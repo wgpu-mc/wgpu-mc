@@ -12,11 +12,15 @@ and (relatively) easy to use API.
 `wgpu` is the name of a crate which implements this specification, and it is written in Rust, allowing safe and blazing-fast
 use of the WebGPU standard, which makes it a prime candidate for a replacement of Blaze3D.
 
-#### Usage
+#### Goals
 
 wgpu-mc is eventually meant to be a full replacement to the standard, official renderer "Blaze3D".
 It will be used as a Fabric mod, which will disable the original OpenGL code and interface with wgpu-mc, using the native
 Java interface.
+
+#### Usage
+
+Grab the assets directory from the Minecraft jar and copy it to /res/assets, and build.
 
 #### Roadmap
 
