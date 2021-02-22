@@ -33,7 +33,6 @@ Entity rendering
 Java Interface
 
 - [ ] Interface with the Fabric mod to use wgpu-mc
-- [ ]
 
 Shaders
 
