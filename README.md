@@ -48,3 +48,7 @@ Shaders
 
 - [ ] Have built in shaders that mimic the original Minecraft style, and also built-in more advanced shaders
 - [ ] Ability to use custom shaders
+
+Maybe features (far future)
+
+- [ ] Combine this project with https://github.com/birbe/jvm to run Minecraft: Java Edition in the browser
