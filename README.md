@@ -2,6 +2,16 @@
 
 ## 🚀 A blazing fast alternative renderer for Minecraft
 
+#### Intro
+
+WebGPU is a new web specification designed to provide modern graphics and compute capabilities in an API.
+It is in its very early stages in web browsers, but has had a very promising cycle of development. It's inspired by
+Metal & Vulkan's render pipelines, and is able to efficiently provide lower level access to graphics hardware, in a modern
+and (relatively) easy to use API. 
+
+`wgpu` is the name of a crate which implements this specification, and it is written in Rust, allowing safe and blazing-fast
+use of the WebGPU standard, which makes it a prime candidate for a replacement of Blaze3D.
+
 #### Usage
 
 wgpu-mc is eventually meant to be a full replacement to the standard, official renderer "Blaze3D".
