@@ -30,10 +30,6 @@ impl StaticBlock {
                     NamespacedId::Tag(t) => {
                         let resolved  = resolved_namespaces.get(t)?;
 
-                        if name == "minecraft:block/anvil" {
-                            println!("{:?}", resolved);
-                        }
-
                         tex_manager.get( resolved )?
                     },
                     NamespacedId::Resource(res) => tex_manager.get( &tex.texture )?,
@@ -48,11 +44,6 @@ impl StaticBlock {
                 // }
                 let atlas = ATLAS_DIMENSIONS as f32;
 
-                if name == "minecraft:block/cobblestone" {
-                    println!("{:?}", tex.uv);
-                    println!("diff {}", ((loc.0.x + tex.uv.1.x) - (loc.0.x + tex.uv.0.x)) / atlas);
-                }
-
                 let arr = [
                     [
                         (loc.0.x + tex.uv.0.x) / atlas,
@@ -65,10 +56,6 @@ impl StaticBlock {
                         // 0.015625, 0.015625
                     ]
                 ];
-
-                // if name == "minecraft:block/anvil" {
-                //     println!("{:?}", arr);
-                // }
 
                 arr
             }
@@ -157,21 +144,21 @@ impl StaticBlock {
                 ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: d, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: a, tex_coords: [north[0][0], north[0][0]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: a, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
                 //Back
                 ModelVertex { position: e, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: f, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: h, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: g, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
                 //Top
+                ModelVertex { position: d, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: c, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: h, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: d, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
                 //Bottom
                 ModelVertex { position: b, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
@@ -180,19 +167,19 @@ impl StaticBlock {
                 ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: e, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
                 //Left
-                ModelVertex { position: a, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: e, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: e, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: h, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: a, tex_coords: [west[1][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: h, tex_coords: [west[0][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
                 //Right
-                ModelVertex { position: f, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: b, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: b, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: c, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: f, tex_coords: [east[1][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: c, tex_coords: [east[0][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
             ]);
 
             Option::Some(())

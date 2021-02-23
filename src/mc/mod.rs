@@ -103,6 +103,10 @@ impl<'block> Minecraft<'block> {
 
             overlay(&mut self.atlas_image, &image, allocation.rectangle.min.x as u32, allocation.rectangle.min.y as u32);
 
+            if ns == &NamespacedId::from("minecraft:block/cobblestone") {
+                println!("alloc @ {:?}", allocation);
+            }
+
             self.texture_manager.insert(ns.clone(), (
                 Vector2::new(allocation.rectangle.min.x as f32, allocation.rectangle.min.y as f32),
                 Vector2::new(allocation.rectangle.max.x as f32, allocation.rectangle.max.y as f32),
