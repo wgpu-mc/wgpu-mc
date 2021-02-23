@@ -148,7 +148,7 @@ impl BlockModelData {
                     None => (Vector2::new(0.0, 0.0), Vector2::<f32>::new(16.0, 16.0)),
                     Some(uv_arr_v) => {
                         let uv_arr = uv_arr_v.as_array().unwrap();
-                        (
+                        ( //TODO: handle UV rotation
                             Vector2::<f32>::new(
                                 uv_arr.get(0).unwrap().as_f64().unwrap() as f32,
                                 uv_arr.get(1).unwrap().as_f64().unwrap() as f32,

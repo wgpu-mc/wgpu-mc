@@ -28,8 +28,8 @@ World rendering
 
 - [x] Discover and load blockmodels
 - [x] Generate a texture atlas of all the block textures 
-- [x] Convert the blockmodels into a mesh (not currently 100% accurate)
-- [ ] Properly assign UVs to the meshes
+- [x] Convert the blockmodels into a mesh (somewhat broken)
+- [x] Properly assign UVs to the meshes (doesn't handle UV rotation yet)
 - [ ] Generate optimized render chunk meshes
 
 Gameplay

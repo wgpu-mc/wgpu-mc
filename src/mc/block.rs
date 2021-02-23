@@ -153,9 +153,9 @@ impl StaticBlock {
                 ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: g, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
                 //Top
-                ModelVertex { position: d, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: c, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
+                ModelVertex { position: d, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: h, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
                 ModelVertex { position: d, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
