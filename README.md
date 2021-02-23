@@ -30,7 +30,7 @@ World rendering
 - [x] Generate a texture atlas of all the block textures 
 - [x] Convert the blockmodels into a mesh (somewhat broken)
 - [x] Properly assign UVs to the meshes (doesn't handle UV rotation yet)
-- [ ] Generate optimized render chunk meshes
+- [ ] Generate optimized render chunk meshes (working on it)
 
 Gameplay
 
