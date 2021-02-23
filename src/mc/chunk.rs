@@ -76,9 +76,18 @@ impl Chunk {
                             vertices.extend_from_slice(&model.south.iter().map(mapper).collect::<Vec<ModelVertex>>());
                             vertices.extend_from_slice(&model.west.iter().map(mapper).collect::<Vec<ModelVertex>>());
                             vertices.extend_from_slice(&model.up.iter().map(mapper).collect::<Vec<ModelVertex>>());
-                            vertices.extend_from_slice(&model.down.iter().map(mapper).collect::<Vec<ModelVertex>>());
+                            // vertices.extend_from_slice(&model.down.ite r().map(mapper).collect::<Vec<ModelVertex>>());
                         }
-                        BlockModel::Custom(model) => {}
+                        BlockModel::Custom(model) => {
+                            model.iter().for_each(|faces| {
+                                vertices.extend_from_slice(&faces.north.iter().map(mapper).collect::<Vec<ModelVertex>>());
+                                vertices.extend_from_slice(&faces.east.iter().map(mapper).collect::<Vec<ModelVertex>>());
+                                vertices.extend_from_slice(&faces.south.iter().map(mapper).collect::<Vec<ModelVertex>>());
+                                vertices.extend_from_slice(&faces.west.iter().map(mapper).collect::<Vec<ModelVertex>>());
+                                vertices.extend_from_slice(&faces.up.iter().map(mapper).collect::<Vec<ModelVertex>>());
+                                vertices.extend_from_slice(&faces.down.iter().map(mapper).collect::<Vec<ModelVertex>>());
+                            });
+                        }
                     }
                 }
             }

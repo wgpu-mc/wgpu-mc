@@ -90,13 +90,12 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
         damage: 0
     }; 256] }; 256]);
 
-    sections.deref_mut()[0] = ChunkSection {
-        empty: false,
-        blocks: [BlockState {
-            block: *state.mc.block_indices.get("minecraft:block/grass").unwrap(),
-            direction: BlockDirection::North,
-            damage: 0
-        }; 256]
+    sections.deref_mut()[0].empty = false;
+
+    sections.deref_mut()[0].blocks[0] = BlockState {
+        block: *state.mc.block_indices.get("minecraft:block/anvil").unwrap(),
+        direction: BlockDirection::North,
+        damage: 0
     };
 
     let mut chunk = Chunk {

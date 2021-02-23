@@ -138,70 +138,78 @@ impl StaticBlock {
             let name = &model.id.to_str();
 
             //Face textures
-            let north = Self::get_element_face_uv(&element.face_textures.north, &resolved_texture_namespaces, tex_manager, name)?;
+            let north = Self::get_element_face_uv(&element.face_textures.south, &resolved_texture_namespaces, tex_manager, name)?;
             let east = Self::get_element_face_uv(&element.face_textures.east, &resolved_texture_namespaces, tex_manager, name)?;
-            let south = Self::get_element_face_uv(&element.face_textures.south, &resolved_texture_namespaces, tex_manager, name)?;
+            let south = Self::get_element_face_uv(&element.face_textures.north, &resolved_texture_namespaces, tex_manager, name)?;
             let west = Self::get_element_face_uv(&element.face_textures.west, &resolved_texture_namespaces, tex_manager, name)?;
             let down = Self::get_element_face_uv(&element.face_textures.down, &resolved_texture_namespaces, tex_manager, name)?;
             let up = Self::get_element_face_uv(&element.face_textures.up, &resolved_texture_namespaces, tex_manager, name)?;
 
-            let a = [element.from.0, element.from.1, element.from.2];
-            let b = [element.to.0, element.from.1, element.from.2];
-            let c = [element.to.0, element.to.1, element.from.2];
-            let d = [element.from.0, element.to.1, element.from.2];
-            let e = [element.from.0, element.from.1, element.to.2];
-            let f = [element.to.0, element.from.1, element.to.2];
-            let g = [element.to.0, element.to.1, element.to.2];
-            let h = [element.from.0, element.to.1, element.to.2];
+            // let a = [element.from.0, element.from.1, element.from.2];
+            // let b = [element.to.0, element.from.1, element.from.2];
+            // let c = [element.to.0, element.to.1, element.from.2];
+            // let d = [element.from.0, element.to.1, element.from.2];
+            // let e = [element.from.0, element.from.1, element.to.2];
+            // let f = [element.to.0, element.from.1, element.to.2];
+            // let g = [element.to.0, element.to.1, element.to.2];
+            // let h = [element.from.0, element.to.1, element.to.2];
+            let a = [element.to.0, element.from.1, element.from.2];
+            let b = [element.from.0, element.from.1, element.from.2];
+            let c = [element.from.0, element.to.1, element.from.2];
+            let d = [element.to.0, element.to.1, element.from.2];
+            let e = [element.to.0, element.from.1, element.to.2];
+            let f = [element.from.0, element.from.1, element.to.2];
+            let g = [element.from.0, element.to.1, element.to.2];
+            let h = [element.to.0, element.to.1, element.to.2];
 
             let faces = BlockModelFaces {
-                north: [
-                        ModelVertex { position: a, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, 0.0] },
-                        ModelVertex { position: b, tex_coords: [north[1][0], north[1][1]], normal: [0.0, 0.0, 0.0] },
-                        ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                        ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                        ModelVertex { position: d, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                        ModelVertex { position: a, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] }
-                ],
-                east: [
-                    ModelVertex { position: f, tex_coords: [east[1][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: c, tex_coords: [east[0][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
-                ],
                 south: [
-                    ModelVertex { position: e, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: g, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, 0.0] }
+                    ModelVertex { position: c, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 1.0] },
+                    ModelVertex { position: a, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 1.0] },
+                    ModelVertex { position: b, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, 1.0] },
+                    ModelVertex { position: d, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, 1.0] },
+                    ModelVertex { position: a, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 1.0] },
+                    ModelVertex { position: c, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 1.0] }
                 ],
                 west: [
-                    ModelVertex { position: a, tex_coords: [west[1][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: h, tex_coords: [west[0][0], west[0][1]], normal: [0.0, 0.0, 0.0] }
+                    ModelVertex { position: g, tex_coords: [west[1][0], west[0][1]], normal: [-1.0, 0.0, 0.0] },
+                    ModelVertex { position: b, tex_coords: [west[0][0], west[1][1]], normal: [-1.0, 0.0, 0.0] },
+                    ModelVertex { position: f, tex_coords: [west[1][0], west[1][1]], normal: [-1.0, 0.0, 0.0] },
+                    ModelVertex { position: c, tex_coords: [west[0][0], west[0][1]], normal: [-1.0, 0.0, 0.0] },
+                    ModelVertex { position: b, tex_coords: [west[0][0], west[1][1]], normal: [-1.0, 0.0, 0.0] },
+                    ModelVertex { position: g, tex_coords: [west[1][0], west[0][1]], normal: [-1.0, 0.0, 0.0] }
+                ],
+                north: [
+                    ModelVertex { position: f, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, -1.0] },
+                    ModelVertex { position: e, tex_coords: [north[1][0], north[1][1]], normal: [0.0, 0.0, -1.0] },
+                    ModelVertex { position: h, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, -1.0] },
+                    ModelVertex { position: h, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, -1.0] },
+                    ModelVertex { position: g, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, -1.0] },
+                    ModelVertex { position: f, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, -1.0] }
+                ],
+                east: [
+                    ModelVertex { position: a, tex_coords: [east[1][0], east[1][1]], normal: [1.0, 0.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [east[1][0], east[0][1]], normal: [1.0, 0.0, 0.0] },
+                    ModelVertex { position: e, tex_coords: [east[0][0], east[1][1]], normal: [1.0, 0.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [east[1][0], east[0][1]], normal: [1.0, 0.0, 0.0] },
+                    ModelVertex { position: h, tex_coords: [east[0][0], east[0][1]], normal: [1.0, 0.0, 0.0] },
+                    ModelVertex { position: e, tex_coords: [east[0][0], east[1][1]], normal: [1.0, 0.0, 0.0] }
                 ],
                 up: [
-                    ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: d, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: c, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: h, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: d, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, 1.0, 0.0] },
+                    ModelVertex { position: b, tex_coords: [down[0][0], down[0][1]], normal: [0.0, 1.0, 0.0] },
+                    ModelVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, 1.0, 0.0] },
+                    ModelVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, 1.0, 0.0] },
+                    ModelVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, 1.0, 0.0] },
+                    ModelVertex { position: e, tex_coords: [down[1][0], down[1][1]], normal: [0.0, 1.0, 0.0] }
                 ],
                 down: [
-                    ModelVertex { position: b, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: a, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: a, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                    ModelVertex { position: e, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0] },
+                    ModelVertex { position: g, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0] },
+                    ModelVertex { position: c, tex_coords: [down[1][0], down[1][1]], normal: [0.0, -1.0, 0.0] },
+                    ModelVertex { position: h, tex_coords: [down[0][0], down[0][1]], normal: [0.0, -1.0, 0.0] },
+                    ModelVertex { position: g, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [down[0][0], down[0][1]], normal: [0.0, -1.0, 0.0] }
                 ]
             };
 
