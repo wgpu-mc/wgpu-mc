@@ -27,11 +27,12 @@ const ATLAS_DIMENSIONS: i32 = 1024;
 
 pub type TextureManager = HashMap<NamespacedId, UV>;
 
-pub struct Minecraft<'block> {
+pub struct Minecraft {
     pub sun_position: f32,
-    pub blocks: HashMap<String, Box<dyn Block>>,
+    pub block_indices: HashMap<String, usize>,
+    pub blocks: Vec<Box<dyn Block>>,
     pub block_model_data: HashMap<String, BlockModelData>,
-    pub chunks: ChunkManager<'block>,
+    pub chunks: ChunkManager,
     pub entities: Vec<Entity>,
     pub atlas_allocator: AtlasAllocator,
     pub atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
@@ -40,18 +41,19 @@ pub struct Minecraft<'block> {
     pub texture_manager: TextureManager
 }
 
-impl<'block> Minecraft<'block> {
+impl Minecraft {
     pub fn new() -> Self {
         Minecraft {
             sun_position: 0.0,
-            blocks: HashMap::new(),
+            block_indices: HashMap::new(),
             chunks: ChunkManager::new(),
             entities: Vec::new(),
             block_model_data: HashMap::new(),
             atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
             atlas_image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
             atlas_material: None,
-            texture_manager: HashMap::new()
+            texture_manager: HashMap::new(),
+            blocks: Vec::new()
         }
     }
 
@@ -132,7 +134,8 @@ impl<'block> Minecraft<'block> {
     }
 
     pub fn generate_blocks(&mut self, device: &wgpu::Device, rp: &dyn ResourceProvider) {
-        let mut blocks: HashMap<String, Box<dyn Block>> = HashMap::new();
+        let mut block_indices: HashMap<String, usize> = HashMap::new();
+        let mut blocks: Vec<Box<dyn Block>> = Vec::new();
 
         self.block_model_data.iter().for_each(|(name, block_data)| {
             let block = StaticBlock::from_datapack(device, block_data, rp, &self.texture_manager);
@@ -140,11 +143,14 @@ impl<'block> Minecraft<'block> {
             match block {
                 None => {} //If it fails, it's most definitely a template and not an actual block
                 Some(some) => {
-                    blocks.insert(name.clone(), Box::new(some));
+                    // blocks.insert(name.clone(), Box::new(some));
+                    blocks.push(Box::new(some));
+                    block_indices.insert(name.clone(), blocks.len()-1);
                 }
             }
         });
 
+        self.block_indices = block_indices;
         self.blocks = blocks;
     }
 }

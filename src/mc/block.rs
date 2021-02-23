@@ -8,16 +8,35 @@ use crate::mc::datapack::{BlockModelData, NamespacedId, FaceTexture};
 use crate::mc::resource::ResourceProvider;
 use crate::mc::{TextureManager, ATLAS_DIMENSIONS};
 
-#[derive(Debug)]
+pub struct BlockModelFaces {
+    pub north: [ModelVertex; 6],
+    pub east: [ModelVertex; 6],
+    pub south: [ModelVertex; 6],
+    pub west: [ModelVertex; 6],
+    pub up: [ModelVertex; 6],
+    pub down: [ModelVertex; 6]
+}
+
+// #[derive(Debug)]
 pub enum BlockModel {
-    Cube(wgpu::Buffer, u16),
-    Custom(wgpu::Buffer, u16)
+    Cube(BlockModelFaces),
+    Custom(Vec<BlockModelFaces>)
 }
 
 pub struct StaticBlock { //Not a BlockEntity
     pub name: NamespacedId,
     pub textures: HashMap<String, UV>,
     pub model: BlockModel
+}
+
+macro_rules! upload_vertex_vec {
+    ($device:ident, $vec:expr) => {
+        $device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&$vec[..]),
+            usage: wgpu::BufferUsage::VERTEX
+        })
+    }
 }
 
 impl StaticBlock {
@@ -102,21 +121,19 @@ impl StaticBlock {
             textures.insert(key.clone(), uv.clone());
         }); //Map the referenced textures to their respective UVs in the texture atlas
 
-        let mut vertices = Vec::new();
-
         let is_cube = if model.elements.len() == 1 {
             let first = model.elements.first().unwrap();
 
-            first.from.0 == 0.0 && first.from.1 == 0.0 && first.from.2 == 0.0 &&
-                first.to.0 == 16.0 && first.to.1 == 16.0 && first.to.2 == 16.0
+            first.from.0 == 0.0 && first.from.1 == 1.0 && first.from.2 == 1.0 &&
+                first.to.0 == 1.0 && first.to.1 == 0.0 && first.to.2 == 0.0
         } else {
             false
         };
 
-        let results = model.elements.iter().map(|element| { //TODO: properly generate the vertices, probably in another method
-            if model.id == NamespacedId::from("minecraft:block/cobblestone") {
-                println!("To {:?}\nFrom {:?}", element.from, element.to);
-            }
+        let mut results = model.elements.iter().map(|element| { //TODO: properly generate the vertices, probably in another method
+            // if model.id == NamespacedId::from("minecraft:block/cobblestone") {
+            //     println!("To {:?}\nFrom {:?}", element.from, element.to);
+            // }
 
             let name = &model.id.to_str();
 
@@ -137,73 +154,73 @@ impl StaticBlock {
             let g = [element.to.0, element.to.1, element.to.2];
             let h = [element.from.0, element.to.1, element.to.2];
 
-            vertices.extend(vec![
-                //Front
-                ModelVertex { position: a, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: b, tex_coords: [north[1][0], north[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: a, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
-                //Back
-                ModelVertex { position: e, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
-                //Top
-                ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: c, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: h, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                //Bottom
-                ModelVertex { position: b, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: a, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: a, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: e, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
-                //Left
-                ModelVertex { position: a, tex_coords: [west[1][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: h, tex_coords: [west[0][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
-                //Right
-                ModelVertex { position: f, tex_coords: [east[1][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
-                ModelVertex { position: c, tex_coords: [east[0][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
-            ]);
+            let faces = BlockModelFaces {
+                north: [
+                        ModelVertex { position: a, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, 0.0] },
+                        ModelVertex { position: b, tex_coords: [north[1][0], north[1][1]], normal: [0.0, 0.0, 0.0] },
+                        ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
+                        ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
+                        ModelVertex { position: d, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] },
+                        ModelVertex { position: a, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 0.0] }
+                ],
+                east: [
+                    ModelVertex { position: f, tex_coords: [east[1][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: b, tex_coords: [east[0][0], east[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: g, tex_coords: [east[1][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: c, tex_coords: [east[0][0], east[0][1]], normal: [0.0, 0.0, 0.0] },
+                ],
+                south: [
+                    ModelVertex { position: e, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: g, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, 0.0] }
+                ],
+                west: [
+                    ModelVertex { position: a, tex_coords: [west[1][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: e, tex_coords: [west[0][0], west[1][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [west[1][0], west[0][1]], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: h, tex_coords: [west[0][0], west[0][1]], normal: [0.0, 0.0, 0.0] }
+                ],
+                up: [
+                    ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: c, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: g, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: h, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: d, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
+                ],
+                down: [
+                    ModelVertex { position: b, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: a, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: a, tex_coords: [0.0 , 0.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: f, tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0] },
+                    ModelVertex { position: e, tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0] },
+                ]
+            };
 
-            Option::Some(())
-        }).collect::<Vec<Option<()>>>();
+            Option::Some(faces)
+        }).collect::<Vec<Option<BlockModelFaces>>>();
 
-        for e in results {
+        for e in results.iter() {
             if e.is_none() {
                 return None;
             }
         }
 
-        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&vertices[..]),
-            usage: wgpu::BufferUsage::VERTEX
-        });
-
         Option::Some(Self {
             name: model.id.clone(),
             textures,
             model: if is_cube {
-                BlockModel::Cube(vertex_buffer, vertices.len() as u16)
+                BlockModel::Cube(results.pop().unwrap().unwrap())
             } else {
-                BlockModel::Custom(vertex_buffer, vertices.len() as u16)
+                BlockModel::Custom(results.into_iter().map(|x| x.unwrap()).collect())
             }
         })
     }
@@ -266,9 +283,11 @@ impl<'block> Block for BlockEntity<'block> {
 
 pub type BlockPos = (u32, u8, u32);
 
+type BlockIndex = usize;
+
 #[derive(Clone, Copy)]
-pub struct BlockState<'block> {
-    pub block: &'block dyn Block,
+pub struct BlockState {
+    pub block: BlockIndex,
     pub direction: BlockDirection,
     pub damage: u8
 }

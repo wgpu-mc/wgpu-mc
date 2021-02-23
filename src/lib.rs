@@ -15,12 +15,12 @@ pub mod texture;
 
 use model::{Vertex};
 use crate::mc::Minecraft;
-use crate::mc::chunk::ChunkManager;
+use crate::mc::chunk::{ChunkManager, Chunk};
 use crate::model::{Material};
 use crate::mc::block::{Block, BlockModel};
 use crate::texture::{TextureId, Texture};
 use std::collections::HashMap;
-use wgpu::{BindGroupDescriptor, BindGroupEntry};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, Buffer};
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -228,7 +228,7 @@ impl InstanceRaw {
     }
 }
 
-pub struct Renderer<'blocks> {
+pub struct Renderer {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -251,12 +251,12 @@ pub struct Renderer<'blocks> {
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
 
     pub depth_texture: texture::Texture,
-    pub mc: mc::Minecraft<'blocks>,
+    pub mc: mc::Minecraft,
     pub texture_map: HashMap<TextureId, Material>
 }
 
-impl<'blocks> Renderer<'blocks> {
-    pub async fn new(window: &Window) -> Renderer<'blocks> {
+impl Renderer {
+    pub async fn new(window: &Window) -> Renderer {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -316,7 +316,7 @@ impl<'blocks> Renderer<'blocks> {
             });
 
         let camera = Camera {
-            eye: (0.0, 5.0, -10.0).into(),
+            eye: (0.0, 5.0, 10.0).into(),
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_y(),
             aspect: sc_desc.width as f32 / sc_desc.height as f32,
@@ -394,7 +394,11 @@ impl<'blocks> Renderer<'blocks> {
             color_states: &[wgpu::ColorStateDescriptor {
                 format: sc_desc.format,
                 color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                alpha_blend: wgpu::BlendDescriptor {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add
+                },
                 write_mask: wgpu::ColorWrite::ALL,
             }],
             depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
@@ -462,7 +466,7 @@ impl<'blocks> Renderer<'blocks> {
         );
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
+    pub fn render_chunk(&mut self, chunk: &Chunk) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
 
         let mut encoder = self
@@ -499,20 +503,7 @@ impl<'blocks> Renderer<'blocks> {
             // render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
 
-            let cobble = self.mc.blocks.get("minecraft:block/anvil").unwrap();
-
-            let (vertex_buffer, vertex_count) = match cobble.get_model() {
-                BlockModel::Cube(buf, c) => (buf, c),
-                BlockModel::Custom(buf,c ) => (buf, c)
-            };
-
-            render_pass.set_vertex_buffer(
-                0, vertex_buffer.slice(..)
-            );
-
             let bind_texture = match &self.mc.atlas_material {
-
-
                 None => unreachable!(),
                 Some(mat) => mat
             };
@@ -520,32 +511,103 @@ impl<'blocks> Renderer<'blocks> {
             render_pass.set_bind_group(0, &bind_texture.bind_group, &[]);
             render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
 
-            render_pass.draw(0..(*vertex_count as u32), 0..1);
+            render_pass.set_vertex_buffer(0, match &chunk.vertex_buffer {
+                None => panic!("Chunk did not have generated vertex buffer!"),
+                Some(buf) => buf.slice(..)
+            });
 
-            // let mesh = &self.full_block_model.meshes[0];
-            //
-            // render_pass.set_vertex_buffer(0, match block.get_model() {
-            //     BlockModel::Full => mesh.vertex_buffer.slice(..),
-            //     BlockModel::CUSTOM(model) => mesh.vertex_buffer.slice(..)
-            // });
-            //
-            // render_pass.set_index_buffer(
-            //     match block.get_model() {
-            //         BlockModel::Full => mesh.index_buffer.slice(..),
-            //         BlockModel::CUSTOM(model) => mesh.index_buffer.slice(..)
-            //     }
-            // );
-            //
-            // let texture = block.get_textures().get("face").unwrap();
-            //
-            // render_pass.set_bind_group(0, &self.texture_map.get(texture).unwrap().bind_group, &[]);
-
-            //
-            // render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
+            render_pass.draw(0..chunk.vertex_count as u32, 0..1);
         }
 
         self.queue.submit(iter::once(encoder.finish()));
 
         Ok(())
     }
+
+    // pub fn debug_render_block(&mut self, block_id: &str) -> Result<(), wgpu::SwapChainError> {
+    //     let frame = self.swap_chain.get_current_frame()?.output;
+    //
+    //     let mut encoder = self
+    //         .device
+    //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+    //             label: Some("Render Encoder"),
+    //         });
+    //
+    //     {
+    //         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    //             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+    //                 attachment: &frame.view,
+    //                 resolve_target: None,
+    //                 ops: wgpu::Operations {
+    //                     load: wgpu::LoadOp::Clear(wgpu::Color {
+    //                         r: 0.1,
+    //                         g: 0.2,
+    //                         b: 0.3,
+    //                         a: 1.0,
+    //                     }),
+    //                     store: true,
+    //                 },
+    //             }],
+    //             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+    //                 attachment: &self.depth_texture.view,
+    //                 depth_ops: Some(wgpu::Operations {
+    //                     load: wgpu::LoadOp::Clear(1.0),
+    //                     store: true,
+    //                 }),
+    //                 stencil_ops: None,
+    //             }),
+    //         });
+    //
+    //         // render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+    //         render_pass.set_pipeline(&self.render_pipeline);
+    //
+    //         let bind_texture = match &self.mc.atlas_material {
+    //             None => unreachable!(),
+    //             Some(mat) => mat
+    //         };
+    //
+    //         render_pass.set_bind_group(0, &bind_texture.bind_group, &[]);
+    //         render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+    //
+    //         let block_index = self.mc.block_indices.get(block_id).unwrap();
+    //         let block = self.mc.blocks.get(*block_index).unwrap();
+    //
+    //         match block.get_model() {
+    //             BlockModel::Cube(faces) => {
+    //                 render_pass.set_vertex_buffer(0, faces.north.slice(..));
+    //                 render_pass.draw(0..6, 0..1);
+    //                 render_pass.set_vertex_buffer(0, faces.east.slice(..));
+    //                 render_pass.draw(0..6, 0..1);
+    //                 render_pass.set_vertex_buffer(0, faces.south.slice(..));
+    //                 render_pass.draw(0..6, 0..1);
+    //                 render_pass.set_vertex_buffer(0, faces.west.slice(..));
+    //                 render_pass.draw(0..6, 0..1);
+    //                 render_pass.set_vertex_buffer(0, faces.up.slice(..));
+    //                 render_pass.draw(0..6, 0..1);
+    //                 render_pass.set_vertex_buffer(0, faces.down.slice(..));
+    //                 render_pass.draw(0..6, 0..1);
+    //             },
+    //             BlockModel::Custom(faces) => {
+    //                 faces.iter().for_each(|f| {
+    //                     render_pass.set_vertex_buffer(0, f.north.slice(..));
+    //                     render_pass.draw(0..6, 0..1);
+    //                     render_pass.set_vertex_buffer(0, f.east.slice(..));
+    //                     render_pass.draw(0..6, 0..1);
+    //                     render_pass.set_vertex_buffer(0, f.south.slice(..));
+    //                     render_pass.draw(0..6, 0..1);
+    //                     render_pass.set_vertex_buffer(0, f.west.slice(..));
+    //                     render_pass.draw(0..6, 0..1);
+    //                     render_pass.set_vertex_buffer(0, f.up.slice(..));
+    //                     render_pass.draw(0..6, 0..1);
+    //                     render_pass.set_vertex_buffer(0, f.down.slice(..));
+    //                     render_pass.draw(0..6, 0..1);
+    //                 });
+    //             }
+    //         };
+    //     }
+    //
+    //     self.queue.submit(iter::once(encoder.finish()));
+    //
+    //     Ok(())
+    // }
 }

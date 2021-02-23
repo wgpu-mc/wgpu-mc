@@ -13,7 +13,7 @@ mod texture;
 
 use model::{Vertex};
 use wgpu_mc::Renderer;
-use wgpu_mc::mc::chunk::Chunk;
+use wgpu_mc::mc::chunk::{Chunk, ChunkSection};
 use wgpu_mc::mc::block::{BlockState, StaticBlock, BlockModel, BlockDirection};
 use std::collections::HashMap;
 use std::cell::RefCell;
@@ -21,6 +21,7 @@ use futures::executor::block_on;
 use std::path::PathBuf;
 use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
 use wgpu_mc::mc::datapack::NamespacedId;
+use std::ops::{Deref, DerefMut};
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -77,17 +78,39 @@ fn main() {
 
     state.mc.generate_blocks(&state.device, &rsp);
 
-    println!("Generated blocks.");
-
-    // state.mc.blocks.iter().for_each(|e| {
-    //     println!("{} = {{ textures: {:?}, model: {:?} }}", e.0, e.1.get_textures(), e.1.get_model());
-    // });
-
     begin_rendering(event_loop, window, state);
 }
 
-fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: Renderer<'static>) {
+fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: Renderer) {
     use futures::executor::block_on;
+
+    let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
+        block: *state.mc.block_indices.get("minecraft:block/air").unwrap(),
+        direction: BlockDirection::North,
+        damage: 0
+    }; 256] }; 256]);
+
+    sections.deref_mut()[0] = ChunkSection {
+        empty: false,
+        blocks: [BlockState {
+            block: *state.mc.block_indices.get("minecraft:block/grass").unwrap(),
+            direction: BlockDirection::North,
+            damage: 0
+        }; 256]
+    };
+
+    let mut chunk = Chunk {
+        pos: (0, 0),
+        sections,
+        vertices: None,
+        vertex_buffer: None,
+        vertex_count: 0
+    };
+
+    chunk.generate_vertices(&state.mc.blocks);
+    chunk.upload_buffer(&state.device);
+
+    state.render_chunk(&chunk);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -122,7 +145,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
             }
             Event::RedrawRequested(_) => {
                 &state.update();
-                match &state.render() {
+                match &state.render_chunk(&chunk) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
                     Err(wgpu::SwapChainError::Lost) => *(&state.resize(state.size)),

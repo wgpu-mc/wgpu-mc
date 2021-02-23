@@ -87,7 +87,7 @@ pub struct FaceTexture {
     pub texture: NamespacedId
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ElementFaces {
     pub up: Option<FaceTexture>,
     pub down: Option<FaceTexture>,
@@ -99,7 +99,7 @@ pub struct ElementFaces {
 
 type ElementCorner = (f32, f32, f32);
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Element {
     pub from: ElementCorner,
     pub to: ElementCorner,
