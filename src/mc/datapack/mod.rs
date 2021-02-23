@@ -1,10 +1,11 @@
 use serde_json::{Value, Number};
 use std::rc::Rc;
-use cgmath::Matrix4;
+use cgmath::{Matrix4, Vector4, Vector2};
 use std::collections::HashMap;
 use serde_bytes::deserialize;
 use std::path::PathBuf;
 use futures::FutureExt;
+use crate::texture::UV;
 
 pub type NamespacedResource = (String, String);
 
@@ -17,10 +18,18 @@ pub enum NamespacedId {
 
 impl NamespacedId {
 
-    pub(crate) fn is_tag(&self) -> bool {
+    pub fn is_tag(&self) -> bool {
         match self {
             NamespacedId::Tag(_) => true,
             _ => false
+        }
+    }
+
+    pub fn to_str(&self) -> String {
+        match self {
+            NamespacedId::Tag(tag) => format!("#{}", tag),
+            NamespacedId::Resource(res) => format!("{}:{}", res.0, res.1),
+            NamespacedId::Invalid => "Invalid".into()
         }
     }
 
@@ -72,14 +81,20 @@ impl From<&str> for NamespacedId {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct FaceTexture {
+    pub uv: UV,
+    pub texture: NamespacedId
+}
+
 #[derive(Clone)]
 pub struct ElementFaces {
-    up: Option<NamespacedId>,
-    down: Option<NamespacedId>,
-    north: Option<NamespacedId>,
-    east: Option<NamespacedId>,
-    south: Option<NamespacedId>,
-    west: Option<NamespacedId>
+    pub up: Option<FaceTexture>,
+    pub down: Option<FaceTexture>,
+    pub north: Option<FaceTexture>,
+    pub east: Option<FaceTexture>,
+    pub south: Option<FaceTexture>,
+    pub west: Option<FaceTexture>
 }
 
 type ElementCorner = (f32, f32, f32);
@@ -124,8 +139,43 @@ impl BlockModelData {
         ))
     }
 
+    fn parse_face(val: Option<&Value>, textures: &HashMap<String, NamespacedId>) -> Option<FaceTexture> {
+        match val {
+            None => Option::None,
+            Some(face) => {
+                let obj = face.as_object().unwrap();
+                let uv = match obj.get("uv") {
+                    None => (Vector2::new(0.0, 0.0), Vector2::<f32>::new(16.0, 16.0)),
+                    Some(uv_arr_v) => {
+                        let uv_arr = uv_arr_v.as_array().unwrap();
+                        (
+                            Vector2::<f32>::new(
+                                uv_arr.get(0).unwrap().as_f64().unwrap() as f32,
+                                uv_arr.get(1).unwrap().as_f64().unwrap() as f32,
+                            ),
+                            Vector2::<f32>::new(
+                                uv_arr.get(2).unwrap().as_f64().unwrap() as f32,
+                                uv_arr.get(3).unwrap().as_f64().unwrap() as f32,
+                            ),
+                        )
+                    }
+                };
+
+                let texture = NamespacedId::from( obj.get("texture").unwrap().as_str().unwrap() );
+
+                Option::Some(
+                    FaceTexture {
+                        uv,
+                        texture: texture.clone()
+                    }
+                )
+            }
+        }
+    }
+
     fn parse_elements(val: Option<&Value>, parent: Option<&BlockModelData>, textures: &HashMap<String, NamespacedId>) -> Option<Vec<Element>> {
         Option::Some(match val {
+            //No elements, default to parent's
             None => match parent {
                 None => Vec::new(),
                 Some(parent) => {
@@ -133,6 +183,7 @@ impl BlockModelData {
                 }
             },
             Some(v) => match v {
+                //The array of elements
                 Value::Array(arr) => {
                     let out = arr.iter().map(|x| {
                         let from = match x.get("from").unwrap() {
@@ -153,17 +204,19 @@ impl BlockModelData {
                             _ => panic!("Invalid datapack!")
                         };
 
+                        let faces = x.get("faces").unwrap().as_object().unwrap();
+
                         Option::Some(Element {
                             from: (from.0, to.1, to.1),
                             to: (to.0, from.1, from.2),
                             face_textures: {
                                 ElementFaces {
-                                    up: None,
-                                    down: None,
-                                    north: None,
-                                    east: None,
-                                    south: None,
-                                    west: None
+                                    up: Self::parse_face(faces.get("up"), textures),
+                                    down: Self::parse_face(faces.get("down"), textures),
+                                    north: Self::parse_face(faces.get("north"), textures),
+                                    east: Self::parse_face(faces.get("east"), textures),
+                                    south: Self::parse_face(faces.get("south"), textures),
+                                    west: Self::parse_face(faces.get("west"), textures)
                                 }
                             }
                         })

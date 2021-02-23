@@ -499,7 +499,7 @@ impl<'blocks> Renderer<'blocks> {
             // render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
 
-            let cobble = self.mc.blocks.get("minecraft:block/damaged_anvil").unwrap();
+            let cobble = self.mc.blocks.get("minecraft:block/oak_log").unwrap();
 
             let (vertex_buffer, vertex_count) = match cobble.get_model() {
                 BlockModel::Cube(buf, c) => (buf, c),
