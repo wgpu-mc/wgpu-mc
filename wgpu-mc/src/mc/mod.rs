@@ -22,6 +22,7 @@ pub mod chunk;
 pub mod entity;
 pub mod datapack;
 pub mod resource;
+pub mod gui;
 
 const ATLAS_DIMENSIONS: i32 = 1024;
 
@@ -105,22 +106,11 @@ impl Minecraft {
 
             overlay(&mut self.atlas_image, &image, allocation.rectangle.min.x as u32, allocation.rectangle.min.y as u32);
 
-            if ns == &NamespacedId::from("minecraft:block/cobblestone") {
-                println!("alloc @ {:?}", allocation);
-            }
-
             self.texture_manager.insert(ns.clone(), (
                 Vector2::new(allocation.rectangle.min.x as f32, allocation.rectangle.min.y as f32),
                 Vector2::new(allocation.rectangle.max.x as f32, allocation.rectangle.max.y as f32),
             ));
         });
-
-        dbg!(env!("OUT_DIR"));
-
-        let mut stream = File::create(Path::new(env!("OUT_DIR")).join("atlas.svg")).unwrap();
-
-        dump_svg(&self.atlas_allocator, &mut stream);
-        image::save_buffer(Path::new(env!("OUT_DIR")).join("atlas.png"), self.atlas_image.as_ref(), ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32, ColorType::Rgba8);
 
         let texture = Texture::from_image_raw(device, queue, self.atlas_image.as_ref(), Extent3d {
             width: ATLAS_DIMENSIONS as u32,

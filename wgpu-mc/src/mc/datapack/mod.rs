@@ -4,7 +4,6 @@ use cgmath::{Matrix4, Vector4, Vector2};
 use std::collections::HashMap;
 use serde_bytes::deserialize;
 use std::path::PathBuf;
-use futures::FutureExt;
 use crate::texture::UV;
 
 pub type NamespacedResource = (String, String);

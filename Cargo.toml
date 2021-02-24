@@ -1,4 +1,6 @@
 [workspace]
 members = [
-    "wgpu-mc"
+    "wgpu-mc",
+    "wgpu-mc-jni",
+    "wgpu-mc-demo"
 ]

@@ -2,11 +2,6 @@ use std::iter;
 
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
-use winit::{
-    event::*,
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
-};
 
 pub mod mc;
 
@@ -25,6 +20,10 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, Buffer};
 use crate::camera::{CameraController, Camera, Uniforms};
 use cgmath::{Vector3, Point3};
 use bytemuck::__core::time::Duration;
+use winit::window::Window;
+use winit::event::WindowEvent;
+use shaderc::ShaderKind;
+use anyhow::Context;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -33,8 +32,6 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 0.0,
     0.0, 0.0, 0.5, 1.0,
 );
-
-const NUM_INSTANCES_PER_ROW: u32 = 10;
 
 struct Instance {
     position: cgmath::Vector3<f32>,
@@ -97,6 +94,12 @@ impl InstanceRaw {
     }
 }
 
+pub trait ShaderProvider {
+
+    fn get_shader(&self, name: &str) -> Vec<u8>;
+
+}
+
 pub struct Renderer {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -126,7 +129,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: &Window) -> Renderer {
+    pub async fn new(window: &Window, shader_provider: Box<dyn ShaderProvider>) -> Renderer {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -220,11 +223,40 @@ impl Renderer {
             label: Some("uniform_bind_group"),
         });
 
-        let vs_module = device.create_shader_module(wgpu::include_spirv!("shaders/shader.vert.spv"));
-        let fs_module = device.create_shader_module(wgpu::include_spirv!("shaders/shader.frag.spv"));
+        let mut compiler = shaderc::Compiler::new().unwrap();
+        // let mut options = shaderc::CompileOptions::new().unwrap();
+
+        println!("do it error tho");
+
+        let vs_module_bin = compiler.compile_into_spirv(
+            std::str::from_utf8(&shader_provider.get_shader("terrain.vsh")[..]).unwrap(),
+            ShaderKind::Vertex,
+            "terrain.vsh",
+            "main",
+            None
+        ).unwrap();
+
+        println!("do it error tho");
+
+        let fs_module_bin = compiler.compile_into_spirv(
+            std::str::from_utf8(&shader_provider.get_shader("terrain.fsh")[..]).unwrap(),
+            ShaderKind::Fragment,
+            "terrain.fsh",
+            "main",
+            None
+        ).unwrap();
+
+        println!("do it error tho");
+
+        let vs_module = device.create_shader_module(wgpu::util::make_spirv(vs_module_bin.as_binary_u8()));
+        let fs_module = device.create_shader_module(wgpu::util::make_spirv(fs_module_bin.as_binary_u8()));
+
+        println!("do it error tho");
 
         let depth_texture =
             texture::Texture::create_depth_texture(&device, &sc_desc, "depth_texture");
+
+        println!("unh huh");
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -232,6 +264,8 @@ impl Renderer {
                 bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
                 push_constant_ranges: &[],
             });
+
+        println!("test");
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
@@ -278,6 +312,8 @@ impl Renderer {
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
         });
+
+        println!("do we get here tho");
 
         let mut texture_map = HashMap::new();
         let mc = Minecraft::new();
@@ -385,91 +421,4 @@ impl Renderer {
 
         Ok(())
     }
-
-    // pub fn debug_render_block(&mut self, block_id: &str) -> Result<(), wgpu::SwapChainError> {
-    //     let frame = self.swap_chain.get_current_frame()?.output;
-    //
-    //     let mut encoder = self
-    //         .device
-    //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-    //             label: Some("Render Encoder"),
-    //         });
-    //
-    //     {
-    //         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-    //             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-    //                 attachment: &frame.view,
-    //                 resolve_target: None,
-    //                 ops: wgpu::Operations {
-    //                     load: wgpu::LoadOp::Clear(wgpu::Color {
-    //                         r: 0.1,
-    //                         g: 0.2,
-    //                         b: 0.3,
-    //                         a: 1.0,
-    //                     }),
-    //                     store: true,
-    //                 },
-    //             }],
-    //             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-    //                 attachment: &self.depth_texture.view,
-    //                 depth_ops: Some(wgpu::Operations {
-    //                     load: wgpu::LoadOp::Clear(1.0),
-    //                     store: true,
-    //                 }),
-    //                 stencil_ops: None,
-    //             }),
-    //         });
-    //
-    //         // render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-    //         render_pass.set_pipeline(&self.render_pipeline);
-    //
-    //         let bind_texture = match &self.mc.atlas_material {
-    //             None => unreachable!(),
-    //             Some(mat) => mat
-    //         };
-    //
-    //         render_pass.set_bind_group(0, &bind_texture.bind_group, &[]);
-    //         render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
-    //
-    //         let block_index = self.mc.block_indices.get(block_id).unwrap();
-    //         let block = self.mc.blocks.get(*block_index).unwrap();
-    //
-    //         match block.get_model() {
-    //             BlockModel::Cube(faces) => {
-    //                 render_pass.set_vertex_buffer(0, faces.north.slice(..));
-    //                 render_pass.draw(0..6, 0..1);
-    //                 render_pass.set_vertex_buffer(0, faces.east.slice(..));
-    //                 render_pass.draw(0..6, 0..1);
-    //                 render_pass.set_vertex_buffer(0, faces.south.slice(..));
-    //                 render_pass.draw(0..6, 0..1);
-    //                 render_pass.set_vertex_buffer(0, faces.west.slice(..));
-    //                 render_pass.draw(0..6, 0..1);
-    //                 render_pass.set_vertex_buffer(0, faces.up.slice(..));
-    //                 render_pass.draw(0..6, 0..1);
-    //                 render_pass.set_vertex_buffer(0, faces.down.slice(..));
-    //                 render_pass.draw(0..6, 0..1);
-    //             },
-    //             BlockModel::Custom(faces) => {
-    //                 faces.iter().for_each(|f| {
-    //                     render_pass.set_vertex_buffer(0, f.north.slice(..));
-    //                     render_pass.draw(0..6, 0..1);
-    //                     render_pass.set_vertex_buffer(0, f.east.slice(..));
-    //                     render_pass.draw(0..6, 0..1);
-    //                     render_pass.set_vertex_buffer(0, f.south.slice(..));
-    //                     render_pass.draw(0..6, 0..1);
-    //                     render_pass.set_vertex_buffer(0, f.west.slice(..));
-    //                     render_pass.draw(0..6, 0..1);
-    //                     render_pass.set_vertex_buffer(0, f.up.slice(..));
-    //                     render_pass.draw(0..6, 0..1);
-    //                     render_pass.set_vertex_buffer(0, f.down.slice(..));
-    //                     render_pass.draw(0..6, 0..1);
-    //                 });
-    //             }
-    //         };
-    //     }
-    //
-    //     self.queue.submit(iter::once(encoder.finish()));
-    //
-    //     Ok(())
-    // }
 }

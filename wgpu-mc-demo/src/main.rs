@@ -1,27 +1,23 @@
 use std::{iter, fs};
-
-use cgmath::prelude::*;
-use wgpu::util::DeviceExt;
-use winit::{
-    event::*,
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
-};
-use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
-use wgpu_mc::mc::datapack::NamespacedId;
-use futures::executor::block_on;
-use wgpu_mc::Renderer;
-use wgpu_mc::mc::block::{BlockState, BlockDirection};
-use wgpu_mc::mc::chunk::{ChunkSection, Chunk};
+use std::path::PathBuf;
 use std::ops::DerefMut;
 use std::time::Instant;
-use std::path::PathBuf;
-
-mod model;
-mod texture;
+use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
+use wgpu_mc::mc::datapack::NamespacedId;
+use wgpu_mc::mc::block::{BlockDirection, BlockState};
+use wgpu_mc::mc::chunk::{ChunkSection, Chunk};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
+use wgpu_mc::{Renderer, ShaderProvider};
+use futures::executor::block_on;
+use winit::window::Window;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
+}
+
+struct SimpleShaderProvider {
+    pub shader_root: PathBuf
 }
 
 impl ResourceProvider for SimpleResourceProvider {
@@ -49,21 +45,39 @@ impl ResourceProvider for SimpleResourceProvider {
 
 }
 
+impl ShaderProvider for SimpleShaderProvider {
+    fn get_shader(&self, name: &str) -> Vec<u8> {
+        let path = self.shader_root.join(name);
+        println!("{:?}", path);
+        fs::read(path).unwrap()
+    }
+}
+
 fn main() {
     let event_loop = EventLoop::new();
-    let title = env!("CARGO_PKG_NAME");
+    let title = "wgpu-mc test";
     let window = winit::window::WindowBuilder::new()
         .with_title(title)
         .build(&event_loop)
         .unwrap();
 
-    let mut state = block_on(Renderer::new(&window));
-
-    let mc_root = std::path::Path::new(env!("OUT_DIR")).join("res").join("assets").join("minecraft");
+    let sp = SimpleShaderProvider {
+        shader_root: std::path::Path::new(env!("OUT_DIR")).join("res").join("shaders")
+    };
 
     let rsp = SimpleResourceProvider {
         asset_root: std::path::Path::new(env!("OUT_DIR")).join("res").join("assets")
     };
+
+    println!("{:?}", sp.shader_root);
+
+    let mc_root = std::path::Path::new(env!("OUT_DIR")).join("res").join("assets").join("minecraft");
+
+    println!("making renderer");
+
+    let mut state = block_on(Renderer::new(&window, Box::new(sp)));
+
+    println!("doing stuff");
 
     state.mc.load_block_models(mc_root);
 
@@ -100,38 +114,6 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
             }; 256]
         };
     });
-    //
-    // sections.deref_mut()[0].empty = false;
-    // sections.deref_mut()[0].blocks = [BlockState {
-    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/bedrock").unwrap()),
-    //     direction: BlockDirection::North,
-    //     damage: 0,
-    //     is_cube: true
-    // }; 256];
-    //
-    // sections.deref_mut()[1].empty = false;
-    // sections.deref_mut()[1].blocks = [BlockState {
-    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/dirt").unwrap()),
-    //     direction: BlockDirection::North,
-    //     damage: 0,
-    //     is_cube: true
-    // }; 256];
-    //
-    // sections.deref_mut()[2].empty = false;
-    // sections.deref_mut()[2].blocks = [BlockState {
-    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/oak_wood").unwrap()),
-    //     direction: BlockDirection::North,
-    //     damage: 0,
-    //     is_cube: true
-    // }; 256];
-    //
-    // sections.deref_mut()[3].empty = false;
-    // sections.deref_mut()[3].blocks = [BlockState {
-    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/anvil").unwrap()),
-    //     direction: BlockDirection::North,
-    //     damage: 0,
-    //     is_cube: false
-    // }; 256];
 
     let mut chunk = Chunk {
         pos: (0, 0),
@@ -141,14 +123,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
         vertex_count: 0
     };
 
-    let big_benchmark = Instant::now();
-
-    (0..4225).for_each(|_| {
-        chunk.generate_vertices(&state.mc.blocks);
-    });
-
-    println!("Generating the mesh for 4225 chunks took {} ms", Instant::now().duration_since(big_benchmark).as_millis());
-
+    chunk.generate_vertices(&state.mc.blocks);
     chunk.upload_buffer(&state.device);
 
     event_loop.run(move |event, _, control_flow| {

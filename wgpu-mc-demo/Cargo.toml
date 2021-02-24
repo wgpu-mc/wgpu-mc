@@ -1,0 +1,18 @@
+[package]
+name = "wgpu-mc-demo"
+version = "0.1.0"
+authors = ["Birb <birb.seeb@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+futures = "0.3"
+wgpu-mc = { path = "../wgpu-mc" }
+winit = "0.22"
+wgpu = "0.6"
+
+[build-dependencies]
+anyhow = "1.0"
+fs_extra = "1.1"
+glob = "0.3"
