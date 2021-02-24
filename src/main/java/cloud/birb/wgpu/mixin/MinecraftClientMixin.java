@@ -93,13 +93,16 @@ public class MinecraftClientMixin {
 
     @Inject(method = "<init>", at = @At("TAIL"))
     public void injectWindowHook(RunArgs args, CallbackInfo ci) {
+        System.load("/home/birb/wgpu-mc/target/debug/libwgpu_mc_jni.so");
+//        System.loadLibrary("/home/birb/wgpu-mc/target/debug/libwgpu_mc_jni.so");
+        System.out.println(Thread.currentThread().getId());
         Wgpu.initializeWindow();
     }
 
     /**
      * @author Birb
      * 
-     * @reason Replace the rendering code
+     * @reason Replace the render loop
      */
     @Overwrite
     private void render(boolean tick) {
