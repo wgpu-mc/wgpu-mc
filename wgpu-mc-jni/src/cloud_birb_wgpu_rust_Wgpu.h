@@ -15,6 +15,14 @@ extern "C" {
 JNIEXPORT void JNICALL Java_cloud_birb_wgpu_rust_Wgpu_initializeWindow
   (JNIEnv *, jclass);
 
+/*
+ * Class:     cloud_birb_wgpu_rust_Wgpu
+ * Method:    updateWindowTitle
+ * Signature: (Ljava/lang/String;)V
+ */
+JNIEXPORT void JNICALL Java_cloud_birb_wgpu_rust_Wgpu_updateWindowTitle
+  (JNIEnv *, jclass, jstring);
+
 #ifdef __cplusplus
 }
 #endif

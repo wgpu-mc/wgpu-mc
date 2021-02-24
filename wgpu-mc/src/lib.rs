@@ -24,6 +24,7 @@ use winit::window::Window;
 use winit::event::WindowEvent;
 use shaderc::ShaderKind;
 use anyhow::Context;
+use crate::mc::gui::Screen;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -122,10 +123,10 @@ pub struct Renderer {
     // instance_buffer: wgpu::Buffer,
 
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
+    // pub screen: Option<Box<dyn Screen>>,
 
     pub depth_texture: texture::Texture,
-    pub mc: mc::Minecraft,
-    pub texture_map: HashMap<TextureId, Material>
+    pub mc: mc::Minecraft
 }
 
 impl Renderer {
@@ -224,9 +225,6 @@ impl Renderer {
         });
 
         let mut compiler = shaderc::Compiler::new().unwrap();
-        // let mut options = shaderc::CompileOptions::new().unwrap();
-
-        println!("do it error tho");
 
         let vs_module_bin = compiler.compile_into_spirv(
             std::str::from_utf8(&shader_provider.get_shader("terrain.vsh")[..]).unwrap(),
@@ -236,8 +234,6 @@ impl Renderer {
             None
         ).unwrap();
 
-        println!("do it error tho");
-
         let fs_module_bin = compiler.compile_into_spirv(
             std::str::from_utf8(&shader_provider.get_shader("terrain.fsh")[..]).unwrap(),
             ShaderKind::Fragment,
@@ -246,17 +242,11 @@ impl Renderer {
             None
         ).unwrap();
 
-        println!("do it error tho");
-
         let vs_module = device.create_shader_module(wgpu::util::make_spirv(vs_module_bin.as_binary_u8()));
         let fs_module = device.create_shader_module(wgpu::util::make_spirv(fs_module_bin.as_binary_u8()));
 
-        println!("do it error tho");
-
         let depth_texture =
             texture::Texture::create_depth_texture(&device, &sc_desc, "depth_texture");
-
-        println!("unh huh");
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -264,8 +254,6 @@ impl Renderer {
                 bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
                 push_constant_ranges: &[],
             });
-
-        println!("test");
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
@@ -313,9 +301,6 @@ impl Renderer {
             alpha_to_coverage_enabled: false,
         });
 
-        println!("do we get here tho");
-
-        let mut texture_map = HashMap::new();
         let mc = Minecraft::new();
 
         Self {
@@ -336,8 +321,7 @@ impl Renderer {
             depth_texture,
             texture_bind_group_layout,
 
-            mc,
-            texture_map
+            mc
         }
     }
 
@@ -401,7 +385,7 @@ impl Renderer {
             // render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
 
-            let bind_texture = match &self.mc.atlas_material {
+            let bind_texture = match &self.mc.block_atlas_material {
                 None => unreachable!(),
                 Some(mat) => mat
             };

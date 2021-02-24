@@ -36,8 +36,8 @@ pub struct Minecraft {
     pub chunks: ChunkManager,
     pub entities: Vec<Entity>,
     pub atlas_allocator: AtlasAllocator,
-    pub atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
-    pub atlas_material: Option<Material>,
+    pub block_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
+    pub block_atlas_material: Option<Material>,
 
     pub texture_manager: TextureManager
 }
@@ -51,8 +51,8 @@ impl Minecraft {
             entities: Vec::new(),
             block_model_data: HashMap::new(),
             atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
-            atlas_image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
-            atlas_material: None,
+            block_atlas_image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
+            block_atlas_material: None,
             texture_manager: HashMap::new(),
             blocks: Vec::new()
         }
@@ -104,7 +104,7 @@ impl Minecraft {
 
             let allocation = self.atlas_allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)).unwrap();
 
-            overlay(&mut self.atlas_image, &image, allocation.rectangle.min.x as u32, allocation.rectangle.min.y as u32);
+            overlay(&mut self.block_atlas_image, &image, allocation.rectangle.min.x as u32, allocation.rectangle.min.y as u32);
 
             self.texture_manager.insert(ns.clone(), (
                 Vector2::new(allocation.rectangle.min.x as f32, allocation.rectangle.min.y as f32),
@@ -112,13 +112,13 @@ impl Minecraft {
             ));
         });
 
-        let texture = Texture::from_image_raw(device, queue, self.atlas_image.as_ref(), Extent3d {
+        let texture = Texture::from_image_raw(device, queue, self.block_atlas_image.as_ref(), Extent3d {
             width: ATLAS_DIMENSIONS as u32,
             height: ATLAS_DIMENSIONS as u32,
             depth: 1
         }, Some("Texture Atlas")).unwrap();
 
-        self.atlas_material = Some(
+        self.block_atlas_material = Some(
             Material::from_texture(device, queue, texture, t_bgl, "Texture Atlas".into())
         );
     }
