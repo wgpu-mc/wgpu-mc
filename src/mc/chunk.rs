@@ -169,8 +169,6 @@ impl Chunk {
             }
         }
 
-        println!("Generated chunk mesh in {} ms", Instant::now().duration_since(instant).as_millis());
-
         self.vertex_count = vertices.len();
         self.vertices = Option::Some(vertices);
     }

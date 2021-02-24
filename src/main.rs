@@ -22,6 +22,7 @@ use std::path::PathBuf;
 use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
 use wgpu_mc::mc::datapack::NamespacedId;
 use std::ops::{Deref, DerefMut};
+use std::time::Instant;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -85,43 +86,56 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     use futures::executor::block_on;
 
     let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
-        block: Option::None,
+        block: None,
+        // block: None,
         direction: BlockDirection::North,
         damage: 0,
         is_cube: true
     }; 256] }; 256]);
-
-    sections.deref_mut()[0].empty = false;
-    sections.deref_mut()[0].blocks = [BlockState {
-        block: Option::Some(*state.mc.block_indices.get("minecraft:block/bedrock").unwrap()),
-        direction: BlockDirection::North,
-        damage: 0,
-        is_cube: true
-    }; 256];
-
-    sections.deref_mut()[1].empty = false;
-    sections.deref_mut()[1].blocks = [BlockState {
-        block: Option::Some(*state.mc.block_indices.get("minecraft:block/dirt").unwrap()),
-        direction: BlockDirection::North,
-        damage: 0,
-        is_cube: true
-    }; 256];
-
-    sections.deref_mut()[2].empty = false;
-    sections.deref_mut()[2].blocks = [BlockState {
-        block: Option::Some(*state.mc.block_indices.get("minecraft:block/oak_wood").unwrap()),
-        direction: BlockDirection::North,
-        damage: 0,
-        is_cube: true
-    }; 256];
-
-    sections.deref_mut()[3].empty = false;
-    sections.deref_mut()[3].blocks = [BlockState {
-        block: Option::Some(*state.mc.block_indices.get("minecraft:block/anvil").unwrap()),
-        direction: BlockDirection::North,
-        damage: 0,
-        is_cube: false
-    }; 256];
+    
+    (0..5).for_each(|index| {
+        sections.deref_mut()[index] = ChunkSection {
+            empty: false,
+            blocks: [BlockState {
+                block: Option::Some(*state.mc.block_indices.get("minecraft:block/quartz_block").unwrap()),
+                direction: BlockDirection::North,
+                damage: 0,
+                is_cube: true
+            }; 256]
+        };
+    });
+    //
+    // sections.deref_mut()[0].empty = false;
+    // sections.deref_mut()[0].blocks = [BlockState {
+    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/bedrock").unwrap()),
+    //     direction: BlockDirection::North,
+    //     damage: 0,
+    //     is_cube: true
+    // }; 256];
+    //
+    // sections.deref_mut()[1].empty = false;
+    // sections.deref_mut()[1].blocks = [BlockState {
+    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/dirt").unwrap()),
+    //     direction: BlockDirection::North,
+    //     damage: 0,
+    //     is_cube: true
+    // }; 256];
+    //
+    // sections.deref_mut()[2].empty = false;
+    // sections.deref_mut()[2].blocks = [BlockState {
+    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/oak_wood").unwrap()),
+    //     direction: BlockDirection::North,
+    //     damage: 0,
+    //     is_cube: true
+    // }; 256];
+    //
+    // sections.deref_mut()[3].empty = false;
+    // sections.deref_mut()[3].blocks = [BlockState {
+    //     block: Option::Some(*state.mc.block_indices.get("minecraft:block/anvil").unwrap()),
+    //     direction: BlockDirection::North,
+    //     damage: 0,
+    //     is_cube: false
+    // }; 256];
 
     let mut chunk = Chunk {
         pos: (0, 0),
@@ -131,7 +145,14 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
         vertex_count: 0
     };
 
-    chunk.generate_vertices(&state.mc.blocks);
+    let big_benchmark = Instant::now();
+
+    (0..4225).for_each(|_| {
+        chunk.generate_vertices(&state.mc.blocks);
+    });
+
+    println!("Generating the mesh for 4225 chunks took {} ms", Instant::now().duration_since(big_benchmark).as_millis());
+
     chunk.upload_buffer(&state.device);
 
     event_loop.run(move |event, _, control_flow| {
