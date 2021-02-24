@@ -138,9 +138,9 @@ impl StaticBlock {
             let name = &model.id.to_str();
 
             //Face textures
-            let north = Self::get_element_face_uv(&element.face_textures.south, &resolved_texture_namespaces, tex_manager, name)?;
+            let north = Self::get_element_face_uv(&element.face_textures.north, &resolved_texture_namespaces, tex_manager, name)?;
             let east = Self::get_element_face_uv(&element.face_textures.east, &resolved_texture_namespaces, tex_manager, name)?;
-            let south = Self::get_element_face_uv(&element.face_textures.north, &resolved_texture_namespaces, tex_manager, name)?;
+            let south = Self::get_element_face_uv(&element.face_textures.south, &resolved_texture_namespaces, tex_manager, name)?;
             let west = Self::get_element_face_uv(&element.face_textures.west, &resolved_texture_namespaces, tex_manager, name)?;
             let down = Self::get_element_face_uv(&element.face_textures.down, &resolved_texture_namespaces, tex_manager, name)?;
             let up = Self::get_element_face_uv(&element.face_textures.up, &resolved_texture_namespaces, tex_manager, name)?;
@@ -295,7 +295,8 @@ type BlockIndex = usize;
 
 #[derive(Clone, Copy)]
 pub struct BlockState {
-    pub block: BlockIndex,
+    pub block: Option<BlockIndex>,
     pub direction: BlockDirection,
-    pub damage: u8
+    pub damage: u8,
+    pub is_cube: bool //speed things up a bit
 }

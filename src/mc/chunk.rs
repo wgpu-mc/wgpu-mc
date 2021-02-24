@@ -7,10 +7,11 @@ use std::cell::RefCell;
 use crate::model::ModelVertex;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use std::ops::Deref;
+use std::time::Instant;
 
-const CHUNK_WIDTH: usize = 16;
-const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
-const CHUNK_HEIGHT: usize = 256;
+pub const CHUNK_WIDTH: usize = 16;
+pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
+pub const CHUNK_HEIGHT: usize = 256;
 
 type ChunkPos = (u32, u32);
 
@@ -43,6 +44,9 @@ impl Chunk {
 
     pub fn generate_vertices(&mut self, blocks: &Vec<Box<dyn Block>>) {
         let mut vertices = Vec::new();
+        let instant = Instant::now();
+
+        let sections = self.sections.deref();
 
         for y in 0..CHUNK_HEIGHT {
             let section = &self.sections[y];
@@ -53,8 +57,12 @@ impl Chunk {
 
             for x in 0..CHUNK_WIDTH {
                 for z in 0..CHUNK_WIDTH {
-                    let block_state: BlockState = self.sections.deref()[y].blocks[(z * CHUNK_WIDTH) + x];
-                    let block = blocks.get(block_state.block).unwrap();
+                    let block_state: BlockState = sections[y].blocks[(z * CHUNK_WIDTH) + x];
+
+                    let block = blocks.get(match block_state.block {
+                        None => continue,
+                        Some(i) => i
+                    }).unwrap();
 
                     let mapper = |v: &ModelVertex| {
                         let mut vertex = *v;
@@ -65,18 +73,86 @@ impl Chunk {
                         vertex
                     };
 
-                    let north_neighbour = {
-
-                    };
-
                     match block.get_model() {
                         BlockModel::Cube(model) => {
-                            vertices.extend_from_slice(&model.north.iter().map(mapper).collect::<Vec<ModelVertex>>());
-                            vertices.extend_from_slice(&model.east.iter().map(mapper).collect::<Vec<ModelVertex>>());
-                            vertices.extend_from_slice(&model.south.iter().map(mapper).collect::<Vec<ModelVertex>>());
-                            vertices.extend_from_slice(&model.west.iter().map(mapper).collect::<Vec<ModelVertex>>());
-                            vertices.extend_from_slice(&model.up.iter().map(mapper).collect::<Vec<ModelVertex>>());
-                            // vertices.extend_from_slice(&model.down.ite r().map(mapper).collect::<Vec<ModelVertex>>());
+                            let render_north = {
+                                if z > 0 {
+                                    let north_block: BlockState = self.sections[y].blocks[((z-1) * CHUNK_WIDTH) + x];
+                                    match north_block.block {
+                                        None => true,
+                                        Some(_) => !north_block.is_cube
+                                    }
+                                } else {
+                                    true
+                                }
+                            };
+
+                            let render_south = {
+                                if z < 15 {
+                                    let south_block: BlockState = self.sections[y].blocks[((z+1) * CHUNK_WIDTH) + x];
+                                    match south_block.block {
+                                        None => true,
+                                        Some(_) => !south_block.is_cube
+                                    }
+                                } else {
+                                    true
+                                }
+                            };
+
+                            let render_up = {
+                                if y < 255 {
+                                    let up_block: BlockState = self.sections[y+1].blocks[(z * CHUNK_WIDTH) + x];
+                                    match up_block.block {
+                                        None => true,
+                                        Some(_) => !up_block.is_cube
+                                    }
+                                } else {
+                                    true
+                                }
+                            };
+
+                            let render_down = {
+                                if y > 0 {
+                                    let down_block: BlockState = self.sections[y-1].blocks[(z * CHUNK_WIDTH) + x];
+                                    match down_block.block {
+                                        None => true,
+                                        Some(_) => !down_block.is_cube
+                                    }
+                                } else {
+                                    true
+                                }
+                            };
+
+                            let render_west = {
+                                if x > 0 {
+                                    let west_block: BlockState = self.sections[y].blocks[(z * CHUNK_WIDTH) + (x-1)];
+                                    match west_block.block {
+                                        None => true,
+                                        Some(_) => !west_block.is_cube
+                                    }
+                                } else {
+                                    true
+                                }
+                            };
+
+                            let render_east = {
+                                if x < 15 {
+                                    let east_block: BlockState = self.sections[y].blocks[(z * CHUNK_WIDTH) + (x+1)];
+                                    match east_block.block {
+                                        None => true,
+                                        Some(_) => !east_block.is_cube
+                                    }
+                                } else {
+                                    true
+                                }
+                            };
+
+                            if render_north { vertices.extend_from_slice(&model.north.iter().map(mapper).collect::<Vec<ModelVertex>>()); }
+                            if render_east { vertices.extend_from_slice(&model.east.iter().map(mapper).collect::<Vec<ModelVertex>>()); }
+                            if render_south { vertices.extend_from_slice(&model.south.iter().map(mapper).collect::<Vec<ModelVertex>>()); }
+                            if render_west { vertices.extend_from_slice(&model.west.iter().map(mapper).collect::<Vec<ModelVertex>>()); }
+                            if render_up { vertices.extend_from_slice(&model.up.iter().map(mapper).collect::<Vec<ModelVertex>>()); }
+                            if render_down { vertices.extend_from_slice(&model.down.iter().map(mapper).collect::<Vec<ModelVertex>>()); }
                         }
                         BlockModel::Custom(model) => {
                             model.iter().for_each(|faces| {
@@ -92,6 +168,8 @@ impl Chunk {
                 }
             }
         }
+
+        println!("Generated chunk mesh in {} ms", Instant::now().duration_since(instant).as_millis());
 
         self.vertex_count = vertices.len();
         self.vertices = Option::Some(vertices);

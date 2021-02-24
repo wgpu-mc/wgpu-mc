@@ -13,7 +13,7 @@ mod texture;
 
 use model::{Vertex};
 use wgpu_mc::Renderer;
-use wgpu_mc::mc::chunk::{Chunk, ChunkSection};
+use wgpu_mc::mc::chunk::{Chunk, ChunkSection, CHUNK_WIDTH};
 use wgpu_mc::mc::block::{BlockState, StaticBlock, BlockModel, BlockDirection};
 use std::collections::HashMap;
 use std::cell::RefCell;
@@ -85,18 +85,43 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     use futures::executor::block_on;
 
     let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
-        block: *state.mc.block_indices.get("minecraft:block/air").unwrap(),
+        block: Option::None,
         direction: BlockDirection::North,
-        damage: 0
+        damage: 0,
+        is_cube: true
     }; 256] }; 256]);
 
     sections.deref_mut()[0].empty = false;
-
-    sections.deref_mut()[0].blocks[0] = BlockState {
-        block: *state.mc.block_indices.get("minecraft:block/anvil").unwrap(),
+    sections.deref_mut()[0].blocks = [BlockState {
+        block: Option::Some(*state.mc.block_indices.get("minecraft:block/bedrock").unwrap()),
         direction: BlockDirection::North,
-        damage: 0
-    };
+        damage: 0,
+        is_cube: true
+    }; 256];
+
+    sections.deref_mut()[1].empty = false;
+    sections.deref_mut()[1].blocks = [BlockState {
+        block: Option::Some(*state.mc.block_indices.get("minecraft:block/dirt").unwrap()),
+        direction: BlockDirection::North,
+        damage: 0,
+        is_cube: true
+    }; 256];
+
+    sections.deref_mut()[2].empty = false;
+    sections.deref_mut()[2].blocks = [BlockState {
+        block: Option::Some(*state.mc.block_indices.get("minecraft:block/oak_wood").unwrap()),
+        direction: BlockDirection::North,
+        damage: 0,
+        is_cube: true
+    }; 256];
+
+    sections.deref_mut()[3].empty = false;
+    sections.deref_mut()[3].blocks = [BlockState {
+        block: Option::Some(*state.mc.block_indices.get("minecraft:block/anvil").unwrap()),
+        direction: BlockDirection::North,
+        damage: 0,
+        is_cube: false
+    }; 256];
 
     let mut chunk = Chunk {
         pos: (0, 0),
@@ -108,8 +133,6 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     chunk.generate_vertices(&state.mc.blocks);
     chunk.upload_buffer(&state.device);
-
-    state.render_chunk(&chunk);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -123,6 +146,26 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::KeyboardInput { input, .. } => match input {
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Space),
+                                ..
+                            } => {
+                                //Update a block and re-generate the chunk mesh for testing
+
+                                println!("test");
+
+                                chunk.sections.deref_mut()[3].blocks[0] = BlockState {
+                                    block: Option::Some(*state.mc.block_indices.get("minecraft:block/quartz_block").unwrap()),
+                                    direction: BlockDirection::North,
+                                    damage: 0,
+                                    is_cube: true
+                                };
+
+                                chunk.generate_vertices(&state.mc.blocks);
+                                chunk.upload_buffer(&state.device);
+                            }
+
                             KeyboardInput {
                                 state: ElementState::Pressed,
                                 virtual_keycode: Some(VirtualKeyCode::Escape),

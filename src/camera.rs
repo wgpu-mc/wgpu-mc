@@ -1,6 +1,45 @@
-use crate::{Camera, OPENGL_TO_WGPU_MATRIX};
+use crate::{OPENGL_TO_WGPU_MATRIX};
 use winit::event::{VirtualKeyCode, ElementState, KeyboardInput, WindowEvent};
-use cgmath::SquareMatrix;
+use cgmath::{SquareMatrix, Rad, Point3, Deg, Vector3, Angle};
+
+pub struct Camera {
+    pub position: cgmath::Point3<f32>,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub up: cgmath::Vector3<f32>,
+    pub aspect: f32,
+    pub fovy: f32,
+    pub znear: f32,
+    pub zfar: f32,
+}
+
+impl Camera {
+    pub fn new(aspect: f32) -> Self {
+        Self {
+            position: Point3::new(0.0, 0.0, 0.0),
+            yaw: 45.0,
+            pitch: 0.0,
+            up: Vector3::unit_y(),
+            aspect,
+            fovy: 90.0,
+            znear: 0.1,
+            zfar: 100.0
+        }
+    }
+
+    pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
+        let target = Point3::new(
+            self.position.x + (self.yaw.cos()),
+            self.position.y + (self.pitch.cos()),
+            self.position.z + (self.yaw.sin())
+        );
+
+        let view = cgmath::Matrix4::look_at(self.position, target, self.up);
+        let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
+        proj * view
+    }
+}
+
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -57,22 +96,30 @@ impl CameraController {
                 let is_pressed = *state == ElementState::Pressed;
                 match keycode {
                     VirtualKeyCode::Space => {
-                        self.is_up_pressed = is_pressed;
-                        true
+                        // self.is_up_pressed = is_pressed;
+                        false
                     }
                     VirtualKeyCode::LShift => {
                         self.is_down_pressed = is_pressed;
                         true
                     }
-                    VirtualKeyCode::W | VirtualKeyCode::Up => {
+                    VirtualKeyCode::W => {
                         self.is_forward_pressed = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Up => {
+                        self.is_up_pressed = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::Down => {
+                        self.is_down_pressed = is_pressed;
                         true
                     }
                     VirtualKeyCode::A | VirtualKeyCode::Left => {
                         self.is_left_pressed = is_pressed;
                         true
                     }
-                    VirtualKeyCode::S | VirtualKeyCode::Down => {
+                    VirtualKeyCode::S => {
                         self.is_backward_pressed = is_pressed;
                         true
                     }
@@ -87,36 +134,36 @@ impl CameraController {
         }
     }
 
-    pub(crate) fn update_camera(&self, camera: &mut Camera) {
+    pub fn update_camera(&self, camera: &mut Camera) {
         use cgmath::InnerSpace;
 
-        let forward = camera.target - camera.eye;
+        let forward = Vector3::new(camera.yaw.cos(), camera.pitch.cos(), camera.yaw.sin());
         let forward_norm = forward.normalize();
-        let forward_mag = forward.magnitude();
 
         // Prevents glitching when camera gets too close to the
         // center of the scene.
-        if self.is_forward_pressed && forward_mag > self.speed {
-            camera.eye += forward_norm * self.speed;
+        if self.is_forward_pressed {
+            camera.position += forward_norm * self.speed;
         }
         if self.is_backward_pressed {
-            camera.eye -= forward_norm * self.speed;
+            camera.position -= forward_norm * self.speed;
         }
-
-        let right = forward_norm.cross(camera.up);
 
         // Redo radius calc in case the up/ down is pressed.
-        let forward = camera.target - camera.eye;
-        let forward_mag = forward.magnitude();
+
+        if self.is_up_pressed {
+            camera.pitch -= 0.05;
+        }
+        if self.is_down_pressed {
+            camera.pitch += 0.05;
+        }
 
         if self.is_right_pressed {
-            // Rescale the distance between the target and eye so
-            // that it doesn't change. The eye therefore still
-            // lies on the circle made by the target and eye.
-            camera.eye = camera.target - (forward + right * self.speed).normalize() * forward_mag;
+            camera.yaw += 0.05;
         }
         if self.is_left_pressed {
-            camera.eye = camera.target - (forward - right * self.speed).normalize() * forward_mag;
+            camera.yaw -= 0.05;
+            // camera.position = camera.target - (forward - right * self.speed).normalize() * forward_mag;
         }
     }
 }

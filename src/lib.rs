@@ -22,7 +22,9 @@ use crate::mc::block::{Block, BlockModel};
 use crate::texture::{TextureId, Texture};
 use std::collections::HashMap;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, Buffer};
-use crate::camera::{CameraController, Uniforms};
+use crate::camera::{CameraController, Camera, Uniforms};
+use cgmath::{Vector3, Point3};
+use bytemuck::__core::time::Duration;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -33,24 +35,6 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
-
-pub struct Camera {
-    eye: cgmath::Point3<f32>,
-    target: cgmath::Point3<f32>,
-    up: cgmath::Vector3<f32>,
-    aspect: f32,
-    fovy: f32,
-    znear: f32,
-    zfar: f32,
-}
-
-impl Camera {
-    fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
-        let view = cgmath::Matrix4::look_at(self.eye, self.target, self.up);
-        let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        proj * view
-    }
-}
 
 struct Instance {
     position: cgmath::Vector3<f32>,
@@ -126,6 +110,7 @@ pub struct Renderer {
     pub camera_controller: CameraController,
 
     pub uniforms: Uniforms,
+    
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
 
@@ -200,16 +185,8 @@ impl Renderer {
                 label: Some("texture_bind_group_layout"),
             });
 
-        let camera = Camera {
-            eye: (0.0, 5.0, 10.0).into(),
-            target: (0.0, 0.0, 0.0).into(),
-            up: cgmath::Vector3::unit_y(),
-            aspect: sc_desc.width as f32 / sc_desc.height as f32,
-            fovy: 90.0,
-            znear: 0.1,
-            zfar: 100.0,
-        };
-        let camera_controller = CameraController::new(0.2);
+        let camera = camera::Camera::new(sc_desc.width as f32 / sc_desc.height as f32);
+        let camera_controller = camera::CameraController::new(0.1);
 
         let mut uniforms = Uniforms::new();
         uniforms.update_view_proj(&camera);
