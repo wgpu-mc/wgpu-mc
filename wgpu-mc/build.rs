@@ -58,15 +58,9 @@ fn main() -> Result<()> {
 
     let mut compiler = shaderc::Compiler::new().context("Unable to create shader compiler")?;
 
-    // This can't be parallelized. The [shaderc::Compiler] is not
-    // thread safe. Also, it creates a lot of resources. You could
-    // spawn multiple processes to handle this, but it would probably
-    // be better just to only compile shaders that have been changed
-    // recently.
+    println!("cargo:rerun-if-changed=\"whateverYouLikeEvenAnAbsentDirectoryOrFile\"");
+
     for shader in shaders {
-        // This tells cargo to rerun this script if something in /src/ changes.
-        // println!("cargo:rerun-if-changed={}", shader.src_path.as_os_str().to_str().unwrap());
-        println!("cargo:rerun-if-changed=\"whateverYouLikeEvenAnAbsentDirectoryOrFile\"");
 
         let compiled = compiler.compile_into_spirv(
             &shader.src,

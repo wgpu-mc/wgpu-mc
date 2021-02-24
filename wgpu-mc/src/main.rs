@@ -7,22 +7,18 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
+use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
+use wgpu_mc::mc::datapack::NamespacedId;
+use futures::executor::block_on;
+use wgpu_mc::Renderer;
+use wgpu_mc::mc::block::{BlockState, BlockDirection};
+use wgpu_mc::mc::chunk::{ChunkSection, Chunk};
+use std::ops::DerefMut;
+use std::time::Instant;
+use std::path::PathBuf;
 
 mod model;
 mod texture;
-
-use model::{Vertex};
-use wgpu_mc::Renderer;
-use wgpu_mc::mc::chunk::{Chunk, ChunkSection, CHUNK_WIDTH};
-use wgpu_mc::mc::block::{BlockState, StaticBlock, BlockModel, BlockDirection};
-use std::collections::HashMap;
-use std::cell::RefCell;
-use futures::executor::block_on;
-use std::path::PathBuf;
-use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
-use wgpu_mc::mc::datapack::NamespacedId;
-use std::ops::{Deref, DerefMut};
-use std::time::Instant;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
