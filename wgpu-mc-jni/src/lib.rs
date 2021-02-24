@@ -2,12 +2,16 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 use std::sync::{Mutex, RwLock, mpsc, Arc};
-use wgpu_mc::Renderer;
+use wgpu_mc::{Renderer, WindowSize, HasWindowSize, ShaderProvider};
 use std::mem::MaybeUninit;
 use glfw::{Context, Key, Action, Window};
-use std::thread;
+use std::{thread, fs};
 use std::sync::mpsc::{channel, RecvError};
 use std::ops::Deref;
+use futures::executor::block_on;
+use glfw::ffi::GLFWwindow;
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use std::path::Path;
 
 enum WindowMessage {
     SetTitle(Arc<String>)
@@ -15,6 +19,37 @@ enum WindowMessage {
 
 static mut RENDERER: MaybeUninit<Mutex<Renderer>> = MaybeUninit::uninit();
 static mut CHANNEL_TX: MaybeUninit<mpsc::Sender<WindowMessage>> = MaybeUninit::uninit();
+
+struct GlfwWindowWrapper {
+    handle: RawWindowHandle,
+    size: WindowSize
+}
+
+impl HasWindowSize for GlfwWindowWrapper {
+    fn get_window_size(&self) -> WindowSize {
+        self.size
+    }
+}
+
+unsafe impl HasRawWindowHandle for GlfwWindowWrapper {
+    fn raw_window_handle(&self) -> RawWindowHandle {
+        self.handle
+    }
+}
+
+struct SimpleShaderProvider {
+
+}
+
+impl ShaderProvider for SimpleShaderProvider {
+    fn get_shader(&self, name: &str) -> Vec<u8> {
+        fs::read(
+            Path::new(
+                "/home/birb/wgpu-mc/wgpu-mc-demo/res/shaders"
+            ).join(name)
+        ).unwrap() //very basic
+    }
+}
 
 #[no_mangle]
 pub extern "system" fn Java_cloud_birb_wgpu_rust_Wgpu_initializeWindow(env: JNIEnv, class: JClass, string: JString) {
@@ -33,6 +68,16 @@ pub extern "system" fn Java_cloud_birb_wgpu_rust_Wgpu_initializeWindow(env: JNIE
         let env = vm.attach_current_thread_permanently().unwrap();
 
         let (mut window, events) = glfw.create_window(640, 480, &title[..], glfw::WindowMode::Windowed).unwrap();
+
+        let renderer = block_on(Renderer::new(
+            &GlfwWindowWrapper {
+                handle: window.raw_window_handle(),
+                size: WindowSize {
+                    width: 640,
+                    height: 480
+                }
+            }, Box::new(SimpleShaderProvider {})
+        ));
 
         while !window.should_close() {
             // Swap front and back buffers

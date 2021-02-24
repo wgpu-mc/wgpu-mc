@@ -25,6 +25,7 @@ use winit::event::WindowEvent;
 use shaderc::ShaderKind;
 use anyhow::Context;
 use crate::mc::gui::Screen;
+use raw_window_handle::HasRawWindowHandle;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -107,7 +108,7 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub sc_desc: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
-    pub size: winit::dpi::PhysicalSize<u32>,
+    pub size: WindowSize,
     pub render_pipeline: wgpu::RenderPipeline,
 
     pub camera: Camera,
@@ -129,9 +130,19 @@ pub struct Renderer {
     pub mc: mc::Minecraft
 }
 
+#[derive(Copy, Clone)]
+pub struct WindowSize {
+    pub width: u32,
+    pub height: u32
+}
+
+pub trait HasWindowSize {
+    fn get_window_size(&self) -> WindowSize;
+}
+
 impl Renderer {
-    pub async fn new(window: &Window, shader_provider: Box<dyn ShaderProvider>) -> Renderer {
-        let size = window.inner_size();
+    pub async fn new<W: HasRawWindowHandle + HasWindowSize>(window: &W, shader_provider: Box<dyn ShaderProvider>) -> Renderer {
+        let size = window.get_window_size();
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
@@ -325,7 +336,7 @@ impl Renderer {
         }
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: WindowSize) {
         self.camera.aspect = self.sc_desc.width as f32 / self.sc_desc.height as f32;
         self.size = new_size;
         self.sc_desc.width = new_size.width;

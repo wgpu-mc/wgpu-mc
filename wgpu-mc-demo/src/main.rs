@@ -8,9 +8,10 @@ use wgpu_mc::mc::block::{BlockDirection, BlockState};
 use wgpu_mc::mc::chunk::{ChunkSection, Chunk};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
-use wgpu_mc::{Renderer, ShaderProvider};
+use wgpu_mc::{Renderer, ShaderProvider, HasWindowSize, WindowSize};
 use futures::executor::block_on;
 use winit::window::Window;
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -53,6 +54,27 @@ impl ShaderProvider for SimpleShaderProvider {
     }
 }
 
+struct WinitWindowWrapper {
+    window: Window
+}
+
+impl HasWindowSize for WinitWindowWrapper {
+    fn get_window_size(&self) -> WindowSize {
+        WindowSize {
+            width: self.window.inner_size().width,
+            height: self.window.inner_size().height,
+        }
+    }
+}
+
+unsafe impl HasRawWindowHandle for WinitWindowWrapper {
+
+    fn raw_window_handle(&self) -> RawWindowHandle {
+        self.window.raw_window_handle()
+    }
+
+}
+
 fn main() {
     let event_loop = EventLoop::new();
     let title = "wgpu-mc test";
@@ -60,6 +82,10 @@ fn main() {
         .with_title(title)
         .build(&event_loop)
         .unwrap();
+
+    let wrapper = WinitWindowWrapper {
+        window
+    };
 
     let sp = SimpleShaderProvider {
         shader_root: std::path::Path::new(env!("OUT_DIR")).join("res").join("shaders")
@@ -75,7 +101,7 @@ fn main() {
 
     println!("making renderer");
 
-    let mut state = block_on(Renderer::new(&window, Box::new(sp)));
+    let mut state = block_on(Renderer::new(&wrapper, Box::new(sp)));
 
     println!("doing stuff");
 
@@ -88,6 +114,8 @@ fn main() {
     println!("Generated block texture atlas.");
 
     state.mc.generate_blocks(&state.device, &rsp);
+
+    let window = wrapper.window;
 
     begin_rendering(event_loop, window, state);
 }
@@ -168,10 +196,16 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                             _ => {}
                         },
                         WindowEvent::Resized(physical_size) => {
-                            &state.resize(*physical_size);
+                            &state.resize(WindowSize {
+                                width: physical_size.width,
+                                height: physical_size.height
+                            });
                         }
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            &state.resize(**new_inner_size);
+                            &state.resize(WindowSize {
+                                width: new_inner_size.width,
+                                height: new_inner_size.height
+                            });
                         }
                         _ => {}
                     }

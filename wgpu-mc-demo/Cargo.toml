@@ -11,6 +11,7 @@ futures = "0.3"
 wgpu-mc = { path = "../wgpu-mc" }
 winit = "0.22"
 wgpu = "0.6"
+raw-window-handle = "0.3.3"
 
 [build-dependencies]
 anyhow = "1.0"
