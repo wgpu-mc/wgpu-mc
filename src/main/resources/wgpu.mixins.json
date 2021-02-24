@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "cloud.birb.wgpu.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "AbstractTextureMixin",
+    "FontManagerMixin",
+    "FramebufferMixin",
+    "NativeImageBackedTextureMixin",
+    "NativeImageMixin",
+    "RenderSystemMixin",
+    "TextureManagerMixin",
+    "TextureUtilMixin",
+    "WorldRendererMixin"
+  ],
+  "client": [
+    "MinecraftClientMixin",
+    "WindowProviderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
