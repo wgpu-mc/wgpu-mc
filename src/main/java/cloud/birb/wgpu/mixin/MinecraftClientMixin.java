@@ -15,11 +15,17 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.io.InputStream;
 
 @Mixin(MinecraftClient.class)
-public class MinecraftClientMixin {
+public abstract class MinecraftClientMixin {
+
+    @Shadow public abstract void startIntegratedServer(String worldName);
+
+    @Shadow protected abstract String getWindowTitle();
 
     @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;setIcon(Ljava/io/InputStream;Ljava/io/InputStream;)V"))
     public void cancelSetIcon(Window window, InputStream icon16, InputStream icon32) {
@@ -96,7 +102,20 @@ public class MinecraftClientMixin {
         System.load("/home/birb/wgpu-mc/target/debug/libwgpu_mc_jni.so");
 //        System.loadLibrary("/home/birb/wgpu-mc/target/debug/libwgpu_mc_jni.so");
         System.out.println(Thread.currentThread().getId());
-        Wgpu.initializeWindow();
+        Wgpu.initializeWindow(this.getWindowTitle());
+
+        this.startIntegratedServer("New World");
+    }
+
+    @Inject(method = "updateWindowTitle", at = @At("HEAD"), cancellable = true)
+    public void modifyUpdateWindowTitle(CallbackInfo ci) {
+        Wgpu.updateWindowTitle(this.getWindowTitle());
+        ci.cancel();
+    }
+
+    @Inject(method = "getWindowTitle", at = @At(value = "RETURN"), cancellable = true)
+    public void getWindowTitleAddWgpu(CallbackInfoReturnable<String> cir) {
+        cir.setReturnValue(cir.getReturnValue() + " + Wgpu");
     }
 
     /**
