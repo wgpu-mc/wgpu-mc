@@ -1,12 +1,7 @@
-
-use anyhow::*;
-use std::ops::Range;
-use std::path::Path;
-use wgpu::util::DeviceExt;
-
 use crate::texture;
 use crate::texture::Texture;
-use wgpu::{BindGroupDescriptor, BindGroupLayout, BindGroupEntry, BindingResource};
+
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingResource};
 
 pub trait Vertex {
     fn desc<'a>() -> wgpu::VertexBufferDescriptor<'a>;
@@ -17,7 +12,7 @@ pub trait Vertex {
 pub struct ModelVertex {
     pub(crate) position: [f32; 3],
     pub(crate) tex_coords: [f32; 2],
-    pub(crate) normal: [f32; 3]
+    pub(crate) normal: [f32; 3],
 }
 
 impl Vertex for ModelVertex {
@@ -54,28 +49,33 @@ pub struct Material {
 }
 
 impl Material {
-    pub fn from_texture(device: &wgpu::Device, queue: &wgpu::Queue, texture: Texture, bgl: &BindGroupLayout, name: String) -> Self {
-        let bind_group = device.create_bind_group(
-            &BindGroupDescriptor {
-                label: None,
-                layout: bgl,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(&texture.view)
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::Sampler(&texture.sampler)
-                    }
-                ]
-            }
-        );
+    #[allow(unused_variables)] // TODO queue is an unused parameter
+    pub fn from_texture(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture: Texture,
+        bgl: &BindGroupLayout,
+        name: String,
+    ) -> Self {
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: bgl,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&texture.view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&texture.sampler),
+                },
+            ],
+        });
 
         Self {
             name,
             diffuse_texture: texture,
-            bind_group
+            bind_group,
         }
     }
 }

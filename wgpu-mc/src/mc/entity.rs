@@ -1,20 +1,24 @@
 pub type Position = (f64, f64);
 pub type Rotation = (f32, f32);
 
+#[allow(dead_code)] // TODO
 pub struct EntityPart {
-    position: Position
+    position: Position,
 }
 
+#[allow(dead_code)] // TODO
 pub struct EntityModel {
-    parts: Vec<EntityPart>
+    parts: Vec<EntityPart>,
 }
 
+#[allow(dead_code)] // TODO
 pub struct Entity {
     model: EntityModel,
 }
 
+#[allow(dead_code)] // TODO
 pub struct EntityInstance {
     entity: &'static Entity,
     position: Position,
-    part_rotation: Vec<Rotation>
+    part_rotation: Vec<Rotation>,
 }

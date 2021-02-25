@@ -1,6 +1,6 @@
-use crate::{OPENGL_TO_WGPU_MATRIX};
-use winit::event::{VirtualKeyCode, ElementState, KeyboardInput, WindowEvent};
-use cgmath::{SquareMatrix, Rad, Point3, Deg, Vector3, Angle};
+use crate::OPENGL_TO_WGPU_MATRIX;
+use cgmath::{Point3, SquareMatrix, Vector3};
+use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 pub struct Camera {
     pub position: cgmath::Point3<f32>,
@@ -23,7 +23,7 @@ impl Camera {
             aspect,
             fovy: 90.0,
             znear: 0.1,
-            zfar: 100.0
+            zfar: 100.0,
         }
     }
 
@@ -31,7 +31,7 @@ impl Camera {
         let target = Point3::new(
             self.position.x + (self.yaw.cos()),
             self.position.y + (self.pitch.cos()),
-            self.position.z + (self.yaw.sin())
+            self.position.z + (self.yaw.sin()),
         );
 
         let view = cgmath::Matrix4::look_at(self.position, target, self.up);
@@ -39,7 +39,6 @@ impl Camera {
         proj * view
     }
 }
-
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -86,11 +85,11 @@ impl CameraController {
         match event {
             WindowEvent::KeyboardInput {
                 input:
-                KeyboardInput {
-                    state,
-                    virtual_keycode: Some(keycode),
-                    ..
-                },
+                    KeyboardInput {
+                        state,
+                        virtual_keycode: Some(keycode),
+                        ..
+                    },
                 ..
             } => {
                 let is_pressed = *state == ElementState::Pressed;
