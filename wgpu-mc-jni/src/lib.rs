@@ -43,11 +43,8 @@ struct SimpleShaderProvider {
 
 impl ShaderProvider for SimpleShaderProvider {
     fn get_shader(&self, name: &str) -> Vec<u8> {
-        fs::read(
-            Path::new(
-                "/home/birb/wgpu-mc/wgpu-mc-demo/res/shaders"
-            ).join(name)
-        ).unwrap() //very basic
+        fs::read(crate_root::root().unwrap().join("res").join("shaders").join(name)).unwrap()
+        //very basic
     }
 }
 
