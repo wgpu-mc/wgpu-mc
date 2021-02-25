@@ -16,6 +16,7 @@ use model::Vertex;
 use raw_window_handle::HasRawWindowHandle;
 use shaderc::ShaderKind;
 use winit::event::WindowEvent;
+use wgpu::RenderPass;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -293,7 +294,7 @@ impl Renderer {
         );
     }
 
-    pub fn render_chunk(&mut self, chunk: &Chunk) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(&mut self, chunks: &[Chunk]) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
 
         let mut encoder = self
@@ -326,9 +327,9 @@ impl Renderer {
                     stencil_ops: None,
                 }),
             });
-
-            // render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
+
+            //Render chunks
 
             let bind_texture = match &self.mc.block_atlas_material {
                 None => unreachable!(),
@@ -338,15 +339,19 @@ impl Renderer {
             render_pass.set_bind_group(0, &bind_texture.bind_group, &[]);
             render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
 
-            render_pass.set_vertex_buffer(
-                0,
-                match &chunk.vertex_buffer {
-                    None => panic!("Chunk did not have generated vertex buffer!"),
-                    Some(buf) => buf.slice(..),
-                },
-            );
+            let mrp = &mut render_pass;
 
-            render_pass.draw(0..chunk.vertex_count as u32, 0..1);
+            for chunk in chunks.iter() {
+                render_pass.set_vertex_buffer(
+                    0,
+                    match &chunk.vertex_buffer {
+                        None => panic!("Chunk did not have generated vertex buffer!"),
+                        Some(buf) => buf.slice(..),
+                    },
+                );
+
+                render_pass.draw(0..chunk.vertex_count as u32, 0..1);
+            }
         }
 
         self.queue.submit(iter::once(encoder.finish()));

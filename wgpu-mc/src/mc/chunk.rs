@@ -33,11 +33,8 @@ impl Chunk {
         self.sections[y].blocks[(z * CHUNK_WIDTH) + x]
     }
 
-    pub fn generate_vertices(&mut self, blocks: &[Box<dyn Block>]) {
+    pub fn generate_vertices(&mut self, blocks: &[Box<dyn Block>], chunk_x: u32, chunk_z: u32) {
         let mut vertices = Vec::new();
-
-        #[allow(unused_variables)] // TODO
-        let instant = Instant::now();
 
         let sections = self.sections.as_ref();
 
@@ -59,9 +56,9 @@ impl Chunk {
 
                     let mapper = |v: &ModelVertex| {
                         let mut vertex = *v;
-                        vertex.position[0] += x as f32;
+                        vertex.position[0] += x as f32 + chunk_x as f32;
                         vertex.position[1] += y as f32;
-                        vertex.position[2] += z as f32;
+                        vertex.position[2] += z as f32 + chunk_z as f32;
 
                         vertex
                     };

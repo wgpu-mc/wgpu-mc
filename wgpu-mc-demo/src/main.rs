@@ -112,39 +112,51 @@ fn main() {
 fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: Renderer) {
     use futures::executor::block_on;
 
-    let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
-        block: None,
-        // block: None,
-        direction: BlockDirection::North,
-        damage: 0,
-        transparency: false
-    }; 256] }; 256]);
+    let mut block_layers = Vec::new();
 
-    (sections.deref_mut())[2] = ChunkSection {
-        empty: false,
-        blocks: [BlockState {
-            block: Option::Some(*state.mc.block_indices.get("minecraft:block/quartz_block").unwrap()),
-            direction: BlockDirection::North,
-            damage: 0,
-            transparency: true
-        }; 256]
-    };
+    (0..30).for_each(|_| block_layers.push(*state.mc.block_indices.get("minecraft:block/stone").unwrap()));
+    (0..19).for_each(|_| block_layers.push(*state.mc.block_indices.get("minecraft:block/dirt").unwrap()));
 
-    let mut chunk = Chunk {
-        pos: (0, 0),
-        sections,
-        vertices: None,
-        vertex_buffer: None,
-        vertex_count: 0
-    };
+    block_layers.push(*state.mc.block_indices.get("minecraft:block/grass_block").unwrap());
 
-    chunk.generate_vertices(&state.mc.blocks);
-    chunk.upload_buffer(&state.device);
+    let chunks = (0..8).map(|x| {
+        (0..8).map(|z| {
+            let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
+                block: None,
+                // block: None,
+                direction: BlockDirection::North,
+                damage: 0,
+                transparency: false
+            }; 256] }; 256]);
 
-    let cobblestone = state.mc.block_model_data.get("minecraft:block/jukebox").unwrap();
+            (0..50).for_each(|y| {
+                sections.deref_mut()[y] = ChunkSection {
+                    empty: false,
+                    blocks: [BlockState {
+                        block: Option::Some(*block_layers.get(y).unwrap()),
+                        direction: BlockDirection::North,
+                        damage: 0,
+                        transparency: true
+                    }; 256]
+                }
+            });
 
+            let mut chunk = Chunk {
+                pos: (x, z),
+                sections,
+                vertices: None,
+                vertex_buffer: None,
+                vertex_count: 0
+            };
 
-    let model = cobblestone.elements.first().unwrap();
+            chunk.generate_vertices(&state.mc.blocks, x*16, z*16);
+            chunk.upload_buffer(&state.device);
+
+            chunk
+        }).collect::<Vec<Chunk>>()
+    }).flatten().collect::<Vec<Chunk>>();
+
+    let mut frame_begin = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -165,17 +177,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                             } => {
                                 //Update a block and re-generate the chunk mesh for testing
 
-                                println!("test");
-
-                                chunk.sections.deref_mut()[3].blocks[0] = BlockState {
-                                    block: Option::Some(*state.mc.block_indices.get("minecraft:block/quartz_block").unwrap()),
-                                    direction: BlockDirection::North,
-                                    damage: 0,
-                                    transparency: true
-                                };
-
-                                chunk.generate_vertices(&state.mc.blocks);
-                                chunk.upload_buffer(&state.device);
+                                //removed atm for testing
                             }
 
                             KeyboardInput {
@@ -205,15 +207,12 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
             }
             Event::RedrawRequested(_) => {
                 &state.update();
-                match &state.render_chunk(&chunk) {
-                    Ok(_) => {}
-                    // Recreate the swap_chain if lost
-                    Err(wgpu::SwapChainError::Lost) => *(&state.resize(state.size)),
-                    // The system is out of memory, we should probably quit
-                    Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{:?}", e),
-                };
+                &state.render(&chunks);
+
+                let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
+                frame_begin = Instant::now();
+
+                println!("Frametime {}, FPS {}", delta, 1000/delta);
             }
             _ => {}
         }
