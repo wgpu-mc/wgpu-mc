@@ -87,14 +87,18 @@ fn main() {
     };
 
     let sp = SimpleShaderProvider {
-        shader_root: std::path::Path::new(env!("OUT_DIR")).join("res").join("shaders")
+        shader_root: crate_root::root().unwrap().join("res").join("shaders"),
     };
 
     let rsp = SimpleResourceProvider {
-        asset_root: std::path::Path::new(env!("OUT_DIR")).join("res").join("assets")
+        asset_root: crate_root::root().unwrap().join("res").join("assets"),
     };
 
-    let mc_root = std::path::Path::new(env!("OUT_DIR")).join("res").join("assets").join("minecraft");
+    let mc_root = crate_root::root()
+        .unwrap()
+        .join("res")
+        .join("assets")
+        .join("minecraft");
 
     let mut state = block_on(Renderer::new(&wrapper, Box::new(sp)));
 
