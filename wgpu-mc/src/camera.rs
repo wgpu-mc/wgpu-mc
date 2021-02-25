@@ -17,7 +17,7 @@ impl Camera {
     pub fn new(aspect: f32) -> Self {
         Self {
             position: Point3::new(0.0, 0.0, 0.0),
-            yaw: 45.0,
+            yaw: 0.0,
             pitch: 0.0,
             up: Vector3::unit_y(),
             aspect,
@@ -54,7 +54,8 @@ impl Uniforms {
     }
 
     pub(crate) fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_proj = (OPENGL_TO_WGPU_MATRIX * camera.build_view_projection_matrix()).into();
+        // self.view_proj = (OPENGL_TO_WGPU_MATRIX * camera.build_view_projection_matrix()).into();
+        self.view_proj = camera.build_view_projection_matrix().into();
     }
 }
 

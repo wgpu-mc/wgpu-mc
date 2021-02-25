@@ -201,8 +201,8 @@ impl BlockModelData {
                             let faces = x.get("faces").unwrap().as_object().unwrap();
 
                             Some(Element {
-                                from: (from.0, to.1, to.1),
-                                to: (to.0, from.1, from.2),
+                                from,
+                                to,
                                 face_textures: {
                                     ElementFaces {
                                         up: Self::parse_face(faces.get("up"), textures),
