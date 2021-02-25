@@ -1,10 +1,10 @@
 use std::{iter, fs};
 use std::path::PathBuf;
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Deref};
 use std::time::Instant;
 use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
 use wgpu_mc::mc::datapack::NamespacedId;
-use wgpu_mc::mc::block::{BlockDirection, BlockState};
+use wgpu_mc::mc::block::{BlockDirection, BlockState, BlockModel};
 use wgpu_mc::mc::chunk::{ChunkSection, Chunk};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
@@ -49,7 +49,6 @@ impl ResourceProvider for SimpleResourceProvider {
 impl ShaderProvider for SimpleShaderProvider {
     fn get_shader(&self, name: &str) -> Vec<u8> {
         let path = self.shader_root.join(name);
-        println!("{:?}", path);
         fs::read(path).unwrap()
     }
 }
@@ -95,23 +94,13 @@ fn main() {
         asset_root: std::path::Path::new(env!("OUT_DIR")).join("res").join("assets")
     };
 
-    println!("{:?}", sp.shader_root);
-
     let mc_root = std::path::Path::new(env!("OUT_DIR")).join("res").join("assets").join("minecraft");
-
-    println!("making renderer");
 
     let mut state = block_on(Renderer::new(&wrapper, Box::new(sp)));
 
-    println!("doing stuff");
-
     state.mc.load_block_models(mc_root);
 
-    println!("Loaded block model datapacks.");
-
     state.mc.generate_block_texture_atlas(&rsp, &state.device, &state.queue, &state.texture_bind_group_layout);
-
-    println!("Generated block texture atlas.");
 
     state.mc.generate_blocks(&state.device, &rsp);
 
@@ -128,20 +117,18 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
         // block: None,
         direction: BlockDirection::North,
         damage: 0,
-        is_cube: true
+        transparency: false
     }; 256] }; 256]);
-    
-    (0..5).for_each(|index| {
-        sections.deref_mut()[index] = ChunkSection {
-            empty: false,
-            blocks: [BlockState {
-                block: Option::Some(*state.mc.block_indices.get("minecraft:block/quartz_block").unwrap()),
-                direction: BlockDirection::North,
-                damage: 0,
-                is_cube: true
-            }; 256]
-        };
-    });
+
+    (sections.deref_mut())[2] = ChunkSection {
+        empty: false,
+        blocks: [BlockState {
+            block: Option::Some(*state.mc.block_indices.get("minecraft:block/quartz_block").unwrap()),
+            direction: BlockDirection::North,
+            damage: 0,
+            transparency: true
+        }; 256]
+    };
 
     let mut chunk = Chunk {
         pos: (0, 0),
@@ -153,6 +140,11 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     chunk.generate_vertices(&state.mc.blocks);
     chunk.upload_buffer(&state.device);
+
+    let cobblestone = state.mc.block_model_data.get("minecraft:block/jukebox").unwrap();
+
+
+    let model = cobblestone.elements.first().unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -179,7 +171,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                                     block: Option::Some(*state.mc.block_indices.get("minecraft:block/quartz_block").unwrap()),
                                     direction: BlockDirection::North,
                                     damage: 0,
-                                    is_cube: true
+                                    transparency: true
                                 };
 
                                 chunk.generate_vertices(&state.mc.blocks);

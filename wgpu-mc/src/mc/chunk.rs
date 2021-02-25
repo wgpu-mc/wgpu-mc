@@ -72,8 +72,8 @@ impl Chunk {
                                 let north_block =
                                     self.sections[y].blocks[((z - 1) * CHUNK_WIDTH) + x];
                                 match north_block.block {
-                                    Some(_) => !north_block.is_cube,
-                                    None => true,
+                                    Some(_) => north_block.transparency,
+                                    None => false,
                                 }
                             });
 
@@ -81,24 +81,24 @@ impl Chunk {
                                 let south_block =
                                     self.sections[y].blocks[((z + 1) * CHUNK_WIDTH) + x];
                                 match south_block.block {
-                                    Some(_) => !south_block.is_cube,
-                                    None => true,
+                                    Some(_) => south_block.transparency,
+                                    None => false,
                                 }
                             });
 
                             let render_up = !(y < 255 && {
                                 let up_block = self.sections[y + 1].blocks[(z * CHUNK_WIDTH) + x];
                                 match up_block.block {
-                                    Some(_) => !up_block.is_cube,
-                                    None => true,
+                                    Some(_) => up_block.transparency,
+                                    None => false,
                                 }
                             });
 
                             let render_down = !(y > 0 && {
                                 let down_block = self.sections[y - 1].blocks[(z * CHUNK_WIDTH) + x];
                                 match down_block.block {
-                                    Some(_) => !down_block.is_cube,
-                                    None => true,
+                                    Some(_) => down_block.transparency,
+                                    None => false,
                                 }
                             });
 
@@ -106,8 +106,8 @@ impl Chunk {
                                 let west_block =
                                     self.sections[y].blocks[(z * CHUNK_WIDTH) + (x - 1)];
                                 match west_block.block {
-                                    Some(_) => !west_block.is_cube,
-                                    None => true,
+                                    Some(_) => west_block.transparency,
+                                    None => false,
                                 }
                             });
 
@@ -115,8 +115,8 @@ impl Chunk {
                                 let east_block =
                                     self.sections[y].blocks[(z * CHUNK_WIDTH) + (x + 1)];
                                 match east_block.block {
-                                    Some(_) => !east_block.is_cube,
-                                    None => true,
+                                    Some(_) => east_block.transparency,
+                                    None => false,
                                 }
                             });
 

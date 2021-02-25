@@ -83,8 +83,6 @@ impl Minecraft {
         }
 
         let model = model_map.get("minecraft:block/cobblestone").unwrap();
-
-        println!("{:?}", model.textures);
     }
 
     pub fn generate_block_texture_atlas(

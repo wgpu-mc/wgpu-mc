@@ -40,12 +40,11 @@ macro_rules! upload_vertex_vec {
 }
 
 impl StaticBlock {
-    #[allow(unused_variables)] // TODO parameter name is unused
+
     pub fn get_element_face_uv(
         face: &Option<FaceTexture>,
         resolved_namespaces: &HashMap<&String, &NamespacedId>,
-        tex_manager: &TextureManager,
-        name: &str,
+        tex_manager: &TextureManager
     ) -> Option<[[f32; 2]; 2]> {
         match face {
             None => Some([[0.0, 0.0], [0.0, 0.0]]),
@@ -60,12 +59,6 @@ impl StaticBlock {
                     NamespacedId::Invalid => panic!(),
                 };
 
-                // if name == "minecraft:block/anvil" {
-                //     println!("loc.0.x + tex.uv.0.x = {} + {} = {}", loc.0.x, tex.uv.0.x, loc.0.x + tex.uv.0.x);
-                //     println!("loc.0.x + tex.uv.0.y = {} + {} = {}", loc.0.x, tex.uv.0.y, loc.0.x + tex.uv.0.y);
-                //     println!("loc.0.x + tex.uv.1.x = {} + {} = {}", loc.0.x, tex.uv.1.x, loc.0.x + tex.uv.1.x);
-                //     println!("loc.0.x + tex.uv.1.y = {} + {} = {}", loc.0.x, tex.uv.1.y, loc.0.x + tex.uv.1.x);
-                // }
                 const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
                 let arr = [
@@ -142,11 +135,11 @@ impl StaticBlock {
             let first = model.elements.first().unwrap();
 
             first.from.0 == 0.0
-                && first.from.1 == 1.0
-                && first.from.2 == 1.0
+                && first.from.1 == 0.0
+                && first.from.2 == 0.0
                 && first.to.0 == 1.0
-                && first.to.1 == 0.0
-                && first.to.2 == 0.0
+                && first.to.1 == 1.0
+                && first.to.2 == 1.0
         };
 
         let mut results = model
@@ -164,68 +157,64 @@ impl StaticBlock {
                 let north = Self::get_element_face_uv(
                     &element.face_textures.north,
                     &resolved_texture_namespaces,
-                    tex_manager,
-                    name.as_str(),
+                    tex_manager
                 )?;
                 let east = Self::get_element_face_uv(
                     &element.face_textures.east,
                     &resolved_texture_namespaces,
-                    tex_manager,
-                    name.as_str(),
+                    tex_manager
                 )?;
                 let south = Self::get_element_face_uv(
                     &element.face_textures.south,
                     &resolved_texture_namespaces,
-                    tex_manager,
-                    name.as_str(),
+                    tex_manager
                 )?;
                 let west = Self::get_element_face_uv(
                     &element.face_textures.west,
                     &resolved_texture_namespaces,
-                    tex_manager,
-                    name.as_str(),
+                    tex_manager
                 )?;
                 let down = Self::get_element_face_uv(
                     &element.face_textures.down,
                     &resolved_texture_namespaces,
-                    tex_manager,
-                    name.as_str(),
+                    tex_manager
                 )?;
                 let up = Self::get_element_face_uv(
                     &element.face_textures.up,
                     &resolved_texture_namespaces,
-                    tex_manager,
-                    name.as_str(),
+                    tex_manager
                 )?;
 
                 //let resolved_texture_namespaces = ();
 
-                // let a = [element.from.0, element.from.1, element.from.2];
-                // let b = [element.to.0, element.from.1, element.from.2];
-                // let c = [element.to.0, element.to.1, element.from.2];
-                // let d = [element.from.0, element.to.1, element.from.2];
-                // let e = [element.from.0, element.from.1, element.to.2];
-                // let f = [element.to.0, element.from.1, element.to.2];
-                // let g = [element.to.0, element.to.1, element.to.2];
-                // let h = [element.from.0, element.to.1, element.to.2];
-                let a = [element.to.0, element.from.1, element.from.2];
-                let b = [element.from.0, element.from.1, element.from.2];
-                let c = [element.from.0, element.to.1, element.from.2];
-                let d = [element.to.0, element.to.1, element.from.2];
-                let e = [element.to.0, element.from.1, element.to.2];
-                let f = [element.from.0, element.from.1, element.to.2];
-                let g = [element.from.0, element.to.1, element.to.2];
-                let h = [element.to.0, element.to.1, element.to.2];
+                //to-from to model coords is Z and Y inverted
+
+                // let a = [element.from.0, 1.0-element.to.1, 1.0-element.to.2];
+                // let b = [element.to.0, 1.0-element.to.1, 1.0-element.to.2];
+                // let c = [element.to.0, 1.0-element.from.1, 1.0-element.to.2];
+                // let d = [element.from.0, 1.0-element.from.1, 1.0-element.to.2];
+                // let e = [element.from.0, 1.0-element.to.1, 1.0-element.from.2];
+                // let f = [element.to.0, 1.0-element.to.1, 1.0-element.from.2];
+                // let g = [element.to.0, 1.0-element.from.1, 1.0-element.from.2];
+                // let h = [element.from.0, 1.0-element.from.1, 1.0-element.from.2];
+                let a = [1.0-element.from.0, element.from.1,   element.from.2];
+                let b = [1.0-element.to.0, element.from.1,     element.from.2];
+                let c = [1.0-element.to.0, element.to.1,   element.from.2];
+                let d = [1.0-element.from.0, element.to.1, element.from.2];
+                let e = [1.0-element.from.0, element.from.1,   element.to.2];
+                let f = [1.0-element.to.0, element.from.1,     element.to.2];
+                let g = [1.0-element.to.0, element.to.1,   element.to.2];
+                let h = [1.0-element.from.0, element.to.1, element.to.2];
 
                 #[rustfmt::skip]
                 let faces = BlockModelFaces {
                     south: [
-                        ModelVertex { position: c, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 1.0], },
-                        ModelVertex { position: a, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 1.0], },
-                        ModelVertex { position: b, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, 1.0], },
-                        ModelVertex { position: d, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, 1.0], },
-                        ModelVertex { position: a, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, 1.0], },
-                        ModelVertex { position: c, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, 1.0], },
+                        ModelVertex { position: e, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, -1.0], },
+                        ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, -1.0], },
+                        ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, -1.0], },
+                        ModelVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, -1.0], },
+                        ModelVertex { position: g, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, -1.0], },
+                        ModelVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, -1.0], },
                     ],
                     west: [
                         ModelVertex { position: g, tex_coords: [west[1][0], west[0][1]], normal: [-1.0, 0.0, 0.0], },
@@ -235,36 +224,36 @@ impl StaticBlock {
                         ModelVertex { position: b, tex_coords: [west[0][0], west[1][1]], normal: [-1.0, 0.0, 0.0], },
                         ModelVertex { position: g, tex_coords: [west[1][0], west[0][1]], normal: [-1.0, 0.0, 0.0], },
                     ], north: [
-                        ModelVertex { position: f, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, -1.0], },
-                        ModelVertex { position: e, tex_coords: [north[1][0], north[1][1]], normal: [0.0, 0.0, -1.0], },
-                        ModelVertex { position: h, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, -1.0], },
-                        ModelVertex { position: h, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, -1.0], },
-                        ModelVertex { position: g, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, -1.0], },
-                        ModelVertex { position: f, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, -1.0], },
+                        ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 1.0], },
+                        ModelVertex { position: a, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, 1.0], },
+                        ModelVertex { position: b, tex_coords: [north[1][0], north[1][1]], normal: [0.0, 0.0, 1.0], },
+                        ModelVertex { position: d, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 1.0], },
+                        ModelVertex { position: a, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, 1.0], },
+                        ModelVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 1.0], },
                     ],
                     east: [
+                        ModelVertex { position: e, tex_coords: [east[0][0], east[1][1]], normal: [1.0, 0.0, 0.0], },
                         ModelVertex { position: a, tex_coords: [east[1][0], east[1][1]], normal: [1.0, 0.0, 0.0], },
                         ModelVertex { position: d, tex_coords: [east[1][0], east[0][1]], normal: [1.0, 0.0, 0.0], },
-                        ModelVertex { position: e, tex_coords: [east[0][0], east[1][1]], normal: [1.0, 0.0, 0.0], },
                         ModelVertex { position: d, tex_coords: [east[1][0], east[0][1]], normal: [1.0, 0.0, 0.0], },
                         ModelVertex { position: h, tex_coords: [east[0][0], east[0][1]], normal: [1.0, 0.0, 0.0], },
                         ModelVertex { position: e, tex_coords: [east[0][0], east[1][1]], normal: [1.0, 0.0, 0.0], },
                     ],
                     up: [
-                        ModelVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, 1.0, 0.0], },
-                        ModelVertex { position: b, tex_coords: [down[0][0], down[0][1]], normal: [0.0, 1.0, 0.0], },
-                        ModelVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, 1.0, 0.0], },
-                        ModelVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, 1.0, 0.0], },
-                        ModelVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, 1.0, 0.0], },
-                        ModelVertex { position: e, tex_coords: [down[1][0], down[1][1]], normal: [0.0, 1.0, 0.0], },
+                        ModelVertex { position: g, tex_coords: [up[1][0], up[0][1]], normal: [1.0, 0.0, 0.0], },
+                        ModelVertex { position: h, tex_coords: [up[0][0], up[0][1]], normal: [1.0, 0.0, 0.0], },
+                        ModelVertex { position: d, tex_coords: [up[0][0], up[1][1]], normal: [1.0, 0.0, 0.0], },
+                        ModelVertex { position: c, tex_coords: [up[1][0], up[1][1]], normal: [1.0, 0.0, 0.0], },
+                        ModelVertex { position: g, tex_coords: [up[1][0], up[0][1]], normal: [1.0, 0.0, 0.0], },
+                        ModelVertex { position: d, tex_coords: [up[0][0], up[1][1]], normal: [1.0, 0.0, 0.0], },
                     ],
                     down: [
-                        ModelVertex { position: d, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
-                        ModelVertex { position: g, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
-                        ModelVertex { position: c, tex_coords: [down[1][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
-                        ModelVertex { position: h, tex_coords: [down[0][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
-                        ModelVertex { position: g, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
-                        ModelVertex { position: d, tex_coords: [down[0][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
+                        ModelVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
+                        ModelVertex { position: b, tex_coords: [down[0][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
+                        ModelVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
+                        ModelVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
+                        ModelVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
+                        ModelVertex { position: e, tex_coords: [down[1][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
                     ],
                 };
 
@@ -352,5 +341,5 @@ pub struct BlockState {
     pub block: Option<BlockIndex>,
     pub direction: BlockDirection,
     pub damage: u8,
-    pub is_cube: bool, //speed things up a bit
+    pub transparency: bool, //speed things up a bit
 }
