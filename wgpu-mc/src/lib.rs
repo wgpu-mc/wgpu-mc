@@ -1,31 +1,21 @@
 use std::iter;
 
-use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
 
 pub mod mc;
 
+pub mod camera;
 pub mod model;
 pub mod texture;
-pub mod camera;
 
-use model::{Vertex};
+use crate::camera::{Camera, CameraController, Uniforms};
+use crate::mc::chunk::Chunk;
 use crate::mc::Minecraft;
-use crate::mc::chunk::{ChunkManager, Chunk};
-use crate::model::{Material};
-use crate::mc::block::{Block, BlockModel};
-use crate::texture::{TextureId, Texture};
-use std::collections::HashMap;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, Buffer};
-use crate::camera::{CameraController, Camera, Uniforms};
-use cgmath::{Vector3, Point3};
-use bytemuck::__core::time::Duration;
-use winit::window::Window;
-use winit::event::WindowEvent;
-use shaderc::ShaderKind;
-use anyhow::Context;
-use crate::mc::gui::Screen;
+
+use model::Vertex;
 use raw_window_handle::HasRawWindowHandle;
+use shaderc::ShaderKind;
+use winit::event::WindowEvent;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -35,17 +25,19 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 1.0,
 );
 
+#[allow(dead_code)] // TODO
 struct Instance {
     position: cgmath::Vector3<f32>,
     rotation: cgmath::Quaternion<f32>,
 }
 
 impl Instance {
+    #[allow(dead_code)] // TODO
     fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
             model: (cgmath::Matrix4::from_translation(self.position)
                 * cgmath::Matrix4::from(self.rotation))
-                .into(),
+            .into(),
         }
     }
 }
@@ -58,6 +50,7 @@ pub struct InstanceRaw {
 }
 
 impl InstanceRaw {
+    #[allow(dead_code)] // TODO
     fn desc<'a>() -> wgpu::VertexBufferDescriptor<'a> {
         use std::mem;
         wgpu::VertexBufferDescriptor {
@@ -97,9 +90,7 @@ impl InstanceRaw {
 }
 
 pub trait ShaderProvider {
-
     fn get_shader(&self, name: &str) -> Vec<u8>;
-
 }
 
 pub struct Renderer {
@@ -115,25 +106,23 @@ pub struct Renderer {
     pub camera_controller: CameraController,
 
     pub uniforms: Uniforms,
-    
+
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
 
     // instances: Vec<Instance>,
     // #[allow(dead_code)]
     // instance_buffer: wgpu::Buffer,
-
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
     // pub screen: Option<Box<dyn Screen>>,
-
     pub depth_texture: texture::Texture,
-    pub mc: mc::Minecraft
+    pub mc: mc::Minecraft,
 }
 
 #[derive(Copy, Clone)]
 pub struct WindowSize {
     pub width: u32,
-    pub height: u32
+    pub height: u32,
 }
 
 pub trait HasWindowSize {
@@ -141,7 +130,10 @@ pub trait HasWindowSize {
 }
 
 impl Renderer {
-    pub async fn new<W: HasRawWindowHandle + HasWindowSize>(window: &W, shader_provider: Box<dyn ShaderProvider>) -> Renderer {
+    pub async fn new<W: HasRawWindowHandle + HasWindowSize>(
+        window: &W,
+        shader_provider: Box<dyn ShaderProvider>,
+    ) -> Renderer {
         let size = window.get_window_size();
 
         // The instance is a handle to our GPU
@@ -237,24 +229,30 @@ impl Renderer {
 
         let mut compiler = shaderc::Compiler::new().unwrap();
 
-        let vs_module_bin = compiler.compile_into_spirv(
-            std::str::from_utf8(&shader_provider.get_shader("terrain.vsh")[..]).unwrap(),
-            ShaderKind::Vertex,
-            "terrain.vsh",
-            "main",
-            None
-        ).unwrap();
+        let vs_module_bin = compiler
+            .compile_into_spirv(
+                std::str::from_utf8(&shader_provider.get_shader("terrain.vsh")[..]).unwrap(),
+                ShaderKind::Vertex,
+                "terrain.vsh",
+                "main",
+                None,
+            )
+            .unwrap();
 
-        let fs_module_bin = compiler.compile_into_spirv(
-            std::str::from_utf8(&shader_provider.get_shader("terrain.fsh")[..]).unwrap(),
-            ShaderKind::Fragment,
-            "terrain.fsh",
-            "main",
-            None
-        ).unwrap();
+        let fs_module_bin = compiler
+            .compile_into_spirv(
+                std::str::from_utf8(&shader_provider.get_shader("terrain.fsh")[..]).unwrap(),
+                ShaderKind::Fragment,
+                "terrain.fsh",
+                "main",
+                None,
+            )
+            .unwrap();
 
-        let vs_module = device.create_shader_module(wgpu::util::make_spirv(vs_module_bin.as_binary_u8()));
-        let fs_module = device.create_shader_module(wgpu::util::make_spirv(fs_module_bin.as_binary_u8()));
+        let vs_module =
+            device.create_shader_module(wgpu::util::make_spirv(vs_module_bin.as_binary_u8()));
+        let fs_module =
+            device.create_shader_module(wgpu::util::make_spirv(fs_module_bin.as_binary_u8()));
 
         let depth_texture =
             texture::Texture::create_depth_texture(&device, &sc_desc, "depth_texture");
@@ -292,7 +290,7 @@ impl Renderer {
                 alpha_blend: wgpu::BlendDescriptor {
                     src_factor: wgpu::BlendFactor::One,
                     dst_factor: wgpu::BlendFactor::One,
-                    operation: wgpu::BlendOperation::Add
+                    operation: wgpu::BlendOperation::Add,
                 },
                 write_mask: wgpu::ColorWrite::ALL,
             }],
@@ -332,7 +330,7 @@ impl Renderer {
             depth_texture,
             texture_bind_group_layout,
 
-            mc
+            mc,
         }
     }
 
@@ -398,16 +396,19 @@ impl Renderer {
 
             let bind_texture = match &self.mc.block_atlas_material {
                 None => unreachable!(),
-                Some(mat) => mat
+                Some(mat) => mat,
             };
 
             render_pass.set_bind_group(0, &bind_texture.bind_group, &[]);
             render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, match &chunk.vertex_buffer {
-                None => panic!("Chunk did not have generated vertex buffer!"),
-                Some(buf) => buf.slice(..)
-            });
+            render_pass.set_vertex_buffer(
+                0,
+                match &chunk.vertex_buffer {
+                    None => panic!("Chunk did not have generated vertex buffer!"),
+                    Some(buf) => buf.slice(..),
+                },
+            );
 
             render_pass.draw(0..chunk.vertex_count as u32, 0..1);
         }

@@ -1,28 +1,27 @@
-use crate::mc::entity::Entity;
-use crate::mc::chunk::ChunkManager;
 use std::collections::HashMap;
-use crate::model::Material;
+use std::path::PathBuf;
+
 use crate::mc::block::{Block, StaticBlock};
-use std::path::{PathBuf, Path};
-use image::{DynamicImage, GenericImageView, Rgba, ColorType};
+use crate::mc::chunk::ChunkManager;
 use crate::mc::datapack::{BlockModelData, NamespacedId};
-use guillotiere::{SimpleAtlasAllocator, Size, dump_svg, AtlasAllocator, size2};
-use guillotiere::euclid::Size2D;
+use crate::mc::entity::Entity;
 use crate::mc::resource::{ResourceProvider, ResourceType};
+use crate::model::Material;
 use crate::texture::{Texture, UV};
-use std::fs;
-use std::fs::File;
-use image::imageops::overlay;
-use image::codecs::png::PngEncoder;
-use wgpu::{TextureDescriptor, Extent3d, TextureFormat, TextureDimension, BindGroupLayout};
+
 use cgmath::Vector2;
+use guillotiere::euclid::Size2D;
+use guillotiere::AtlasAllocator;
+use image::imageops::overlay;
+use image::{GenericImageView, Rgba};
+use wgpu::{BindGroupLayout, Extent3d};
 
 pub mod block;
 pub mod chunk;
-pub mod entity;
 pub mod datapack;
-pub mod resource;
+pub mod entity;
 pub mod gui;
+pub mod resource;
 
 const ATLAS_DIMENSIONS: i32 = 1024;
 
@@ -39,7 +38,7 @@ pub struct Minecraft {
     pub block_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
     pub block_atlas_material: Option<Material>,
 
-    pub texture_manager: TextureManager
+    pub texture_manager: TextureManager,
 }
 
 impl Minecraft {
@@ -51,10 +50,13 @@ impl Minecraft {
             entities: Vec::new(),
             block_model_data: HashMap::new(),
             atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
-            block_atlas_image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
+            block_atlas_image: image::ImageBuffer::new(
+                ATLAS_DIMENSIONS as u32,
+                ATLAS_DIMENSIONS as u32,
+            ),
             block_atlas_material: None,
             texture_manager: HashMap::new(),
-            blocks: Vec::new()
+            blocks: Vec::new(),
         }
     }
 
@@ -64,83 +66,118 @@ impl Minecraft {
 
         let mut model_map = &mut self.block_model_data;
 
-        models_list.for_each(|e| {
+        for e in models_list {
             let entry = e.unwrap();
 
             let path = entry.path();
-            let split: Vec<&str> = path.file_name().unwrap().to_str().unwrap().split(".").collect();
+            let split: Vec<&str> = path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .split('.')
+                .collect();
             let name = *split.first().unwrap();
 
-            datapack::BlockModelData::deserialize(name, (&models_dir).clone(), model_map);
-        });
+            datapack::BlockModelData::deserialize(name, (&models_dir).clone(), &mut model_map);
+        }
 
         let model = model_map.get("minecraft:block/cobblestone").unwrap();
 
         println!("{:?}", model.textures);
     }
-    
-    pub fn generate_block_texture_atlas(&mut self, rsp: &dyn ResourceProvider, device: &wgpu::Device, queue: &wgpu::Queue, t_bgl: &BindGroupLayout) {
+
+    pub fn generate_block_texture_atlas(
+        &mut self,
+        rsp: &dyn ResourceProvider,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        t_bgl: &BindGroupLayout,
+    ) {
         let mut textures = HashMap::new();
 
-        self.block_model_data.iter().for_each(|(_, bmd)| {
-            bmd.textures.iter().for_each(|(_, ns)| {
-                match ns {
-                    NamespacedId::Resource(_) => {
-                        textures.insert(ns.clone(), ());
-                    }
-                    _ => {}
+        for (_, bmd) in self.block_model_data.iter() {
+            for (_, ns) in bmd.textures.iter() {
+                if let NamespacedId::Resource(_) = ns {
+                    textures.insert(ns.clone(), ());
                 }
-            });
-        });
+            }
+        }
 
-        textures.iter().for_each(|(ns, _)| {
-
-            let bytes = rsp.get_bytes(
-                ResourceType::Texture,
-                ns
-            );
+        for (ns, _) in textures.iter() {
+            let bytes = rsp.get_bytes(ResourceType::Texture, ns);
 
             let image = image::load_from_memory(&bytes[..]).unwrap();
 
-            let allocation = self.atlas_allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)).unwrap();
+            let allocation = self
+                .atlas_allocator
+                .allocate(Size2D::new(image.width() as i32, image.height() as i32))
+                .unwrap();
 
-            overlay(&mut self.block_atlas_image, &image, allocation.rectangle.min.x as u32, allocation.rectangle.min.y as u32);
+            overlay(
+                &mut self.block_atlas_image,
+                &image,
+                allocation.rectangle.min.x as u32,
+                allocation.rectangle.min.y as u32,
+            );
 
-            self.texture_manager.insert(ns.clone(), (
-                Vector2::new(allocation.rectangle.min.x as f32, allocation.rectangle.min.y as f32),
-                Vector2::new(allocation.rectangle.max.x as f32, allocation.rectangle.max.y as f32),
-            ));
-        });
+            self.texture_manager.insert(
+                ns.clone(),
+                (
+                    Vector2::new(
+                        allocation.rectangle.min.x as f32,
+                        allocation.rectangle.min.y as f32,
+                    ),
+                    Vector2::new(
+                        allocation.rectangle.max.x as f32,
+                        allocation.rectangle.max.y as f32,
+                    ),
+                ),
+            );
+        }
 
-        let texture = Texture::from_image_raw(device, queue, self.block_atlas_image.as_ref(), Extent3d {
-            width: ATLAS_DIMENSIONS as u32,
-            height: ATLAS_DIMENSIONS as u32,
-            depth: 1
-        }, Some("Texture Atlas")).unwrap();
+        let texture = Texture::from_image_raw(
+            device,
+            queue,
+            self.block_atlas_image.as_ref(),
+            Extent3d {
+                width: ATLAS_DIMENSIONS as u32,
+                height: ATLAS_DIMENSIONS as u32,
+                depth: 1,
+            },
+            Some("Texture Atlas"),
+        )
+        .unwrap();
 
-        self.block_atlas_material = Some(
-            Material::from_texture(device, queue, texture, t_bgl, "Texture Atlas".into())
-        );
+        self.block_atlas_material = Some(Material::from_texture(
+            device,
+            queue,
+            texture,
+            t_bgl,
+            "Texture Atlas".into(),
+        ));
     }
 
     pub fn generate_blocks(&mut self, device: &wgpu::Device, rp: &dyn ResourceProvider) {
-        let mut block_indices: HashMap<String, usize> = HashMap::new();
+        let mut block_indices = HashMap::new();
         let mut blocks: Vec<Box<dyn Block>> = Vec::new();
 
-        self.block_model_data.iter().for_each(|(name, block_data)| {
-            let block = StaticBlock::from_datapack(device, block_data, rp, &self.texture_manager);
-
-            match block {
-                None => {} //If it fails, it's most definitely a template and not an actual block
-                Some(some) => {
-                    // blocks.insert(name.clone(), Box::new(some));
-                    blocks.push(Box::new(some));
-                    block_indices.insert(name.clone(), blocks.len()-1);
-                }
+        for (name, block_data) in self.block_model_data.iter() {
+            if let Some(block) =
+                StaticBlock::from_datapack(device, block_data, rp, &self.texture_manager)
+            {
+                blocks.push(Box::new(block));
+                block_indices.insert(name.clone(), blocks.len() - 1);
             }
-        });
+        }
 
         self.block_indices = block_indices;
         self.blocks = blocks;
+    }
+}
+
+impl Default for Minecraft {
+    fn default() -> Self {
+        Self::new()
     }
 }
