@@ -10,10 +10,10 @@ extern "C" {
 /*
  * Class:     cloud_birb_wgpu_rust_Wgpu
  * Method:    initializeWindow
- * Signature: ()V
+ * Signature: (Ljava/lang/String;)V
  */
 JNIEXPORT void JNICALL Java_cloud_birb_wgpu_rust_Wgpu_initializeWindow
-  (JNIEnv *, jclass);
+  (JNIEnv *, jclass, jstring);
 
 /*
  * Class:     cloud_birb_wgpu_rust_Wgpu
@@ -22,6 +22,14 @@ JNIEXPORT void JNICALL Java_cloud_birb_wgpu_rust_Wgpu_initializeWindow
  */
 JNIEXPORT void JNICALL Java_cloud_birb_wgpu_rust_Wgpu_updateWindowTitle
   (JNIEnv *, jclass, jstring);
+
+/*
+ * Class:     cloud_birb_wgpu_rust_Wgpu
+ * Method:    registerEntry
+ * Signature: (ILjava/lang/String;)V
+ */
+JNIEXPORT void JNICALL Java_cloud_birb_wgpu_rust_Wgpu_registerEntry
+  (JNIEnv *, jclass, jint, jstring);
 
 #ifdef __cplusplus
 }
