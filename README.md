@@ -1,6 +1,8 @@
 # wgpu-mc
 
 ## 🚀 A blazing fast alternative renderer for Minecraft
+### Discord
+https://discord.gg/NTuK8bQ2hn
 
 #### Intro
 
