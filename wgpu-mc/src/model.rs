@@ -1,5 +1,5 @@
 use crate::texture;
-use crate::texture::Texture;
+use crate::texture::WgTexture;
 
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingResource};
 
@@ -44,7 +44,7 @@ impl Vertex for ModelVertex {
 
 pub struct Material {
     pub name: String,
-    pub diffuse_texture: texture::Texture,
+    pub diffuse_texture: texture::WgTexture,
     pub bind_group: wgpu::BindGroup,
 }
 
@@ -53,7 +53,7 @@ impl Material {
     pub fn from_texture(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        texture: Texture,
+        texture: WgTexture,
         bgl: &BindGroupLayout,
         name: String,
     ) -> Self {

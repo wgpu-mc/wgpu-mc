@@ -4,13 +4,15 @@ version = "0.1.0"
 authors = ["birb"]
 edition = "2018"
 
+resolver = "2"
+
 [dependencies]
 image = "0.23"
 cgmath = "0.17"
-wgpu = "0.6"
+wgpu = "0.11.0"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 anyhow = "1.0"
-winit = "0.22"
+winit = "0.25.0"
 shaderc = "0.7"
 serde = "1.0.123"
 serde_bytes = "0.11.5"

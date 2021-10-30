@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::mc::block::{Block, StaticBlock};
@@ -7,7 +7,7 @@ use crate::mc::datapack::{BlockModelData, NamespacedId};
 use crate::mc::entity::Entity;
 use crate::mc::resource::{ResourceProvider, ResourceType};
 use crate::model::Material;
-use crate::texture::{Texture, UV};
+use crate::texture::{WgTexture, UV};
 
 use cgmath::Vector2;
 use guillotiere::euclid::Size2D;
@@ -27,39 +27,49 @@ const ATLAS_DIMENSIONS: i32 = 1024;
 
 pub type TextureManager = HashMap<NamespacedId, UV>;
 
-pub struct Minecraft {
+pub struct MinecraftRenderer {
     pub sun_position: f32,
     pub block_indices: HashMap<String, usize>,
     pub blocks: Vec<Box<dyn Block>>,
     pub block_model_data: HashMap<String, BlockModelData>,
     pub chunks: ChunkManager,
     pub entities: Vec<Entity>,
-    pub atlas_allocator: AtlasAllocator,
+
+    pub block_atlas_allocator: AtlasAllocator,
     pub block_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
     pub block_atlas_material: Option<Material>,
+
+    pub gui_atlas_allocator: AtlasAllocator,
+    pub gui_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
+    pub gui_atlas_material: Option<Material>,
 
     pub texture_manager: TextureManager,
 }
 
-impl Minecraft {
+impl MinecraftRenderer {
     pub fn new() -> Self {
-        Minecraft {
+        MinecraftRenderer {
             sun_position: 0.0,
             block_indices: HashMap::new(),
             chunks: ChunkManager::new(),
             entities: Vec::new(),
             block_model_data: HashMap::new(),
-            atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
+            block_atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
             block_atlas_image: image::ImageBuffer::new(
                 ATLAS_DIMENSIONS as u32,
                 ATLAS_DIMENSIONS as u32,
             ),
+
             block_atlas_material: None,
+            gui_atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
+            gui_atlas_image: Default::default(),
+            gui_atlas_material: None,
             texture_manager: HashMap::new(),
             blocks: Vec::new(),
         }
     }
 
+    //TODO: make this not suck and also genericize it to not require fs
     pub fn load_block_models(&mut self, root: PathBuf) {
         let models_dir = root.join("models").join("block");
         let models_list = std::fs::read_dir(models_dir.clone()).unwrap();
@@ -81,8 +91,6 @@ impl Minecraft {
 
             datapack::BlockModelData::deserialize(name, (&models_dir).clone(), &mut model_map);
         }
-
-        let model = model_map.get("minecraft:block/cobblestone").unwrap();
     }
 
     pub fn generate_block_texture_atlas(
@@ -92,23 +100,23 @@ impl Minecraft {
         queue: &wgpu::Queue,
         t_bgl: &BindGroupLayout,
     ) {
-        let mut textures = HashMap::new();
+        let mut textures = HashSet::new();
 
         for (_, bmd) in self.block_model_data.iter() {
             for (_, ns) in bmd.textures.iter() {
                 if let NamespacedId::Resource(_) = ns {
-                    textures.insert(ns.clone(), ());
+                    textures.insert(ns.clone());
                 }
             }
         }
 
-        for (ns, _) in textures.iter() {
-            let bytes = rsp.get_bytes(ResourceType::Texture, ns);
+        for ns in textures.iter() {
+            let bytes = rsp.get_bytes(ResourceType::Texture, &ns);
 
             let image = image::load_from_memory(&bytes[..]).unwrap();
 
             let allocation = self
-                .atlas_allocator
+                .block_atlas_allocator
                 .allocate(Size2D::new(image.width() as i32, image.height() as i32))
                 .unwrap();
 
@@ -134,7 +142,7 @@ impl Minecraft {
             );
         }
 
-        let texture = Texture::from_image_raw(
+        let texture = WgTexture::from_image_raw(
             device,
             queue,
             self.block_atlas_image.as_ref(),
@@ -143,7 +151,7 @@ impl Minecraft {
                 height: ATLAS_DIMENSIONS as u32,
                 depth: 1,
             },
-            Some("Texture Atlas"),
+            Some("Block Texture Atlas"),
         )
         .unwrap();
 
@@ -152,7 +160,7 @@ impl Minecraft {
             queue,
             texture,
             t_bgl,
-            "Texture Atlas".into(),
+            "Block Texture Atlas".into(),
         ));
     }
 
@@ -174,7 +182,7 @@ impl Minecraft {
     }
 }
 
-impl Default for Minecraft {
+impl Default for MinecraftRenderer {
     fn default() -> Self {
         Self::new()
     }

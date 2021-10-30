@@ -16,12 +16,14 @@ pub struct ChunkSection {
     pub blocks: [BlockState; CHUNK_AREA],
 }
 
+type RawChunkSectionPaletted = [u8; 256];
+
 pub struct Chunk {
     pub pos: ChunkPos,
-    pub sections: Box<[ChunkSection; CHUNK_HEIGHT]>,
+    pub sections: Box<[ChunkSection; 4]>,
     pub vertices: Option<Vec<ModelVertex>>,
     pub vertex_buffer: Option<wgpu::Buffer>,
-    pub vertex_count: usize,
+    pub vertex_count: usize
 }
 
 impl Chunk {
@@ -34,7 +36,7 @@ impl Chunk {
     }
 
     pub fn generate_vertices(&mut self, blocks: &[Box<dyn Block>], chunk_x: u32, chunk_z: u32) {
-        let mut vertices = Vec::new();
+        let mut vertices = Vec::with_capacity(blocks.len() * 4 * 8);
 
         let sections = self.sections.as_ref();
 

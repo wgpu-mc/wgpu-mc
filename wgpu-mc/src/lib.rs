@@ -10,13 +10,14 @@ pub mod texture;
 
 use crate::camera::{Camera, CameraController, Uniforms};
 use crate::mc::chunk::Chunk;
-use crate::mc::Minecraft;
+use crate::mc::MinecraftRenderer;
 
 use model::Vertex;
 use raw_window_handle::HasRawWindowHandle;
 use shaderc::ShaderKind;
 use winit::event::WindowEvent;
 use wgpu::RenderPass;
+use std::collections::{HashMap, HashSet};
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -28,6 +29,20 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 
 pub trait ShaderProvider {
     fn get_shader(&self, name: &str) -> Vec<u8>;
+}
+
+pub struct McRegistry {
+    pub items: HashSet<String>,
+    pub blocks: HashSet<String>
+}
+
+impl McRegistry {
+    pub fn new() -> Self {
+        Self {
+            items: Default::default(),
+            blocks: Default::default()
+        }
+    }
 }
 
 pub struct Renderer {
@@ -52,8 +67,10 @@ pub struct Renderer {
     // instance_buffer: wgpu::Buffer,
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
     // pub screen: Option<Box<dyn Screen>>,
-    pub depth_texture: texture::Texture,
-    pub mc: mc::Minecraft,
+    pub depth_texture: texture::WgTexture,
+    pub mc: mc::MinecraftRenderer,
+
+    pub registry: McRegistry
 }
 
 #[derive(Copy, Clone)]
@@ -192,7 +209,7 @@ impl Renderer {
             device.create_shader_module(wgpu::util::make_spirv(fs_module_bin.as_binary_u8()));
 
         let depth_texture =
-            texture::Texture::create_depth_texture(&device, &sc_desc, "depth_texture");
+            texture::WgTexture::create_depth_texture(&device, &sc_desc, "depth_texture");
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -232,7 +249,7 @@ impl Renderer {
                 write_mask: wgpu::ColorWrite::ALL,
             }],
             depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
-                format: texture::Texture::DEPTH_FORMAT,
+                format: texture::WgTexture::DEPTH_FORMAT,
                 depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::Less,
                 stencil: wgpu::StencilStateDescriptor::default(),
@@ -247,7 +264,7 @@ impl Renderer {
             alpha_to_coverage_enabled: false,
         });
 
-        let mc = Minecraft::new();
+        let mc = MinecraftRenderer::new();
 
         Self {
             surface,
@@ -268,6 +285,8 @@ impl Renderer {
             texture_bind_group_layout,
 
             mc,
+
+            registry: McRegistry::new()
         }
     }
 
@@ -278,7 +297,7 @@ impl Renderer {
         self.sc_desc.height = new_size.height;
         self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
         self.depth_texture =
-            texture::Texture::create_depth_texture(&self.device, &self.sc_desc, "depth_texture");
+            texture::WgTexture::create_depth_texture(&self.device, &self.sc_desc, "depth_texture");
     }
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         self.camera_controller.process_events(event)

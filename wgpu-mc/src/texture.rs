@@ -7,13 +7,13 @@ use wgpu::Extent3d;
 pub type TextureId = u32;
 pub type UV = (Vector2<f32>, Vector2<f32>);
 
-pub struct Texture {
+pub struct WgTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
 
-impl Texture {
+impl WgTexture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn from_bytes(

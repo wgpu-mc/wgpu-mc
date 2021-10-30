@@ -101,7 +101,7 @@ pub struct Element {
 
 //Deserialized info about a block and how it should render
 pub struct BlockModelData {
-    pub id: NamespacedId, //It's id
+    pub id: NamespacedId, //Its id
     pub parent: Option<NamespacedId>,
     pub elements: Vec<Element>,
     pub display_transforms: HashMap<String, Matrix4<f32>>,

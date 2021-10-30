@@ -1,116 +1,217 @@
+mod mc_interface;
+
 use jni::JNIEnv;
-use jni::objects::{JClass, JString};
-use jni::sys::jstring;
+use jni::objects::{JClass, JString, JValue};
+use jni::sys::{jstring, jint};
 use std::sync::{Mutex, RwLock, mpsc, Arc};
 use wgpu_mc::{Renderer, WindowSize, HasWindowSize, ShaderProvider};
 use std::mem::MaybeUninit;
-use glfw::{Context, Key, Action, Window};
 use std::{thread, fs};
 use std::sync::mpsc::{channel, RecvError};
 use std::ops::Deref;
 use futures::executor::block_on;
-use glfw::ffi::GLFWwindow;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use std::path::Path;
+use winit::window::Window;
+use glfw::WindowEvent::Size;
+use winit::dpi::PhysicalSize;
+use winit::event::{Event, WindowEvent, KeyboardInput, ElementState, VirtualKeyCode};
+use std::time::Instant;
+use winit::event_loop::{ControlFlow, EventLoop};
+use crate::mc_interface::chunk_from_java_client_chunk;
 
 enum WindowMessage {
-    SetTitle(Arc<String>)
+    SetTitle(Arc<String>),
+
 }
 
-static mut RENDERER: MaybeUninit<Mutex<Renderer>> = MaybeUninit::uninit();
-static mut CHANNEL_TX: MaybeUninit<mpsc::Sender<WindowMessage>> = MaybeUninit::uninit();
+static mut RENDERER: MaybeUninit<Renderer> = MaybeUninit::uninit();
+static mut EVENT_LOOP: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
+static mut CHANNEL_TX: MaybeUninit<mpsc::Sender<WindowEvent>> = MaybeUninit::uninit();
+static mut CHANNEL_RX: MaybeUninit<mpsc::Receiver<WindowEvent>> = MaybeUninit::uninit();
 
-struct GlfwWindowWrapper {
-    handle: RawWindowHandle,
-    size: WindowSize
+struct WinitWindowWrapper {
+    window: Window
 }
 
-impl HasWindowSize for GlfwWindowWrapper {
+impl HasWindowSize for &WinitWindowWrapper {
     fn get_window_size(&self) -> WindowSize {
-        self.size
+        WindowSize {
+            width: self.window.inner_size().width,
+            height: self.window.inner_size().height,
+        }
     }
 }
 
-unsafe impl HasRawWindowHandle for GlfwWindowWrapper {
+unsafe impl HasRawWindowHandle for &WinitWindowWrapper {
+
     fn raw_window_handle(&self) -> RawWindowHandle {
-        self.handle
+        self.window.raw_window_handle()
     }
+
 }
 
-struct SimpleShaderProvider {
+struct JarShaderProvider {
 
 }
 
 impl ShaderProvider for SimpleShaderProvider {
     fn get_shader(&self, name: &str) -> Vec<u8> {
-        fs::read(crate_root::root().unwrap().join("res").join("shaders").join(name)).unwrap()
+        fs::read(Path::new("/Users/birb/wgpu-mc")
+            .join("res").join("shaders").join(name))
+            .expect("Couldn't locate the shaders")
         //very basic
     }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_cloud_birb_wgpu_rust_Wgpu_initializeWindow(env: JNIEnv, class: JClass, string: JString) {
-    let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunk(
+    env: JNIEnv,
+    class: JClass,
+    entry_type: jint,
+    name: JString) {
 
-    let (tx, rx) = channel();
+    let chunk = chunk_from_java_client_chunk();
 
-    unsafe {
-        CHANNEL_TX = MaybeUninit::new(tx);
-    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerEntry(
+    env: JNIEnv,
+    class: JClass,
+    entry_type: jint,
+    name: JString) {
+
+    let rname: String = env.get_string(name).unwrap().into();
+
+    let renderer = unsafe { RENDERER.assume_init_mut() };
+
+    match entry_type {
+        0 => renderer.registry.blocks.insert(rname),
+        1 => renderer.registry.items.insert(rname),
+        _ => unimplemented!()
+    };
+
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
+    env: JNIEnv,
+    class: JClass,
+    string: JString
+) {
+    use winit::event_loop::EventLoop;
+
+    let event_loop = EventLoop::new();
+    let window = winit::window::WindowBuilder::new()
+        .with_title("wgpu-mc")
+        .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
+            width: 600,
+            height: 500
+        }))
+        .build(&event_loop)
+        .unwrap();
 
     let vm = env.get_java_vm().unwrap();
     let title: String = env.get_string(string).unwrap().into();
 
-    thread::spawn(move || {
-        let env = vm.attach_current_thread_permanently().unwrap();
+    let wrapper = &WinitWindowWrapper {
+        window
+    };
 
-        let (mut window, events) = glfw.create_window(640, 480, &title[..], glfw::WindowMode::Windowed).unwrap();
+    let mut state = block_on(Renderer::new(
+        &wrapper, Box::new(SimpleShaderProvider {})
+    ));
 
-        let renderer = block_on(Renderer::new(
-            &GlfwWindowWrapper {
-                handle: window.raw_window_handle(),
-                size: WindowSize {
-                    width: 640,
-                    height: 480
-                }
-            }, Box::new(SimpleShaderProvider {})
-        ));
-
-        while !window.should_close() {
-            // Swap front and back buffers
-            window.swap_buffers();
-
-            // Poll for and process events
-            glfw.poll_events();
-
-            for (_, event) in glfw::flush_messages(&events) {
-                match event {
-                    glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                        window.set_should_close(true)
-                    },
-                    _ => {},
-                }
-            }
-
-            match rx.try_recv() {
-                Ok(message) => match message {
-                    WindowMessage::SetTitle(title) => {
-                        window.set_title(&title.deref().clone()[..]);
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-    });
+    unsafe {
+        RENDERER = MaybeUninit::new(state);
+        EVENT_LOOP = MaybeUninit::new(event_loop);
+    }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_cloud_birb_wgpu_rust_Wgpu_updateWindowTitle(env: JNIEnv, class: JClass, string: JString) {
-    let input: String = env.get_string(string).unwrap().into();
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
+    env: JNIEnv,
+    class: JClass) {
+    // let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
-    unsafe {
-        (*(CHANNEL_TX.as_mut_ptr())).send(
-            WindowMessage::SetTitle(Arc::new(input))
-        );
-    }
+    let mut swap: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
+
+    std::mem::swap(&mut swap, unsafe { &mut EVENT_LOOP });
+
+    let renderer = unsafe { RENDERER.assume_init_mut() };
+
+    let event_loop = unsafe { swap.assume_init() };
+
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
+        let mut state = unsafe {
+            RENDERER.assume_init_mut()
+        };
+
+        match event {
+            Event::MainEventsCleared => window.request_redraw(),
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == window.id() => {
+                if !state.input(event) {
+                    match event {
+                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                        WindowEvent::KeyboardInput { input, .. } => match input {
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Space),
+                                ..
+                            } => {
+                                //Update a block and re-generate the chunk mesh for testing
+
+                                //removed atm for testing
+                            }
+
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            } => {
+                                *control_flow = ControlFlow::Exit;
+                            }
+                            _ => {}
+                        },
+                        WindowEvent::Resized(physical_size) => {
+                            &state.resize(WindowSize {
+                                width: physical_size.width,
+                                height: physical_size.height
+                            });
+                        }
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                            &state.resize(WindowSize {
+                                width: new_inner_size.width,
+                                height: new_inner_size.height
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Event::RedrawRequested(_) => {
+                // &state.update();
+                // &state.render(&chunks);
+
+                // let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
+                // frame_begin = Instant::now();
+
+                // println!("Frametime {}, FPS {}", delta, 1000/delta);
+            }
+            _ => {}
+        }
+    });
+
+    // });
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(env: JNIEnv, class: JClass, string: JString) {
+
 }

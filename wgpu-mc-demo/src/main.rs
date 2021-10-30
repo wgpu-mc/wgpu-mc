@@ -5,7 +5,7 @@ use std::time::Instant;
 use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
 use wgpu_mc::mc::datapack::NamespacedId;
 use wgpu_mc::mc::block::{BlockDirection, BlockState, BlockModel};
-use wgpu_mc::mc::chunk::{ChunkSection, Chunk};
+use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
 use wgpu_mc::{Renderer, ShaderProvider, HasWindowSize, WindowSize};
@@ -123,42 +123,69 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     block_layers.push(*state.mc.block_indices.get("minecraft:block/grass_block").unwrap());
 
-    let chunks = (0..8).map(|x| {
-        (0..8).map(|z| {
-            let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
-                block: None,
-                // block: None,
+
+
+    // let chunks = (0..8).map(|x| {
+    //     (0..8).map(|z| {
+    //         let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
+    //             block: None,
+    //             // block: None,
+    //             direction: BlockDirection::North,
+    //             damage: 0,
+    //             transparency: false
+    //         }; 256] }; 256]);
+    //
+    //         (0..50).for_each(|y| {
+    //             sections.deref_mut()[y] = ChunkSection {
+    //                 empty: false,
+    //                 blocks: [BlockState {
+    //                     block: Option::Some(*block_layers.get(y).unwrap()),
+    //                     direction: BlockDirection::North,
+    //                     damage: 0,
+    //                     transparency: true
+    //                 }; 256]
+    //             }
+    //         });
+    //
+    //         let mut chunk = Chunk {
+    //             pos: (x, z),
+    //             sections,
+    //             vertices: None,
+    //             vertex_buffer: None,
+    //             vertex_count: 0
+    //         };
+    //
+    //         chunk.generate_vertices(&state.mc.blocks, x*16, z*16);
+    //         chunk.upload_buffer(&state.device);
+    //
+    //         chunk
+    //     }).collect::<Vec<Chunk>>()
+    // }).flatten().collect::<Vec<Chunk>>();
+
+    let mut chunk = Chunk {
+        pos: (0, 0),
+
+        sections: Box::new([ChunkSection { empty: false, blocks: [
+            BlockState {
+                block: state.mc.block_indices.get("minecraft:block/anvil").cloned(),
                 direction: BlockDirection::North,
                 damage: 0,
                 transparency: false
-            }; 256] }; 256]);
+            }; CHUNK_AREA
+        ] }; CHUNK_HEIGHT]),
+        vertices: None,
+        vertex_buffer: None,
+        vertex_count: 0
+    };
 
-            (0..50).for_each(|y| {
-                sections.deref_mut()[y] = ChunkSection {
-                    empty: false,
-                    blocks: [BlockState {
-                        block: Option::Some(*block_layers.get(y).unwrap()),
-                        direction: BlockDirection::North,
-                        damage: 0,
-                        transparency: true
-                    }; 256]
-                }
-            });
+    let instant = Instant::now();
 
-            let mut chunk = Chunk {
-                pos: (x, z),
-                sections,
-                vertices: None,
-                vertex_buffer: None,
-                vertex_count: 0
-            };
+    chunk.generate_vertices(&state.mc.blocks, 0, 0);
+    chunk.upload_buffer(&state.device);
 
-            chunk.generate_vertices(&state.mc.blocks, x*16, z*16);
-            chunk.upload_buffer(&state.device);
+    println!("Time to gnerate and upload VBO: {}", Instant::now().duration_since(instant).as_millis());
 
-            chunk
-        }).collect::<Vec<Chunk>>()
-    }).flatten().collect::<Vec<Chunk>>();
+    let chunks = [chunk];
 
     let mut frame_begin = Instant::now();
 
@@ -216,7 +243,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                 let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
                 frame_begin = Instant::now();
 
-                println!("Frametime {}, FPS {}", delta, 1000/delta);
+                // println!("Frametime {}, FPS {}", delta, 1000/delta);
             }
             _ => {}
         }
