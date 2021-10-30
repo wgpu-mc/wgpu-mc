@@ -1,4 +1,4 @@
-package cloud.birb.wgpu.mixin;
+package dev.birb.wgpu.mixin.disablers;
 
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import org.spongepowered.asm.mixin.Mixin;

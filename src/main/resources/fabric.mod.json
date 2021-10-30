@@ -19,7 +19,7 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "cloud.birb.wgpu.WebGPUMod"
+      "dev.birb.wgpu.WebGPUMod"
     ]
   },
   "mixins": [

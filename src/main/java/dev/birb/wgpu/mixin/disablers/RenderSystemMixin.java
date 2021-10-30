@@ -1,7 +1,8 @@
-package cloud.birb.wgpu.mixin;
+package dev.birb.wgpu.mixin.disablers;
 
 import com.mojang.blaze3d.systems.RenderCall;
 import com.mojang.blaze3d.systems.RenderSystem;
+import org.lwjgl.glfw.GLFWErrorCallbackI;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -55,6 +56,11 @@ public class RenderSystemMixin {
 
     @Inject(method = "matrixMode", at = @At("HEAD"), cancellable = true)
     private static void matrixMode(CallbackInfo ci) {
+        ci.cancel();
+    }
+
+    @Inject(method = "setErrorCallback", at = @At("HEAD"), cancellable = true)
+    private static void setErrorCallback(GLFWErrorCallbackI callback, CallbackInfo ci) {
         ci.cancel();
     }
 

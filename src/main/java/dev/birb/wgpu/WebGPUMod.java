@@ -1,4 +1,4 @@
-package cloud.birb.wgpu;
+package dev.birb.wgpu;
 
 import net.fabricmc.api.ModInitializer;
 

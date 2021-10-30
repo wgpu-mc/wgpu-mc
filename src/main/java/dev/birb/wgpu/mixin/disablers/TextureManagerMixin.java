@@ -1,6 +1,5 @@
-package cloud.birb.wgpu.mixin;
+package dev.birb.wgpu.mixin.disablers;
 
-import cloud.birb.wgpu.rust.Wgpu;
 import net.minecraft.client.texture.AbstractTexture;
 import net.minecraft.client.texture.TextureManager;
 import net.minecraft.util.Identifier;
@@ -14,7 +13,6 @@ public class TextureManagerMixin {
 
     @Inject(method = "registerTexture", at = @At("HEAD"), cancellable = true)
     public void registerTexture(Identifier identifier, AbstractTexture abstractTexture, CallbackInfo ci) {
-//        Wgpu.registerTexture(identifier);
         ci.cancel();
     }
 
