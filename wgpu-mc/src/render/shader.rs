@@ -3,8 +3,8 @@ use wgpu::ShaderModuleDescriptorSpirV;
 use std::borrow::Cow;
 
 pub struct Shader {
-    frag: wgpu::ShaderModule,
-    vert: wgpu::ShaderModule
+    pub frag: wgpu::ShaderModule,
+    pub vert: wgpu::ShaderModule
 }
 
 pub struct ShaderSource<'a> {

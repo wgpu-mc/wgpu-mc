@@ -3,6 +3,7 @@ use cgmath::Vector2;
 use image::GenericImageView;
 use std::path::Path;
 use wgpu::Extent3d;
+use std::num::NonZeroU32;
 
 pub type TextureId = u32;
 pub type UV = (Vector2<f32>, Vector2<f32>);
@@ -34,8 +35,8 @@ impl WgTexture {
         label: &str,
     ) -> Self {
         let size = wgpu::Extent3d {
-            width: sc_desc.width,
-            height: sc_desc.height,
+            width: surface_config.width,
+            height: surface_config.height,
             depth_or_array_layers: 1
         };
         let desc = wgpu::TextureDescriptor {
@@ -108,20 +109,22 @@ impl WgTexture {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            //TODO: maybe wrong
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT
         });
 
         queue.write_texture(
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All
             },
             bytes,
-            wgpu::TextureDataLayout {
+            wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: 4 * size.width,
-                rows_per_image: size.height,
+                bytes_per_row: NonZeroU32::new(size.width),
+                rows_per_image: NonZeroU32::new(size.height),
             },
             size,
         );

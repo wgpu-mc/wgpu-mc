@@ -13,7 +13,6 @@ use crate::camera::{Camera, CameraController, Uniforms};
 use crate::mc::chunk::Chunk;
 use crate::mc::MinecraftRenderer;
 
-use model::Vertex;
 use raw_window_handle::HasRawWindowHandle;
 use shaderc::ShaderKind;
 use winit::event::WindowEvent;
@@ -21,6 +20,7 @@ use wgpu::{RenderPass, VertexState, TextureViewDescriptor};
 use std::collections::{HashMap, HashSet};
 use crate::render::pipeline::{Pipelines, Shaders};
 use crate::render::shader::{Shader, ShaderSource};
+use crate::texture::WgTexture;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -50,17 +50,13 @@ impl MinecraftRegistry {
 
 pub struct Renderer {
     pub surface: wgpu::Surface,
+    pub surface_config: wgpu::SurfaceConfiguration,
+
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
 
     pub size: WindowSize,
-    // pub camera: Camera,
-    // pub camera_controller: CameraController,
 
-    pub uniforms: Uniforms,
-
-    // #[allow(dead_code)]
-    // pub screen: Option<Box<dyn Screen>>,
     pub depth_texture: texture::WgTexture,
 
     pub pipelines: Pipelines,
@@ -87,7 +83,7 @@ impl Renderer {
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -102,7 +98,7 @@ impl Renderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::default(),
+                    features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH | wgpu::Features::default(),
                     limits: wgpu::Limits::default()
                 },
                 None, // Trace path
@@ -119,7 +115,7 @@ impl Renderer {
         };
         surface.configure(&device, &config);
 
-        let mc = MinecraftRenderer::new();
+        let mc = MinecraftRenderer::new(&device);
 
         let mut sc = shaderc::Compiler::new().unwrap();
         
@@ -167,13 +163,14 @@ impl Renderer {
         
         let pipelines = render::pipeline::Pipelines::init(&device, shaders);
 
+        let depth_texture = WgTexture::create_depth_texture(&device, &config, "depth texture");
+
         Self {
             surface,
+            surface_config: config,
             device,
             queue,
             size,
-            
-            uniforms,
 
             depth_texture,
             pipelines,
@@ -184,25 +181,31 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, new_size: WindowSize) {
-        self.camera.aspect = self.sc_desc.width as f32 / self.sc_desc.height as f32;
-        self.size = new_size;
-        self.sc_desc.width = new_size.width;
-        self.sc_desc.height = new_size.height;
+        // self.camera.aspect = self.sc_desc.width as f32 / self.sc_desc.height as f32;
+        // self.size = new_size;
+        // self.sc_desc.width = new_size.width;
+        // self.sc_desc.height = new_size.height;
         self.depth_texture =
-            texture::WgTexture::create_depth_texture(&self.device, &self.sc_desc, "depth_texture");
+            texture::WgTexture::create_depth_texture(&self.device, &self.surface_config, "depth_texture");
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event)
+        // se
+        //lf.camera_controller.process_events(event)
+        false
     }
 
     pub fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.uniforms.update_view_proj(&self.camera);
+        // self.camera_controller.update_camera(&mut self.camera);
+        // self.mc.camera.update_view_proj(&self.camera);
+        let uniforms = Uniforms {
+            view_proj: self.mc.camera.build_view_projection_matrix().into()
+        };
+
         self.queue.write_buffer(
-            &self.uniform_buffer,
+            &self.mc.uniform_buffer,
             0,
-            bytemuck::cast_slice(&[self.uniforms]),
+            bytemuck::cast_slice(&[uniforms]),
         );
     }
 

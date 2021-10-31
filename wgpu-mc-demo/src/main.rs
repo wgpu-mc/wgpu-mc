@@ -47,9 +47,9 @@ impl ResourceProvider for SimpleResourceProvider {
 }
 
 impl ShaderProvider for SimpleShaderProvider {
-    fn get_shader(&self, name: &str) -> Vec<u8> {
+    fn get_shader(&self, name: &str) -> String {
         let path = self.shader_root.join(name);
-        fs::read(path).unwrap()
+        String::from_utf8(fs::read(path).expect(&format!("Shader {} does not exist", name))).unwrap()
     }
 }
 
@@ -103,7 +103,7 @@ fn main() {
     let mut state = block_on(Renderer::new(&wrapper, Box::new(sp)));
 
     state.mc.load_block_models(mc_root);
-    state.mc.generate_block_texture_atlas(&rsp, &state.device, &state.queue, &state.texture_bind_group_layout);
+    state.mc.generate_block_texture_atlas(&rsp, &state.device, &state.queue, &state.pipelines.layouts.texture_bind_group_layout);
     state.mc.generate_blocks(&state.device, &rsp);
 
     let window = wrapper.window;
@@ -170,7 +170,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                 damage: 0,
                 transparency: false
             }; CHUNK_AREA
-        ] }; CHUNK_HEIGHT]),
+        ] }; 4]),
         vertices: None,
         vertex_buffer: None,
         vertex_count: 0
@@ -178,7 +178,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     let instant = Instant::now();
 
-    chunk.generate_vertices(&state.mc.blocks, 0, 0);
+    chunk.generate_vertices(&state.mc.blocks, (0, 0));
     chunk.upload_buffer(&state.device);
 
     println!("Time to gnerate and upload VBO: {}", Instant::now().duration_since(instant).as_millis());

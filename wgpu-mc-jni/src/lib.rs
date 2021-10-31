@@ -18,7 +18,6 @@ use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent, KeyboardInput, ElementState, VirtualKeyCode};
 use std::time::Instant;
 use winit::event_loop::{ControlFlow, EventLoop};
-use crate::mc_interface::chunk_from_java_client_chunk;
 
 enum WindowMessage {
     SetTitle(Arc<String>),
@@ -27,14 +26,16 @@ enum WindowMessage {
 
 static mut RENDERER: MaybeUninit<Renderer> = MaybeUninit::uninit();
 static mut EVENT_LOOP: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
+static mut WINDOW: MaybeUninit<Window> = MaybeUninit::uninit();
+
 static mut CHANNEL_TX: MaybeUninit<mpsc::Sender<WindowEvent>> = MaybeUninit::uninit();
 static mut CHANNEL_RX: MaybeUninit<mpsc::Receiver<WindowEvent>> = MaybeUninit::uninit();
 
-struct WinitWindowWrapper {
-    window: Window
+struct WinitWindowWrapper<'a> {
+    window: &'a Window
 }
 
-impl HasWindowSize for &WinitWindowWrapper {
+impl HasWindowSize for &WinitWindowWrapper<'_> {
     fn get_window_size(&self) -> WindowSize {
         WindowSize {
             width: self.window.inner_size().width,
@@ -43,7 +44,7 @@ impl HasWindowSize for &WinitWindowWrapper {
     }
 }
 
-unsafe impl HasRawWindowHandle for &WinitWindowWrapper {
+unsafe impl HasRawWindowHandle for &WinitWindowWrapper<'_> {
 
     fn raw_window_handle(&self) -> RawWindowHandle {
         self.window.raw_window_handle()
@@ -55,11 +56,13 @@ struct JarShaderProvider {
 
 }
 
+struct SimpleShaderProvider {}
+
 impl ShaderProvider for SimpleShaderProvider {
-    fn get_shader(&self, name: &str) -> Vec<u8> {
-        fs::read(Path::new("/Users/birb/wgpu-mc")
+    fn get_shader(&self, name: &str) -> String {
+        String::from_utf8(fs::read(Path::new("/Users/birb/wgpu-mc")
             .join("res").join("shaders").join(name))
-            .expect("Couldn't locate the shaders")
+            .expect("Couldn't locate the shaders")).unwrap()
         //very basic
     }
 }
@@ -71,7 +74,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunk(
     entry_type: jint,
     name: JString) {
 
-    let chunk = chunk_from_java_client_chunk();
+    // let chunk = chunk_from_java_client_chunk();
 
 }
 
@@ -116,7 +119,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
     let title: String = env.get_string(string).unwrap().into();
 
     let wrapper = &WinitWindowWrapper {
-        window
+        window: &window
     };
 
     let mut state = block_on(Renderer::new(
@@ -126,6 +129,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
     unsafe {
         RENDERER = MaybeUninit::new(state);
         EVENT_LOOP = MaybeUninit::new(event_loop);
+        WINDOW = MaybeUninit::new(window);
     }
 }
 
@@ -146,8 +150,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        let mut state = unsafe {
-            RENDERER.assume_init_mut()
+        let (mut state, window) = unsafe {
+            (
+                RENDERER.assume_init_mut(),
+                WINDOW.assume_init_ref()
+            )
         };
 
         match event {
@@ -159,26 +166,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
                 if !state.input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::KeyboardInput { input, .. } => match input {
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Space),
-                                ..
-                            } => {
-                                //Update a block and re-generate the chunk mesh for testing
-
-                                //removed atm for testing
-                            }
-
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            } => {
-                                *control_flow = ControlFlow::Exit;
-                            }
-                            _ => {}
-                        },
                         WindowEvent::Resized(physical_size) => {
                             &state.resize(WindowSize {
                                 width: physical_size.width,

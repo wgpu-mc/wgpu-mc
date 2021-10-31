@@ -43,20 +43,7 @@ impl Camera {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
-    view_proj: [[f32; 4]; 4],
-}
-
-impl Uniforms {
-    pub(crate) fn new() -> Self {
-        Self {
-            view_proj: cgmath::Matrix4::identity().into(),
-        }
-    }
-
-    pub(crate) fn update_view_proj(&mut self, camera: &Camera) {
-        // self.view_proj = (OPENGL_TO_WGPU_MATRIX * camera.build_view_projection_matrix()).into();
-        self.view_proj = camera.build_view_projection_matrix().into();
-    }
+    pub view_proj: [[f32; 4]; 4],
 }
 
 pub struct CameraController {

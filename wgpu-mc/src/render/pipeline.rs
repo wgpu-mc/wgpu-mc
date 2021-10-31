@@ -59,7 +59,7 @@ impl Pipelines {
                         },
                         count: None
                     },
-                    &wgpu::BindGroupLayoutEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
@@ -86,7 +86,7 @@ impl Pipelines {
                         },
                         count: None
                     },
-                    &wgpu::BindGroupLayoutEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
@@ -147,7 +147,7 @@ impl Pipelines {
 
     pub fn init(device: &wgpu::Device, shaders: Shaders) -> Self {
         let bg_layouts = Self::create_bind_group_layouts(device);
-        let pipeline_layouts = Self::create_pipeline_layouts(device, &layouts);
+        let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
         
         Self {
             sky_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {

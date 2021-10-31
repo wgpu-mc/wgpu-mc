@@ -49,15 +49,6 @@ impl Chunk {
 
         let sections = self.sections.as_ref();
 
-        let mapper = |v: &ModelVertex| {
-            let mut vertex = *v;
-            vertex.position[0] += x as f32 + pos_offset.0 as f32;
-            vertex.position[1] += y as f32;
-            vertex.position[2] += z as f32 + pos_offset.1 as f32;
-
-            vertex
-        };
-
         for (y, section) in sections.iter().enumerate().take(CHUNK_HEIGHT) {
             if section.empty {
                 continue;
@@ -70,6 +61,15 @@ impl Chunk {
                 for z in 0..CHUNK_WIDTH {
                     let block_index = ((z * CHUNK_WIDTH) + x) + (relative_section_y * CHUNK_AREA);
                     let block_state: BlockState = sections[section_index].blocks[block_index];
+
+                    let mapper = |v: &ModelVertex| {
+                        let mut vertex = *v;
+                        vertex.position[0] += x as f32 + pos_offset.0 as f32;
+                        vertex.position[1] += y as f32;
+                        vertex.position[2] += z as f32 + pos_offset.1 as f32;
+
+                        vertex
+                    };
 
                     let block = blocks
                         .get(match block_state.block {
@@ -178,7 +178,7 @@ impl Chunk {
                 Some(v) => &v,
                 None => panic!("Cannot upload chunk buffer, vertices have not been generated!"),
             }),
-            usage: wgpu::BufferUsage::VERTEX,
+            usage: wgpu::BufferUsages::VERTEX
         }));
     }
 }
@@ -199,14 +199,14 @@ impl ChunkManager {
     }
 
     //TODO: parallelize
-    pub fn bake_meshes(&mut self, blocks: &[Box<dyn Block>]) {
-        self.loaded_chunks.iter_mut().for_each(
-            |chunk| chunk.generate_vertices(blocks, self.chunk_origin));
-    }
-
-    pub fn upload_buffers(&mut self, device: &wgpu::Device) {
-        self.loaded_chunks.iter_mut().for_each(|chunk| chunk.upload_buffer(device));
-    }
+    // pub fn bake_meshes(&mut self, blocks: &[Box<dyn Block>]) {
+    //     self.loaded_chunks.iter_mut().for_each(
+    //         |chunk| chunk.generate_vertices(blocks, self.chunk_origin));
+    // }
+    //
+    // pub fn upload_buffers(&mut self, device: &wgpu::Device) {
+    //     self.loaded_chunks.iter_mut().for_each(|chunk| chunk.upload_buffer(device));
+    // }
 }
 
 impl Default for ChunkManager {

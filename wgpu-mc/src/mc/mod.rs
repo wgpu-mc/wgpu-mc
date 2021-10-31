@@ -14,8 +14,9 @@ use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
 use image::imageops::overlay;
 use image::{GenericImageView, Rgba};
-use wgpu::{BindGroupLayout, Extent3d};
-use crate::camera::Camera;
+use wgpu::{BindGroupLayout, Extent3d, BufferDescriptor};
+use crate::camera::{Camera, Uniforms};
+use std::mem::size_of;
 
 pub mod block;
 pub mod chunk;
@@ -37,6 +38,7 @@ pub struct MinecraftRenderer {
     pub entities: Vec<Entity>,
     
     pub camera: Camera,
+    pub uniform_buffer: wgpu::Buffer,
 
     pub block_atlas_allocator: AtlasAllocator,
     pub block_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
@@ -50,7 +52,14 @@ pub struct MinecraftRenderer {
 }
 
 impl MinecraftRenderer {
-    pub fn new() -> Self {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let uniform_buffer = device.create_buffer(&BufferDescriptor {
+            label: None,
+            size: size_of::<Uniforms>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: false
+        });
+
         MinecraftRenderer {
             sun_position: 0.0,
             block_indices: HashMap::new(),
@@ -82,7 +91,8 @@ impl MinecraftRenderer {
                 fovy: 0.0,
                 znear: 0.0,
                 zfar: 0.0
-            }
+            },
+            uniform_buffer
         }
     }
 
@@ -196,11 +206,5 @@ impl MinecraftRenderer {
 
         self.block_indices = block_indices;
         self.blocks = blocks;
-    }
-}
-
-impl Default for MinecraftRenderer {
-    fn default() -> Self {
-        Self::new()
     }
 }
