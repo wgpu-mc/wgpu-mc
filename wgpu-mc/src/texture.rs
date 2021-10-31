@@ -7,6 +7,8 @@ use wgpu::Extent3d;
 pub type TextureId = u32;
 pub type UV = (Vector2<f32>, Vector2<f32>);
 
+///Representation of a texture that has been uploaded to wgpu along with the corresponding view
+/// and sampler
 pub struct WgTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -28,13 +30,13 @@ impl WgTexture {
 
     pub fn create_depth_texture(
         device: &wgpu::Device,
-        sc_desc: &wgpu::SwapChainDescriptor,
+        surface_config: &wgpu::SurfaceConfiguration,
         label: &str,
     ) -> Self {
         let size = wgpu::Extent3d {
             width: sc_desc.width,
             height: sc_desc.height,
-            depth: 1,
+            depth_or_array_layers: 1
         };
         let desc = wgpu::TextureDescriptor {
             label: Some(label),
@@ -43,7 +45,7 @@ impl WgTexture {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
         };
         let texture = device.create_texture(&desc);
 
@@ -86,7 +88,7 @@ impl WgTexture {
             Extent3d {
                 width: dimensions.0,
                 height: dimensions.1,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
             label,
         )

@@ -2,12 +2,15 @@ use crate::mc::block::{Block, BlockModel, BlockPos, BlockState};
 use crate::model::ModelVertex;
 use std::time::Instant;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use rayon::iter::IntoParallelRefMutIterator;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
 pub const CHUNK_HEIGHT: usize = 256;
+pub const CHUNK_SECTION_HEIGHT: usize = CHUNK_HEIGHT / 4;
+pub const CHUNK_SECTIONS_PER: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 
-type ChunkPos = (u32, u32);
+type ChunkPos = (i32, i32);
 
 #[derive(Clone, Copy)]
 pub struct ChunkSection {
@@ -17,6 +20,12 @@ pub struct ChunkSection {
 }
 
 type RawChunkSectionPaletted = [u8; 256];
+
+struct RenderLayers {
+    terrain: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
+    transparent: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
+    grass: Box<[ChunkSection; CHUNK_SECTIONS_PER]>
+}
 
 pub struct Chunk {
     pub pos: ChunkPos,
@@ -35,19 +44,32 @@ impl Chunk {
         self.sections[y].blocks[(z * CHUNK_WIDTH) + x]
     }
 
-    pub fn generate_vertices(&mut self, blocks: &[Box<dyn Block>], chunk_x: u32, chunk_z: u32) {
+    pub fn generate_vertices(&mut self, blocks: &[Box<dyn Block>], pos_offset: ChunkPos) {
         let mut vertices = Vec::with_capacity(blocks.len() * 4 * 8);
 
         let sections = self.sections.as_ref();
+
+        let mapper = |v: &ModelVertex| {
+            let mut vertex = *v;
+            vertex.position[0] += x as f32 + pos_offset.0 as f32;
+            vertex.position[1] += y as f32;
+            vertex.position[2] += z as f32 + pos_offset.1 as f32;
+
+            vertex
+        };
 
         for (y, section) in sections.iter().enumerate().take(CHUNK_HEIGHT) {
             if section.empty {
                 continue;
             }
 
+            let section_index = y / CHUNK_SECTION_HEIGHT;
+            let relative_section_y = y % CHUNK_SECTION_HEIGHT;
+
             for x in 0..CHUNK_WIDTH {
                 for z in 0..CHUNK_WIDTH {
-                    let block_state: BlockState = sections[y].blocks[(z * CHUNK_WIDTH) + x];
+                    let block_index = ((z * CHUNK_WIDTH) + x) + (relative_section_y * CHUNK_AREA);
+                    let block_state: BlockState = sections[section_index].blocks[block_index];
 
                     let block = blocks
                         .get(match block_state.block {
@@ -55,15 +77,6 @@ impl Chunk {
                             None => continue,
                         })
                         .unwrap();
-
-                    let mapper = |v: &ModelVertex| {
-                        let mut vertex = *v;
-                        vertex.position[0] += x as f32 + chunk_x as f32;
-                        vertex.position[1] += y as f32;
-                        vertex.position[2] += z as f32 + chunk_z as f32;
-
-                        vertex
-                    };
 
                     match block.get_model() {
                         BlockModel::Cube(model) => {
@@ -171,14 +184,28 @@ impl Chunk {
 }
 
 pub struct ChunkManager {
+    //Due to floating point inaccuracy at large distances,
+    //we need to keep the model coordinates as close to 0,0,0 as possible
+    pub chunk_origin: ChunkPos,
     pub loaded_chunks: Vec<Chunk>,
 }
 
 impl ChunkManager {
     pub fn new() -> Self {
         ChunkManager {
+            chunk_origin: (0, 0),
             loaded_chunks: vec![],
         }
+    }
+
+    //TODO: parallelize
+    pub fn bake_meshes(&mut self, blocks: &[Box<dyn Block>]) {
+        self.loaded_chunks.iter_mut().for_each(
+            |chunk| chunk.generate_vertices(blocks, self.chunk_origin));
+    }
+
+    pub fn upload_buffers(&mut self, device: &wgpu::Device) {
+        self.loaded_chunks.iter_mut().for_each(|chunk| chunk.upload_buffer(device));
     }
 }
 

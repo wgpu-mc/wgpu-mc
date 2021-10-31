@@ -24,41 +24,41 @@ Java interface.
 
 The repo for the Fabric mod which interfaces with wgpu-mc is located at https://github.com/birbe/wgpu-mc-fabric
 
-#### Usage
+#### Current status
 
-Grab the assets directory from the Minecraft jar and copy it to /res/assets, and build.
+The project is currently under active development (I'm solo at the moment though) and it's close
+to getting a proper proof-of-concept working. The demo renderer works independently of the game, but does showcase
+that the engine works. The main task is getting it to work with the game.
 
 #### Roadmap
 
-World rendering
+Engine
 
-- [x] Discover and load blockmodels
-- [x] Generate a texture atlas of all the block textures 
-- [x] Convert the blockmodels into a mesh (somewhat broken)
-- [x] Properly assign UVs to the meshes (doesn't handle UV rotation yet)
-- [ ] Generate optimized render chunk meshes (working on it)
+- [x] Load blockmodels
+- [x] Generate a texture atlas of the textures 
+- [x] Convert the block models into a mesh
+- [x] Generate chunk meshes
+- [ ] Skybox
 
 Gameplay
 
-- [ ] Convert main menu and options menu into compatible code
-- [ ] Render the in-game HUD
-- [ ] Render the in-game chat
-- [ ] Handle block animations
+- [x] Disable Blaze3d
+- [ ] Upload basic chunk data to wgpu-mc
 
 Entity rendering
 
 - [ ] Render entity models
-- [ ] Properly render entity parts and their animations
+- [ ] Animations
 
 Java Interface
 
-- [ ] Interface with the Fabric mod to use wgpu-mc
+- [x] Interface with the Fabric mod to use wgpu-mc
 
 Shaders
 
 - [ ] Have built in shaders that mimic the original Minecraft style, and also built-in more advanced shaders
 - [ ] Ability to use custom shaders
 
-Maybe features (far future)
+Pie in the sky
 
-- [ ] Combine this project with https://github.com/birbe/jvm to run Minecraft: Java Edition in the browser
+- [ ] Use https://github.com/birbe/jvm to run Minecraft in the browser

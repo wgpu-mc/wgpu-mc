@@ -2642,6 +2642,7 @@ dependencies = [
  "guillotiere",
  "image",
  "raw-window-handle",
+ "rayon",
  "serde",
  "serde_bytes",
  "serde_json",

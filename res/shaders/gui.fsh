@@ -11,5 +11,5 @@ void main() {
     vec4 diffuse_color = texture(sampler2D(t_diffuse, s_diffuse), vec2(v_tex_coords.x, v_tex_coords.y));
     float bad_lighting = dot(normal, vec3(0.5, 0.5, 0.5))*0.5 + 0.5;
 
-    f_color = diffuse_color;
+    f_color = diffuse_colorr;
 }

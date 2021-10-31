@@ -129,7 +129,7 @@ impl BlockModelData {
         ))
     }
 
-    #[allow(unused_variables)] // TODO parameter textures is unused
+    #[allow(unused_variables)] // TODO: parameter textures is unused
     fn parse_face(
         val: Option<&Value>,
         textures: &HashMap<String, NamespacedId>,
@@ -228,6 +228,7 @@ impl BlockModelData {
         })
     }
 
+    //TODO: this code could maybe (100%) be done better probably
     pub fn deserialize(
         name: &str,
         models_dir: PathBuf,

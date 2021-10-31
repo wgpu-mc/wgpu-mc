@@ -9,12 +9,13 @@ use crate::mc::resource::{ResourceProvider, ResourceType};
 use crate::model::Material;
 use crate::texture::{WgTexture, UV};
 
-use cgmath::Vector2;
+use cgmath::{Vector2, Point3, Vector3};
 use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
 use image::imageops::overlay;
 use image::{GenericImageView, Rgba};
 use wgpu::{BindGroupLayout, Extent3d};
+use crate::camera::Camera;
 
 pub mod block;
 pub mod chunk;
@@ -34,6 +35,8 @@ pub struct MinecraftRenderer {
     pub block_model_data: HashMap<String, BlockModelData>,
     pub chunks: ChunkManager,
     pub entities: Vec<Entity>,
+    
+    pub camera: Camera,
 
     pub block_atlas_allocator: AtlasAllocator,
     pub block_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
@@ -66,6 +69,20 @@ impl MinecraftRenderer {
             gui_atlas_material: None,
             texture_manager: HashMap::new(),
             blocks: Vec::new(),
+            camera: Camera {
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0
+                },
+                yaw: 0.0,
+                pitch: 0.0,
+                up: Vector3::unit_y(),
+                aspect: 0.0,
+                fovy: 0.0,
+                znear: 0.0,
+                zfar: 0.0
+            }
         }
     }
 
@@ -149,7 +166,7 @@ impl MinecraftRenderer {
             Extent3d {
                 width: ATLAS_DIMENSIONS as u32,
                 height: ATLAS_DIMENSIONS as u32,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
             Some("Block Texture Atlas"),
         )

@@ -16,8 +16,6 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, object: &JObject) -> Result<Chu
         "Lnet/minecraft/world/chunk/ChunkSection;")?
         .l()?;
 
-    env.get_array
-
 
     Chunk {
         pos: (0, 0),

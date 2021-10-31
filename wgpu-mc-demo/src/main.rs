@@ -103,9 +103,7 @@ fn main() {
     let mut state = block_on(Renderer::new(&wrapper, Box::new(sp)));
 
     state.mc.load_block_models(mc_root);
-
     state.mc.generate_block_texture_atlas(&rsp, &state.device, &state.queue, &state.texture_bind_group_layout);
-
     state.mc.generate_blocks(&state.device, &rsp);
 
     let window = wrapper.window;
