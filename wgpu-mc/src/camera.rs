@@ -16,14 +16,14 @@ pub struct Camera {
 impl Camera {
     pub fn new(aspect: f32) -> Self {
         Self {
-            position: Point3::new(0.0, 0.0, 0.0),
+            position: Point3::new(-10.0, 5.0, 0.0),
             yaw: 0.0,
             pitch: 0.0,
             up: Vector3::unit_y(),
             aspect,
             fovy: 90.0,
             znear: 0.1,
-            zfar: 100.0,
+            zfar: 1000.0,
         }
     }
 
@@ -35,6 +35,7 @@ impl Camera {
         );
 
         let view = cgmath::Matrix4::look_at(self.position, target, self.up);
+
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
         proj * view
     }

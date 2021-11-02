@@ -16,7 +16,7 @@ type ChunkPos = (i32, i32);
 pub struct ChunkSection {
     //16*16 area
     pub empty: bool,
-    pub blocks: [BlockState; CHUNK_AREA],
+    pub blocks: [BlockState; CHUNK_AREA * CHUNK_SECTION_HEIGHT],
 }
 
 type RawChunkSectionPaletted = [u8; 256];
@@ -44,12 +44,13 @@ impl Chunk {
         self.sections[y].blocks[(z * CHUNK_WIDTH) + x]
     }
 
+    ///Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
     pub fn generate_vertices(&mut self, blocks: &[Box<dyn Block>], pos_offset: ChunkPos) {
         let mut vertices = Vec::with_capacity(blocks.len() * 4 * 8);
 
         let sections = self.sections.as_ref();
 
-        for (y, section) in sections.iter().enumerate().take(CHUNK_HEIGHT) {
+        for (y, section) in sections.iter().enumerate().take(CHUNK_SECTIONS_PER) {
             if section.empty {
                 continue;
             }

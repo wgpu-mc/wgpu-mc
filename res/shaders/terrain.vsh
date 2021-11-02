@@ -7,7 +7,8 @@ layout(location=2) in vec3 in_normal;
 layout(location=0) out vec2 v_tex_coords;
 layout(location=1) out vec3 v_normal;
 
-layout(set=2, binding=0)
+layout(set=1, binding=0)
+//layout(set=2, binding=0)
 uniform Uniforms {
     mat4 u_view_proj;
 };

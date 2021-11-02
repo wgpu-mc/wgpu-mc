@@ -5,7 +5,7 @@ use std::time::Instant;
 use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
 use wgpu_mc::mc::datapack::NamespacedId;
 use wgpu_mc::mc::block::{BlockDirection, BlockState, BlockModel};
-use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT};
+use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
 use wgpu_mc::{Renderer, ShaderProvider, HasWindowSize, WindowSize};
@@ -102,12 +102,16 @@ fn main() {
 
     let mut state = block_on(Renderer::new(&wrapper, Box::new(sp)));
 
+    println!("Loading block models");
     state.mc.load_block_models(mc_root);
+    println!("Generating texture atlas");
     state.mc.generate_block_texture_atlas(&rsp, &state.device, &state.queue, &state.pipelines.layouts.texture_bind_group_layout);
+    println!("Generating blocks");
     state.mc.generate_blocks(&state.device, &rsp);
 
     let window = wrapper.window;
 
+    println!("Starting rendering");
     begin_rendering(event_loop, window, state);
 }
 
@@ -169,7 +173,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                 direction: BlockDirection::North,
                 damage: 0,
                 transparency: false
-            }; CHUNK_AREA
+            }; CHUNK_AREA * CHUNK_SECTION_HEIGHT
         ] }; 4]),
         vertices: None,
         vertex_buffer: None,
@@ -179,9 +183,9 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     let instant = Instant::now();
 
     chunk.generate_vertices(&state.mc.blocks, (0, 0));
-    chunk.upload_buffer(&state.device);
+    println!("Time to generate chunk mesh: {}", Instant::now().duration_since(instant).as_millis());
 
-    println!("Time to gnerate and upload VBO: {}", Instant::now().duration_since(instant).as_millis());
+    chunk.upload_buffer(&state.device);
 
     let chunks = [chunk];
 
@@ -207,7 +211,15 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                                 //Update a block and re-generate the chunk mesh for testing
 
                                 //removed atm for testing
-                            }
+                            },
+
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::W),
+                                ..
+                            } => {
+                                state.mc.camera.pitch += 0.1;
+                            },
 
                             KeyboardInput {
                                 state: ElementState::Pressed,

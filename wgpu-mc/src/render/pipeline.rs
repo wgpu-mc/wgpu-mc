@@ -122,7 +122,8 @@ impl Pipelines {
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("Terrain Pipeline Layout"),
                     bind_group_layouts: &[
-                        &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                        // &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                        &layouts.texture_bind_group_layout, &layouts.camera_bind_group_layout
                     ],
                     push_constant_ranges: &[]
                 }
@@ -206,7 +207,7 @@ impl Pipelines {
                     module: &shaders.sky.frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent::REPLACE,
                             alpha: wgpu::BlendComponent::REPLACE
@@ -248,7 +249,7 @@ impl Pipelines {
                     module: &shaders.terrain.frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent::REPLACE,
                             alpha: wgpu::BlendComponent::REPLACE
@@ -290,7 +291,7 @@ impl Pipelines {
                     module: &shaders.grass.frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent::REPLACE,
                             alpha: wgpu::BlendComponent::REPLACE
@@ -332,7 +333,7 @@ impl Pipelines {
                     module: &shaders.transparent.frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent::REPLACE,
                             alpha: wgpu::BlendComponent::REPLACE

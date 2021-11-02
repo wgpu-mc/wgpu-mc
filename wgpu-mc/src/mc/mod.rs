@@ -14,9 +14,10 @@ use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
 use image::imageops::overlay;
 use image::{GenericImageView, Rgba};
-use wgpu::{BindGroupLayout, Extent3d, BufferDescriptor};
+use wgpu::{BindGroupLayout, Extent3d, BufferDescriptor, BindGroupDescriptor, BindGroupEntry};
 use crate::camera::{Camera, Uniforms};
 use std::mem::size_of;
+use crate::render::pipeline::Pipelines;
 
 pub mod block;
 pub mod chunk;
@@ -25,7 +26,7 @@ pub mod entity;
 pub mod gui;
 pub mod resource;
 
-const ATLAS_DIMENSIONS: i32 = 1024;
+const ATLAS_DIMENSIONS: i32 = 2048;
 
 pub type TextureManager = HashMap<NamespacedId, UV>;
 
@@ -38,7 +39,9 @@ pub struct MinecraftRenderer {
     pub entities: Vec<Entity>,
     
     pub camera: Camera,
+
     pub uniform_buffer: wgpu::Buffer,
+    pub uniform_bind_group: wgpu::BindGroup,
 
     pub block_atlas_allocator: AtlasAllocator,
     pub block_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
@@ -52,12 +55,23 @@ pub struct MinecraftRenderer {
 }
 
 impl MinecraftRenderer {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device, pipelines: &Pipelines) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
             size: size_of::<Uniforms>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
+        });
+
+        let uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: &pipelines.layouts.camera_bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(uniform_buffer.as_entire_buffer_binding())
+                }
+            ]
         });
 
         MinecraftRenderer {
@@ -78,21 +92,10 @@ impl MinecraftRenderer {
             gui_atlas_material: None,
             texture_manager: HashMap::new(),
             blocks: Vec::new(),
-            camera: Camera {
-                position: Point3 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0
-                },
-                yaw: 0.0,
-                pitch: 0.0,
-                up: Vector3::unit_y(),
-                aspect: 0.0,
-                fovy: 0.0,
-                znear: 0.0,
-                zfar: 0.0
-            },
-            uniform_buffer
+            camera: Camera::new(1.0),
+
+            uniform_buffer,
+            uniform_bind_group
         }
     }
 

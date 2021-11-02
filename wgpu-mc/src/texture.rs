@@ -110,7 +110,7 @@ impl WgTexture {
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             //TODO: maybe wrong
-            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING
         });
 
         queue.write_texture(
@@ -123,7 +123,7 @@ impl WgTexture {
             bytes,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(size.width),
+                bytes_per_row: NonZeroU32::new(size.width * 4),
                 rows_per_image: NonZeroU32::new(size.height),
             },
             size,
