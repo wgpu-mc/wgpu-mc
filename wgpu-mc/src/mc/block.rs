@@ -63,12 +63,16 @@ impl StaticBlock {
 
                 let arr = [
                     [
-                        (loc.0.x + tex.uv.0.x) / ATLAS,
-                        (loc.0.y + tex.uv.0.y) / ATLAS, // 0.0, 0.0
+                        // (loc.0.x + tex.uv.0.x) / ATLAS,
+                        // (loc.0.y + tex.uv.0.y) / ATLAS,
+                        0.0,
+                        0.0
                     ],
                     [
-                        (loc.0.x + tex.uv.1.x) / ATLAS,
-                        (loc.0.y + tex.uv.1.y) / ATLAS, // 0.015625, 0.015625
+                        // (loc.0.x + tex.uv.1.x) / ATLAS,
+                        // (loc.0.y + tex.uv.1.y) / ATLAS,
+                        16.0 / ATLAS,
+                        16.0 / ATLAS
                     ],
                 ];
 

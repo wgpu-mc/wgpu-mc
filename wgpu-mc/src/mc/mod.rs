@@ -26,7 +26,7 @@ pub mod entity;
 pub mod gui;
 pub mod resource;
 
-const ATLAS_DIMENSIONS: i32 = 2048;
+const ATLAS_DIMENSIONS: i32 = 1024;
 
 pub type TextureManager = HashMap<NamespacedId, UV>;
 

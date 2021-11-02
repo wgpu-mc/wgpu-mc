@@ -185,11 +185,22 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
         empty: false,
         blocks
     };
-    
+
+    let mut sections = [ChunkSection {
+        empty: true,
+        blocks: [BlockState {
+            block: None,
+            direction: BlockDirection::North,
+            damage: 0,
+            transparency: false
+        }; CHUNK_AREA]
+    }; CHUNK_SECTIONS_PER];
+    sections[0] = section;
+
     let mut chunk = Chunk {
         pos: (0, 0),
 
-        sections: Box::new([section; CHUNK_SECTIONS_PER]),
+        sections: Box::new(sections),
         vertices: None,
         vertex_buffer: None,
         vertex_count: 0
