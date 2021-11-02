@@ -74,7 +74,7 @@ impl Pipelines {
 
         let cubemap_bind_group_layout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
-                label: Some("Sky Bind Group Layout Descriptor"),
+                label: Some("Cubemap Bind Group Layout Descriptor"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,

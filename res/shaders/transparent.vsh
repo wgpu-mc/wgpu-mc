@@ -12,6 +12,8 @@ uniform Uniforms {
     mat4 u_view_proj;
 };
 
+//layout(location=5) in mat4 model_matrix;
+
 void main() {
     v_tex_coords = a_tex_coords;
     v_normal = normal;
