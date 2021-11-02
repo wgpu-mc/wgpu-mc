@@ -1,5 +1,6 @@
 use wgpu::{RenderPipelineDescriptor, BindGroupLayout};
 use crate::render::shader::Shader;
+use std::mem::size_of;
 
 pub struct Shaders {
     pub sky: Shader,
@@ -148,7 +149,34 @@ impl Pipelines {
     pub fn init(device: &wgpu::Device, shaders: Shaders) -> Self {
         let bg_layouts = Self::create_bind_group_layouts(device);
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
-        
+
+        let vertex_buffers = [
+            wgpu::VertexBufferLayout {
+                array_stride: 20,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &[
+                    //Position
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x3,
+                        offset: 0,
+                        shader_location: 0
+                    },
+                    //UV
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x2,
+                        offset: 12, //f32 * 3 = 12 bytes
+                        shader_location: 1
+                    },
+                    //Normal
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x3,
+                        offset: 20, //f32 * 3 + f32 * 2 = 20,
+                        shader_location: 2
+                    }
+                ]
+            }
+        ];
+
         Self {
             sky_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
@@ -193,7 +221,7 @@ impl Pipelines {
                 vertex: wgpu::VertexState {
                     module: &shaders.terrain.vert,
                     entry_point: "main",
-                    buffers: &[]
+                    buffers: &vertex_buffers
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -235,7 +263,7 @@ impl Pipelines {
                 vertex: wgpu::VertexState {
                     module: &shaders.grass.vert,
                     entry_point: "main",
-                    buffers: &[]
+                    buffers: &vertex_buffers
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -273,11 +301,11 @@ impl Pipelines {
             }),
             transparent_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
-                layout: Some(&pipeline_layouts.0),
+                layout: Some(&pipeline_layouts.3),
                 vertex: wgpu::VertexState {
                     module: &shaders.transparent.vert,
                     entry_point: "main",
-                    buffers: &[]
+                    buffers: &vertex_buffers
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
