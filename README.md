@@ -1,5 +1,7 @@
 # wgpu-mc
 
+![img](media/logo.png)
+
 ## 🚀 A blazing fast alternative renderer for Minecraft
 ### Discord
 https://discord.gg/NTuK8bQ2hn

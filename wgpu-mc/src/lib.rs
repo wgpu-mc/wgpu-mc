@@ -98,7 +98,7 @@ impl Renderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH | wgpu::Features::default(),
+                    features: wgpu::Features::default(),
                     limits: wgpu::Limits::default()
                 },
                 None, // Trace path

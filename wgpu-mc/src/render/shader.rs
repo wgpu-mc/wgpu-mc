@@ -35,16 +35,16 @@ impl Shader {
             None)?;
 
         let frag = unsafe {
-            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+            device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: None,
-                source: Cow::from(frag_v.as_binary())
+                source: wgpu::ShaderSource::SpirV(Cow::Borrowed(frag_v.as_binary()))
             })
         };
 
         let vert = unsafe {
-            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+            device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: None,
-                source: Cow::from(vert_v.as_binary())
+                source: wgpu::ShaderSource::SpirV(Cow::Borrowed(vert_v.as_binary()))
             })
         };
 

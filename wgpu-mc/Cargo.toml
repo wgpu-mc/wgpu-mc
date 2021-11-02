@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 image = "0.23"
 cgmath = "0.17"
-wgpu = "0.11.0"
+wgpu = { version = "0.11.0", features = ["spirv"] }
 bytemuck = { version = "1.4", features = [ "derive" ] }
 anyhow = "1.0"
 winit = "0.25.0"
