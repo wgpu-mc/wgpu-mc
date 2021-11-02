@@ -5,13 +5,14 @@ use std::time::Instant;
 use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
 use wgpu_mc::mc::datapack::NamespacedId;
 use wgpu_mc::mc::block::{BlockDirection, BlockState, BlockModel};
-use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT};
+use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
 use wgpu_mc::{Renderer, ShaderProvider, HasWindowSize, WindowSize};
 use futures::executor::block_on;
 use winit::window::Window;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use cgmath::InnerSpace;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -164,17 +165,31 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     //     }).collect::<Vec<Chunk>>()
     // }).flatten().collect::<Vec<Chunk>>();
 
+    let mut blocks = [
+        BlockState {
+            block: None,
+            direction: BlockDirection::North,
+            damage: 0,
+            transparency: false
+        }; 256
+    ];
+    
+    blocks[0] = BlockState {
+        block: state.mc.block_indices.get("minecraft:block/stone").cloned(),
+        direction: BlockDirection::North,
+        damage: 0,
+        transparency: false
+    };
+    
+    let section = ChunkSection {
+        empty: false,
+        blocks
+    };
+    
     let mut chunk = Chunk {
         pos: (0, 0),
 
-        sections: Box::new([ChunkSection { empty: false, blocks: [
-            BlockState {
-                block: state.mc.block_indices.get("minecraft:block/anvil").cloned(),
-                direction: BlockDirection::North,
-                damage: 0,
-                transparency: false
-            }; CHUNK_AREA * CHUNK_SECTION_HEIGHT
-        ] }; 4]),
+        sections: Box::new([section; CHUNK_SECTIONS_PER]),
         vertices: None,
         vertex_buffer: None,
         vertex_count: 0
@@ -215,10 +230,54 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
                             KeyboardInput {
                                 state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::W),
+                                virtual_keycode: Some(VirtualKeyCode::Down),
                                 ..
                             } => {
                                 state.mc.camera.pitch += 0.1;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Up),
+                                ..
+                            } => {
+                                state.mc.camera.pitch -= 0.1;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Left),
+                                ..
+                            } => {
+                                state.mc.camera.yaw -= 0.1;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Right),
+                                ..
+                            } => {
+                                state.mc.camera.yaw += 0.1;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Q),
+                                ..
+                            } => {
+                                state.mc.camera.position.y -= 0.1;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::E),
+                                ..
+                            } => {
+                                state.mc.camera.position.y += 0.1;
+                            },
+
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::W),
+                                ..
+                            } => {
+                                let direction: cgmath::Vector3<f32> = (state.mc.camera.yaw.cos(), state.mc.camera.pitch.sin(), state.mc.camera.yaw.sin()).into();
+                                state.mc.camera.position += direction.normalize();
                             },
 
                             KeyboardInput {

@@ -13,6 +13,7 @@ raw-window-handle = "0.3.3"
 wgpu = "0.11.0"
 wgpu-mc = { path = "../wgpu-mc" }
 winit = "0.25.0"
+cgmath = "0.17"
 
 [build-dependencies]
 anyhow = "1.0"

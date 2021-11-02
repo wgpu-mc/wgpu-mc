@@ -2674,6 +2674,7 @@ name = "wgpu-mc-demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cgmath",
  "crate-root",
  "fs_extra",
  "futures",

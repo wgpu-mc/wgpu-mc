@@ -1,6 +1,7 @@
 use wgpu::{RenderPipelineDescriptor, BindGroupLayout};
 use crate::render::shader::Shader;
 use std::mem::size_of;
+use crate::model::ModelVertex;
 
 pub struct Shaders {
     pub sky: Shader,
@@ -152,30 +153,7 @@ impl Pipelines {
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
 
         let vertex_buffers = [
-            wgpu::VertexBufferLayout {
-                array_stride: 20,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &[
-                    //Position
-                    wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x3,
-                        offset: 0,
-                        shader_location: 0
-                    },
-                    //UV
-                    wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x2,
-                        offset: 12, //f32 * 3 = 12 bytes
-                        shader_location: 1
-                    },
-                    //Normal
-                    wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x3,
-                        offset: 20, //f32 * 3 + f32 * 2 = 20,
-                        shader_location: 2
-                    }
-                ]
-            }
+            ModelVertex::desc()
         ];
 
         Self {

@@ -37,7 +37,7 @@ impl Camera {
         let view = cgmath::Matrix4::look_at(self.position, target, self.up);
 
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        proj * view
+        proj * view * OPENGL_TO_WGPU_MATRIX
     }
 }
 

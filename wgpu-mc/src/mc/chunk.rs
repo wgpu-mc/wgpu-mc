@@ -7,7 +7,7 @@ use rayon::iter::IntoParallelRefMutIterator;
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
 pub const CHUNK_HEIGHT: usize = 256;
-pub const CHUNK_SECTION_HEIGHT: usize = CHUNK_HEIGHT / 4;
+pub const CHUNK_SECTION_HEIGHT: usize = 1;
 pub const CHUNK_SECTIONS_PER: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 
 type ChunkPos = (i32, i32);
@@ -29,7 +29,7 @@ struct RenderLayers {
 
 pub struct Chunk {
     pub pos: ChunkPos,
-    pub sections: Box<[ChunkSection; 4]>,
+    pub sections: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
     pub vertices: Option<Vec<ModelVertex>>,
     pub vertex_buffer: Option<wgpu::Buffer>,
     pub vertex_count: usize
@@ -50,18 +50,19 @@ impl Chunk {
 
         let sections = self.sections.as_ref();
 
-        for (y, section) in sections.iter().enumerate().take(CHUNK_SECTIONS_PER) {
+        for y in 0..256 {
+            let section_index = y / CHUNK_SECTION_HEIGHT;
+
+            let section = sections[section_index];
             if section.empty {
                 continue;
             }
 
-            let section_index = y / CHUNK_SECTION_HEIGHT;
-            let relative_section_y = y % CHUNK_SECTION_HEIGHT;
-
+            // let relative_section_y = y % CHUNK_SECTION_HEIGHT;
             for x in 0..CHUNK_WIDTH {
                 for z in 0..CHUNK_WIDTH {
-                    let block_index = ((z * CHUNK_WIDTH) + x) + (relative_section_y * CHUNK_AREA);
-                    let block_state: BlockState = sections[section_index].blocks[block_index];
+                    let block_index = (z * CHUNK_WIDTH) + x;
+                    let block_state: BlockState = section.blocks[block_index];
 
                     let mapper = |v: &ModelVertex| {
                         let mut vertex = *v;
