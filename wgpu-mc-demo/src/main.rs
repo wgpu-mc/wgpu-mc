@@ -175,7 +175,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     ];
     
     blocks[0] = BlockState {
-        block: state.mc.block_indices.get("minecraft:block/stone").cloned(),
+        block: state.mc.block_indices.get("minecraft:block/anvil").cloned(),
         direction: BlockDirection::North,
         damage: 0,
         transparency: false

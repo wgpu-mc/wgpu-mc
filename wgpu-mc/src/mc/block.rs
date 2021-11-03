@@ -63,16 +63,12 @@ impl StaticBlock {
 
                 let arr = [
                     [
-                        // (loc.0.x + tex.uv.0.x) / ATLAS,
-                        // (loc.0.y + tex.uv.0.y) / ATLAS,
-                        0.0,
-                        0.0
+                        (loc.0.x + tex.uv.0.x) / ATLAS,
+                        (loc.0.y + tex.uv.0.y) / ATLAS
                     ],
                     [
-                        // (loc.0.x + tex.uv.1.x) / ATLAS,
-                        // (loc.0.y + tex.uv.1.y) / ATLAS,
-                        16.0 / ATLAS,
-                        16.0 / ATLAS
+                        (loc.0.x + tex.uv.1.x) / ATLAS,
+                        (loc.0.y + tex.uv.1.y) / ATLAS
                     ],
                 ];
 
@@ -189,18 +185,8 @@ impl StaticBlock {
                     tex_manager
                 )?;
 
-                //let resolved_texture_namespaces = ();
+                dbg!(north, east, south, west, down, up);
 
-                //to-from to model coords is Z and Y inverted
-
-                // let a = [element.from.0, 1.0-element.to.1, 1.0-element.to.2];
-                // let b = [element.to.0, 1.0-element.to.1, 1.0-element.to.2];
-                // let c = [element.to.0, 1.0-element.from.1, 1.0-element.to.2];
-                // let d = [element.from.0, 1.0-element.from.1, 1.0-element.to.2];
-                // let e = [element.from.0, 1.0-element.to.1, 1.0-element.from.2];
-                // let f = [element.to.0, 1.0-element.to.1, 1.0-element.from.2];
-                // let g = [element.to.0, 1.0-element.from.1, 1.0-element.from.2];
-                // let h = [element.from.0, 1.0-element.from.1, 1.0-element.from.2];
                 let a = [1.0-element.from.0, element.from.1,   element.from.2];
                 let b = [1.0-element.to.0, element.from.1,     element.from.2];
                 let c = [1.0-element.to.0, element.to.1,   element.from.2];
@@ -260,6 +246,8 @@ impl StaticBlock {
                         ModelVertex { position: e, tex_coords: [down[1][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
                     ],
                 };
+
+                dbg!(&faces.north);
 
                 Some(faces)
             })

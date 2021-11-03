@@ -3,6 +3,7 @@ use crate::model::ModelVertex;
 use std::time::Instant;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use rayon::iter::IntoParallelRefMutIterator;
+use crate::mc::ATLAS_DIMENSIONS;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -46,7 +47,7 @@ impl Chunk {
 
     ///Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
     pub fn generate_vertices(&mut self, blocks: &[Box<dyn Block>], pos_offset: ChunkPos) {
-        let mut vertices = Vec::with_capacity(blocks.len() * 4 * 8);
+        let mut vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_HEIGHT / 2);
 
         let sections = self.sections.as_ref();
 
@@ -131,6 +132,12 @@ impl Chunk {
                                 match east_block.block {
                                     Some(_) => east_block.transparency,
                                     None => false,
+                                }
+                            });
+
+                            model.north.iter().for_each(|vertex| {
+                                if vertex.tex_coords[0] != 0.0 || vertex.tex_coords[1] != 16.0 / (ATLAS_DIMENSIONS as f32) {
+                                    panic!("??");
                                 }
                             });
 
