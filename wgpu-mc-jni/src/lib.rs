@@ -1,8 +1,8 @@
 mod mc_interface;
 
 use jni::JNIEnv;
-use jni::objects::{JClass, JString, JValue};
-use jni::sys::{jstring, jint};
+use jni::objects::{JClass, JString, JValue, JObject};
+use jni::sys::{jstring, jint, jobjectArray};
 use std::sync::{Mutex, RwLock, mpsc, Arc};
 use wgpu_mc::{Renderer, WindowSize, HasWindowSize, ShaderProvider};
 use std::mem::MaybeUninit;
@@ -18,6 +18,8 @@ use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent, KeyboardInput, ElementState, VirtualKeyCode};
 use std::time::Instant;
 use winit::event_loop::{ControlFlow, EventLoop};
+use wgpu_mc::mc::chunk::CHUNK_HEIGHT;
+use crate::mc_interface::xyz_to_index;
 
 enum WindowMessage {
     SetTitle(Arc<String>),
@@ -71,10 +73,23 @@ impl ShaderProvider for SimpleShaderProvider {
 pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunk(
     env: JNIEnv,
     class: JClass,
-    entry_type: jint,
-    name: JString) {
+    world_chunk: JObject) {
 
-    // let chunk = chunk_from_java_client_chunk();
+    mc_interface::chunk_from_java_world_chunk(&env, &world_chunk);
+
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_getBackend(
+    env: JNIEnv,
+    class: JClass) -> jstring {
+
+    let renderer = unsafe { RENDERER.assume_init_ref() };
+    let backend = renderer.get_backend_description();
+
+    env.new_string(backend)
+         .unwrap()
+        .into_inner()
 
 }
 
@@ -105,18 +120,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
 ) {
     use winit::event_loop::EventLoop;
 
+    let title: String = env.get_string(string).unwrap().into();
+
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()
-        .with_title("wgpu-mc")
+        .with_title(&format!("{} + wgpu-mc", title))
         .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
             width: 600,
             height: 500
         }))
         .build(&event_loop)
         .unwrap();
-
-    let vm = env.get_java_vm().unwrap();
-    let title: String = env.get_string(string).unwrap().into();
 
     let wrapper = &WinitWindowWrapper {
         window: &window
@@ -183,8 +197,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
                 }
             }
             Event::RedrawRequested(_) => {
-                // &state.update();
-                // &state.render(&chunks);
+                &state.update();
+                // &state.render(&[]);
 
                 // let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
                 // frame_begin = Instant::now();
