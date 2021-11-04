@@ -10,7 +10,7 @@ public class MainGameThread extends Thread {
         Thread gameThread = new Thread() {
             @Override
             public void run() {
-                client.openScreen(new ConnectScreen(null, client, new ServerInfo("Test", "localhost:25565", false)));
+                client.startIntegratedServer("world");
                 client.run();
             }
         };

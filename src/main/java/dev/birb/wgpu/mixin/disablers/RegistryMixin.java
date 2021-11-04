@@ -22,9 +22,9 @@ public class RegistryMixin {
         }
 
         if(registry == Registry.BLOCK) {
-            Wgpu.registerEntry(0, id.toString());
+//            Wgpu.registerEntry(0, id.toString());
         } else if(registry == Registry.ITEM) {
-            Wgpu.registerEntry(1, id.toString());
+//            Wgpu.registerEntry(1, id.toString());
         }
     }
 

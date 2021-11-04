@@ -215,7 +215,6 @@ public abstract class MinecraftClientMixin {
             while(item != null) {
                 Runnable task = tasks.remove();
 
-                System.out.println(task);
                 if(!(task instanceof ResourceReloader)) {
                     task.run();
                 }
