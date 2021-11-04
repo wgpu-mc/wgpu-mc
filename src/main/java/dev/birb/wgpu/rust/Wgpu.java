@@ -19,6 +19,8 @@ public class Wgpu {
 
     public static native void uploadChunk(WorldChunk chunk);
 
+    public static native void registerSprite(String namespace);
+
     public static native String getBackend();
 
 //    public static native void registerTexture(Identifier identifier);

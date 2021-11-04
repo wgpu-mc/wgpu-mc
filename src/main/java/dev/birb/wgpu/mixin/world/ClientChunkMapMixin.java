@@ -16,9 +16,9 @@ public class ClientChunkMapMixin {
             at = @At("HEAD")
     )
     protected void set(int index, WorldChunk chunk, CallbackInfo ci) {
-        long time = System.currentTimeMillis();
-        Wgpu.uploadChunk(chunk);
-        System.out.println(System.currentTimeMillis() - time);
+//        long time = System.currentTimeMillis();
+//TODO: Wgpu.uploadChunk(chunk);
+//        System.out.println(System.currentTimeMillis() - time);
     }
 
 }

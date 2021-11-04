@@ -13,6 +13,7 @@ public class TextureManagerMixin {
 
     @Inject(method = "registerTexture", at = @At("HEAD"), cancellable = true)
     public void registerTexture(Identifier identifier, AbstractTexture abstractTexture, CallbackInfo ci) {
+        System.out.println(identifier);
         ci.cancel();
     }
 

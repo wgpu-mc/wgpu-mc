@@ -167,7 +167,7 @@ public abstract class MinecraftClientMixin {
 //
     @Inject(method = "updateWindowTitle", at = @At("HEAD"), cancellable = true)
     public void modifyUpdateWindowTitle(CallbackInfo ci) {
-//        Wgpu.updateWindowTitle(this.getWindowTitle());
+        Wgpu.updateWindowTitle(this.getWindowTitle());
         ci.cancel();
     }
 
