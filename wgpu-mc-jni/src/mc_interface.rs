@@ -87,6 +87,9 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
 
 }
 
+pub fn registerSprite() {
+
+}
 
 struct ChunkInterface<'a> {
     world_chunk: JObject<'a>,

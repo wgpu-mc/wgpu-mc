@@ -20,18 +20,21 @@ use std::time::Instant;
 use winit::event_loop::{ControlFlow, EventLoop};
 use wgpu_mc::mc::chunk::CHUNK_HEIGHT;
 use crate::mc_interface::xyz_to_index;
+use wgpu_mc::mc::datapack::NamespacedId;
+use std::convert::TryFrom;
 
-enum WindowMessage {
-    SetTitle(Arc<String>),
-
+#[derive(Debug)]
+enum RenderMessage {
+    SetTitle(String),
+    RegisterSprite(String)
 }
 
 static mut RENDERER: MaybeUninit<Renderer> = MaybeUninit::uninit();
 static mut EVENT_LOOP: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
 static mut WINDOW: MaybeUninit<Window> = MaybeUninit::uninit();
 
-static mut CHANNEL_TX: MaybeUninit<mpsc::Sender<WindowEvent>> = MaybeUninit::uninit();
-static mut CHANNEL_RX: MaybeUninit<mpsc::Receiver<WindowEvent>> = MaybeUninit::uninit();
+static mut CHANNEL_TX: MaybeUninit<mpsc::Sender<RenderMessage>> = MaybeUninit::uninit();
+static mut CHANNEL_RX: MaybeUninit<mpsc::Receiver<RenderMessage>> = MaybeUninit::uninit();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -94,6 +97,18 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_getBackend(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
+    env: JNIEnv,
+    class: JClass,
+    jnamespace: JString) {
+
+    let tx = unsafe { CHANNEL_TX.assume_init_mut() };
+    let namespace: String = env.get_string(jnamespace).unwrap().into();
+
+    tx.send(RenderMessage::RegisterSprite(namespace));
+}
+
+#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerEntry(
     env: JNIEnv,
     class: JClass,
@@ -140,7 +155,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
         &wrapper, Box::new(SimpleShaderProvider {})
     ));
 
+    let (tx, rx) = mpsc::channel::<RenderMessage>();
+
     unsafe {
+        CHANNEL_TX = MaybeUninit::new(tx);
+        CHANNEL_RX = MaybeUninit::new(rx);
         RENDERER = MaybeUninit::new(state);
         EVENT_LOOP = MaybeUninit::new(event_loop);
         WINDOW = MaybeUninit::new(window);
@@ -161,6 +180,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
 
     let event_loop = unsafe { swap.assume_init() };
 
+    let rx = unsafe { CHANNEL_RX.assume_init_mut() };
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -170,6 +191,24 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
                 WINDOW.assume_init_ref()
             )
         };
+
+        let mut msg_r = rx.try_recv();
+        while msg_r.is_ok() {
+            let msg = msg_r.unwrap();
+
+            println!("{:?}", msg);
+            match msg {
+                RenderMessage::SetTitle(title) => window.set_title(&title),
+                RenderMessage::RegisterSprite(sprite) => {
+                    state.mc.texture_manager.textures.insert(
+                        NamespacedId::try_from(sprite.as_str()).unwrap(),
+                        None
+                    );
+                }
+            };
+
+            msg_r = rx.try_recv();
+        }
 
         match event {
             Event::MainEventsCleared => window.request_redraw(),
@@ -213,6 +252,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(env: JNIEnv, class: JClass, string: JString) {
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(
+    env: JNIEnv,
+    class: JClass,
+    jtitle: JString) {
 
+    let tx = unsafe { CHANNEL_TX.assume_init_mut() };
+    let title: String = env.get_string(jtitle).unwrap().into();
+
+    tx.send(RenderMessage::SetTitle(title));
 }
