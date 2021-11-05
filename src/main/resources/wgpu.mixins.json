@@ -4,7 +4,7 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
-    "MinecraftClientMixin",
+    "disablers.MinecraftClientMixin",
     "accessors.ThreadExecutorAccessor",
     "disablers.AbstractTextureMixin",
     "disablers.FontManagerMixin",
@@ -19,13 +19,20 @@
     "disablers.TextureManagerMixin",
     "disablers.TextureUtilMixin",
     "disablers.WindowProviderMixin",
-    "disablers.WorldRendererMixin"
+    "disablers.WorldRendererMixin",
+    "disablers.ClientWorldMixin",
+    "disablers.GameRendererMixin",
+
+    "render.RenderSystemMixin",
+    "render.MinecraftClientRenderMixin",
+
+    "core.MinecraftClientCoreMixin",
+
+    "world.ClientChunkMapMixin",
+    "accessors.DefaultClientResourcePackMixin"
   ],
   "injectors": {
     "defaultRequire": 1
   },
-  "mixins": [
-    "disablers.ClientWorldMixin",
-    "disablers.GameRendererMixin"
-  ]
+  "mixins": []
 }
