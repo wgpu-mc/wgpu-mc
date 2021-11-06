@@ -1,9 +1,8 @@
 use crate::mc::block::{Block, BlockModel, BlockPos, BlockState};
-use crate::model::ModelVertex;
+use crate::model::MeshVertex;
 use std::time::Instant;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use rayon::iter::IntoParallelRefMutIterator;
-use crate::mc::ATLAS_DIMENSIONS;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -31,7 +30,7 @@ struct RenderLayers {
 pub struct Chunk {
     pub pos: ChunkPos,
     pub sections: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
-    pub vertices: Option<Vec<ModelVertex>>,
+    pub vertices: Option<Vec<MeshVertex>>,
     pub vertex_buffer: Option<wgpu::Buffer>,
     pub vertex_count: usize
 }
@@ -65,7 +64,7 @@ impl Chunk {
                     let block_index = (z * CHUNK_WIDTH) + x;
                     let block_state: BlockState = section.blocks[block_index];
 
-                    let mapper = |v: &ModelVertex| {
+                    let mapper = |v: &MeshVertex| {
                         let mut vertex = *v;
                         vertex.position[0] += x as f32 + pos_offset.0 as f32;
                         vertex.position[1] += y as f32;
@@ -132,12 +131,6 @@ impl Chunk {
                                 match east_block.block {
                                     Some(_) => east_block.transparency,
                                     None => false,
-                                }
-                            });
-
-                            model.north.iter().for_each(|vertex| {
-                                if vertex.tex_coords[0] != 0.0 || vertex.tex_coords[1] != 16.0 / (ATLAS_DIMENSIONS as f32) {
-                                    panic!("??");
                                 }
                             });
 

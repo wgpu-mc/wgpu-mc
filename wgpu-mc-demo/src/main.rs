@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::ops::{DerefMut, Deref};
 use std::time::Instant;
 use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
-use wgpu_mc::mc::datapack::NamespacedId;
+use wgpu_mc::mc::datapack::Identifier;
 use wgpu_mc::mc::block::{BlockDirection, BlockState, BlockModel};
 use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -24,10 +24,10 @@ struct SimpleShaderProvider {
 
 impl ResourceProvider for SimpleResourceProvider {
 
-    fn get_bytes(&self, t: ResourceType, id: &NamespacedId) -> Vec<u8> {
+    fn get_bytes(&self, t: ResourceType, id: &Identifier) -> Vec<u8> {
 
         let paths: Vec<&str> = match id {
-            NamespacedId::Resource(res) => {
+            Identifier::Resource(res) => {
                 res.1.split("/").take(2).collect()
             },
             _ => unreachable!()
@@ -106,7 +106,7 @@ fn main() {
     println!("Loading block models");
     state.mc.load_block_models(mc_root);
     println!("Generating texture atlas");
-    state.mc.generate_block_texture_atlas(&rsp, &state.device, &state.queue, &state.pipelines.layouts.texture_bind_group_layout);
+    state.mc.generate_block_texture_atlas(&state.device, &state.queue, &state.pipelines.layouts.texture_bind_group_layout);
     println!("Generating blocks");
     state.mc.generate_blocks(&state.device, &rsp);
 

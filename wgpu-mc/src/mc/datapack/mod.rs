@@ -5,56 +5,56 @@ use crate::texture::UV;
 
 use cgmath::{Matrix4, Vector2};
 use serde_json::Value;
+use std::convert::{TryFrom, TryInto};
 
 pub type NamespacedResource = (String, String);
 
 #[derive(Debug, Clone, Eq, Hash)]
-pub enum NamespacedId {
+pub enum Identifier {
     Tag(String),
-    Resource(NamespacedResource),
-    Invalid,
+    Resource(NamespacedResource)
 }
 
-impl NamespacedId {
+impl Identifier {
     pub fn is_tag(&self) -> bool {
-        matches!(self, NamespacedId::Tag(_))
+        matches!(self, Identifier::Tag(_))
     }
 }
 
-impl std::string::ToString for NamespacedId {
+impl std::string::ToString for Identifier {
     fn to_string(&self) -> String {
         match self {
-            NamespacedId::Tag(tag) => format!("#{}", tag),
-            NamespacedId::Resource(res) => format!("{}:{}", res.0, res.1),
-            NamespacedId::Invalid => "Invalid".into(),
+            Identifier::Tag(tag) => format!("#{}", tag),
+            Identifier::Resource(res) => format!("{}:{}", res.0, res.1)
         }
     }
 }
 
-impl PartialEq for NamespacedId {
+impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
         match self {
-            NamespacedId::Tag(tag) => {
-                if let NamespacedId::Tag(o) = other {
+            Identifier::Tag(tag) => {
+                if let Identifier::Tag(o) = other {
                     o == tag
                 } else {
                     false
                 }
             }
-            NamespacedId::Resource((ns, id)) => {
-                if let NamespacedId::Resource((ons, oid)) = other {
+            Identifier::Resource((ns, id)) => {
+                if let Identifier::Resource((ons, oid)) = other {
                     ons == ns && oid == id
                 } else {
                     false
                 }
             }
-            NamespacedId::Invalid => false,
         }
     }
 }
 
-impl From<&str> for NamespacedId {
-    fn from(string: &str) -> Self {
+impl TryFrom<&str> for Identifier {
+    type Error = ();
+
+    fn try_from(string: &str) -> Result<Identifier, Self::Error> {
         // See if tag and remove # if so
         let is_tag = string.starts_with('#');
         let string = if is_tag { &string[1..] } else { string };
@@ -62,22 +62,22 @@ impl From<&str> for NamespacedId {
         // Parse the rest of the namespace
         let mut split = string.split(':').take(2);
 
-        if !is_tag {
+        Ok(if !is_tag {
             match (split.next(), split.next()) {
-                (Some(ns), Some(id)) => NamespacedId::Resource((ns.into(), id.into())),
-                (Some(id), None) => NamespacedId::Resource(("minecraft".into(), id.into())),
-                _ => NamespacedId::Invalid,
+                (Some(ns), Some(id)) => Identifier::Resource((ns.into(), id.into())),
+                (Some(id), None) => Identifier::Resource(("minecraft".into(), id.into())),
+                _ => return Err(())
             }
         } else {
-            NamespacedId::Tag(string.into())
-        }
+            Identifier::Tag(string.into())
+        })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct FaceTexture {
     pub uv: UV,
-    pub texture: NamespacedId,
+    pub texture: Identifier,
 }
 
 #[derive(Debug, Clone)]
@@ -101,11 +101,11 @@ pub struct Element {
 
 //Deserialized info about a block and how it should render
 pub struct BlockModelData {
-    pub id: NamespacedId, //Its id
-    pub parent: Option<NamespacedId>,
+    pub id: Identifier, //Its id
+    pub parent: Option<Identifier>,
     pub elements: Vec<Element>,
     pub display_transforms: HashMap<String, Matrix4<f32>>,
-    pub textures: HashMap<String, NamespacedId>,
+    pub textures: HashMap<String, Identifier>,
 }
 
 impl BlockModelData {
@@ -132,7 +132,7 @@ impl BlockModelData {
     #[allow(unused_variables)] // TODO: parameter textures is unused
     fn parse_face(
         val: Option<&Value>,
-        textures: &HashMap<String, NamespacedId>,
+        textures: &HashMap<String, Identifier>,
     ) -> Option<FaceTexture> {
         match val {
             None => None,
@@ -156,7 +156,12 @@ impl BlockModelData {
                     }
                 };
 
-                let texture = NamespacedId::from(obj.get("texture").unwrap().as_str().unwrap());
+                let texture: Identifier = obj.get("texture")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
 
                 Some(FaceTexture { uv, texture })
             }
@@ -166,7 +171,7 @@ impl BlockModelData {
     fn parse_elements(
         val: Option<&Value>,
         parent: Option<&BlockModelData>,
-        textures: &HashMap<String, NamespacedId>,
+        textures: &HashMap<String, Identifier>,
     ) -> Option<Vec<Element>> {
         Some(match val {
             //No elements, default to parent's
@@ -250,13 +255,13 @@ impl BlockModelData {
                         None => (None, None),
                         Some(v) => match v {
                             Value::String(s) => {
-                                let namespaced = NamespacedId::from(s.as_str());
+                                let namespaced: Identifier = s.as_str().try_into().unwrap();
 
                                 let namespace;
                                 let id;
 
                                 let path: &str = match &namespaced {
-                                    NamespacedId::Resource(res) => {
+                                    Identifier::Resource(res) => {
                                         namespace = res.0.as_str();
                                         id = res.1.as_str();
 
@@ -284,20 +289,17 @@ impl BlockModelData {
                     }
                 };
 
-                let textures: HashMap<String, NamespacedId> = match obj.get("textures") {
+                let textures: HashMap<String, Identifier> = match obj.get("textures") {
                     None => HashMap::new(),
                     Some(textures_map) => {
-                        let mut map: HashMap<_, _> = textures_map
+                        let mut map: HashMap<String, Identifier> = textures_map
                             .as_object()
                             .unwrap()
                             .iter()
                             .map(|(key, val)| {
                                 (
                                     key.clone(),
-                                    match val {
-                                        Value::String(str) => NamespacedId::from(&str[..]),
-                                        _ => panic!("Invalid datapack!"),
-                                    },
+                                    val.as_str().expect("Invalid datapack!").try_into().unwrap()
                                 )
                             })
                             .collect();
@@ -313,7 +315,7 @@ impl BlockModelData {
                 };
 
                 Some(BlockModelData {
-                    id: NamespacedId::Resource(("minecraft".into(), format!("block/{}", name))),
+                    id: Identifier::Resource(("minecraft".into(), format!("block/{}", name))),
                     parent: parent_namespace,
                     elements: {
                         Self::parse_elements(obj.get("elements"), parent_model, &textures)
@@ -329,7 +331,7 @@ impl BlockModelData {
 
         if let Some(m) = model {
             // println!("Deserialized {:?} with {} elements", m.id, m.elements.len());
-            if let NamespacedId::Resource(ref namespace) = m.id {
+            if let Identifier::Resource(ref namespace) = m.id {
                 model_map.insert(format!("{}:{}", namespace.0, namespace.1), m);
             }
         };

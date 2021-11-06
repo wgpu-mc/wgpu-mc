@@ -2695,6 +2695,7 @@ dependencies = [
  "futures",
  "glfw",
  "jni",
+ "lazy_static",
  "raw-window-handle",
  "wgpu",
  "wgpu-mc",

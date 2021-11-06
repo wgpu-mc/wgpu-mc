@@ -1,13 +1,14 @@
 use wgpu::{RenderPipelineDescriptor, BindGroupLayout};
 use crate::render::shader::Shader;
 use std::mem::size_of;
-use crate::model::ModelVertex;
+use crate::model::{MeshVertex, GuiVertex};
 
 pub struct Shaders {
     pub sky: Shader,
     pub terrain: Shader,
     pub grass: Shader,
     pub transparent: Shader,
+    pub gui: Shader
 }
 
 pub struct Pipelines {
@@ -15,6 +16,7 @@ pub struct Pipelines {
     pub terrain_pipeline: wgpu::RenderPipeline,
     pub grass_pipeline: wgpu::RenderPipeline,
     pub transparent_pipeline: wgpu::RenderPipeline,
+    pub gui_pipeline: wgpu::RenderPipeline,
     
     pub layouts: Layouts,
     pub shaders: Shaders
@@ -108,7 +110,7 @@ impl Pipelines {
         }
     }
 
-    fn create_pipeline_layouts(device: &wgpu::Device, layouts: &Layouts) -> (wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout) {
+    fn create_pipeline_layouts(device: &wgpu::Device, layouts: &Layouts) -> (wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout) {
         (
             device.create_pipeline_layout(
                 &wgpu::PipelineLayoutDescriptor {
@@ -128,23 +130,34 @@ impl Pipelines {
                     ],
                     push_constant_ranges: &[]
                 }
-            ),device.create_pipeline_layout(
+            ),
+            device.create_pipeline_layout(
+                &wgpu::PipelineLayoutDescriptor {
+                    label: Some("Grass Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                    ],
+                    push_constant_ranges: &[]
+                }
+            ),
+            device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
-                label: Some("Grass Pipeline Layout"),
-                bind_group_layouts: &[
-                    &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
-                ],
-                push_constant_ranges: &[]
-            }
-        ),device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                label: Some("Transparent Pipeline Layout"),
-                bind_group_layouts: &[
-                    &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
-                ],
-                push_constant_ranges: &[]
-            }
-        ),
+                    label: Some("Transparent Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                    ],
+                    push_constant_ranges: &[]
+                }
+            ),
+            device.create_pipeline_layout(
+                &wgpu::PipelineLayoutDescriptor {
+                    label: Some("GUI Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &layouts.texture_bind_group_layout, &layouts.camera_bind_group_layout
+                    ],
+                    push_constant_ranges: &[]
+                }
+            ),
         )
     }
 
@@ -153,7 +166,7 @@ impl Pipelines {
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
 
         let vertex_buffers = [
-            ModelVertex::desc()
+            MeshVertex::desc()
         ];
 
         Self {
@@ -309,6 +322,50 @@ impl Pipelines {
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shaders.transparent.frag,
+                    entry_point: "main",
+                    targets: &[wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent::REPLACE,
+                            alpha: wgpu::BlendComponent::REPLACE
+                        }),
+                        write_mask: Default::default()
+                    }]
+                })
+            }),
+            gui_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layouts.4),
+                vertex: wgpu::VertexState {
+                    module: &shaders.gui.vert,
+                    entry_point: "main",
+                    buffers: &[
+                        GuiVertex::desc()
+                    ]
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    clamp_depth: false,
+                    polygon_mode: Default::default(),
+                    conservative: false
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default()
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shaders.gui.frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,

@@ -52,6 +52,8 @@ pub struct Renderer {
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
 
+    pub adapter: wgpu::Adapter,
+
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
 
@@ -84,6 +86,7 @@ impl Renderer {
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -157,6 +160,16 @@ impl Renderer {
                 source: &shader_provider.get_shader("transparent.vsh"),
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
+
+            gui: Shader::from_glsl(ShaderSource {
+                file_name: "gui.fsh",
+                source: &shader_provider.get_shader("gui.fsh"),
+                entry_point: "main"
+            }, ShaderSource {
+                file_name: "gui.vsh",
+                source: &shader_provider.get_shader("gui.vsh"),
+                entry_point: "main"
+            }, &device, &mut sc).unwrap(),
         };
         
         let pipelines = render::pipeline::Pipelines::init(&device, shaders);
@@ -167,6 +180,9 @@ impl Renderer {
         Self {
             surface,
             surface_config: config,
+
+            adapter,
+
             device,
             queue,
             size,
@@ -180,10 +196,13 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, new_size: WindowSize) {
-        // self.camera.aspect = self.sc_desc.width as f32 / self.sc_desc.height as f32;
+        self.surface_config.width = new_size.width;
+        self.surface_config.height = new_size.height;
+
+        self.surface.configure(&self.device, &self.surface_config);
+
+        self.mc.camera.aspect = self.surface_config.height as f32 / self.surface_config.width as f32;
         // self.size = new_size;
-        // self.sc_desc.width = new_size.width;
-        // self.sc_desc.height = new_size.height;
         self.depth_texture =
             texture::WgTexture::create_depth_texture(&self.device, &self.surface_config, "depth_texture");
     }
@@ -256,9 +275,9 @@ impl Renderer {
 
             //Render chunks
 
-            let bind_texture = self.mc.block_atlas_material.as_ref().unwrap();
+            let texture_bind_group = &self.mc.texture_manager.atlases.block.material.as_ref().unwrap().bind_group;
 
-            render_pass.set_bind_group(0, &bind_texture.bind_group, &[]);
+            render_pass.set_bind_group(0, &texture_bind_group, &[]);
             render_pass.set_bind_group(1, &self.mc.uniform_bind_group, &[]);
 
             let mrp = &mut render_pass;
@@ -280,5 +299,9 @@ impl Renderer {
         output.present();
 
         Ok(())
+    }
+
+    pub fn get_backend_description(&self) -> String {
+        format!("Wgpu 11.0 ({:?})", self.adapter.get_info().backend)
     }
 }

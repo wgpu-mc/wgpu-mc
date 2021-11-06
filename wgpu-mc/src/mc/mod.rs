@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crate::mc::block::{Block, StaticBlock};
 use crate::mc::chunk::ChunkManager;
-use crate::mc::datapack::{BlockModelData, NamespacedId};
+use crate::mc::datapack::{BlockModelData, Identifier};
 use crate::mc::entity::Entity;
 use crate::mc::resource::{ResourceProvider, ResourceType};
 use crate::model::Material;
@@ -13,11 +13,12 @@ use cgmath::{Vector2, Point3, Vector3};
 use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
 use image::imageops::overlay;
-use image::{GenericImageView, Rgba};
+use image::{GenericImageView, Rgba, ImageFormat};
 use wgpu::{BindGroupLayout, Extent3d, BufferDescriptor, BindGroupDescriptor, BindGroupEntry};
 use crate::camera::{Camera, Uniforms};
 use std::mem::size_of;
 use crate::render::pipeline::Pipelines;
+use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS};
 
 pub mod block;
 pub mod chunk;
@@ -25,10 +26,6 @@ pub mod datapack;
 pub mod entity;
 pub mod gui;
 pub mod resource;
-
-const ATLAS_DIMENSIONS: i32 = 1024;
-
-pub type TextureManager = HashMap<NamespacedId, UV>;
 
 pub struct MinecraftRenderer {
     pub sun_position: f32,
@@ -43,15 +40,7 @@ pub struct MinecraftRenderer {
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
 
-    pub block_atlas_allocator: AtlasAllocator,
-    pub block_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
-    pub block_atlas_material: Option<Material>,
-
-    pub gui_atlas_allocator: AtlasAllocator,
-    pub gui_atlas_image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
-    pub gui_atlas_material: Option<Material>,
-
-    pub texture_manager: TextureManager,
+    pub texture_manager: TextureManager
 }
 
 impl MinecraftRenderer {
@@ -80,17 +69,9 @@ impl MinecraftRenderer {
             chunks: ChunkManager::new(),
             entities: Vec::new(),
             block_model_data: HashMap::new(),
-            block_atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
-            block_atlas_image: image::ImageBuffer::new(
-                ATLAS_DIMENSIONS as u32,
-                ATLAS_DIMENSIONS as u32,
-            ),
 
-            block_atlas_material: None,
-            gui_atlas_allocator: AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
-            gui_atlas_image: Default::default(),
-            gui_atlas_material: None,
-            texture_manager: HashMap::new(),
+            texture_manager: TextureManager::new(),
+
             blocks: Vec::new(),
             camera: Camera::new(1.0),
 
@@ -125,73 +106,47 @@ impl MinecraftRenderer {
 
     pub fn generate_block_texture_atlas(
         &mut self,
-        rsp: &dyn ResourceProvider,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         t_bgl: &BindGroupLayout,
-    ) {
+    ) -> Option<()> {
         let mut textures = HashSet::new();
 
         for (_, bmd) in self.block_model_data.iter() {
             for (_, ns) in bmd.textures.iter() {
-                if let NamespacedId::Resource(_) = ns {
+                if let Identifier::Resource(_) = ns {
                     textures.insert(ns.clone());
                 }
             }
         }
 
-        for ns in textures.iter() {
-            let bytes = rsp.get_bytes(ResourceType::Texture, &ns);
+        for id in textures.iter() {
+            let bytes = self.texture_manager.textures.get(id)?;
 
-            let image = image::load_from_memory(&bytes[..]).unwrap();
-
-            let allocation = self
-                .block_atlas_allocator
-                .allocate(Size2D::new(image.width() as i32, image.height() as i32))
-                .unwrap();
-
-            overlay(
-                &mut self.block_atlas_image,
-                &image,
-                allocation.rectangle.min.x as u32,
-                allocation.rectangle.min.y as u32,
-            );
-
-            self.texture_manager.insert(
-                ns.clone(),
-                (
-                    Vector2::new(
-                        allocation.rectangle.min.x as f32,
-                        allocation.rectangle.min.y as f32,
-                    ),
-                    Vector2::new(
-                        allocation.rectangle.max.x as f32,
-                        allocation.rectangle.max.y as f32,
-                    ),
-                ),
-            );
+            self.texture_manager.atlases.block.allocate(id, &bytes[..])?;
         }
 
         let texture = WgTexture::from_image_raw(
             device,
             queue,
-            self.block_atlas_image.as_ref(),
+            self.texture_manager.atlases.block.image.as_ref(),
             Extent3d {
                 width: ATLAS_DIMENSIONS as u32,
                 height: ATLAS_DIMENSIONS as u32,
                 depth_or_array_layers: 1,
             },
             Some("Block Texture Atlas"),
-        )
-        .unwrap();
+        ).ok()?;
 
-        self.block_atlas_material = Some(Material::from_texture(
+        self.texture_manager.atlases.block.material = Some(Material::from_texture(
             device,
             queue,
             texture,
             t_bgl,
             "Block Texture Atlas".into(),
         ));
+
+        Some(())
     }
 
     pub fn generate_blocks(&mut self, device: &wgpu::Device, rp: &dyn ResourceProvider) {

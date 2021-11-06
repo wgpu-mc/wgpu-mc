@@ -1,8 +1,9 @@
-use jni::objects::{JObject, JString};
+use jni::objects::{JObject, JString, JClass};
 use wgpu_mc::mc::chunk::Chunk;
 use jni::JNIEnv;
 
 use jni::errors::Result;
+use jni::sys::jarray;
 
 pub fn xyz_to_index(x: i32, y: i32, z: i32) -> i32 {
     y << 8 | z << 4 | x
@@ -87,7 +88,11 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
 
 }
 
-pub fn registerSprite() {
+pub fn register_sprite(
+    env: JNIEnv,
+    class: JClass,
+    identifier: JString,
+    array: jarray) {
 
 }
 

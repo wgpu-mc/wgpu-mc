@@ -1,13 +1,15 @@
+#![feature(once_cell)]
+
 mod mc_interface;
 
 use jni::JNIEnv;
-use jni::objects::{JClass, JString, JValue, JObject};
-use jni::sys::{jstring, jint, jobjectArray};
+use jni::objects::{JClass, JString, JValue, JObject, ReleaseMode};
+use jni::sys::{jstring, jint, jobjectArray, jbyteArray};
 use std::sync::{Mutex, RwLock, mpsc, Arc};
 use wgpu_mc::{Renderer, WindowSize, HasWindowSize, ShaderProvider};
 use std::mem::MaybeUninit;
 use std::{thread, fs};
-use std::sync::mpsc::{channel, RecvError};
+use std::sync::mpsc::{channel, RecvError, Sender};
 use std::ops::Deref;
 use futures::executor::block_on;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
@@ -20,21 +22,22 @@ use std::time::Instant;
 use winit::event_loop::{ControlFlow, EventLoop};
 use wgpu_mc::mc::chunk::CHUNK_HEIGHT;
 use crate::mc_interface::xyz_to_index;
-use wgpu_mc::mc::datapack::NamespacedId;
+use wgpu_mc::mc::datapack::Identifier;
 use std::convert::TryFrom;
+use std::lazy::OnceCell;
 
 #[derive(Debug)]
 enum RenderMessage {
     SetTitle(String),
-    RegisterSprite(String)
+    RegisterSprite(Identifier, Vec<u8>)
 }
 
 static mut RENDERER: MaybeUninit<Renderer> = MaybeUninit::uninit();
 static mut EVENT_LOOP: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
 static mut WINDOW: MaybeUninit<Window> = MaybeUninit::uninit();
 
-static mut CHANNEL_TX: MaybeUninit<mpsc::Sender<RenderMessage>> = MaybeUninit::uninit();
-static mut CHANNEL_RX: MaybeUninit<mpsc::Receiver<RenderMessage>> = MaybeUninit::uninit();
+static mut CHANNEL_TX: MaybeUninit<Mutex<mpsc::Sender<RenderMessage>>> = MaybeUninit::uninit();
+static mut CHANNEL_RX: MaybeUninit<Mutex<mpsc::Receiver<RenderMessage>>> = MaybeUninit::uninit();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -100,12 +103,33 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_getBackend(
 pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
     env: JNIEnv,
     class: JClass,
-    jnamespace: JString) {
+    jnamespace: JString,
+    buffer: jbyteArray) {
 
-    let tx = unsafe { CHANNEL_TX.assume_init_mut() };
-    let namespace: String = env.get_string(jnamespace).unwrap().into();
+    let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock().unwrap();
+    let namespace_str: String = env.get_string(jnamespace).unwrap().into();
+    let identifier = Identifier::try_from(namespace_str.as_str())
+        .unwrap();
 
-    tx.send(RenderMessage::RegisterSprite(namespace));
+    let buffer_arr = env.get_byte_array_elements(
+        buffer,
+        ReleaseMode::NoCopyBack)
+        .unwrap();
+
+    let buffer_arr_size = buffer_arr.size().unwrap() as usize;
+    let mut buffer: Vec<u8> = vec![0; buffer_arr_size];
+    //Create a slice looking into the buffer so that we can immediately copy the data into a Vec.
+    let slice: &[u8] = unsafe {
+        std::mem::transmute(
+            std::slice::from_raw_parts(
+                buffer_arr.as_ptr(),
+                buffer_arr_size)
+        )
+    };
+
+    buffer.copy_from_slice(slice);
+
+    tx.send(RenderMessage::RegisterSprite(identifier, buffer));
 }
 
 #[no_mangle]
@@ -158,8 +182,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
     let (tx, rx) = mpsc::channel::<RenderMessage>();
 
     unsafe {
-        CHANNEL_TX = MaybeUninit::new(tx);
-        CHANNEL_RX = MaybeUninit::new(rx);
+        CHANNEL_TX = MaybeUninit::new(Mutex::new(tx));
+        CHANNEL_RX = MaybeUninit::new(Mutex::new(rx));
         RENDERER = MaybeUninit::new(state);
         EVENT_LOOP = MaybeUninit::new(event_loop);
         WINDOW = MaybeUninit::new(window);
@@ -180,7 +204,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
 
     let event_loop = unsafe { swap.assume_init() };
 
-    let rx = unsafe { CHANNEL_RX.assume_init_mut() };
+    let rx = unsafe { CHANNEL_RX.assume_init_ref() }.lock().unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -192,22 +216,28 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
             )
         };
 
+        let mut sprites_registered = 0;
         let mut msg_r = rx.try_recv();
         while msg_r.is_ok() {
             let msg = msg_r.unwrap();
 
-            println!("{:?}", msg);
             match msg {
                 RenderMessage::SetTitle(title) => window.set_title(&title),
-                RenderMessage::RegisterSprite(sprite) => {
+                RenderMessage::RegisterSprite(sprite, buffer) => {
                     state.mc.texture_manager.textures.insert(
-                        NamespacedId::try_from(sprite.as_str()).unwrap(),
-                        None
+                        sprite.clone(),
+                        buffer
                     );
+
+                    sprites_registered += 1;
                 }
             };
 
             msg_r = rx.try_recv();
+        }
+
+        if sprites_registered > 0 {
+            println!("Sprites registered: {}", sprites_registered);
         }
 
         match event {
@@ -252,12 +282,58 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_digestInputStream(
+    env: JNIEnv,
+    class: JClass,
+    input_stream: JObject) -> jbyteArray {
+
+    let mut vec = Vec::with_capacity(1024);
+    let array = env.new_byte_array(1024).unwrap();
+
+    loop {
+        let bytes_read = env.call_method(
+            input_stream,
+            "read",
+            "([B)I",
+            &[array.into()]).unwrap().i().unwrap();
+
+        //bytes_read being -1 means EOF
+        if bytes_read > 0 {
+            let elements = env.get_byte_array_elements(array, ReleaseMode::NoCopyBack)
+                .unwrap();
+
+            let slice: &[u8] = unsafe {
+                std::mem::transmute(
+                    std::slice::from_raw_parts(elements.as_ptr(), bytes_read as usize)
+                )
+            };
+
+            vec.extend_from_slice(slice);
+        } else {
+            break;
+        }
+    }
+
+
+    let bytes = env.new_byte_array(vec.len() as i32).unwrap();
+    let bytes_elements = env.get_byte_array_elements(bytes, ReleaseMode::CopyBack).unwrap();
+
+    unsafe {
+        std::ptr::copy(vec.as_ptr(), bytes_elements.as_ptr() as *mut u8, vec.len());
+    }
+
+    bytes
+
+}
+
+#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(
     env: JNIEnv,
     class: JClass,
     jtitle: JString) {
 
-    let tx = unsafe { CHANNEL_TX.assume_init_mut() };
+    let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock().unwrap();
+
     let title: String = env.get_string(jtitle).unwrap().into();
 
     tx.send(RenderMessage::SetTitle(title));
