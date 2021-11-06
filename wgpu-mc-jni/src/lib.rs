@@ -1,3 +1,9 @@
+///Foreword here,
+/// the code is quite messy and will be cleaned up at some point.
+/// I'm sure there are even some bad practices atm but the general goal is to get things working
+/// relatively well, and then clean them up, while still keeping the prototyped code updateable and
+/// managable. Feel free to make a pull request.
+
 #![feature(once_cell)]
 
 mod mc_interface;
