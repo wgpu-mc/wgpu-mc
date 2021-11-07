@@ -3,18 +3,21 @@ use crate::render::shader::Shader;
 use std::mem::size_of;
 use crate::model::{MeshVertex, GuiVertex};
 use std::collections::HashMap;
-use crate::mc::MinecraftRenderer;
+use crate::mc::MinecraftState;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use dashmap::DashMap;
-use crate::ShaderProvider;
+use crate::{ShaderProvider, WmRenderer};
 
 pub type ShaderMap = DashMap<String, Shader>;
 
-//TODO
 pub trait WmPipeline {
 
-    fn render(&self, device: &wgpu::Device, queue: &wgpu::Queue, mc: &MinecraftRenderer);
+    fn render(&self,
+        renderer: &WmRenderer,
+        surface: &wgpu::SurfaceTexture,
+        surface_texture_view: &wgpu::TextureView,
+        command_encoder: &wgpu::CommandEncoder);
 
 }
 

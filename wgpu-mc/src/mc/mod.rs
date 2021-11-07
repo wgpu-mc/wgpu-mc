@@ -40,13 +40,22 @@ pub struct BlockManager {
     ///Blocks should be discovered then put into this map. Once they've all been loaded,
     /// they should be baked into their respective Block trait implementation, and inserted into the
     /// block_array field
+    pub registered_blocks: HashSet<Identifier>,
     pub blocks: HashMap<Identifier, BlockEntry>,
 
     ///For faster indexing
     pub block_array: Vec<Box<dyn Block>>,
 }
 
-pub struct MinecraftRenderer {
+impl BlockManager {
+
+    pub fn register_block(&mut self, block: Identifier) {
+        self.registered_blocks.insert(block);
+    }
+
+}
+
+pub struct MinecraftState {
     pub sun_position: f32,
 
     ///Usually I would simply use a DashMap, but considering that the states of the two fields are intertwined,
@@ -67,7 +76,7 @@ pub struct MinecraftRenderer {
     pub texture_manager: TextureManager
 }
 
-impl MinecraftRenderer {
+impl MinecraftState {
     pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>, shader_provider: Arc<dyn ShaderProvider>) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
@@ -87,7 +96,7 @@ impl MinecraftRenderer {
             ]
         });
 
-        MinecraftRenderer {
+        MinecraftState {
             sun_position: 0.0,
             chunks: ChunkManager::new(),
             entities: Vec::new(),
@@ -95,6 +104,7 @@ impl MinecraftRenderer {
             texture_manager: TextureManager::new(),
 
             block_manager: Arc::new(RwLock::new(BlockManager {
+                registered_blocks: HashSet::new(),
                 blocks: HashMap::new(),
                 block_array: Vec::new()
             })),
@@ -109,7 +119,8 @@ impl MinecraftRenderer {
         }
     }
 
-    pub fn deserialize_block_models(&self) {
+    ///Loops through all the blocks in the BlockManager, and creates their respective BlockModel
+    pub fn generate_block_models(&self) {
         let mut block_manager = self.block_manager.write();
         let mut model_map = HashMap::new();
 
@@ -178,7 +189,7 @@ impl MinecraftRenderer {
         Some(())
     }
 
-    pub fn bake_blocks(&self, device: &wgpu::Device, rp: Arc<dyn ResourceProvider>) {
+    pub fn bake_blocks(&self, device: &wgpu::Device) {
         let mut blocks = HashMap::new();
         let mut block_array: Vec<Box<dyn Block>> = Vec::new();
 
@@ -186,9 +197,8 @@ impl MinecraftRenderer {
 
         for (_, block_data) in block_manager.blocks.iter_mut() {
             if let Some(block) =
-                StaticBlock::from_datapack(device, &block_data.model, rp.as_ref(), &self.texture_manager)
+                StaticBlock::from_datapack(device, &block_data.model, self.resource_provider.as_ref(), &self.texture_manager)
             {
-
                 block_array.push(Box::new(block));
                 block_data.index = Some(blocks.len() - 1);
             }

@@ -1,18 +1,18 @@
+#![feature(once_cell)]
+
 ///Foreword here,
 /// the code is quite messy and will be cleaned up at some point.
 /// I'm sure there are even some bad practices atm but the general goal is to get things working
 /// relatively well, and then clean them up, while still keeping the prototyped code updateable and
 /// managable. Feel free to make a pull request.
 
-#![feature(once_cell)]
-
 mod mc_interface;
 
-use jni::JNIEnv;
+use jni::{JNIEnv, JavaVM};
 use jni::objects::{JClass, JString, JValue, JObject, ReleaseMode};
 use jni::sys::{jstring, jint, jobjectArray, jbyteArray};
-use std::sync::{Mutex, RwLock, mpsc, Arc};
-use wgpu_mc::{Renderer, WindowSize, HasWindowSize, ShaderProvider};
+use std::sync::{mpsc, Arc};
+use wgpu_mc::{WmRenderer, WindowSize, HasWindowSize, ShaderProvider};
 use std::mem::MaybeUninit;
 use std::{thread, fs};
 use std::sync::mpsc::{channel, RecvError, Sender};
@@ -31,6 +31,9 @@ use crate::mc_interface::xyz_to_index;
 use wgpu_mc::mc::datapack::Identifier;
 use std::convert::TryFrom;
 use std::lazy::OnceCell;
+use wgpu_mc::mc::BlockEntry;
+use wgpu_mc::mc::resource::ResourceProvider;
+use parking_lot::{RwLock, Mutex};
 
 #[derive(Debug)]
 enum RenderMessage {
@@ -38,7 +41,8 @@ enum RenderMessage {
     RegisterSprite(Identifier, Vec<u8>)
 }
 
-static mut RENDERER: MaybeUninit<Renderer> = MaybeUninit::uninit();
+static mut RENDERER: MaybeUninit<WmRenderer> = MaybeUninit::uninit();
+
 static mut EVENT_LOOP: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
 static mut WINDOW: MaybeUninit<Window> = MaybeUninit::uninit();
 
@@ -77,7 +81,46 @@ impl ShaderProvider for SimpleShaderProvider {
         String::from_utf8(fs::read(Path::new("/Users/birb/wgpu-mc")
             .join("res").join("shaders").join(name))
             .expect("Couldn't locate the shaders")).unwrap()
-        //very basic
+    }
+}
+
+struct MinecraftResourceManagerAdapter {
+    jvm: JavaVM
+}
+
+impl ResourceProvider for MinecraftResourceManagerAdapter {
+    fn get_resource(&self, id: &Identifier) -> Vec<u8> {
+        let env = self.jvm.attach_current_thread()
+            .unwrap();
+
+        let ident_parts = match id {
+            Identifier::Tag(_) => unreachable!(),
+            Identifier::Resource(ns) => ns
+        };
+
+        let ident_ns = env.new_string(&ident_parts.0).unwrap();
+        let ident_path = env.new_string(&ident_parts.1).unwrap();
+
+        let bytes = env.call_static_method(
+            "dev/birb/wgpu/rust/WgpuResourceProvider",
+            "getResource",
+            "(Ljava/lang/String;Ljava/lang/String)[B;",
+            &[
+                JValue::Object(ident_ns.into()),
+                JValue::Object(ident_path.into())
+            ]).unwrap().l().unwrap();
+
+        let elements = env.get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack)
+            .unwrap();
+
+        let mut vec = Vec::with_capacity(elements.size().unwrap() as usize);
+        vec.copy_from_slice(
+            unsafe {
+                std::slice::from_raw_parts(elements.as_ptr() as *const u8, elements.size().unwrap() as usize)
+            }
+        );
+
+        vec
     }
 }
 
@@ -112,7 +155,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
     jnamespace: JString,
     buffer: jbyteArray) {
 
-    let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock().unwrap();
+    let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock();
     let namespace_str: String = env.get_string(jnamespace).unwrap().into();
     let identifier = Identifier::try_from(namespace_str.as_str())
         .unwrap();
@@ -149,9 +192,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerEntry(
 
     let renderer = unsafe { RENDERER.assume_init_mut() };
 
+    let mut block_manager = renderer.mc.block_manager.write();
+
     match entry_type {
-        0 => renderer.registry.blocks.insert(rname),
-        1 => renderer.registry.items.insert(rname),
+        0 => block_manager.register_block(Identifier::try_from(rname.as_str()).unwrap()),
+        // 1 => renderer.registry.items.insert(rname),
         _ => unimplemented!()
     };
 
@@ -181,8 +226,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
         window: &window
     };
 
-    let mut state = block_on(Renderer::new(
-        &wrapper, Box::new(SimpleShaderProvider {})
+    let mut state = block_on(WmRenderer::new(
+        &wrapper, Arc::new(MinecraftResourceManagerAdapter {
+            jvm: env.get_java_vm().unwrap()
+        }), Arc::new(SimpleShaderProvider {})
     ));
 
     let (tx, rx) = mpsc::channel::<RenderMessage>();
@@ -210,7 +257,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
 
     let event_loop = unsafe { swap.assume_init() };
 
-    let rx = unsafe { CHANNEL_RX.assume_init_ref() }.lock().unwrap();
+    let rx = unsafe { CHANNEL_RX.assume_init_ref() }.lock();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -338,9 +385,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(
     class: JClass,
     jtitle: JString) {
 
-    let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock().unwrap();
+    let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock();
 
     let title: String = env.get_string(jtitle).unwrap().into();
 
     tx.send(RenderMessage::SetTitle(title));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
+    env: JNIEnv,
+    class: JClass) {
+
+    let renderer = unsafe { RENDERER.assume_init_mut() };
+
+    renderer.mc.bake_blocks(&renderer.device);
 }

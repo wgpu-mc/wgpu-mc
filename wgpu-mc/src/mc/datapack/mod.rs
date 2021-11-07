@@ -101,8 +101,8 @@ pub struct Element {
     pub face_textures: ElementFaces,
 }
 
-///Deserialized info about a block and how it should render
-/// (NOT A BAKED MESH!)
+///A struct that described a block and how it renders (usually from a datapack)
+/// Not a baked mesh.
 #[derive(Clone, Debug)]
 pub struct BlockModel {
     pub id: Identifier, //Its id

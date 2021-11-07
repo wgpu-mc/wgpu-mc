@@ -3,15 +3,14 @@ use std::iter;
 use wgpu::util::DeviceExt;
 
 pub mod mc;
-
 pub mod camera;
 pub mod model;
 pub mod texture;
-mod render;
+pub mod render;
 
 use crate::camera::{Camera, CameraController, Uniforms};
 use crate::mc::chunk::Chunk;
-use crate::mc::MinecraftRenderer;
+use crate::mc::MinecraftState;
 
 use raw_window_handle::HasRawWindowHandle;
 use shaderc::ShaderKind;
@@ -48,26 +47,12 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 pub trait ShaderProvider: Send + Sync {
-    fn get_shader(&self, name: &str) -> &str;
-}
-
-pub struct MinecraftRegistry {
-    pub items: HashSet<String>,
-    pub blocks: HashSet<String>
-}
-
-impl MinecraftRegistry {
-    pub fn new() -> Self {
-        Self {
-            items: Default::default(),
-            blocks: Default::default()
-        }
-    }
+    fn get_shader(&self, name: &str) -> String;
 }
 
 ///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
-/// goes in MinecraftRenderer
-pub struct Renderer {
+/// goes in MinecraftState
+pub struct WmRenderer {
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
     pub adapter: wgpu::Adapter,
@@ -80,9 +65,7 @@ pub struct Renderer {
 
     pub pipelines: RenderPipelinesManager,
 
-    pub mc: mc::MinecraftRenderer,
-
-    pub registry: MinecraftRegistry
+    pub mc: mc::MinecraftState
 }
 
 #[derive(Copy, Clone)]
@@ -95,12 +78,12 @@ pub trait HasWindowSize {
     fn get_window_size(&self) -> WindowSize;
 }
 
-impl Renderer{
+impl WmRenderer {
     pub async fn new<W: HasRawWindowHandle + HasWindowSize>(
         window: &W,
         resource_provider: Arc<dyn ResourceProvider>,
         shader_provider: Arc<dyn ShaderProvider>
-    ) -> Renderer {
+    ) -> WmRenderer {
         let size = window.get_window_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
@@ -195,7 +178,7 @@ impl Renderer{
             shader_map,
             shader_provider.clone());
 
-        let mc = MinecraftRenderer::new(&device, &pipelines, resource_provider, shader_provider);
+        let mc = MinecraftState::new(&device, &pipelines, resource_provider, shader_provider);
         let depth_texture = WgpuTexture::create_depth_texture(&device, &config, "depth texture");
 
         Self {
@@ -210,9 +193,7 @@ impl Renderer{
 
             depth_texture,
             pipelines,
-            mc,
-
-            registry: MinecraftRegistry::new()
+            mc
         }
     }
 
@@ -250,16 +231,9 @@ impl Renderer{
         );
     }
 
-    pub fn render(&mut self, chunks: &[Chunk]) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&TextureViewDescriptor::default());
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: None
-            });
-
 
         let mut encoder = self
             .device
@@ -267,56 +241,15 @@ impl Renderer{
                 label: Some("Render Encoder"),
             });
 
-        let atlases = self.mc.texture_manager.atlases.read();
+        self.pipelines.pipelines.read().iter().for_each(|wm_pipeline| {
+            wm_pipeline.render(
+                &self,
+                &output,
+                &view,
+                &encoder,
 
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-            });
-            render_pass.set_pipeline(&self.pipelines.terrain_pipeline);
-
-            //Render chunks
-
-            let texture_bind_group = &atlases.block.material.as_ref().unwrap().bind_group;
-
-            render_pass.set_bind_group(0, &texture_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.mc.uniform_bind_group, &[]);
-
-            let mrp = &mut render_pass;
-
-            for chunk in chunks.iter() {
-                render_pass.set_vertex_buffer(
-                    0,
-                    match &chunk.vertex_buffer {
-                        None => panic!("Chunk did not have generated vertex buffer!"),
-                        Some(buf) => buf.slice(..),
-                    },
-                );
-
-                render_pass.draw(0..chunk.vertex_count as u32, 0..1);
-            }
-        }
+            );
+        });
 
         self.queue.submit(iter::once(encoder.finish()));
         output.present();

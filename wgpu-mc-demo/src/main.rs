@@ -2,17 +2,20 @@ use std::{iter, fs};
 use std::path::PathBuf;
 use std::ops::{DerefMut, Deref};
 use std::time::Instant;
-use wgpu_mc::mc::resource::{ResourceProvider, ResourceType};
 use wgpu_mc::mc::datapack::Identifier;
-use wgpu_mc::mc::block::{BlockDirection, BlockState, BlockModel};
-use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER};
+use wgpu_mc::mc::block::{BlockDirection, BlockState};
+use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
-use wgpu_mc::{Renderer, ShaderProvider, HasWindowSize, WindowSize};
+use wgpu_mc::{WmRenderer, ShaderProvider, HasWindowSize, WindowSize};
 use futures::executor::block_on;
 use winit::window::Window;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use cgmath::InnerSpace;
+use std::sync::Arc;
+use wgpu_mc::mc::resource::ResourceProvider;
+use std::convert::{TryFrom, TryInto};
+use wgpu_mc::render::chunk::BakedChunk;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -24,25 +27,17 @@ struct SimpleShaderProvider {
 
 impl ResourceProvider for SimpleResourceProvider {
 
-    fn get_bytes(&self, t: ResourceType, id: &Identifier) -> Vec<u8> {
+    fn get_resource(&self, id: &Identifier) -> Vec<u8> {
 
-        let paths: Vec<&str> = match id {
-            Identifier::Resource(res) => {
-                res.1.split("/").take(2).collect()
+        let (namespace, path) = match id {
+            Identifier::Resource(inner) => {
+                inner
             },
             _ => unreachable!()
         };
 
-        let path = *paths.first().unwrap();
-        let resource = format!("{}.png", *paths.last().unwrap());
-
-        match t {
-            ResourceType::Texture => {
-                let real_path = self.asset_root.join("minecraft").join("textures").join(path).join(resource);
-                fs::read(real_path).unwrap()
-            }
-        }
-
+        let real_path = self.asset_root.join(namespace).join(path);
+        fs::read(real_path).unwrap()
     }
 
 }
@@ -101,14 +96,20 @@ fn main() {
         .join("assets")
         .join("minecraft");
 
-    let mut state = block_on(Renderer::new(&wrapper, Box::new(sp)));
+    let mut state = block_on(
+        WmRenderer::new(
+            &wrapper,
+            Arc::new(rsp),
+            Arc::new(sp)
+        )
+    );
 
     println!("Loading block models");
-    state.mc.load_block_models(mc_root);
+    state.mc.generate_block_models();
     println!("Generating texture atlas");
     state.mc.generate_block_texture_atlas(&state.device, &state.queue, &state.pipelines.layouts.texture_bind_group_layout);
-    println!("Generating blocks");
-    state.mc.generate_blocks(&state.device, &rsp);
+    println!("Baking blocks");
+    state.mc.bake_blocks(&state.device);
 
     let window = wrapper.window;
 
@@ -116,102 +117,28 @@ fn main() {
     begin_rendering(event_loop, window, state);
 }
 
-fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: Renderer) {
+fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: WmRenderer) {
     use futures::executor::block_on;
 
-    let mut block_layers = Vec::new();
+    let block_manager = state.mc.block_manager.read();
+    let anvil = Identifier::try_from("minecraft:block/anvil").unwrap();
 
-    (0..30).for_each(|_| block_layers.push(*state.mc.block_indices.get("minecraft:block/stone").unwrap()));
-    (0..19).for_each(|_| block_layers.push(*state.mc.block_indices.get("minecraft:block/dirt").unwrap()));
-
-    block_layers.push(*state.mc.block_indices.get("minecraft:block/grass_block").unwrap());
-
-
-
-    // let chunks = (0..8).map(|x| {
-    //     (0..8).map(|z| {
-    //         let mut sections = Box::new([ChunkSection { empty: true, blocks: [BlockState {
-    //             block: None,
-    //             // block: None,
-    //             direction: BlockDirection::North,
-    //             damage: 0,
-    //             transparency: false
-    //         }; 256] }; 256]);
-    //
-    //         (0..50).for_each(|y| {
-    //             sections.deref_mut()[y] = ChunkSection {
-    //                 empty: false,
-    //                 blocks: [BlockState {
-    //                     block: Option::Some(*block_layers.get(y).unwrap()),
-    //                     direction: BlockDirection::North,
-    //                     damage: 0,
-    //                     transparency: true
-    //                 }; 256]
-    //             }
-    //         });
-    //
-    //         let mut chunk = Chunk {
-    //             pos: (x, z),
-    //             sections,
-    //             vertices: None,
-    //             vertex_buffer: None,
-    //             vertex_count: 0
-    //         };
-    //
-    //         chunk.generate_vertices(&state.mc.blocks, x*16, z*16);
-    //         chunk.upload_buffer(&state.device);
-    //
-    //         chunk
-    //     }).collect::<Vec<Chunk>>()
-    // }).flatten().collect::<Vec<Chunk>>();
-
-    let mut blocks = [
+    let blocks = (0..CHUNK_SECTIONS_PER).map(|_| {
         BlockState {
-            block: None,
+            block: block_manager.blocks.get(&anvil).unwrap().index,
             direction: BlockDirection::North,
             damage: 0,
             transparency: false
-        }; 256
-    ];
-    
-    blocks[0] = BlockState {
-        block: state.mc.block_indices.get("minecraft:block/anvil").cloned(),
-        direction: BlockDirection::North,
-        damage: 0,
-        transparency: false
-    };
-    
-    let section = ChunkSection {
-        empty: false,
-        blocks
-    };
+        }
+    }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
-    let mut sections = [ChunkSection {
-        empty: true,
-        blocks: [BlockState {
-            block: None,
-            direction: BlockDirection::North,
-            damage: 0,
-            transparency: false
-        }; CHUNK_AREA]
-    }; CHUNK_SECTIONS_PER];
-    sections[0] = section;
+    drop(block_manager);
 
-    let mut chunk = Chunk {
-        pos: (0, 0),
-
-        sections: Box::new(sections),
-        vertices: None,
-        vertex_buffer: None,
-        vertex_count: 0
-    };
+    let chunk = Chunk::new((0, 0), blocks);
 
     let instant = Instant::now();
-
-    chunk.generate_vertices(&state.mc.blocks, (0, 0));
+    let baked_chunk = BakedChunk::bake(&state, &chunk);
     println!("Time to generate chunk mesh: {}", Instant::now().duration_since(instant).as_millis());
-
-    chunk.upload_buffer(&state.device);
 
     let chunks = [chunk];
 
@@ -318,7 +245,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
             }
             Event::RedrawRequested(_) => {
                 &state.update();
-                &state.render(&chunks);
+                &state.render();
 
                 let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
                 frame_begin = Instant::now();
