@@ -3,11 +3,10 @@ use std::path::PathBuf;
 
 use crate::mc::block::{Block, StaticBlock};
 use crate::mc::chunk::ChunkManager;
-use crate::mc::datapack::{BlockModelData, Identifier};
+use crate::mc::datapack::{BlockModel, Identifier};
 use crate::mc::entity::Entity;
-use crate::mc::resource::{ResourceProvider, ResourceType};
 use crate::model::Material;
-use crate::texture::{WgTexture, UV};
+use crate::texture::{WgpuTexture, UV};
 
 use cgmath::{Vector2, Point3, Vector3};
 use guillotiere::euclid::Size2D;
@@ -17,8 +16,13 @@ use image::{GenericImageView, Rgba, ImageFormat};
 use wgpu::{BindGroupLayout, Extent3d, BufferDescriptor, BindGroupDescriptor, BindGroupEntry};
 use crate::camera::{Camera, Uniforms};
 use std::mem::size_of;
-use crate::render::pipeline::Pipelines;
+use crate::render::pipeline::RenderPipelinesManager;
 use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS};
+use std::rc::Rc;
+use std::sync::Arc;
+use crate::mc::resource::ResourceProvider;
+use parking_lot::RwLock;
+use crate::ShaderProvider;
 
 pub mod block;
 pub mod chunk;
@@ -27,13 +31,33 @@ pub mod entity;
 pub mod gui;
 pub mod resource;
 
+pub struct BlockEntry {
+    pub index: Option<usize>,
+    pub model: BlockModel
+}
+
+pub struct BlockManager {
+    ///Blocks should be discovered then put into this map. Once they've all been loaded,
+    /// they should be baked into their respective Block trait implementation, and inserted into the
+    /// block_array field
+    pub blocks: HashMap<Identifier, BlockEntry>,
+
+    ///For faster indexing
+    pub block_array: Vec<Box<dyn Block>>,
+}
+
 pub struct MinecraftRenderer {
     pub sun_position: f32,
-    pub block_indices: HashMap<String, usize>,
-    pub blocks: Vec<Box<dyn Block>>,
-    pub block_model_data: HashMap<String, BlockModelData>,
+
+    ///Usually I would simply use a DashMap, but considering that the states of the two fields are intertwined,
+    /// this has to be behind a single RwLock
+    pub block_manager: Arc<RwLock<BlockManager>>,
+
     pub chunks: ChunkManager,
     pub entities: Vec<Entity>,
+
+    pub resource_provider: Arc<dyn ResourceProvider>,
+    pub shader_provider: Arc<dyn ShaderProvider>,
     
     pub camera: Camera,
 
@@ -44,7 +68,7 @@ pub struct MinecraftRenderer {
 }
 
 impl MinecraftRenderer {
-    pub fn new(device: &wgpu::Device, pipelines: &Pipelines) -> Self {
+    pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>, shader_provider: Arc<dyn ShaderProvider>) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
             size: size_of::<Uniforms>() as wgpu::BufferAddress,
@@ -65,71 +89,76 @@ impl MinecraftRenderer {
 
         MinecraftRenderer {
             sun_position: 0.0,
-            block_indices: HashMap::new(),
             chunks: ChunkManager::new(),
             entities: Vec::new(),
-            block_model_data: HashMap::new(),
 
             texture_manager: TextureManager::new(),
 
-            blocks: Vec::new(),
+            block_manager: Arc::new(RwLock::new(BlockManager {
+                blocks: HashMap::new(),
+                block_array: Vec::new()
+            })),
+
             camera: Camera::new(1.0),
 
             uniform_buffer,
-            uniform_bind_group
+            uniform_bind_group,
+
+            resource_provider,
+            shader_provider
         }
     }
 
-    //TODO: make this not suck and also genericize it to not require fs
-    pub fn load_block_models(&mut self, root: PathBuf) {
-        let models_dir = root.join("models").join("block");
-        let models_list = std::fs::read_dir(models_dir.clone()).unwrap();
+    pub fn deserialize_block_models(&self) {
+        let mut block_manager = self.block_manager.write();
+        let mut model_map = HashMap::new();
 
-        let mut model_map = &mut self.block_model_data;
+        block_manager.blocks.iter().for_each(|(identifier, _)| {
+            datapack::BlockModel::deserialize(identifier, self.resource_provider.as_ref(), &mut model_map);
+        });
 
-        for e in models_list {
-            let entry = e.unwrap();
+        model_map.into_iter().for_each(|(identifier, model)| {
+            let index = match block_manager.blocks.get(&identifier) {
+                None => None,
+                Some(entry) => entry.index
+            };
 
-            let path = entry.path();
-            let split: Vec<&str> = path
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .split('.')
-                .collect();
-            let name = *split.first().unwrap();
-
-            datapack::BlockModelData::deserialize(name, (&models_dir).clone(), &mut model_map);
-        }
+            block_manager.blocks.insert(identifier, BlockEntry {
+                index,
+                model
+            });
+        });
     }
 
     pub fn generate_block_texture_atlas(
-        &mut self,
+        &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         t_bgl: &BindGroupLayout,
     ) -> Option<()> {
         let mut textures = HashSet::new();
+        let block_manager = self.block_manager.read();
 
-        for (_, bmd) in self.block_model_data.iter() {
-            for (_, ns) in bmd.textures.iter() {
-                if let Identifier::Resource(_) = ns {
-                    textures.insert(ns.clone());
+        for (id, entry) in block_manager.blocks.iter() {
+            for (_, texture_id) in &entry.model.textures {
+                if let Identifier::Resource(_) = texture_id {
+                    textures.insert(texture_id);
                 }
             }
         }
 
-        for id in textures.iter() {
+        let mut atlases = self.texture_manager.atlases.write();
+
+        for &id in textures.iter() {
             let bytes = self.texture_manager.textures.get(id)?;
 
-            self.texture_manager.atlases.block.allocate(id, &bytes[..])?;
+            atlases.block.allocate(id, &bytes[..])?;
         }
 
-        let texture = WgTexture::from_image_raw(
+        let texture = WgpuTexture::from_image_raw(
             device,
             queue,
-            self.texture_manager.atlases.block.image.as_ref(),
+            atlases.block.image.as_ref(),
             Extent3d {
                 width: ATLAS_DIMENSIONS as u32,
                 height: ATLAS_DIMENSIONS as u32,
@@ -138,7 +167,7 @@ impl MinecraftRenderer {
             Some("Block Texture Atlas"),
         ).ok()?;
 
-        self.texture_manager.atlases.block.material = Some(Material::from_texture(
+        atlases.block.material = Some(Material::from_texture(
             device,
             queue,
             texture,
@@ -149,20 +178,23 @@ impl MinecraftRenderer {
         Some(())
     }
 
-    pub fn generate_blocks(&mut self, device: &wgpu::Device, rp: &dyn ResourceProvider) {
-        let mut block_indices = HashMap::new();
-        let mut blocks: Vec<Box<dyn Block>> = Vec::new();
+    pub fn bake_blocks(&self, device: &wgpu::Device, rp: Arc<dyn ResourceProvider>) {
+        let mut blocks = HashMap::new();
+        let mut block_array: Vec<Box<dyn Block>> = Vec::new();
 
-        for (name, block_data) in self.block_model_data.iter() {
+        let mut block_manager = self.block_manager.write();
+
+        for (_, block_data) in block_manager.blocks.iter_mut() {
             if let Some(block) =
-                StaticBlock::from_datapack(device, block_data, rp, &self.texture_manager)
+                StaticBlock::from_datapack(device, &block_data.model, rp.as_ref(), &self.texture_manager)
             {
-                blocks.push(Box::new(block));
-                block_indices.insert(name.clone(), blocks.len() - 1);
+
+                block_array.push(Box::new(block));
+                block_data.index = Some(blocks.len() - 1);
             }
         }
 
-        self.block_indices = block_indices;
-        self.blocks = blocks;
+        block_manager.blocks = blocks;
+        block_manager.block_array = block_array;
     }
 }

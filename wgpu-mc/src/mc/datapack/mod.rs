@@ -6,9 +6,11 @@ use crate::texture::UV;
 use cgmath::{Matrix4, Vector2};
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
+use crate::mc::resource::ResourceProvider;
 
 pub type NamespacedResource = (String, String);
 
+///TODO: make this be a struct that contains only NamespacedResource and no Tag
 #[derive(Debug, Clone, Eq, Hash)]
 pub enum Identifier {
     Tag(String),
@@ -99,8 +101,10 @@ pub struct Element {
     pub face_textures: ElementFaces,
 }
 
-//Deserialized info about a block and how it should render
-pub struct BlockModelData {
+///Deserialized info about a block and how it should render
+/// (NOT A BAKED MESH!)
+#[derive(Clone, Debug)]
+pub struct BlockModel {
     pub id: Identifier, //Its id
     pub parent: Option<Identifier>,
     pub elements: Vec<Element>,
@@ -108,232 +112,165 @@ pub struct BlockModelData {
     pub textures: HashMap<String, Identifier>,
 }
 
-impl BlockModelData {
+impl BlockModel {
     fn triplet_from_array(vec: &[Value]) -> Option<ElementCorner> {
-        Some((
-            if let Value::Number(ref n) = vec[0] {
-                n.as_f64()? as f32
-            } else {
-                panic!("Invalid block datapack!")
-            },
-            if let Value::Number(ref n) = vec[1] {
-                n.as_f64()? as f32
-            } else {
-                panic!("Invalid block datapack!")
-            },
-            if let Value::Number(ref n) = vec[2] {
-                n.as_f64()? as f32
-            } else {
-                panic!("Invalid block datapack!")
-            },
-        ))
+
+        Some(
+            (
+                vec[0].as_f64()? as f32,
+                vec[0].as_f64()? as f32,
+                vec[0].as_f64()? as f32
+            )
+        )
     }
 
-    #[allow(unused_variables)] // TODO: parameter textures is unused
     fn parse_face(
-        val: Option<&Value>,
-        textures: &HashMap<String, Identifier>,
+        val: Option<&Value>
     ) -> Option<FaceTexture> {
-        match val {
-            None => None,
-            Some(face) => {
-                let obj = face.as_object().unwrap();
-                let uv = match obj.get("uv") {
-                    None => (Vector2::new(0.0, 0.0), Vector2::new(16.0, 16.0)),
-                    Some(uv_arr_v) => {
-                        let uv_arr = uv_arr_v.as_array().unwrap();
-                        (
-                            //TODO: handle UV rotation
-                            Vector2::new(
-                                uv_arr[0].as_f64().unwrap() as f32,
-                                uv_arr[1].as_f64().unwrap() as f32,
-                            ),
-                            Vector2::new(
-                                uv_arr[2].as_f64().unwrap() as f32,
-                                uv_arr[3].as_f64().unwrap() as f32,
-                            ),
-                        )
-                    }
-                };
+        let face = val?.as_object()?;
+        let uv_arr = face.get("uv")?.as_array()?;
 
-                let texture: Identifier = obj.get("texture")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
+        let uv = (
+            //TODO: handle UV rotation
+            (
+                uv_arr[0].as_f64().unwrap() as f32,
+                uv_arr[1].as_f64().unwrap() as f32,
+            ),
+            (
+                uv_arr[2].as_f64().unwrap() as f32,
+                uv_arr[3].as_f64().unwrap() as f32,
+            ),
+        );
 
-                Some(FaceTexture { uv, texture })
-            }
-        }
+        let texture: Identifier = face.get("texture")?.as_str()?.try_into().ok()?;
+
+        Some(FaceTexture {
+            uv,
+            texture
+        })
     }
 
     fn parse_elements(
         val: Option<&Value>,
-        parent: Option<&BlockModelData>,
+        parent: Option<&BlockModel>,
         textures: &HashMap<String, Identifier>,
     ) -> Option<Vec<Element>> {
-        Some(match val {
-            //No elements, default to parent's
+        match val {
+            //No elements, default to parent's elements
             None => match parent {
-                Some(parent) => parent.elements.clone(),
-                None => Vec::new(),
+                Some(parent) => Some(parent.elements.clone()),
+                None => Some(Vec::new()),
             },
-            Some(v) => match v {
-                //The array of elements
-                Value::Array(arr) => {
-                    let out: Vec<_> = arr
-                        .iter()
-                        .map(|x| {
-                            let from = match x.get("from").unwrap() {
-                                Value::Array(vec) => {
-                                    let triplet = BlockModelData::triplet_from_array(vec)?;
+            Some(v) => {
+                val?.as_array()?
+                    .iter()
+                    .map(|element| {
+                        let triplet = Self::triplet_from_array(element.get("from")?.as_array()?)?;
+                        let from = (triplet.0 / 16.0, triplet.1 / 16.0, triplet.2 / 16.0);
 
-                                    (triplet.0 / 16.0, triplet.1 / 16.0, triplet.2 / 16.0)
+                        let triplet = Self::triplet_from_array(element.get("to")?.as_array()?)?;
+                        let to = (triplet.0 / 16.0, triplet.1 / 16.0, triplet.2 / 16.0);
+
+                        let faces = element.get("faces")?.as_object()?;
+
+                        Some(Element {
+                            from,
+                            to,
+                            face_textures: {
+                                ElementFaces {
+                                    up: Self::parse_face(faces.get("up")),
+                                    down: Self::parse_face(faces.get("down")),
+                                    north: Self::parse_face(faces.get("north")),
+                                    east: Self::parse_face(faces.get("east")),
+                                    south: Self::parse_face(faces.get("south")),
+                                    west: Self::parse_face(faces.get("west")),
                                 }
-                                _ => panic!("Invalid datapack!"),
-                            };
-
-                            let to = match x.get("to").unwrap() {
-                                Value::Array(vec) => {
-                                    let triplet = BlockModelData::triplet_from_array(vec)?;
-
-                                    (triplet.0 / 16.0, triplet.1 / 16.0, triplet.2 / 16.0)
-                                }
-                                _ => panic!("Invalid datapack!"),
-                            };
-
-                            let faces = x.get("faces").unwrap().as_object().unwrap();
-
-                            Some(Element {
-                                from,
-                                to,
-                                face_textures: {
-                                    ElementFaces {
-                                        up: Self::parse_face(faces.get("up"), textures),
-                                        down: Self::parse_face(faces.get("down"), textures),
-                                        north: Self::parse_face(faces.get("north"), textures),
-                                        east: Self::parse_face(faces.get("east"), textures),
-                                        south: Self::parse_face(faces.get("south"), textures),
-                                        west: Self::parse_face(faces.get("west"), textures),
-                                    }
-                                },
-                            })
+                            },
                         })
-                        .collect();
-
-                    if out.iter().any(|x| x.is_none()) {
-                        return None;
-                    }
-
-                    out.into_iter().map(|x| x.unwrap()).collect()
-                } //TODO
-                _ => Vec::new(),
-            },
-        })
+                    }).collect::<Option<Vec<Element>>>()
+            }
+        }
     }
 
-    //TODO: this code could maybe (100%) be done better probably
     pub fn deserialize(
-        name: &str,
-        models_dir: PathBuf,
-        model_map: &mut HashMap<String, BlockModelData>,
-    ) {
-        let path = models_dir.join(format!("{}.json", name));
-
-        if model_map.contains_key(name) {
-            return;
+        identifier: &Identifier,
+        resource_provider: &dyn ResourceProvider,
+        model_map: &mut HashMap<Identifier, BlockModel>,
+    ) -> Option<()> {
+        if model_map.contains_key(identifier) {
+            return Some(());
         }
 
-        let bytes = std::fs::read(path).unwrap();
+        let bytes = resource_provider.get_resource(identifier);
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
-        let model = match json {
-            Value::Object(obj) => {
-                let (parent_model, parent_namespace) = {
-                    match obj.get("parent") {
-                        None => (None, None),
-                        Some(v) => match v {
-                            Value::String(s) => {
-                                let namespaced: Identifier = s.as_str().try_into().unwrap();
+        let obj = json.as_object()?;
 
-                                let namespace;
-                                let id;
+        //Get information about the parent model, if this model has one
+        let parent = obj.get("parent").map_or(None, |v| {
+            let parent_identifier_string = v.as_str()?;
+            let parent_identifier: Identifier = parent_identifier_string.try_into().unwrap();
 
-                                let path: &str = match &namespaced {
-                                    Identifier::Resource(res) => {
-                                        namespace = res.0.as_str();
-                                        id = res.1.as_str();
+            BlockModel::deserialize(&parent_identifier, resource_provider, model_map);
 
-                                        res.1
-                                            .as_str()
-                                            .split(':')
-                                            .last()
-                                            .unwrap()
-                                            .split('/')
-                                            .last()
-                                            .unwrap()
-                                    }
-                                    _ => panic!("Invalid datapack!"),
-                                };
+            model_map.get(&parent_identifier)
+        });
 
-                                BlockModelData::deserialize(path, models_dir, model_map);
+        //Get the face texture mappings
+        let mut textures: HashMap<String, Identifier> = obj.get("textures").map_or(
+            HashMap::new(),
+            |textures_map| {
+                //Map of the faces and their textures
+                let mut map: HashMap<String, Identifier> = textures_map
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(key, val)| {
+                        (
+                            key.clone(),
+                            val.as_str().unwrap().try_into().unwrap()
+                        )
+                    })
+                    .collect();
 
-                                (
-                                    model_map.get(&format!("{}:{}", namespace, id)),
-                                    Some(namespaced),
-                                )
-                            }
-                            _ => panic!("Invalid datapack!"),
-                        },
+                //If there is a parent model, merge the texture references so that the tags can be resolved.
+                match parent {
+                    None => map,
+                    Some(parent_model) => {
+                        map.extend(parent_model.textures.iter().map(|(k, v)| (k.clone(), v.clone())));
+                        map
                     }
-                };
-
-                let textures: HashMap<String, Identifier> = match obj.get("textures") {
-                    None => HashMap::new(),
-                    Some(textures_map) => {
-                        let mut map: HashMap<String, Identifier> = textures_map
-                            .as_object()
-                            .unwrap()
-                            .iter()
-                            .map(|(key, val)| {
-                                (
-                                    key.clone(),
-                                    val.as_str().expect("Invalid datapack!").try_into().unwrap()
-                                )
-                            })
-                            .collect();
-
-                        match &parent_model {
-                            None => map,
-                            Some(p) => {
-                                map.extend(p.textures.iter().map(|(k, v)| (k.clone(), v.clone())));
-                                map
-                            }
-                        }
-                    }
-                };
-
-                Some(BlockModelData {
-                    id: Identifier::Resource(("minecraft".into(), format!("block/{}", name))),
-                    parent: parent_namespace,
-                    elements: {
-                        Self::parse_elements(obj.get("elements"), parent_model, &textures)
-                            .expect(name)
-                    },
-                    textures,
-                    display_transforms: HashMap::new(), //TODO
-                                                        // textures: Option
-                })
+                }
             }
-            _ => None,
+        );
+
+        let resolved_resources: HashMap<String, Identifier> = textures.clone().into_iter().filter(|(string, identifier)| {
+            matches!(identifier, Identifier::Resource(_))
+        }).collect();
+
+        textures.iter_mut().for_each(|(_, mut identifier)| {
+            match identifier.clone() {
+                Identifier::Tag(tag) => {
+                    *identifier = resolved_resources.get(&tag).unwrap().clone().clone();
+                },
+                _ => {}
+            }
+        });
+
+        let model = BlockModel {
+            id: identifier.clone(),
+            parent: parent.map(|some| {
+                some.id.clone()
+            }),
+            elements: {
+                Self::parse_elements(obj.get("elements"), parent, &textures)?
+            },
+            textures,
+            display_transforms: HashMap::new(), //TODO
         };
 
-        if let Some(m) = model {
-            // println!("Deserialized {:?} with {} elements", m.id, m.elements.len());
-            if let Identifier::Resource(ref namespace) = m.id {
-                model_map.insert(format!("{}:{}", namespace.0, namespace.1), m);
-            }
-        };
+        model_map.insert(identifier.clone(), model);
+
+        Some(())
     }
 }

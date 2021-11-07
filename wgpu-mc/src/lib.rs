@@ -18,9 +18,26 @@ use shaderc::ShaderKind;
 use winit::event::WindowEvent;
 use wgpu::{RenderPass, VertexState, TextureViewDescriptor};
 use std::collections::{HashMap, HashSet};
-use crate::render::pipeline::{Pipelines, Shaders};
+use crate::render::pipeline::{RenderPipelinesManager};
 use crate::render::shader::{Shader, ShaderSource};
-use crate::texture::WgTexture;
+use crate::texture::WgpuTexture;
+use std::rc::Rc;
+use std::sync::Arc;
+use parking_lot::RwLock;
+use dashmap::DashMap;
+use crate::mc::resource::ResourceProvider;
+
+macro_rules! dashmap(
+    { $($key:expr => $value:expr),+ } => {
+        {
+            let mut m = dashmap::DashMap::new();
+            $(
+                m.insert($key, $value);
+            )+
+            m
+        }
+     };
+);
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -30,8 +47,8 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 1.0,
 );
 
-pub trait ShaderProvider {
-    fn get_shader(&self, name: &str) -> String;
+pub trait ShaderProvider: Send + Sync {
+    fn get_shader(&self, name: &str) -> &str;
 }
 
 pub struct MinecraftRegistry {
@@ -48,43 +65,44 @@ impl MinecraftRegistry {
     }
 }
 
+///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
+/// goes in MinecraftRenderer
 pub struct Renderer {
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
-
     pub adapter: wgpu::Adapter,
-
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
 
-    pub size: WindowSize,
+    pub size: Arc<RwLock<WindowSize>>,
 
-    pub depth_texture: texture::WgTexture,
+    pub depth_texture: texture::WgpuTexture,
 
-    pub pipelines: Pipelines,
+    pub pipelines: RenderPipelinesManager,
+
     pub mc: mc::MinecraftRenderer,
+
     pub registry: MinecraftRegistry
 }
 
 #[derive(Copy, Clone)]
 pub struct WindowSize {
     pub width: u32,
-    pub height: u32,
+    pub height: u32
 }
 
 pub trait HasWindowSize {
     fn get_window_size(&self) -> WindowSize;
 }
 
-impl Renderer {
+impl Renderer{
     pub async fn new<W: HasRawWindowHandle + HasWindowSize>(
         window: &W,
-        shader_provider: Box<dyn ShaderProvider>,
+        resource_provider: Arc<dyn ResourceProvider>,
+        shader_provider: Arc<dyn ShaderProvider>
     ) -> Renderer {
         let size = window.get_window_size();
 
-        // The instance is a handle to our GPU
-        // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
 
         let surface = unsafe { instance.create_surface(window) };
@@ -119,9 +137,9 @@ impl Renderer {
         surface.configure(&device, &config);
 
         let mut sc = shaderc::Compiler::new().unwrap();
-        
-        let shaders = Shaders {
-            sky: Shader::from_glsl(ShaderSource {
+
+        let shader_map = dashmap! {
+            String::from("sky") => Shader::from_glsl(ShaderSource {
                 file_name: "sky.fsh",
                 source: &shader_provider.get_shader("sky.fsh"),
                 entry_point: "main"
@@ -131,7 +149,7 @@ impl Renderer {
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
-            terrain: Shader::from_glsl(ShaderSource {
+            String::from("terrain") => Shader::from_glsl(ShaderSource {
                 file_name: "terrain.fsh",
                 source: &shader_provider.get_shader("terrain.fsh"),
                 entry_point: "main"
@@ -141,7 +159,7 @@ impl Renderer {
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
-            grass: Shader::from_glsl(ShaderSource {
+            String::from("grass") => Shader::from_glsl(ShaderSource {
                 file_name: "grass.fsh",
                 source: &shader_provider.get_shader("grass.fsh"),
                 entry_point: "main"
@@ -151,7 +169,7 @@ impl Renderer {
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
-            transparent: Shader::from_glsl(ShaderSource {
+            String::from("transparent") => Shader::from_glsl(ShaderSource {
                 file_name: "transparent.fsh",
                 source: &shader_provider.get_shader("transparent.fsh"),
                 entry_point: "main"
@@ -161,7 +179,7 @@ impl Renderer {
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
-            gui: Shader::from_glsl(ShaderSource {
+            String::from("gui") => Shader::from_glsl(ShaderSource {
                 file_name: "gui.fsh",
                 source: &shader_provider.get_shader("gui.fsh"),
                 entry_point: "main"
@@ -169,13 +187,16 @@ impl Renderer {
                 file_name: "gui.vsh",
                 source: &shader_provider.get_shader("gui.vsh"),
                 entry_point: "main"
-            }, &device, &mut sc).unwrap(),
+            }, &device, &mut sc).unwrap()
         };
         
-        let pipelines = render::pipeline::Pipelines::init(&device, shaders);
+        let pipelines = render::pipeline::RenderPipelinesManager::init(
+            &device,
+            shader_map,
+            shader_provider.clone());
 
-        let mc = MinecraftRenderer::new(&device, &pipelines);
-        let depth_texture = WgTexture::create_depth_texture(&device, &config, "depth texture");
+        let mc = MinecraftRenderer::new(&device, &pipelines, resource_provider, shader_provider);
+        let depth_texture = WgpuTexture::create_depth_texture(&device, &config, "depth texture");
 
         Self {
             surface,
@@ -185,7 +206,7 @@ impl Renderer {
 
             device,
             queue,
-            size,
+            size: Arc::new(RwLock::new(size)),
 
             depth_texture,
             pipelines,
@@ -204,7 +225,7 @@ impl Renderer {
         self.mc.camera.aspect = self.surface_config.height as f32 / self.surface_config.width as f32;
         // self.size = new_size;
         self.depth_texture =
-            texture::WgTexture::create_depth_texture(&self.device, &self.surface_config, "depth_texture");
+            texture::WgpuTexture::create_depth_texture(&self.device, &self.surface_config, "depth_texture");
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -246,6 +267,8 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
+        let atlases = self.mc.texture_manager.atlases.read();
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
@@ -275,7 +298,7 @@ impl Renderer {
 
             //Render chunks
 
-            let texture_bind_group = &self.mc.texture_manager.atlases.block.material.as_ref().unwrap().bind_group;
+            let texture_bind_group = &atlases.block.material.as_ref().unwrap().bind_group;
 
             render_pass.set_bind_group(0, &texture_bind_group, &[]);
             render_pass.set_bind_group(1, &self.mc.uniform_bind_group, &[]);

@@ -1,7 +1,8 @@
 use crate::texture;
-use crate::texture::WgTexture;
+use crate::texture::WgpuTexture;
 
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingResource};
+use std::sync::Arc;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -71,10 +72,11 @@ impl MeshVertex {
     }
 }
 
+///Represents a texture that has been uploaded to GPU and has an associated BindGroup
 pub struct Material {
-    pub name: String,
-    pub diffuse_texture: texture::WgTexture,
-    pub bind_group: wgpu::BindGroup,
+    pub name: Arc<String>,
+    pub diffuse_texture: texture::WgpuTexture,
+    pub bind_group: wgpu::BindGroup
 }
 
 impl Material {
@@ -82,7 +84,7 @@ impl Material {
     pub fn from_texture(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        texture: WgTexture,
+        texture: WgpuTexture,
         bgl: &BindGroupLayout,
         name: String,
     ) -> Self {
@@ -102,7 +104,7 @@ impl Material {
         });
 
         Self {
-            name,
+            name: Arc::new(name),
             diffuse_texture: texture,
             bind_group,
         }

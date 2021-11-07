@@ -6,17 +6,17 @@ use wgpu::Extent3d;
 use std::num::NonZeroU32;
 
 pub type TextureId = u32;
-pub type UV = (Vector2<f32>, Vector2<f32>);
+pub type UV = ( (f32, f32), (f32, f32) );
 
 ///Representation of a texture that has been uploaded to wgpu along with the corresponding view
 /// and sampler
-pub struct WgTexture {
+pub struct WgpuTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
 
-impl WgTexture {
+impl WgpuTexture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn from_bytes(

@@ -1,11 +1,13 @@
-use crate::mc::datapack::{BlockModelData, FaceTexture, Identifier};
-use crate::mc::resource::ResourceProvider;
+use crate::mc::datapack::{FaceTexture, Identifier, BlockModel};
 use crate::model::MeshVertex;
 use crate::texture::UV;
 use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS};
+use crate::mc::resource::ResourceProvider;
+use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct BlockModelFaces {
     pub north: [MeshVertex; 6],
     pub east: [MeshVertex; 6],
@@ -15,8 +17,8 @@ pub struct BlockModelFaces {
     pub down: [MeshVertex; 6],
 }
 
-// #[derive(Debug)]
-pub enum BlockModel {
+#[derive(Debug)]
+pub enum BlockShape {
     Cube(BlockModelFaces),
     Custom(Vec<BlockModelFaces>),
 }
@@ -25,7 +27,7 @@ pub struct StaticBlock {
     //Not a BlockEntity
     pub name: Identifier,
     pub textures: HashMap<String, UV>,
-    pub model: BlockModel,
+    pub shape: BlockShape
 }
 
 #[allow(unused_macros)] // TODO
@@ -41,90 +43,48 @@ macro_rules! upload_vertex_vec {
 
 impl StaticBlock {
 
-    pub fn get_element_face_uv(
+    pub fn relative_atlas_uv(
         face: &Option<FaceTexture>,
-        resolved_identifiers: &HashMap<&String, &Identifier>,
+        textures: &HashMap<String, Identifier>,
         tex_manager: &TextureManager
-    ) -> Option<[[f32; 2]; 2]> {
-        match face {
-            None => Some([[0.0, 0.0], [0.0, 0.0]]),
-            Some(tex) => {
-                let loc = match &tex.texture {
-                    Identifier::Tag(t) => {
-                        let resolved = resolved_identifiers.get(t)?;
+    ) -> Option<UV> {
+        let atlas_uv = face.as_ref().map_or(((0.0, 0.0), (0.0, 0.0)), |texture| {
+            let atlases = tex_manager.atlases.read();
+            atlases.block.map.get(&texture.texture).unwrap().clone()
+        });
 
-                        tex_manager.atlases.block.map.as_ref()?.get(resolved)?
-                    }
-                    Identifier::Resource(res) => tex_manager.atlases.block.map.as_ref()?.get(&tex.texture)?
-                };
+        let face_uv = face.as_ref().map_or(((0.0, 0.0), (0.0, 0.0)), |texture| {
+            texture.uv
+        });
 
-                const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
+        const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
-                let arr = [
-                    [
-                        (loc.0.x + tex.uv.0.x) / ATLAS,
-                        (loc.0.y + tex.uv.0.y) / ATLAS
-                    ],
-                    [
-                        (loc.0.x + tex.uv.1.x) / ATLAS,
-                        (loc.0.y + tex.uv.1.y) / ATLAS
-                    ],
-                ];
+        let adjusted_uv = (
+            (
+                (atlas_uv.0.0 + face_uv.0.0) / ATLAS,
+                (atlas_uv.0.1 + face_uv.0.1) / ATLAS
+            ),
+            (
+                (atlas_uv.1.0 + face_uv.1.0) / ATLAS,
+                (atlas_uv.1.1 + face_uv.1.1) / ATLAS
+            )
+        );
 
-                Some(arr)
-            }
-        }
+        Some(adjusted_uv)
     }
 
     #[allow(unused_variables)] // TODO parameters device and rp are unused
     pub fn from_datapack(
         device: &wgpu::Device,
-        model: &BlockModelData,
+        model: &BlockModel,
         rp: &dyn ResourceProvider,
         tex_manager: &TextureManager,
     ) -> Option<Self> {
-        let textures_ids = &model.textures;
+        let texture_ids = &model.textures;
 
-        let resolved_texture_namespaces_vec: Vec<_> = textures_ids
-            .iter()
-            .map(|(string, namespaced)| {
-                Some(match namespaced {
-                    Identifier::Tag(tag) => {
-                        let mut value = textures_ids.get(tag)?;
-
-                        while value.is_tag() {
-                            if let Identifier::Tag(tag2) = value {
-                                value = textures_ids.get(tag2)?
-                            }
-                        }
-
-                        (string, value)
-                    }
-                    Identifier::Resource(_) => (string, namespaced),
-                    _ => panic!(),
-                })
-            })
-            .collect();
-
-        if resolved_texture_namespaces_vec.iter().any(|x| x.is_none()) {
-            return None;
-        }
-
-        let resolved_texture_namespaces: HashMap<_, _> = resolved_texture_namespaces_vec
-            .into_iter()
-            .map(|x| x.unwrap())
-            .collect();
-
-        let textures = {
-            let mut textures = HashMap::new();
-
-            for (&key, value) in resolved_texture_namespaces.iter() {
-                let uv = tex_manager.atlases.block.map.as_ref()?.get(value).unwrap();
-
-                textures.insert(key.clone(), uv.clone());
-            } //Map the referenced textures to their respective UVs in the texture atlas
-            textures
-        };
+        let textures: HashMap<String, UV> = texture_ids.iter().map(|(key, identifier)| {
+            (key.clone(), tex_manager.atlases.read().block.map.get(identifier).unwrap().clone())
+        }).collect();
 
         let is_cube = model.elements.len() == 1 && {
             let first = model.elements.first().unwrap();
@@ -141,46 +101,39 @@ impl StaticBlock {
             .elements
             .iter()
             .map(|element| {
-                //TODO: properly generate the vertices, probably in another method
-                // if model.id == NamespacedId::from("minecraft:block/cobblestone") {
-                //     println!("To {:?}\nFrom {:?}", element.from, element.to);
-                // }
-
                 let name = model.id.to_string();
 
                 //Face textures
-                let north = Self::get_element_face_uv(
+                let north = Self::relative_atlas_uv(
                     &element.face_textures.north,
-                    &resolved_texture_namespaces,
+                    &texture_ids,
                     tex_manager
                 )?;
-                let east = Self::get_element_face_uv(
+                let east = Self::relative_atlas_uv(
                     &element.face_textures.east,
-                    &resolved_texture_namespaces,
+                    &texture_ids,
                     tex_manager
                 )?;
-                let south = Self::get_element_face_uv(
+                let south = Self::relative_atlas_uv(
                     &element.face_textures.south,
-                    &resolved_texture_namespaces,
+                    &texture_ids,
                     tex_manager
                 )?;
-                let west = Self::get_element_face_uv(
+                let west = Self::relative_atlas_uv(
                     &element.face_textures.west,
-                    &resolved_texture_namespaces,
+                    &texture_ids,
                     tex_manager
                 )?;
-                let down = Self::get_element_face_uv(
+                let down = Self::relative_atlas_uv(
                     &element.face_textures.down,
-                    &resolved_texture_namespaces,
+                    &texture_ids,
                     tex_manager
                 )?;
-                let up = Self::get_element_face_uv(
+                let up = Self::relative_atlas_uv(
                     &element.face_textures.up,
-                    &resolved_texture_namespaces,
+                    &texture_ids,
                     tex_manager
                 )?;
-
-                dbg!(north, east, south, west, down, up);
 
                 let a = [1.0-element.from.0, element.from.1,   element.from.2];
                 let b = [1.0-element.to.0, element.from.1,     element.from.2];
@@ -194,55 +147,53 @@ impl StaticBlock {
                 #[rustfmt::skip]
                 let faces = BlockModelFaces {
                     south: [
-                        MeshVertex { position: e, tex_coords: [south[1][0], south[1][1]], normal: [0.0, 0.0, -1.0], },
-                        MeshVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, -1.0], },
-                        MeshVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, -1.0], },
-                        MeshVertex { position: h, tex_coords: [south[1][0], south[0][1]], normal: [0.0, 0.0, -1.0], },
-                        MeshVertex { position: g, tex_coords: [south[0][0], south[0][1]], normal: [0.0, 0.0, -1.0], },
-                        MeshVertex { position: f, tex_coords: [south[0][0], south[1][1]], normal: [0.0, 0.0, -1.0], },
+                        MeshVertex { position: e, tex_coords: [south.1.0, south.1.1], normal: [0.0, 0.0, -1.0], },
+                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, -1.0], },
+                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, -1.0], },
+                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, -1.0], },
+                        MeshVertex { position: g, tex_coords: [south.0.0, south.0.1], normal: [0.0, 0.0, -1.0], },
+                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, -1.0], },
                     ],
                     west: [
-                        MeshVertex { position: g, tex_coords: [west[1][0], west[0][1]], normal: [-1.0, 0.0, 0.0], },
-                        MeshVertex { position: b, tex_coords: [west[0][0], west[1][1]], normal: [-1.0, 0.0, 0.0], },
-                        MeshVertex { position: f, tex_coords: [west[1][0], west[1][1]], normal: [-1.0, 0.0, 0.0], },
-                        MeshVertex { position: c, tex_coords: [west[0][0], west[0][1]], normal: [-1.0, 0.0, 0.0], },
-                        MeshVertex { position: b, tex_coords: [west[0][0], west[1][1]], normal: [-1.0, 0.0, 0.0], },
-                        MeshVertex { position: g, tex_coords: [west[1][0], west[0][1]], normal: [-1.0, 0.0, 0.0], },
+                        MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0], },
+                        MeshVertex { position: b, tex_coords: [west.0.0, west.1.1], normal: [-1.0, 0.0, 0.0], },
+                        MeshVertex { position: f, tex_coords: [west.1.0, west.1.1], normal: [-1.0, 0.0, 0.0], },
+                        MeshVertex { position: c, tex_coords: [west.0.0, west.0.1], normal: [-1.0, 0.0, 0.0], },
+                        MeshVertex { position: b, tex_coords: [west.0.0, west.1.1], normal: [-1.0, 0.0, 0.0], },
+                        MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0], },
                     ], north: [
-                        MeshVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 1.0], },
-                        MeshVertex { position: a, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, 1.0], },
-                        MeshVertex { position: b, tex_coords: [north[1][0], north[1][1]], normal: [0.0, 0.0, 1.0], },
-                        MeshVertex { position: d, tex_coords: [north[0][0], north[0][1]], normal: [0.0, 0.0, 1.0], },
-                        MeshVertex { position: a, tex_coords: [north[0][0], north[1][1]], normal: [0.0, 0.0, 1.0], },
-                        MeshVertex { position: c, tex_coords: [north[1][0], north[0][1]], normal: [0.0, 0.0, 1.0], },
+                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, 1.0], },
+                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, 1.0], },
+                        MeshVertex { position: b, tex_coords: [north.1.0, north.1.1], normal: [0.0, 0.0, 1.0], },
+                        MeshVertex { position: d, tex_coords: [north.0.0, north.0.1], normal: [0.0, 0.0, 1.0], },
+                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, 1.0], },
+                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, 1.0], },
                     ],
                     east: [
-                        MeshVertex { position: e, tex_coords: [east[0][0], east[1][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: a, tex_coords: [east[1][0], east[1][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: d, tex_coords: [east[1][0], east[0][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: d, tex_coords: [east[1][0], east[0][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: h, tex_coords: [east[0][0], east[0][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: e, tex_coords: [east[0][0], east[1][1]], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: a, tex_coords: [east.1.0, east.1.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: d, tex_coords: [east.1.0, east.0.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: d, tex_coords: [east.1.0, east.0.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: h, tex_coords: [east.0.0, east.0.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0], },
                     ],
                     up: [
-                        MeshVertex { position: g, tex_coords: [up[1][0], up[0][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: h, tex_coords: [up[0][0], up[0][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: d, tex_coords: [up[0][0], up[1][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: c, tex_coords: [up[1][0], up[1][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: g, tex_coords: [up[1][0], up[0][1]], normal: [1.0, 0.0, 0.0], },
-                        MeshVertex { position: d, tex_coords: [up[0][0], up[1][1]], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: h, tex_coords: [up.0.0, up.0.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: c, tex_coords: [up.1.0, up.1.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [1.0, 0.0, 0.0], },
+                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [1.0, 0.0, 0.0], },
                     ],
                     down: [
-                        MeshVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
-                        MeshVertex { position: b, tex_coords: [down[0][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
-                        MeshVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
-                        MeshVertex { position: f, tex_coords: [down[0][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
-                        MeshVertex { position: a, tex_coords: [down[1][0], down[0][1]], normal: [0.0, -1.0, 0.0], },
-                        MeshVertex { position: e, tex_coords: [down[1][0], down[1][1]], normal: [0.0, -1.0, 0.0], },
+                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0], },
+                        MeshVertex { position: b, tex_coords: [down.0.0, down.0.1], normal: [0.0, -1.0, 0.0], },
+                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0], },
+                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0], },
+                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0], },
+                        MeshVertex { position: e, tex_coords: [down.1.0, down.1.1], normal: [0.0, -1.0, 0.0], },
                     ],
                 };
-
-                dbg!(&faces.north);
 
                 Some(faces)
             })
@@ -257,10 +208,10 @@ impl StaticBlock {
         Some(Self {
             name: model.id.clone(),
             textures,
-            model: if is_cube {
-                BlockModel::Cube(results.pop().unwrap().unwrap())
+            shape: if is_cube {
+                BlockShape::Cube(results.pop().unwrap().unwrap())
             } else {
-                BlockModel::Custom(results.into_iter().map(|x| x.unwrap()).collect())
+                BlockShape::Custom(results.into_iter().map(|x| x.unwrap()).collect())
             },
         })
     }
@@ -275,15 +226,15 @@ impl Block for StaticBlock {
         &self.textures
     }
 
-    fn get_model(&self) -> &BlockModel {
-        &self.model
+    fn get_shape(&self) -> &BlockShape {
+        &self.shape
     }
 }
 
 pub trait Block {
     fn get_id(&self) -> &Identifier;
     fn get_textures(&self) -> &HashMap<String, UV>;
-    fn get_model(&self) -> &BlockModel;
+    fn get_shape(&self) -> &BlockShape;
 }
 
 #[derive(Clone, Copy)]
@@ -314,8 +265,8 @@ impl<'block> Block for BlockEntity<'block> {
         self.block.get_textures()
     }
 
-    fn get_model(&self) -> &BlockModel {
-        self.block.get_model()
+    fn get_shape(&self) -> &BlockShape {
+        self.block.get_shape()
     }
 }
 

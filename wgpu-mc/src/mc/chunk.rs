@@ -1,8 +1,6 @@
-use crate::mc::block::{Block, BlockModel, BlockPos, BlockState};
+use crate::mc::block::{Block, BlockPos, BlockState, BlockShape};
 use crate::model::MeshVertex;
-use std::time::Instant;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use rayon::iter::IntoParallelRefMutIterator;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -80,8 +78,8 @@ impl Chunk {
                         })
                         .unwrap();
 
-                    match block.get_model() {
-                        BlockModel::Cube(model) => {
+                    match block.get_shape() {
+                        BlockShape::Cube(model) => {
                             let render_north = !(z > 0 && {
                                 let north_block =
                                     self.sections[y].blocks[((z - 1) * CHUNK_WIDTH) + x];
@@ -154,15 +152,19 @@ impl Chunk {
                             }
                         }
 
-                        BlockModel::Custom(model) => {
-                            for faces in model.iter() {
-                                vertices.extend(faces.north.iter().map(mapper));
-                                vertices.extend(faces.east.iter().map(mapper));
-                                vertices.extend(faces.south.iter().map(mapper));
-                                vertices.extend(faces.west.iter().map(mapper));
-                                vertices.extend(faces.up.iter().map(mapper));
-                                vertices.extend(faces.down.iter().map(mapper));
-                            }
+                        BlockShape::Custom(model) => {
+                            let vertex_chain = model.iter().flat_map(|faces| {
+                                [
+                                    faces.north.iter().map(mapper),
+                                    faces.east.iter().map(mapper),
+                                    faces.south.iter().map(mapper),
+                                    faces.west.iter().map(mapper),
+                                    faces.up.iter().map(mapper),
+                                    faces.down.iter().map(mapper)
+                                ]
+                            }).flatten();
+
+                            vertices.extend(vertex_chain);
                         }
                     }
                 }

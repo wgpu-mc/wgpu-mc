@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 pub type Position = (f64, f64);
 pub type Rotation = (f32, f32);
 
@@ -18,7 +20,7 @@ pub struct Entity {
 
 #[allow(dead_code)] // TODO
 pub struct EntityInstance {
-    entity: &'static Entity,
+    entity: Arc<Entity>,
     position: Position,
     part_rotation: Vec<Rotation>,
 }

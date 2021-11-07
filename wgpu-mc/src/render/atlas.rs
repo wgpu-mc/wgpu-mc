@@ -7,6 +7,9 @@ use crate::texture::UV;
 use guillotiere::euclid::Size2D;
 use image::imageops::overlay;
 use cgmath::Vector2;
+use dashmap::DashMap;
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 pub const ATLAS_DIMENSIONS: i32 = 1024;
 
@@ -14,7 +17,7 @@ pub struct Atlas {
     pub allocator: AtlasAllocator,
     pub image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
     pub material: Option<Material>,
-    pub map: Option<HashMap<Identifier, UV>>
+    pub map: HashMap<Identifier, UV>
 }
 
 impl Atlas {
@@ -23,7 +26,7 @@ impl Atlas {
             allocator: AtlasAllocator::new(guillotiere::Size::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
             image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
             material: None,
-            map: None
+            map: HashMap::new()
         }
     }
 
@@ -40,17 +43,17 @@ impl Atlas {
             allocation.rectangle.min.y as u32,
         );
 
-        self.map.as_mut()?.insert(
+        self.map.insert(
             id.clone(),
             (
-                Vector2::new(
+                (
                     allocation.rectangle.min.x as f32,
                     allocation.rectangle.min.y as f32,
                 ),
-                Vector2::new(
+                (
                     allocation.rectangle.max.x as f32,
                     allocation.rectangle.max.y as f32,
-                ),
+                )
             ),
         );
 
@@ -64,18 +67,22 @@ pub struct Atlases {
 }
 
 pub struct TextureManager {
-    pub textures: HashMap<Identifier, Vec<u8>>,
-    pub atlases: Atlases
+    pub textures: DashMap<Identifier, Vec<u8>>,
+    pub atlases: Arc<RwLock<Atlases>>
 }
 
 impl TextureManager {
     pub fn new() -> Self {
         Self {
-            textures: HashMap::new(),
-            atlases: Atlases {
+            textures: DashMap::new(),
+            atlases: Arc::new(RwLock::new(Atlases {
                 block: Atlas::new(),
                 gui: Atlas::new()
-            }
+            }))
         }
+    }
+
+    pub fn insert_texture(&self, id: Identifier, data: Vec<u8>) {
+        self.textures.insert(id, data);
     }
 }

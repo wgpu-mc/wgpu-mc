@@ -2,24 +2,33 @@ use wgpu::{RenderPipelineDescriptor, BindGroupLayout};
 use crate::render::shader::Shader;
 use std::mem::size_of;
 use crate::model::{MeshVertex, GuiVertex};
+use std::collections::HashMap;
+use crate::mc::MinecraftRenderer;
+use std::sync::Arc;
+use parking_lot::RwLock;
+use dashmap::DashMap;
+use crate::ShaderProvider;
 
-pub struct Shaders {
-    pub sky: Shader,
-    pub terrain: Shader,
-    pub grass: Shader,
-    pub transparent: Shader,
-    pub gui: Shader
+pub type ShaderMap = DashMap<String, Shader>;
+
+//TODO
+pub trait WmPipeline {
+
+    fn render(&self, device: &wgpu::Device, queue: &wgpu::Queue, mc: &MinecraftRenderer);
+
 }
 
-pub struct Pipelines {
+pub struct RenderPipelinesManager {
     pub sky_pipeline: wgpu::RenderPipeline,
     pub terrain_pipeline: wgpu::RenderPipeline,
     pub grass_pipeline: wgpu::RenderPipeline,
     pub transparent_pipeline: wgpu::RenderPipeline,
     pub gui_pipeline: wgpu::RenderPipeline,
     
+    pub pipelines: Arc<RwLock<Vec<Box<dyn WmPipeline>>>>,
+
     pub layouts: Layouts,
-    pub shaders: Shaders
+    pub shader_provider: Arc<dyn ShaderProvider>
 }
 
 pub struct Layouts {
@@ -28,7 +37,7 @@ pub struct Layouts {
     pub camera_bind_group_layout: BindGroupLayout
 }
 
-impl Pipelines {
+impl RenderPipelinesManager {
     
     fn create_bind_group_layouts(device: &wgpu::Device) -> Layouts {
         let camera_bind_group_layout = device.create_bind_group_layout(
@@ -161,7 +170,7 @@ impl Pipelines {
         )
     }
 
-    pub fn init(device: &wgpu::Device, shaders: Shaders) -> Self {
+    pub fn init(device: &wgpu::Device, shader_map: ShaderMap, shader_provider: Arc<dyn ShaderProvider>) -> Self {
         let bg_layouts = Self::create_bind_group_layouts(device);
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
 
@@ -174,7 +183,7 @@ impl Pipelines {
                 label: None,
                 layout: Some(&pipeline_layouts.0),
                 vertex: wgpu::VertexState {
-                    module: &shaders.sky.vert,
+                    module: &shader_map.get("sky").unwrap().vert,
                     entry_point: "main",
                     buffers: &[]
                 },
@@ -195,7 +204,7 @@ impl Pipelines {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shaders.sky.frag,
+                    module: &shader_map.get("sky").unwrap().frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -211,7 +220,7 @@ impl Pipelines {
                 label: None,
                 layout: Some(&pipeline_layouts.1),
                 vertex: wgpu::VertexState {
-                    module: &shaders.terrain.vert,
+                    module: &shader_map.get("terrain").unwrap().vert,
                     entry_point: "main",
                     buffers: &vertex_buffers
                 },
@@ -237,7 +246,7 @@ impl Pipelines {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shaders.terrain.frag,
+                    module: &shader_map.get("terrain").unwrap().frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -253,7 +262,7 @@ impl Pipelines {
                 label: None,
                 layout: Some(&pipeline_layouts.2),
                 vertex: wgpu::VertexState {
-                    module: &shaders.grass.vert,
+                    module: &shader_map.get("grass").unwrap().vert,
                     entry_point: "main",
                     buffers: &vertex_buffers
                 },
@@ -279,7 +288,7 @@ impl Pipelines {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shaders.grass.frag,
+                    module: &shader_map.get("grass").unwrap().frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -295,7 +304,7 @@ impl Pipelines {
                 label: None,
                 layout: Some(&pipeline_layouts.3),
                 vertex: wgpu::VertexState {
-                    module: &shaders.transparent.vert,
+                    module: &shader_map.get("transparent").unwrap().vert,
                     entry_point: "main",
                     buffers: &vertex_buffers
                 },
@@ -321,7 +330,7 @@ impl Pipelines {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shaders.transparent.frag,
+                    module: &shader_map.get("transparent").unwrap().frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -337,7 +346,7 @@ impl Pipelines {
                 label: None,
                 layout: Some(&pipeline_layouts.4),
                 vertex: wgpu::VertexState {
-                    module: &shaders.gui.vert,
+                    module: &shader_map.get("gui").unwrap().vert,
                     entry_point: "main",
                     buffers: &[
                         GuiVertex::desc()
@@ -365,7 +374,7 @@ impl Pipelines {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shaders.gui.frag,
+                    module: &shader_map.get("gui").unwrap().frag,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -377,8 +386,9 @@ impl Pipelines {
                     }]
                 })
             }),
+            pipelines: Arc::new(RwLock::new(Vec::new())),
             layouts: bg_layouts,
-            shaders
+            shader_provider
         }
 
     }

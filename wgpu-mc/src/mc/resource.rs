@@ -1,9 +1,9 @@
 use crate::mc::datapack::Identifier;
+use std::sync::Arc;
+use parking_lot::RwLock;
 
-pub enum ResourceType {
-    Texture,
-}
+pub trait ResourceProvider: Send + Sync {
 
-pub trait ResourceProvider {
-    fn get_bytes(&self, t: ResourceType, id: &Identifier) -> Vec<u8>;
+    fn get_resource(&self, id: &Identifier) -> &[u8];
+
 }
