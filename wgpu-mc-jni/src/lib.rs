@@ -10,7 +10,7 @@ mod mc_interface;
 
 use jni::{JNIEnv, JavaVM};
 use jni::objects::{JClass, JString, JValue, JObject, ReleaseMode};
-use jni::sys::{jstring, jint, jobjectArray, jbyteArray};
+use jni::sys::{jstring, jint, jobjectArray, jbyteArray, jboolean};
 use std::sync::{mpsc, Arc};
 use wgpu_mc::{WmRenderer, WindowSize, HasWindowSize, ShaderProvider};
 use std::mem::MaybeUninit;
@@ -34,11 +34,19 @@ use std::lazy::OnceCell;
 use wgpu_mc::mc::BlockEntry;
 use wgpu_mc::mc::resource::ResourceProvider;
 use parking_lot::{RwLock, Mutex};
+use jni::errors::Error;
+use wgpu_mc::render::pipeline::default::WorldPipeline;
+use wgpu_mc::render::pipeline::WmPipeline;
 
 #[derive(Debug)]
 enum RenderMessage {
     SetTitle(String),
     RegisterSprite(Identifier, Vec<u8>)
+}
+
+struct MinecraftRenderState {
+    //draw_queue: Vec<>,
+    render_world: bool
 }
 
 static mut RENDERER: MaybeUninit<WmRenderer> = MaybeUninit::uninit();
@@ -48,6 +56,8 @@ static mut WINDOW: MaybeUninit<Window> = MaybeUninit::uninit();
 
 static mut CHANNEL_TX: MaybeUninit<Mutex<mpsc::Sender<RenderMessage>>> = MaybeUninit::uninit();
 static mut CHANNEL_RX: MaybeUninit<Mutex<mpsc::Receiver<RenderMessage>>> = MaybeUninit::uninit();
+
+static mut MC_STATE: MaybeUninit<RwLock<MinecraftRenderState>> = MaybeUninit::uninit();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -101,19 +111,25 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
         let ident_ns = env.new_string(&ident_parts.0).unwrap();
         let ident_path = env.new_string(&ident_parts.1).unwrap();
 
-        let bytes = env.call_static_method(
+
+        println!("{:?}", id);
+
+        let bytes = match env.call_static_method(
             "dev/birb/wgpu/rust/WgpuResourceProvider",
             "getResource",
-            "(Ljava/lang/String;Ljava/lang/String)[B;",
+            "(Ljava/lang/String;Ljava/lang/String;)[B",
             &[
                 JValue::Object(ident_ns.into()),
                 JValue::Object(ident_path.into())
-            ]).unwrap().l().unwrap();
+            ]) {
+            Ok(jvalue) => jvalue.l().unwrap(),
+            Err(e) => panic!("{:?}", e)
+        };
 
         let elements = env.get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack)
             .unwrap();
 
-        let mut vec = Vec::with_capacity(elements.size().unwrap() as usize);
+        let mut vec = vec![0u8; elements.size().unwrap() as usize];
         vec.copy_from_slice(
             unsafe {
                 std::slice::from_raw_parts(elements.as_ptr() as *const u8, elements.size().unwrap() as usize)
@@ -152,11 +168,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_getBackend(
 pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
     env: JNIEnv,
     class: JClass,
+    sprite_type: JString,
     jnamespace: JString,
     buffer: jbyteArray) {
 
     let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock();
     let namespace_str: String = env.get_string(jnamespace).unwrap().into();
+    let sprite_type: String = env.get_string(sprite_type).unwrap().into();
     let identifier = Identifier::try_from(namespace_str.as_str())
         .unwrap();
 
@@ -240,6 +258,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
         RENDERER = MaybeUninit::new(state);
         EVENT_LOOP = MaybeUninit::new(event_loop);
         WINDOW = MaybeUninit::new(window);
+        MC_STATE = MaybeUninit::new(RwLock::new(MinecraftRenderState {
+            render_world: false
+        }));
     }
 }
 
@@ -261,6 +282,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
+        let mc_state = unsafe { MC_STATE.assume_init_ref() }.read();
 
         let (mut state, window) = unsafe {
             (
@@ -319,8 +341,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
                 }
             }
             Event::RedrawRequested(_) => {
-                &state.update();
-                // &state.render(&[]);
+                state.update();
+                let mut pipelines: Vec<&dyn WmPipeline> = Vec::with_capacity(1);
+                if mc_state.render_world {
+                    pipelines.push(&WorldPipeline {});
+                }
+                state.render(&pipelines[..]);
 
                 // let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
                 // frame_begin = Instant::now();
@@ -399,5 +425,18 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
 
     let renderer = unsafe { RENDERER.assume_init_mut() };
 
-    renderer.mc.bake_blocks(&renderer.device);
+    renderer.mc.generate_block_models();
+    println!("Generated {} block models", renderer.mc.block_manager.read().blocks.len());
+    renderer.mc.bake_blocks(&renderer.wgpu_state.device);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_setWorldRenderState(
+    env: JNIEnv,
+    class: JClass,
+    boolean: jboolean) {
+
+    let render_state = unsafe { MC_STATE.assume_init_ref() };
+    render_state.write().render_world = boolean != 0;
+
 }
