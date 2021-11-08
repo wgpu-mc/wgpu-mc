@@ -18,6 +18,7 @@ pub enum Identifier {
 }
 
 impl Identifier {
+    #[must_use]
     pub fn is_tag(&self) -> bool {
         matches!(self, Identifier::Tag(_))
     }

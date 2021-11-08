@@ -305,6 +305,7 @@ impl WmRenderer {
         Ok(())
     }
 
+    #[must_use]
     pub fn get_backend_description(&self) -> String {
         format!("Wgpu 11.0 ({:?})", self.wgpu_state.adapter.get_info().backend)
     }

@@ -77,6 +77,7 @@ pub struct MinecraftState {
 }
 
 impl MinecraftState {
+    #[must_use]
     pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>, shader_provider: Arc<dyn ShaderProvider>) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
@@ -195,7 +196,7 @@ impl MinecraftState {
 
         let mut block_manager = self.block_manager.write();
 
-        for (_, block_data) in &mut block_manager.blocks {
+        for block_data in block_manager.blocks.values_mut() {
             if let Some(block) =
                 StaticBlock::from_datapack(device, &block_data.model, self.resource_provider.as_ref(), &self.texture_manager)
             {

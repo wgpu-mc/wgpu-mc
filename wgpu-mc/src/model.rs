@@ -12,6 +12,7 @@ pub struct GuiVertex {
 }
 
 impl GuiVertex {
+    #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -44,6 +45,7 @@ pub struct MeshVertex {
 }
 
 impl MeshVertex {
+    #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -81,6 +83,7 @@ pub struct Material {
 
 impl Material {
     #[allow(unused_variables)] // TODO queue is an unused parameter
+    #[must_use]
     pub fn from_texture(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

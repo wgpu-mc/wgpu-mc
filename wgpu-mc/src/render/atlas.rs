@@ -21,6 +21,7 @@ pub struct Atlas {
 }
 
 impl Atlas {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             allocator: AtlasAllocator::new(guillotiere::Size::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
@@ -72,6 +73,7 @@ pub struct TextureManager {
 }
 
 impl TextureManager {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             textures: DashMap::new(),

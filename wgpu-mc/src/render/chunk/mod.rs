@@ -17,6 +17,7 @@ pub struct ChunkVertex {
 }
 
 impl ChunkVertex {
+    #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -68,7 +69,7 @@ pub struct BakedChunkPortion {
 }
 
 impl BakedChunkPortionsContainer {
-
+    #[must_use]
     pub fn bake_portion(wm: &WmRenderer, chunk: &Chunk, section: &ChunkSection) -> Self {
         let block_manager = wm.mc.block_manager.read();
         let section_y = section.offset_y;
@@ -265,6 +266,7 @@ pub struct BakedChunk {
 }
 
 impl BakedChunk {
+    #[must_use]
     pub fn bake(wm: &WmRenderer, chunk: &Chunk) -> Self {
         use rayon::iter::ParallelIterator;
 
