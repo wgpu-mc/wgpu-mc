@@ -7,6 +7,7 @@ pub struct Shader {
     pub vert: wgpu::ShaderModule
 }
 
+#[derive(Clone, Copy)]
 pub struct ShaderSource<'a> {
     pub file_name: &'a str,
     pub source: &'a str,

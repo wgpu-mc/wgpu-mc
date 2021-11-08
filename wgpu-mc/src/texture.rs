@@ -1,4 +1,4 @@
-use anyhow::*;
+use anyhow::Result;
 use cgmath::Vector2;
 use image::GenericImageView;
 use std::path::Path;

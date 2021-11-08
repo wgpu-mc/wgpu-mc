@@ -295,7 +295,7 @@ impl WmRenderer {
             });
 
             for &wm_pipeline in wm_pipelines {
-                render_pass = wm_pipeline.render(&self, render_pass, &pipelines, &chunk_slice, &entities, &camera, &uniforms);
+                render_pass = wm_pipeline.render(self, render_pass, &pipelines, &chunk_slice, &entities, &camera, &uniforms);
             }
 
         }

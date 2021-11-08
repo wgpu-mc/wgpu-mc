@@ -31,7 +31,7 @@ impl Atlas {
     }
 
     pub fn allocate(&mut self, id: &Identifier, image_bytes: &[u8]) -> Option<()> {
-        let image = image::load_from_memory(&image_bytes[..]).ok()?;
+        let image = image::load_from_memory(image_bytes).ok()?;
 
         let allocation = self.allocator
             .allocate(Size2D::new(image.width() as i32, image.height() as i32))?;

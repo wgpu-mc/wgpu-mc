@@ -150,8 +150,8 @@ impl MinecraftState {
         let mut textures = HashSet::new();
         let block_manager = self.block_manager.read();
 
-        for (id, entry) in block_manager.blocks.iter() {
-            for (_, texture_id) in &entry.model.textures {
+        for (id, entry) in &block_manager.blocks {
+            for texture_id in entry.model.textures.values() {
                 if let Identifier::Resource(_) = texture_id {
                     textures.insert(texture_id);
                 }
@@ -160,7 +160,7 @@ impl MinecraftState {
 
         let mut atlases = self.texture_manager.atlases.write();
 
-        for &id in textures.iter() {
+        for &id in &textures {
             let bytes = self.texture_manager.textures.get(id)?;
 
             atlases.block.allocate(id, &bytes[..])?;
@@ -195,7 +195,7 @@ impl MinecraftState {
 
         let mut block_manager = self.block_manager.write();
 
-        for (_, block_data) in block_manager.blocks.iter_mut() {
+        for (_, block_data) in &mut block_manager.blocks {
             if let Some(block) =
                 StaticBlock::from_datapack(device, &block_data.model, self.resource_provider.as_ref(), &self.texture_manager)
             {

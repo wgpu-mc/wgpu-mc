@@ -97,12 +97,12 @@ impl BakedChunkPortionsContainer {
                                 v.position[1] + y as f32,
                                 v.position[2] + z as f32 + chunk.pos.1 as f32
                             ],
-                            tex_coords: v.tex_coords.clone(),
+                            tex_coords: v.tex_coords,
                             lightmap_coords: [
                                 0.0,
                                 0.0
                             ],
-                            normal: v.normal.clone()
+                            normal: v.normal
                         }
                     };
 
