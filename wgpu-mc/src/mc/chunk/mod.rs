@@ -72,15 +72,15 @@ impl Chunk {
 pub struct ChunkManager {
     //Due to floating point inaccuracy at large distances,
     //we need to keep the model coordinates as close to 0,0,0 as possible
-    pub chunk_origin: Arc<RwLock<ChunkPos>>,
-    pub loaded_chunks: Arc<RwLock<Vec<RwLock<Chunk>>>>,
+    pub chunk_origin: ChunkPos,
+    pub loaded_chunks: Vec<RwLock<Chunk>>,
 }
 
 impl ChunkManager {
     pub fn new() -> Self {
         ChunkManager {
-            chunk_origin: Arc::new(RwLock::new((0, 0))),
-            loaded_chunks: Arc::new(RwLock::new(Vec::new())),
+            chunk_origin: (0, 0),
+            loaded_chunks: Vec::new(),
         }
     }
 

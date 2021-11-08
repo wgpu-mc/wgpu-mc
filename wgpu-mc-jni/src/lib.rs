@@ -40,8 +40,7 @@ use wgpu_mc::render::pipeline::WmPipeline;
 
 #[derive(Debug)]
 enum RenderMessage {
-    SetTitle(String),
-    RegisterSprite(Identifier, Vec<u8>)
+    SetTitle(String)
 }
 
 struct MinecraftRenderState {
@@ -172,6 +171,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
     jnamespace: JString,
     buffer: jbyteArray) {
 
+    let renderer = unsafe { RENDERER.assume_init_ref() };
+
     let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock();
     let namespace_str: String = env.get_string(jnamespace).unwrap().into();
     let sprite_type: String = env.get_string(sprite_type).unwrap().into();
@@ -196,7 +197,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
 
     buffer.copy_from_slice(slice);
 
-    tx.send(RenderMessage::RegisterSprite(identifier, buffer));
+    renderer.mc.texture_manager.textures.insert(identifier, buffer);
 }
 
 #[no_mangle]
@@ -291,28 +292,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
             )
         };
 
-        let mut sprites_registered = 0;
         let mut msg_r = rx.try_recv();
         while msg_r.is_ok() {
             let msg = msg_r.unwrap();
 
             match msg {
                 RenderMessage::SetTitle(title) => window.set_title(&title),
-                RenderMessage::RegisterSprite(sprite, buffer) => {
-                    state.mc.texture_manager.textures.insert(
-                        sprite.clone(),
-                        buffer
-                    );
-
-                    sprites_registered += 1;
-                }
             };
 
             msg_r = rx.try_recv();
-        }
-
-        if sprites_registered > 0 {
-            println!("Sprites registered: {}", sprites_registered);
         }
 
         match event {
@@ -428,6 +416,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
     renderer.mc.generate_block_models();
     println!("Generated {} block models", renderer.mc.block_manager.read().blocks.len());
     renderer.mc.bake_blocks(&renderer.wgpu_state.device);
+
+    let block_indices: Vec<(&Identifier, usize)> = renderer.mc.block_manager.read().blocks.iter().map(|(id, entry)| {
+        (id, entry.index.unwrap())
+    }).collect();
+
+    let block_hashmap = env.new_object("java/");
 }
 
 #[no_mangle]

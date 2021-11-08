@@ -68,17 +68,17 @@ pub struct Atlases {
 
 pub struct TextureManager {
     pub textures: DashMap<Identifier, Vec<u8>>,
-    pub atlases: Arc<RwLock<Atlases>>
+    pub atlases: RwLock<Atlases>
 }
 
 impl TextureManager {
     pub fn new() -> Self {
         Self {
             textures: DashMap::new(),
-            atlases: Arc::new(RwLock::new(Atlases {
+            atlases: RwLock::new(Atlases {
                 block: Atlas::new(),
                 gui: Atlas::new()
-            }))
+            })
         }
     }
 

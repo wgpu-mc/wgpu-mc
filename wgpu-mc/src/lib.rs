@@ -15,9 +15,8 @@ use crate::mc::MinecraftState;
 use raw_window_handle::HasRawWindowHandle;
 use shaderc::ShaderKind;
 use winit::event::WindowEvent;
-use wgpu::{RenderPass, VertexState, TextureViewDescriptor};
+use wgpu::{RenderPass, VertexState, TextureViewDescriptor, RenderPassDescriptor};
 use std::collections::{HashMap, HashSet};
-use crate::render::pipeline::{RenderPipelinesManager};
 use crate::render::shader::{Shader, ShaderSource};
 use crate::texture::WgpuTexture;
 use std::rc::Rc;
@@ -25,6 +24,9 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use dashmap::DashMap;
 use crate::mc::resource::ResourceProvider;
+use std::ops::{DerefMut, Deref};
+use std::cell::RefCell;
+use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
 
 macro_rules! dashmap(
     { $($key:expr => $value:expr),+ } => {
@@ -50,22 +52,28 @@ pub trait ShaderProvider: Send + Sync {
     fn get_shader(&self, name: &str) -> String;
 }
 
-///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
-/// goes in MinecraftState
-pub struct WmRenderer {
+pub struct WgpuState {
     pub surface: wgpu::Surface,
-    pub surface_config: wgpu::SurfaceConfiguration,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
+    pub queue: wgpu::Queue
+}
+
+///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
+/// goes in MinecraftState
+#[derive(Clone)]
+pub struct WmRenderer {
+    pub wgpu_state: Arc<WgpuState>,
+
+    pub surface_config: Arc<RwLock<wgpu::SurfaceConfiguration>>,
 
     pub size: Arc<RwLock<WindowSize>>,
 
-    pub depth_texture: texture::WgpuTexture,
+    pub depth_texture: Arc<RwLock<texture::WgpuTexture>>,
 
-    pub pipelines: RenderPipelinesManager,
+    pub pipelines: Arc<RwLock<RenderPipelinesManager>>,
 
-    pub mc: mc::MinecraftState
+    pub mc: Arc<mc::MinecraftState>
 }
 
 #[derive(Copy, Clone)]
@@ -181,32 +189,36 @@ impl WmRenderer {
         let mc = MinecraftState::new(&device, &pipelines, resource_provider, shader_provider);
         let depth_texture = WgpuTexture::create_depth_texture(&device, &config, "depth texture");
 
-        Self {
+        let wgpu_state = WgpuState {
             surface,
-            surface_config: config,
-
             adapter,
-
             device,
-            queue,
+            queue
+        };
+
+        Self {
+            wgpu_state: Arc::new(wgpu_state),
+            surface_config: Arc::new(RwLock::new(config)),
             size: Arc::new(RwLock::new(size)),
 
-            depth_texture,
-            pipelines,
-            mc
+            depth_texture: Arc::new(RwLock::new(depth_texture)),
+            pipelines: Arc::new(RwLock::new(pipelines)),
+            mc: Arc::new(mc)
         }
     }
 
-    pub fn resize(&mut self, new_size: WindowSize) {
-        self.surface_config.width = new_size.width;
-        self.surface_config.height = new_size.height;
+    pub fn resize(&self, new_size: WindowSize) {
+        let mut surface_config = self.surface_config.write();
 
-        self.surface.configure(&self.device, &self.surface_config);
+        surface_config.width = new_size.width;
+        surface_config.height = new_size.height;
 
-        self.mc.camera.aspect = self.surface_config.height as f32 / self.surface_config.width as f32;
+        self.wgpu_state.surface.configure(&self.wgpu_state.device, &surface_config);
+
+        self.mc.camera.write().aspect = surface_config.height as f32 / surface_config.width as f32;
         // self.size = new_size;
-        self.depth_texture =
-            texture::WgpuTexture::create_depth_texture(&self.device, &self.surface_config, "depth_texture");
+        *(self.depth_texture.write().deref_mut()) =
+            texture::WgpuTexture::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture");
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -218,46 +230,82 @@ impl WmRenderer {
     pub fn update(&mut self) {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
-        self.mc.camera.aspect = self.surface_config.height as f32 / self.surface_config.width as f32;
+        let mut camera = self.mc.camera.write();
+        let surface_config = self.surface_config.read();
+        camera.aspect = surface_config.height as f32 / surface_config.width as f32;
 
         let uniforms = Uniforms {
-            view_proj: self.mc.camera.build_view_projection_matrix().into()
+            view_proj: camera.build_view_projection_matrix().into()
         };
 
-        self.queue.write_buffer(
-            &self.mc.uniform_buffer,
+        self.wgpu_state.queue.write_buffer(
+            &self.mc.uniform_buffer.read(),
             0,
             bytemuck::cast_slice(&[uniforms]),
         );
     }
 
-    pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
+    pub fn render(&self, wm_pipelines: &[&dyn WmPipeline]) -> Result<(), wgpu::SurfaceError> {
+        let output = self.wgpu_state.surface.get_current_texture()?;
         let view = output.texture.create_view(&TextureViewDescriptor::default());
 
         let mut encoder = self
+            .wgpu_state
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
 
-        self.pipelines.pipelines.read().iter().for_each(|wm_pipeline| {
-            wm_pipeline.render(
-                &self,
-                &output,
-                &view,
-                &encoder,
+        let pipelines = self.pipelines.read();
+        let chunks = self.mc.chunks.read();
+        let chunk_reads: Vec<_> = chunks.loaded_chunks.iter().map(|c| c.read()).collect();
 
-            );
-        });
+        let chunk_slice: Vec<&Chunk> = chunk_reads.iter().map(|guard| guard.deref()).collect();
 
-        self.queue.submit(iter::once(encoder.finish()));
+        let depth_texture = self.depth_texture.read();
+        let entities = self.mc.entities.read();
+        let camera = self.mc.camera.read();
+        let uniforms = self.mc.uniform_bind_group.read();
+        {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: None,
+                color_attachments: &[
+                    wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.1,
+                                g: 0.2,
+                                b: 0.3,
+                                a: 1.0
+                            }),
+                            store: true
+                        }
+                    }
+                ],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true
+                    }),
+                    stencil_ops: None
+                })
+            });
+
+            for &wm_pipeline in wm_pipelines {
+                render_pass = wm_pipeline.render(&self, render_pass, &pipelines, &chunk_slice, &entities, &camera, &uniforms);
+            }
+
+        }
+        self.wgpu_state.queue.submit(iter::once(encoder.finish()));
         output.present();
 
         Ok(())
     }
 
     pub fn get_backend_description(&self) -> String {
-        format!("Wgpu 11.0 ({:?})", self.adapter.get_info().backend)
+        format!("Wgpu 11.0 ({:?})", self.wgpu_state.adapter.get_info().backend)
     }
 }

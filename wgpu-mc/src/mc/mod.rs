@@ -60,18 +60,18 @@ pub struct MinecraftState {
 
     ///Usually I would simply use a DashMap, but considering that the states of the two fields are intertwined,
     /// this has to be behind a single RwLock
-    pub block_manager: Arc<RwLock<BlockManager>>,
+    pub block_manager: RwLock<BlockManager>,
 
-    pub chunks: ChunkManager,
-    pub entities: Vec<Entity>,
+    pub chunks: RwLock<ChunkManager>,
+    pub entities: RwLock<Vec<Entity>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
     pub shader_provider: Arc<dyn ShaderProvider>,
     
-    pub camera: Camera,
+    pub camera: RwLock<Camera>,
 
-    pub uniform_buffer: wgpu::Buffer,
-    pub uniform_bind_group: wgpu::BindGroup,
+    pub uniform_buffer: RwLock<wgpu::Buffer>,
+    pub uniform_bind_group: RwLock<wgpu::BindGroup>,
 
     pub texture_manager: TextureManager
 }
@@ -98,21 +98,21 @@ impl MinecraftState {
 
         MinecraftState {
             sun_position: 0.0,
-            chunks: ChunkManager::new(),
-            entities: Vec::new(),
+            chunks: RwLock::new(ChunkManager::new()),
+            entities: RwLock::new(Vec::new()),
 
             texture_manager: TextureManager::new(),
 
-            block_manager: Arc::new(RwLock::new(BlockManager {
+            block_manager: RwLock::new(BlockManager {
                 registered_blocks: HashSet::new(),
                 blocks: HashMap::new(),
                 block_array: Vec::new()
-            })),
+            }),
 
-            camera: Camera::new(1.0),
+            camera: RwLock::new(Camera::new(1.0)),
 
-            uniform_buffer,
-            uniform_bind_group,
+            uniform_buffer: RwLock::new(uniform_buffer),
+            uniform_bind_group: RwLock::new(uniform_bind_group),
 
             resource_provider,
             shader_provider
@@ -124,7 +124,7 @@ impl MinecraftState {
         let mut block_manager = self.block_manager.write();
         let mut model_map = HashMap::new();
 
-        block_manager.blocks.iter().for_each(|(identifier, _)| {
+        block_manager.registered_blocks.iter().for_each(|identifier| {
             datapack::BlockModel::deserialize(identifier, self.resource_provider.as_ref(), &mut model_map);
         });
 
@@ -200,7 +200,7 @@ impl MinecraftState {
                 StaticBlock::from_datapack(device, &block_data.model, self.resource_provider.as_ref(), &self.texture_manager)
             {
                 block_array.push(Box::new(block));
-                block_data.index = Some(blocks.len() - 1);
+                block_data.index = Some(block_array.len() - 1);
             }
         }
 

@@ -16,6 +16,7 @@ use std::sync::Arc;
 use wgpu_mc::mc::resource::ResourceProvider;
 use std::convert::{TryFrom, TryInto};
 use wgpu_mc::render::chunk::BakedChunk;
+use wgpu_mc::render::pipeline::default::WorldPipeline;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -96,7 +97,7 @@ fn main() {
         .join("assets")
         .join("minecraft");
 
-    let mut state = block_on(
+    let mut wm = block_on(
         WmRenderer::new(
             &wrapper,
             Arc::new(rsp),
@@ -105,16 +106,16 @@ fn main() {
     );
 
     println!("Loading block models");
-    state.mc.generate_block_models();
+    wm.mc.generate_block_models();
     println!("Generating texture atlas");
-    state.mc.generate_block_texture_atlas(&state.device, &state.queue, &state.pipelines.layouts.texture_bind_group_layout);
+    wm.mc.generate_block_texture_atlas(&wm.wgpu_state.device, &wm.wgpu_state.queue, &wm.pipelines.read().layouts.texture_bind_group_layout);
     println!("Baking blocks");
-    state.mc.bake_blocks(&state.device);
+    wm.mc.bake_blocks(&wm.wgpu_state.device);
 
     let window = wrapper.window;
 
     println!("Starting rendering");
-    begin_rendering(event_loop, window, state);
+    begin_rendering(event_loop, window, wm);
 }
 
 fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: WmRenderer) {
@@ -171,42 +172,42 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                                 virtual_keycode: Some(VirtualKeyCode::Down),
                                 ..
                             } => {
-                                state.mc.camera.pitch += 0.1;
+                                state.mc.camera.write().pitch += 0.1;
                             },
                             KeyboardInput {
                                 state: ElementState::Pressed,
                                 virtual_keycode: Some(VirtualKeyCode::Up),
                                 ..
                             } => {
-                                state.mc.camera.pitch -= 0.1;
+                                state.mc.camera.write().pitch -= 0.1;
                             },
                             KeyboardInput {
                                 state: ElementState::Pressed,
                                 virtual_keycode: Some(VirtualKeyCode::Left),
                                 ..
                             } => {
-                                state.mc.camera.yaw -= 0.1;
+                                state.mc.camera.write().yaw -= 0.1;
                             },
                             KeyboardInput {
                                 state: ElementState::Pressed,
                                 virtual_keycode: Some(VirtualKeyCode::Right),
                                 ..
                             } => {
-                                state.mc.camera.yaw += 0.1;
+                                state.mc.camera.write().yaw += 0.1;
                             },
                             KeyboardInput {
                                 state: ElementState::Pressed,
                                 virtual_keycode: Some(VirtualKeyCode::Q),
                                 ..
                             } => {
-                                state.mc.camera.position.y -= 0.1;
+                                state.mc.camera.write().position.y -= 0.1;
                             },
                             KeyboardInput {
                                 state: ElementState::Pressed,
                                 virtual_keycode: Some(VirtualKeyCode::E),
                                 ..
                             } => {
-                                state.mc.camera.position.y += 0.1;
+                                state.mc.camera.write().position.y += 0.1;
                             },
 
                             KeyboardInput {
@@ -214,8 +215,9 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                                 virtual_keycode: Some(VirtualKeyCode::W),
                                 ..
                             } => {
-                                let direction: cgmath::Vector3<f32> = (state.mc.camera.yaw.cos(), state.mc.camera.pitch.sin(), state.mc.camera.yaw.sin()).into();
-                                state.mc.camera.position += direction.normalize();
+                                let mut camera = state.mc.camera.write();
+                                let direction: cgmath::Vector3<f32> = (camera.yaw.cos(), camera.pitch.sin(), camera.yaw.sin()).into();
+                                camera.position += direction.normalize();
                             },
 
                             KeyboardInput {
@@ -245,7 +247,9 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
             }
             Event::RedrawRequested(_) => {
                 &state.update();
-                &state.render();
+                &state.render(&[
+                    &WorldPipeline {}
+                ]);
 
                 let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
                 frame_begin = Instant::now();

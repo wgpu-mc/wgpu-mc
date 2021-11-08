@@ -1,23 +1,38 @@
-use wgpu::{RenderPipelineDescriptor, BindGroupLayout};
+pub mod default;
+
+use wgpu::{RenderPipelineDescriptor, BindGroupLayout, BindGroup};
 use crate::render::shader::Shader;
 use std::mem::size_of;
 use crate::model::{MeshVertex, GuiVertex};
 use std::collections::HashMap;
-use crate::mc::MinecraftState;
+use crate::mc::{MinecraftState, BlockManager};
 use std::sync::Arc;
 use parking_lot::RwLock;
 use dashmap::DashMap;
 use crate::{ShaderProvider, WmRenderer};
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::ops::Range;
+use parking_lot::lock_api::{RwLockReadGuard, RawRwLock};
+use crate::mc::chunk::{ChunkManager, Chunk};
+use crate::mc::entity::Entity;
+use crate::camera::Camera;
 
 pub type ShaderMap = DashMap<String, Shader>;
 
 pub trait WmPipeline {
 
-    fn render(&self,
-        renderer: &WmRenderer,
-        surface: &wgpu::SurfaceTexture,
-        surface_texture_view: &wgpu::TextureView,
-        command_encoder: &wgpu::CommandEncoder);
+    fn render<'a>(
+        &self,
+
+        renderer: &'a WmRenderer,
+        render_pass: wgpu::RenderPass<'a>,
+
+        pipelines: &'a RenderPipelinesManager,
+        chunks: &'a [&'a Chunk],
+        entities: &'a [Entity],
+        camera: &'a Camera,
+        uniform_bind_group: &'a BindGroup) -> wgpu::RenderPass<'a>;
 
 }
 
@@ -27,8 +42,6 @@ pub struct RenderPipelinesManager {
     pub grass_pipeline: wgpu::RenderPipeline,
     pub transparent_pipeline: wgpu::RenderPipeline,
     pub gui_pipeline: wgpu::RenderPipeline,
-    
-    pub pipelines: Arc<RwLock<Vec<Box<dyn WmPipeline>>>>,
 
     pub layouts: Layouts,
     pub shader_provider: Arc<dyn ShaderProvider>
@@ -389,7 +402,6 @@ impl RenderPipelinesManager {
                     }]
                 })
             }),
-            pipelines: Arc::new(RwLock::new(Vec::new())),
             layouts: bg_layouts,
             shader_provider
         }

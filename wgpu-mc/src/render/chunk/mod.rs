@@ -52,13 +52,13 @@ impl ChunkVertex {
 }
 
 pub struct BakedChunkPortionsContainer {
-    top: BakedChunkPortion,
-    bottom: BakedChunkPortion,
-    north: BakedChunkPortion,
-    east: BakedChunkPortion,
-    south: BakedChunkPortion,
-    west: BakedChunkPortion,
-    nonstandard: BakedChunkPortion
+    pub top: BakedChunkPortion,
+    pub bottom: BakedChunkPortion,
+    pub north: BakedChunkPortion,
+    pub east: BakedChunkPortion,
+    pub south: BakedChunkPortion,
+    pub west: BakedChunkPortion,
+    pub nonstandard: BakedChunkPortion
 }
 
 pub struct BakedChunkPortion {
@@ -205,43 +205,43 @@ impl BakedChunkPortionsContainer {
             }
         }
 
-        let top_buffer = wm.device.create_buffer_init(&BufferInitDescriptor {
+        let top_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&up_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let bottom_buffer = wm.device.create_buffer_init(&BufferInitDescriptor {
+        let bottom_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&bottom_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let north_buffer = wm.device.create_buffer_init(&BufferInitDescriptor {
+        let north_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&north_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let east_buffer = wm.device.create_buffer_init(&BufferInitDescriptor {
+        let east_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&east_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let south_buffer = wm.device.create_buffer_init(&BufferInitDescriptor {
+        let south_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&south_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let west_buffer = wm.device.create_buffer_init(&BufferInitDescriptor {
+        let west_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&west_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let nonstandard_buffer = wm.device.create_buffer_init(&BufferInitDescriptor {
+        let nonstandard_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&other_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
@@ -261,7 +261,7 @@ impl BakedChunkPortionsContainer {
 }
 
 pub struct BakedChunk {
-    pub sections: Arc<[RwLock<BakedChunkPortionsContainer>]>
+    pub sections: Arc<[BakedChunkPortionsContainer]>
 }
 
 impl BakedChunk {
@@ -270,8 +270,8 @@ impl BakedChunk {
 
         Self {
             sections: chunk.sections.iter().map(|section| {
-                    RwLock::new(BakedChunkPortionsContainer::bake_portion(wm, chunk, section))
-            }).collect::<Arc<[RwLock<BakedChunkPortionsContainer>]>>()
+                    BakedChunkPortionsContainer::bake_portion(wm, chunk, section)
+            }).collect::<Arc<[BakedChunkPortionsContainer]>>()
         }
     }
 }
