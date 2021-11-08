@@ -207,7 +207,7 @@ impl BlockModel {
         let obj = json.as_object()?;
 
         //Get information about the parent model, if this model has one
-        let parent = obj.get("parent").map_or(None, |v| {
+        let parent = obj.get("parent").and_then(|v| {
             let parent_identifier_string = v.as_str()?;
             let parent_identifier: Identifier = parent_identifier_string.try_into().unwrap();
 
@@ -248,12 +248,9 @@ impl BlockModel {
             matches!(identifier, Identifier::Resource(_))
         }).collect();
 
-        textures.iter_mut().for_each(|(_, mut identifier)| {
-            match identifier.clone() {
-                Identifier::Tag(tag) => {
-                    *identifier = resolved_resources.get(&tag).unwrap().clone().clone();
-                },
-                _ => {}
+        textures.values_mut().for_each(|identifier| {
+            if let Identifier::Tag(tag) = identifier {
+                *identifier = resolved_resources.get(tag).unwrap().clone();
             }
         });
 

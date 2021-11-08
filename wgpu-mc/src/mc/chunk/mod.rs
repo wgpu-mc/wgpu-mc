@@ -43,7 +43,7 @@ impl Chunk {
             let start_index = section * SECTION_VOLUME;
             let end_index = (section + 1) * SECTION_VOLUME;
             let block_section: Box<[BlockState; SECTION_VOLUME]> = (start_index..end_index).map(|index| {
-                blocks[index].clone()
+                blocks[index]
             }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
             ChunkSection {
