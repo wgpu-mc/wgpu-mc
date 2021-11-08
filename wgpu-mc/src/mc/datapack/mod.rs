@@ -10,7 +10,7 @@ use crate::mc::resource::ResourceProvider;
 
 pub type NamespacedResource = (String, String);
 
-///TODO: make this be a struct that contains only NamespacedResource and no Tag
+///TODO: make this be a struct that contains only `NamespacedResource` and no Tag
 #[derive(Debug, Clone, Eq, Hash)]
 pub enum Identifier {
     Tag(String),

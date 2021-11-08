@@ -120,7 +120,7 @@ impl MinecraftState {
         }
     }
 
-    ///Loops through all the blocks in the BlockManager, and creates their respective BlockModel
+    ///Loops through all the blocks in the `BlockManager`, and creates their respective `BlockModel`
     pub fn generate_block_models(&self) {
         let mut block_manager = self.block_manager.write();
         let mut model_map = HashMap::new();

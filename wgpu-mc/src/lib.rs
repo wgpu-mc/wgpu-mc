@@ -60,7 +60,7 @@ pub struct WgpuState {
 }
 
 ///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
-/// goes in MinecraftState
+/// goes in `MinecraftState`
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,

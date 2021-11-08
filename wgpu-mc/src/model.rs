@@ -74,7 +74,7 @@ impl MeshVertex {
     }
 }
 
-///Represents a texture that has been uploaded to GPU and has an associated BindGroup
+///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
 pub struct Material {
     pub name: Arc<String>,
     pub diffuse_texture: texture::WgpuTexture,
