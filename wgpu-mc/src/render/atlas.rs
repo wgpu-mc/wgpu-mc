@@ -23,12 +23,7 @@ pub struct Atlas {
 impl Atlas {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            allocator: AtlasAllocator::new(guillotiere::Size::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
-            image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
-            material: None,
-            map: HashMap::new()
-        }
+        Self::default()
     }
 
     pub fn allocate(&mut self, id: &Identifier, image_bytes: &[u8]) -> Option<()> {
@@ -62,6 +57,17 @@ impl Atlas {
     }
 }
 
+impl Default for Atlas {
+    fn default() -> Self {
+        Self {
+            allocator: AtlasAllocator::new(guillotiere::Size::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
+            image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
+            material: None,
+            map: HashMap::new()
+        }
+    }
+}
+
 pub struct Atlases {
     pub block: Atlas,
     pub gui: Atlas
@@ -75,6 +81,16 @@ pub struct TextureManager {
 impl TextureManager {
     #[must_use]
     pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert_texture(&self, id: Identifier, data: Vec<u8>) {
+        self.textures.insert(id, data);
+    }
+}
+
+impl Default for TextureManager {
+    fn default() -> Self {
         Self {
             textures: DashMap::new(),
             atlases: RwLock::new(Atlases {
@@ -82,9 +98,5 @@ impl TextureManager {
                 gui: Atlas::new()
             })
         }
-    }
-
-    pub fn insert_texture(&self, id: Identifier, data: Vec<u8>) {
-        self.textures.insert(id, data);
     }
 }
