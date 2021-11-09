@@ -151,7 +151,7 @@ impl MinecraftState {
         let mut textures = HashSet::new();
         let block_manager = self.block_manager.read();
 
-        for (id, entry) in &block_manager.blocks {
+        for entry in block_manager.blocks.values() {
             for texture_id in entry.model.textures.values() {
                 if let Identifier::Resource(_) = texture_id {
                     textures.insert(texture_id);

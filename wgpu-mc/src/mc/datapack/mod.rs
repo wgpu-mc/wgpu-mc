@@ -163,7 +163,7 @@ impl BlockModel {
                 None => Some(Vec::new()),
             },
             Some(v) => {
-                val?.as_array()?
+                v.as_array()?
                     .iter()
                     .map(|element| {
                         let triplet = Self::triplet_from_array(element.get("from")?.as_array()?)?;
@@ -245,7 +245,7 @@ impl BlockModel {
             }
         );
 
-        let resolved_resources: HashMap<String, Identifier> = textures.clone().into_iter().filter(|(string, identifier)| {
+        let resolved_resources: HashMap<String, Identifier> = textures.clone().into_iter().filter(|(_, identifier)| {
             matches!(identifier, Identifier::Resource(_))
         }).collect();
 

@@ -74,7 +74,7 @@ impl BakedChunkPortionsContainer {
         let block_manager = wm.mc.block_manager.read();
         let section_y = section.offset_y;
 
-        ///Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
+        //Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
         let mut north_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
         let mut east_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
         let mut south_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);

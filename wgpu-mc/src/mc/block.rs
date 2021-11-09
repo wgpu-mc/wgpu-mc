@@ -39,7 +39,7 @@ impl StaticBlock {
     ) -> Option<UV> {
         let atlas_uv = face.as_ref().map_or(((0.0, 0.0), (0.0, 0.0)), |texture| {
             let atlases = tex_manager.atlases.read();
-            atlases.block.map.get(&texture.texture).unwrap().clone()
+            *atlases.block.map.get(&texture.texture).unwrap()
         });
 
         let face_uv = face.as_ref().map_or(((0.0, 0.0), (0.0, 0.0)), |texture| {
@@ -72,7 +72,7 @@ impl StaticBlock {
         let texture_ids = &model.textures;
 
         let textures: HashMap<String, UV> = texture_ids.iter().map(|(key, identifier)| {
-            (key.clone(), tex_manager.atlases.read().block.map.get(identifier).unwrap().clone())
+            (key.clone(), *tex_manager.atlases.read().block.map.get(identifier).unwrap())
         }).collect();
 
         let is_cube = model.elements.len() == 1 && {
@@ -95,32 +95,32 @@ impl StaticBlock {
                 //Face textures
                 let north = Self::relative_atlas_uv(
                     &element.face_textures.north,
-                    &texture_ids,
+                    texture_ids,
                     tex_manager,
                 )?;
                 let east = Self::relative_atlas_uv(
                     &element.face_textures.east,
-                    &texture_ids,
+                    texture_ids,
                     tex_manager,
                 )?;
                 let south = Self::relative_atlas_uv(
                     &element.face_textures.south,
-                    &texture_ids,
+                    texture_ids,
                     tex_manager,
                 )?;
                 let west = Self::relative_atlas_uv(
                     &element.face_textures.west,
-                    &texture_ids,
+                    texture_ids,
                     tex_manager,
                 )?;
                 let down = Self::relative_atlas_uv(
                     &element.face_textures.down,
-                    &texture_ids,
+                    texture_ids,
                     tex_manager,
                 )?;
                 let up = Self::relative_atlas_uv(
                     &element.face_textures.up,
-                    &texture_ids,
+                    texture_ids,
                     tex_manager,
                 )?;
 

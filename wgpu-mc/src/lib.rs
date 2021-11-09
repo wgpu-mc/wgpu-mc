@@ -31,7 +31,7 @@ use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
 macro_rules! dashmap(
     { $($key:expr => $value:expr),+ } => {
         {
-            let mut m = dashmap::DashMap::new();
+            let m = dashmap::DashMap::new();
             $(
                 m.insert($key, $value);
             )+
