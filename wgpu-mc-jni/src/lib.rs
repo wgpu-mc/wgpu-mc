@@ -10,7 +10,7 @@ mod mc_interface;
 
 use jni::{JNIEnv, JavaVM};
 use jni::objects::{JClass, JString, JValue, JObject, ReleaseMode};
-use jni::sys::{jstring, jint, jobjectArray, jbyteArray, jboolean};
+use jni::sys::{jstring, jint, jobjectArray, jbyteArray, jboolean, jobject, jintArray};
 use std::sync::{mpsc, Arc};
 use wgpu_mc::{WmRenderer, WindowSize, HasWindowSize, ShaderProvider};
 use std::mem::MaybeUninit;
@@ -26,10 +26,10 @@ use winit::dpi::PhysicalSize;
 use winit::event::{Event, WindowEvent, KeyboardInput, ElementState, VirtualKeyCode};
 use std::time::Instant;
 use winit::event_loop::{ControlFlow, EventLoop};
-use wgpu_mc::mc::chunk::CHUNK_HEIGHT;
+use wgpu_mc::mc::chunk::{CHUNK_HEIGHT, Chunk, CHUNK_VOLUME};
 use crate::mc_interface::xyz_to_index;
 use wgpu_mc::mc::datapack::Identifier;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::lazy::OnceCell;
 use wgpu_mc::mc::BlockEntry;
 use wgpu_mc::mc::resource::ResourceProvider;
@@ -37,6 +37,8 @@ use parking_lot::{RwLock, Mutex};
 use jni::errors::Error;
 use wgpu_mc::render::pipeline::default::WorldPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
+use wgpu_mc::mc::block::{BlockState, BlockDirection};
+use wgpu_mc::render::chunk::BakedChunk;
 
 #[derive(Debug)]
 enum RenderMessage {
@@ -109,9 +111,6 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 
         let ident_ns = env.new_string(&ident_parts.0).unwrap();
         let ident_path = env.new_string(&ident_parts.1).unwrap();
-
-
-        println!("{:?}", id);
 
         let bytes = match env.call_static_method(
             "dev/birb/wgpu/rust/WgpuResourceProvider",
@@ -409,7 +408,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
     env: JNIEnv,
-    class: JClass) {
+    class: JClass) -> jobject {
 
     let renderer = unsafe { RENDERER.assume_init_mut() };
 
@@ -417,11 +416,28 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
     println!("Generated {} block models", renderer.mc.block_manager.read().blocks.len());
     renderer.mc.bake_blocks(&renderer.wgpu_state.device);
 
-    let block_indices: Vec<(&Identifier, usize)> = renderer.mc.block_manager.read().blocks.iter().map(|(id, entry)| {
-        (id, entry.index.unwrap())
-    }).collect();
+    println!("Baked {} block meshes", renderer.mc.block_manager.read().blocks.len());
 
-    let block_hashmap = env.new_object("java/");
+    let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
+        .unwrap();
+
+    renderer.mc.block_manager.read().blocks.iter().for_each(|(id, entry)| {
+        println!("{:?}", id);
+
+        let identifier_string = env.new_string(id.to_string())
+            .unwrap();
+        let index = entry.index.unwrap();
+        let _integer = env.new_object("java/lang/Integer", "(I)V", &[
+            JValue::Int(index as i32)
+        ]).unwrap();
+
+        env.call_method(block_hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", &[
+            JValue::Object(identifier_string.into()),
+            JValue::Object(_integer.into())
+        ]).unwrap();
+    });
+
+    block_hashmap.into_inner()
 }
 
 #[no_mangle]
@@ -432,5 +448,36 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_setWorldRenderState(
 
     let render_state = unsafe { MC_STATE.assume_init_ref() };
     render_state.write().render_world = boolean != 0;
+}
 
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunkSimple(
+    env: JNIEnv,
+    class: JClass,
+    blocks: jintArray,
+    x: jint,
+    z: jint) {
+    let renderer = unsafe { RENDERER.assume_init_ref() };
+
+    let elements = env.get_int_array_elements(blocks, ReleaseMode::NoCopyBack)
+        .unwrap();
+
+    let elements_ptr = elements.as_ptr();
+    let blocks: Box<[BlockState; CHUNK_VOLUME]> = (0..elements.size().unwrap()).map(|index| {
+        let element_ptr = unsafe { elements_ptr.offset(index as isize) };
+        let block_index = unsafe { *element_ptr } as usize;
+
+        BlockState {
+            block: Some(block_index),
+            direction: BlockDirection::North,
+            damage: 0,
+            transparency: false
+        }
+    }).collect::<Box<[BlockState]>>().try_into().unwrap();
+
+    let mut chunk_manager = renderer.mc.chunks.write();
+    let mut chunk = Chunk::new((x, z), blocks);
+    let baked = BakedChunk::bake(renderer, &chunk);
+    chunk.baked = Some(baked);
+    chunk_manager.loaded_chunks.push(RwLock::new(chunk));
 }
