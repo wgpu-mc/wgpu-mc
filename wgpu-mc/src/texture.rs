@@ -1,4 +1,4 @@
-use anyhow::*;
+use anyhow::Result;
 use cgmath::Vector2;
 use image::GenericImageView;
 use std::path::Path;
@@ -29,6 +29,7 @@ impl WgpuTexture {
         Self::from_image(device, queue, &img, Some(label))
     }
 
+    #[must_use]
     pub fn create_depth_texture(
         device: &wgpu::Device,
         surface_config: &wgpu::SurfaceConfiguration,

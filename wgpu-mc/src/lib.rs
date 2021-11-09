@@ -31,7 +31,7 @@ use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
 macro_rules! dashmap(
     { $($key:expr => $value:expr),+ } => {
         {
-            let mut m = dashmap::DashMap::new();
+            let m = dashmap::DashMap::new();
             $(
                 m.insert($key, $value);
             )+
@@ -60,7 +60,7 @@ pub struct WgpuState {
 }
 
 ///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
-/// goes in MinecraftState
+/// goes in `MinecraftState`
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
@@ -295,7 +295,7 @@ impl WmRenderer {
             });
 
             for &wm_pipeline in wm_pipelines {
-                render_pass = wm_pipeline.render(&self, render_pass, &pipelines, &chunk_slice, &entities, &camera, &uniforms);
+                render_pass = wm_pipeline.render(self, render_pass, &pipelines, &chunk_slice, &entities, &camera, &uniforms);
             }
 
         }
@@ -305,6 +305,7 @@ impl WmRenderer {
         Ok(())
     }
 
+    #[must_use]
     pub fn get_backend_description(&self) -> String {
         format!("Wgpu 11.0 ({:?})", self.wgpu_state.adapter.get_info().backend)
     }

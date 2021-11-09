@@ -77,6 +77,7 @@ pub struct MinecraftState {
 }
 
 impl MinecraftState {
+    #[must_use]
     pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>, shader_provider: Arc<dyn ShaderProvider>) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
@@ -119,7 +120,7 @@ impl MinecraftState {
         }
     }
 
-    ///Loops through all the blocks in the BlockManager, and creates their respective BlockModel
+    ///Loops through all the blocks in the `BlockManager`, and creates their respective `BlockModel`
     pub fn generate_block_models(&self) {
         let mut block_manager = self.block_manager.write();
         let mut model_map = HashMap::new();
@@ -150,8 +151,8 @@ impl MinecraftState {
         let mut textures = HashSet::new();
         let block_manager = self.block_manager.read();
 
-        for (id, entry) in block_manager.blocks.iter() {
-            for (_, texture_id) in &entry.model.textures {
+        for entry in block_manager.blocks.values() {
+            for texture_id in entry.model.textures.values() {
                 if let Identifier::Resource(_) = texture_id {
                     textures.insert(texture_id);
                 }
@@ -160,7 +161,7 @@ impl MinecraftState {
 
         let mut atlases = self.texture_manager.atlases.write();
 
-        for &id in textures.iter() {
+        for &id in &textures {
             let bytes = self.texture_manager.textures.get(id)?;
 
             atlases.block.allocate(id, &bytes[..])?;
@@ -194,7 +195,7 @@ impl MinecraftState {
 
         let mut block_manager = self.block_manager.write();
 
-        for (_, block_data) in block_manager.blocks.iter_mut() {
+        for block_data in block_manager.blocks.values_mut() {
             if let Some(block) =
                 StaticBlock::from_datapack(device, &block_data.model, self.resource_provider.as_ref(), &self.texture_manager)
             {

@@ -186,6 +186,7 @@ impl RenderPipelinesManager {
         )
     }
 
+    #[must_use]
     pub fn init(device: &wgpu::Device, shader_map: ShaderMap, shader_provider: Arc<dyn ShaderProvider>) -> Self {
         let bg_layouts = Self::create_bind_group_layouts(device);
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
