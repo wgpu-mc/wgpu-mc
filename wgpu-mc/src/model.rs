@@ -12,6 +12,7 @@ pub struct GuiVertex {
 }
 
 impl GuiVertex {
+    #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -44,6 +45,7 @@ pub struct MeshVertex {
 }
 
 impl MeshVertex {
+    #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -72,7 +74,7 @@ impl MeshVertex {
     }
 }
 
-///Represents a texture that has been uploaded to GPU and has an associated BindGroup
+///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
 pub struct Material {
     pub name: Arc<String>,
     pub diffuse_texture: texture::WgpuTexture,
@@ -81,6 +83,7 @@ pub struct Material {
 
 impl Material {
     #[allow(unused_variables)] // TODO queue is an unused parameter
+    #[must_use]
     pub fn from_texture(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

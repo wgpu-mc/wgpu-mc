@@ -17,6 +17,7 @@ pub struct ChunkVertex {
 }
 
 impl ChunkVertex {
+    #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -68,12 +69,12 @@ pub struct BakedChunkPortion {
 }
 
 impl BakedChunkPortionsContainer {
-
+    #[must_use]
     pub fn bake_portion(wm: &WmRenderer, chunk: &Chunk, section: &ChunkSection) -> Self {
         let block_manager = wm.mc.block_manager.read();
         let section_y = section.offset_y;
 
-        ///Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
+        //Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
         let mut north_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
         let mut east_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
         let mut south_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
@@ -97,12 +98,12 @@ impl BakedChunkPortionsContainer {
                                 v.position[1] + y as f32,
                                 v.position[2] + z as f32 + chunk.pos.1 as f32
                             ],
-                            tex_coords: v.tex_coords.clone(),
+                            tex_coords: v.tex_coords,
                             lightmap_coords: [
                                 0.0,
                                 0.0
                             ],
-                            normal: v.normal.clone()
+                            normal: v.normal
                         }
                     };
 
@@ -265,6 +266,7 @@ pub struct BakedChunk {
 }
 
 impl BakedChunk {
+    #[must_use]
     pub fn bake(wm: &WmRenderer, chunk: &Chunk) -> Self {
         use rayon::iter::ParallelIterator;
 

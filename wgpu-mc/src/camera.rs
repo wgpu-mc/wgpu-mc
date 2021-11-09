@@ -14,6 +14,7 @@ pub struct Camera {
 }
 
 impl Camera {
+    #[must_use]
     pub fn new(aspect: f32) -> Self {
         Self {
             position: Point3::new(-10.0, 0.0, 0.0),
@@ -27,6 +28,7 @@ impl Camera {
         }
     }
 
+    #[must_use]
     pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
         let target = Point3::new(
             self.position.x + (self.yaw.cos()),

@@ -38,12 +38,13 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    #[must_use]
     pub fn new(pos: ChunkPos, mut blocks: Box<[BlockState; CHUNK_AREA * CHUNK_HEIGHT]>) -> Self {
         let sections: Box<[ChunkSection; CHUNK_SECTIONS_PER]> = (0..CHUNK_SECTIONS_PER).map(|section| {
             let start_index = section * SECTION_VOLUME;
             let end_index = (section + 1) * SECTION_VOLUME;
             let block_section: Box<[BlockState; SECTION_VOLUME]> = (start_index..end_index).map(|index| {
-                blocks[index].clone()
+                blocks[index]
             }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
             ChunkSection {
@@ -60,6 +61,7 @@ impl Chunk {
         }
     }
 
+    #[must_use]
     pub fn blockstate_at_pos(&self, pos: BlockPos) -> BlockState {
         let x = (pos.0 % 16) as usize;
         let y = (pos.1) as usize;
@@ -77,6 +79,7 @@ pub struct ChunkManager {
 }
 
 impl ChunkManager {
+    #[must_use]
     pub fn new() -> Self {
         ChunkManager {
             chunk_origin: (0, 0),
