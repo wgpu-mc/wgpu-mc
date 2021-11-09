@@ -21,6 +21,7 @@ impl WmPipeline for WorldPipeline {
 
     fn render<'a>(&self, renderer: &'a WmRenderer, mut render_pass: RenderPass<'a>, pipelines: &'a RenderPipelinesManager, chunks: &'a [&'a Chunk], entities: &[Entity], camera: &Camera, uniform_bind_group: &BindGroup) -> wgpu::RenderPass<'a> {
         render_pass.set_pipeline(&pipelines.terrain_pipeline);
+        println!("{}", chunks.len());
 
         let buffers = (0..chunks.len()).for_each(|index| {
             let baked_chunk = match &chunks[index].baked {

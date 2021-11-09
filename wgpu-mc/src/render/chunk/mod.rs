@@ -266,8 +266,6 @@ pub struct BakedChunk {
 
 impl BakedChunk {
     pub fn bake(wm: &WmRenderer, chunk: &Chunk) -> Self {
-        use rayon::iter::ParallelIterator;
-
         Self {
             sections: chunk.sections.iter().map(|section| {
                     BakedChunkPortionsContainer::bake_portion(wm, chunk, section)

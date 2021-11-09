@@ -190,7 +190,6 @@ impl MinecraftState {
     }
 
     pub fn bake_blocks(&self, device: &wgpu::Device) {
-        let mut blocks = HashMap::new();
         let mut block_array: Vec<Box<dyn Block>> = Vec::new();
 
         let mut block_manager = self.block_manager.write();
@@ -204,7 +203,6 @@ impl MinecraftState {
             }
         }
 
-        block_manager.blocks = blocks;
         block_manager.block_array = block_array;
     }
 }
