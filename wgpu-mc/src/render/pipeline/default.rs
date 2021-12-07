@@ -19,12 +19,21 @@ pub struct WorldPipeline {}
 
 impl WmPipeline for WorldPipeline {
 
-    fn render<'a>(&self, renderer: &'a WmRenderer, mut render_pass: RenderPass<'a>, pipelines: &'a RenderPipelinesManager, chunks: &'a [&'a Chunk], entities: &[Entity], camera: &Camera, uniform_bind_group: &BindGroup) -> wgpu::RenderPass<'a> {
-        render_pass.set_pipeline(&pipelines.terrain_pipeline);
-        println!("{}", chunks.len());
+    fn render<'a, 'b, 'c, 'd: 'c, 'e: 'd>(&'a self, renderer: &'b WmRenderer, mut render_pass: &'c mut RenderPass<'d>, bumpalowo: &'e bumpalo::Bump) {
+        let pipepines_arc = renderer.pipelines.load_full();
+        let pipelines = bumpalowo.alloc(pipepines_arc);
 
-        let buffers = (0..chunks.len()).for_each(|index| {
-            let baked_chunk = match &chunks[index].baked {
+        render_pass.set_pipeline(&pipelines.terrain_pipeline);
+
+        let atlases = bumpalowo.alloc(renderer.mc.texture_manager.atlases.load_full());
+
+        render_pass.set_bind_group(0, &atlases.block.material.as_ref().unwrap().bind_group, &[]);
+        render_pass.set_bind_group(1, bumpalowo.alloc(renderer.mc.uniform_bind_group.load_full()), &[]);
+
+        renderer.mc.chunks.loaded_chunks.iter().for_each(|chunk_swap| {
+            let chunk = bumpalowo.alloc(chunk_swap.load_full());
+
+            let baked_chunk = match &chunk.baked {
                 None => return,
                 Some(baked_chunk) => baked_chunk
             };
@@ -42,12 +51,11 @@ impl WmPipeline for WorldPipeline {
 
                 //TODO: culling
                 parts.iter().for_each(|&part| {
+                    // println!("{}", part.vertices.len());
                     render_pass.set_vertex_buffer(0, part.buffer.slice(..));
                     render_pass.draw(0..part.vertices.len() as u32, 0..1);
                 });
             });
         });
-
-        render_pass
     }
 }

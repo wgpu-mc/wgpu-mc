@@ -2,10 +2,13 @@ use crate::model::MeshVertex;
 use crate::mc::chunk::{CHUNK_SECTIONS_PER, ChunkSection, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_WIDTH, CHUNK_SECTION_HEIGHT, Chunk};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use crate::mc::block::{BlockState, BlockShape};
+use crate::mc::block::{BlockState, Block};
 use crate::WmRenderer;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use rayon::iter::{IntoParallelRefIterator, FromParallelIterator, IntoParallelIterator};
+use crate::mc::block::model::{CubeOrComplexMesh, BlockstateVariantMesh};
+use crate::mc::datapack::{NamespacedResource, BlockModel};
+use crate::mc::BlockManager;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -52,6 +55,7 @@ impl ChunkVertex {
     }
 }
 
+#[derive(Debug)]
 pub struct BakedChunkPortionsContainer {
     pub top: BakedChunkPortion,
     pub bottom: BakedChunkPortion,
@@ -62,6 +66,12 @@ pub struct BakedChunkPortionsContainer {
     pub nonstandard: BakedChunkPortion
 }
 
+fn get_block_mesh<'a>(block_manager: &'a BlockManager, state: &BlockState) -> Option<&'a BlockstateVariantMesh> {
+    let block = block_manager.baked_block_variants.get_alt(&state.packed_key?)?;
+    Some(block)
+}
+
+#[derive(Debug)]
 pub struct BakedChunkPortion {
     pub buffer: wgpu::Buffer,
     //TODO: should this field be kept or is it unnecessary?
@@ -80,7 +90,7 @@ impl BakedChunkPortionsContainer {
         let mut south_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
         let mut west_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
         let mut up_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
-        let mut bottom_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
+        let mut down_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
         let mut other_vertices = Vec::new();
 
         for y in 0..CHUNK_SECTION_HEIGHT {
@@ -107,99 +117,159 @@ impl BakedChunkPortionsContainer {
                         }
                     };
 
-                    let block = block_manager.block_array.get(
-                        match block_state.block {
-                            Some(i) => i,
-                            None => continue,
-                        }).unwrap();
+                    let baked_mesh = match get_block_mesh(&block_manager, &block_state) {
+                        None => continue,
+                        Some(mesh) => mesh,
+                    };
 
-                    match block.get_shape() {
-                        BlockShape::Cube(model) => {
+                    match &baked_mesh.shape {
+                        CubeOrComplexMesh::Cube(model) => {
                             let render_north = !(z > 0 && {
-                                let north_block =
-                                    &section.blocks[((z - 1) * CHUNK_WIDTH) + x];
-                                match north_block.block {
-                                    Some(_) => north_block.transparency,
+                                let north_block_mesh = get_block_mesh(
+                                    &block_manager,
+                                    &section.blocks[((z - 1) * CHUNK_WIDTH) + x]
+                                );
+
+                                match north_block_mesh {
+                                    Some(block_mesh) => block_mesh.transparent_or_complex,
                                     None => false,
                                 }
                             });
 
                             let render_south = !(z < 15 && {
-                                let south_block =
-                                    &section.blocks[((z + 1) * CHUNK_WIDTH) + x];
-                                match south_block.block {
-                                    Some(_) => south_block.transparency,
+                                let south_block_mesh = get_block_mesh(
+                                    &block_manager,
+                                    &section.blocks[((z + 1) * CHUNK_WIDTH) + x]
+                                );
+
+                                match south_block_mesh {
+                                    Some(block_mesh) => block_mesh.transparent_or_complex,
                                     None => false,
                                 }
                             });
 
                             let render_up = !(absolute_y < 255 && {
-                                let up_block = &chunk.sections[(absolute_y + 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)];
-                                match up_block.block {
-                                    Some(_) => up_block.transparency,
+                                let up_block_mesh = get_block_mesh(
+                                    &block_manager,
+                                    &chunk.sections[(absolute_y + 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)]
+                                );
+
+                                match up_block_mesh {
+                                    Some(block_mesh) => block_mesh.transparent_or_complex,
                                     None => false,
                                 }
                             });
 
                             let render_down = !(absolute_y > 0 && {
-                                let down_block = &chunk.sections[(absolute_y - 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)];
-                                match down_block.block {
-                                    Some(_) => down_block.transparency,
+                                let down_block_mesh = get_block_mesh(
+                                    &block_manager,
+                                    &chunk.sections[(absolute_y - 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)]
+                                );
+
+                                match down_block_mesh {
+                                    Some(block_mesh) => block_mesh.transparent_or_complex,
                                     None => false,
                                 }
                             });
 
                             let render_west = !(x > 0 && {
-                                let west_block =
-                                    &section.blocks[(z * CHUNK_WIDTH) + (x - 1)];
-                                match west_block.block {
-                                    Some(_) => west_block.transparency,
+                                let west_block_mesh = get_block_mesh(
+                                    &block_manager,
+                                    &section.blocks[(z * CHUNK_WIDTH) + (x - 1)]
+                                );
+
+                                match west_block_mesh {
+                                    Some(block_mesh) => block_mesh.transparent_or_complex,
                                     None => false,
                                 }
                             });
 
                             let render_east = !(x < 15 && {
-                                let east_block =
-                                    &section.blocks[(z * CHUNK_WIDTH) + (x + 1)];
-                                match east_block.block {
-                                    Some(_) => east_block.transparency,
+                                let east_block_mesh = get_block_mesh(
+                                    &block_manager,
+                                    &section.blocks[(z * CHUNK_WIDTH) + (x + 1)]
+                                );
+
+                                match east_block_mesh {
+                                    Some(block_mesh) => block_mesh.transparent_or_complex,
                                     None => false,
                                 }
                             });
 
                             if render_north {
-                                north_vertices.extend(model.north.iter().map(mapper));
+                                match &model.north {
+                                    None => {}
+                                    Some(north) =>
+                                        north_vertices.extend(north.iter().map(mapper))
+                                };
                             }
                             if render_east {
-                                east_vertices.extend(model.east.iter().map(mapper));
+                                match &model.east {
+                                    None => {}
+                                    Some(east) =>
+                                        east_vertices.extend(east.iter().map(mapper))
+                                };
                             }
                             if render_south {
-                                south_vertices.extend(model.south.iter().map(mapper));
+                                match &model.south {
+                                    None => {}
+                                    Some(south) =>
+                                        south_vertices.extend(south.iter().map(mapper))
+                                };
                             }
                             if render_west {
-                                west_vertices.extend(model.west.iter().map(mapper));
+                                match &model.north {
+                                    None => {}
+                                    Some(west) =>
+                                        west_vertices.extend(west.iter().map(mapper))
+                                };
                             }
                             if render_up {
-                                up_vertices.extend(model.up.iter().map(mapper));
+                                match &model.up {
+                                    None => {}
+                                    Some(up) =>
+                                        up_vertices.extend(up.iter().map(mapper))
+                                };
                             }
                             if render_down {
-                                bottom_vertices.extend(model.down.iter().map(mapper));
+                                match &model.north {
+                                    None => {}
+                                    Some(down) =>
+                                        down_vertices.extend(down.iter().map(mapper))
+                                };
                             }
                         }
 
-                        BlockShape::Custom(model) => {
-                            let vertex_chain = model.iter().flat_map(|faces| {
-                                [
-                                    faces.north.iter().map(mapper),
-                                    faces.east.iter().map(mapper),
-                                    faces.south.iter().map(mapper),
-                                    faces.west.iter().map(mapper),
-                                    faces.up.iter().map(mapper),
-                                    faces.down.iter().map(mapper)
-                                ]
-                            }).flatten();
+                        CubeOrComplexMesh::Custom(model) => {
+                            // let vertex_chain = model.iter().flat_map(|faces| {
+                            //     [
+                            //         faces.north.iter().map(mapper),
+                            //         faces.east.iter().map(mapper),
+                            //         faces.south.iter().map(mapper),
+                            //         faces.west.iter().map(mapper),
+                            //         faces.up.iter().map(mapper),
+                            //         faces.down.iter().map(mapper)
+                            //     ]
+                            // }).flatten();
+                            //
+                            // other_vertices.extend(vertex_chain);
 
-                            other_vertices.extend(vertex_chain);
+                            other_vertices.extend(
+                                model.iter().flat_map(|faces| {
+                                    [
+                                        faces.north.as_ref(),
+                                        faces.east.as_ref(),
+                                        faces.south.as_ref(),
+                                        faces.west.as_ref(),
+                                        faces.up.as_ref(),
+                                        faces.down.as_ref()
+                                    ]
+                                }).filter_map(|face| {
+                                    face
+                                })
+                                    .flatten()
+                                    .map(mapper)
+                            );
                         }
                     }
                 }
@@ -214,7 +284,7 @@ impl BakedChunkPortionsContainer {
 
         let bottom_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&bottom_vertices[..]),
+            contents: bytemuck::cast_slice(&down_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
@@ -250,7 +320,7 @@ impl BakedChunkPortionsContainer {
 
         Self {
             top: BakedChunkPortion { buffer: top_buffer, vertices: up_vertices },
-            bottom: BakedChunkPortion { buffer: bottom_buffer, vertices: bottom_vertices },
+            bottom: BakedChunkPortion { buffer: bottom_buffer, vertices: down_vertices },
             north: BakedChunkPortion { buffer: north_buffer, vertices: north_vertices },
             east: BakedChunkPortion { buffer: east_buffer, vertices: east_vertices },
             south: BakedChunkPortion { buffer: south_buffer, vertices: south_vertices },
@@ -261,6 +331,7 @@ impl BakedChunkPortionsContainer {
 
 }
 
+#[derive(Debug)]
 pub struct BakedChunk {
     pub sections: Arc<[BakedChunkPortionsContainer]>
 }
@@ -270,7 +341,7 @@ impl BakedChunk {
     pub fn bake(wm: &WmRenderer, chunk: &Chunk) -> Self {
         Self {
             sections: chunk.sections.iter().map(|section| {
-                    BakedChunkPortionsContainer::bake_portion(wm, chunk, section)
+                BakedChunkPortionsContainer::bake_portion(wm, chunk, section)
             }).collect::<Arc<[BakedChunkPortionsContainer]>>()
         }
     }

@@ -1,10 +1,12 @@
-use crate::mc::block::{Block, BlockPos, BlockState, BlockShape};
+use crate::mc::block::{Block, BlockPos, BlockState};
 use crate::model::MeshVertex;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::render::chunk::BakedChunk;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::convert::TryInto;
+use arc_swap::ArcSwap;
+use dashmap::DashMap;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -31,6 +33,7 @@ struct RenderLayers {
     grass: Box<[ChunkSection; CHUNK_SECTIONS_PER]>
 }
 
+#[derive(Debug)]
 pub struct Chunk {
     pub pos: ChunkPos,
     pub sections: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
@@ -48,7 +51,7 @@ impl Chunk {
             }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
             ChunkSection {
-                empty: !blocks.iter().any(|state| state.block.is_some()),
+                empty: !blocks.iter().any(|state| state.packed_key.is_some()),
                 blocks: block_section,
                 offset_y: section * CHUNK_SECTION_HEIGHT
             }
@@ -74,16 +77,16 @@ impl Chunk {
 pub struct ChunkManager {
     //Due to floating point inaccuracy at large distances,
     //we need to keep the model coordinates as close to 0,0,0 as possible
-    pub chunk_origin: ChunkPos,
-    pub loaded_chunks: Vec<RwLock<Chunk>>,
+    pub chunk_origin: ArcSwap<ChunkPos>,
+    pub loaded_chunks: DashMap<ChunkPos, ArcSwap<Chunk>>
 }
 
 impl ChunkManager {
     #[must_use]
     pub fn new() -> Self {
         ChunkManager {
-            chunk_origin: (0, 0),
-            loaded_chunks: Vec::new(),
+            chunk_origin: ArcSwap::new(Arc::new((0, 0))),
+            loaded_chunks: DashMap::new(),
         }
     }
 

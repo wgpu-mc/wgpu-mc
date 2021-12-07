@@ -7,6 +7,7 @@ pub mod camera;
 pub mod model;
 pub mod texture;
 pub mod render;
+mod util;
 
 use crate::camera::{Camera, CameraController, Uniforms};
 use crate::mc::chunk::Chunk;
@@ -27,6 +28,7 @@ use crate::mc::resource::ResourceProvider;
 use std::ops::{DerefMut, Deref};
 use std::cell::RefCell;
 use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
+use arc_swap::ArcSwap;
 
 macro_rules! dashmap(
     { $($key:expr => $value:expr),+ } => {
@@ -48,10 +50,6 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 1.0,
 );
 
-pub trait ShaderProvider: Send + Sync {
-    fn get_shader(&self, name: &str) -> String;
-}
-
 pub struct WgpuState {
     pub surface: wgpu::Surface,
     pub adapter: wgpu::Adapter,
@@ -61,17 +59,16 @@ pub struct WgpuState {
 
 ///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
 /// goes in `MinecraftState`
-#[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
 
-    pub surface_config: Arc<RwLock<wgpu::SurfaceConfiguration>>,
+    pub surface_config: ArcSwap<wgpu::SurfaceConfiguration>,
 
-    pub size: Arc<RwLock<WindowSize>>,
+    pub size: ArcSwap<WindowSize>,
 
-    pub depth_texture: Arc<RwLock<texture::WgpuTexture>>,
+    pub depth_texture: ArcSwap<texture::WgpuTexture>,
 
-    pub pipelines: Arc<RwLock<RenderPipelinesManager>>,
+    pub pipelines: ArcSwap<RenderPipelinesManager>,
 
     pub mc: Arc<mc::MinecraftState>
 }
@@ -89,8 +86,7 @@ pub trait HasWindowSize {
 impl WmRenderer {
     pub async fn new<W: HasRawWindowHandle + HasWindowSize>(
         window: &W,
-        resource_provider: Arc<dyn ResourceProvider>,
-        shader_provider: Arc<dyn ShaderProvider>
+        resource_provider: Arc<dyn ResourceProvider>
     ) -> WmRenderer {
         let size = window.get_window_size();
 
@@ -132,51 +128,51 @@ impl WmRenderer {
         let shader_map = dashmap! {
             String::from("sky") => Shader::from_glsl(ShaderSource {
                 file_name: "sky.fsh",
-                source: &shader_provider.get_shader("sky.fsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/sky.fsh").into())).unwrap(),
                 entry_point: "main"
             }, ShaderSource {
                 file_name: "sky.vsh",
-                source: &shader_provider.get_shader("sky.vsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/sky.vsh").into())).unwrap(),
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
             String::from("terrain") => Shader::from_glsl(ShaderSource {
                 file_name: "terrain.fsh",
-                source: &shader_provider.get_shader("terrain.fsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/terrain.fsh").into())).unwrap(),
                 entry_point: "main"
             }, ShaderSource {
                 file_name: "terrain.vsh",
-                source: &shader_provider.get_shader("terrain.vsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/terrain.vsh").into())).unwrap(),
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
             String::from("grass") => Shader::from_glsl(ShaderSource {
                 file_name: "grass.fsh",
-                source: &shader_provider.get_shader("grass.fsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/grass.fsh").into())).unwrap(),
                 entry_point: "main"
             }, ShaderSource {
                 file_name: "grass.vsh",
-                source: &shader_provider.get_shader("grass.vsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/grass.vsh").into())).unwrap(),
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
             String::from("transparent") => Shader::from_glsl(ShaderSource {
                 file_name: "transparent.fsh",
-                source: &shader_provider.get_shader("transparent.fsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/transparent.fsh").into())).unwrap(),
                 entry_point: "main"
             }, ShaderSource {
                 file_name: "transparent.vsh",
-                source: &shader_provider.get_shader("transparent.vsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/transparent.vsh").into())).unwrap(),
                 entry_point: "main"
             }, &device, &mut sc).unwrap(),
 
             String::from("gui") => Shader::from_glsl(ShaderSource {
                 file_name: "gui.fsh",
-                source: &shader_provider.get_shader("gui.fsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/gui.fsh").into())).unwrap(),
                 entry_point: "main"
             }, ShaderSource {
                 file_name: "gui.vsh",
-                source: &shader_provider.get_shader("gui.vsh"),
+                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/gui.vsh").into())).unwrap(),
                 entry_point: "main"
             }, &device, &mut sc).unwrap()
         };
@@ -184,9 +180,9 @@ impl WmRenderer {
         let pipelines = render::pipeline::RenderPipelinesManager::init(
             &device,
             shader_map,
-            shader_provider.clone());
+            resource_provider.clone());
 
-        let mc = MinecraftState::new(&device, &pipelines, resource_provider, shader_provider);
+        let mc = MinecraftState::new(&device, &pipelines, resource_provider);
         let depth_texture = WgpuTexture::create_depth_texture(&device, &config, "depth texture");
 
         let wgpu_state = WgpuState {
@@ -198,27 +194,29 @@ impl WmRenderer {
 
         Self {
             wgpu_state: Arc::new(wgpu_state),
-            surface_config: Arc::new(RwLock::new(config)),
-            size: Arc::new(RwLock::new(size)),
+            surface_config: ArcSwap::new(Arc::new(config)),
+            size: ArcSwap::new(Arc::new(size)),
 
-            depth_texture: Arc::new(RwLock::new(depth_texture)),
-            pipelines: Arc::new(RwLock::new(pipelines)),
+            depth_texture: ArcSwap::new(Arc::new(depth_texture)),
+            pipelines: ArcSwap::new(Arc::new(pipelines)),
             mc: Arc::new(mc)
         }
     }
 
     pub fn resize(&self, new_size: WindowSize) {
-        let mut surface_config = self.surface_config.write();
+        let mut surface_config = (*self.surface_config.load_full()).clone();
 
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
 
         self.wgpu_state.surface.configure(&self.wgpu_state.device, &surface_config);
 
-        self.mc.camera.write().aspect = surface_config.height as f32 / surface_config.width as f32;
-        // self.size = new_size;
-        *(self.depth_texture.write().deref_mut()) =
-            texture::WgpuTexture::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture");
+        let mut new_camera = *self.mc.camera.load_full().clone();
+
+        new_camera.aspect = surface_config.height as f32 / surface_config.width as f32;
+        self.mc.camera.store(Arc::new(new_camera));
+
+        self.depth_texture.store(Arc::new(texture::WgpuTexture::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture")));
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -230,8 +228,8 @@ impl WmRenderer {
     pub fn update(&mut self) {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
-        let mut camera = self.mc.camera.write();
-        let surface_config = self.surface_config.read();
+        let mut camera = **self.mc.camera.load();
+        let surface_config = self.surface_config.load();
         camera.aspect = surface_config.height as f32 / surface_config.width as f32;
 
         let uniforms = Uniforms {
@@ -239,7 +237,7 @@ impl WmRenderer {
         };
 
         self.wgpu_state.queue.write_buffer(
-            &self.mc.uniform_buffer.read(),
+            &self.mc.uniform_buffer.load_full(),
             0,
             bytemuck::cast_slice(&[uniforms]),
         );
@@ -256,16 +254,9 @@ impl WmRenderer {
                 label: Some("Render Encoder"),
             });
 
-        let pipelines = self.pipelines.read();
-        let chunks = self.mc.chunks.read();
-        let chunk_reads: Vec<_> = chunks.loaded_chunks.iter().map(|c| c.read()).collect();
+        let bumpalowo = bumpalo::Bump::new();
+        let depth_texture = self.depth_texture.load();
 
-        let chunk_slice: Vec<&Chunk> = chunk_reads.iter().map(|guard| guard.deref()).collect();
-
-        let depth_texture = self.depth_texture.read();
-        let entities = self.mc.entities.read();
-        let camera = self.mc.camera.read();
-        let uniforms = self.mc.uniform_bind_group.read();
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
@@ -295,7 +286,7 @@ impl WmRenderer {
             });
 
             for &wm_pipeline in wm_pipelines {
-                render_pass = wm_pipeline.render(self, render_pass, &pipelines, &chunk_slice, &entities, &camera, &uniforms);
+                wm_pipeline.render(self, &mut render_pass, &bumpalowo);
             }
 
         }

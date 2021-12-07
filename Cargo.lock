@@ -55,6 +55,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6df5aef5c5830360ce5218cecb8f018af3438af5686ae945094affc86fdec63"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -116,9 +122,9 @@ checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 
 [[package]]
 name = "bumpalo"
-version = "3.6.1"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63396b8a4b9de3f4fdfb320ab6080762242f66a8ef174c49d8e19b674db4cdbe"
+checksum = "8f1e260c3a9040a7c19a12468758f4c16f31a81a1fe087482be9570ec864bb6c"
 
 [[package]]
 name = "bytemuck"
@@ -1294,6 +1300,12 @@ checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
 dependencies = [
  "winapi",
 ]
+
+[[package]]
+name = "multi-map"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bba551d6d795f74a01767577ea8339560bf0a65354e0417b7e915ed608443d46"
 
 [[package]]
 name = "naga"
@@ -2665,11 +2677,15 @@ name = "wgpu-mc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
+ "bumpalo",
  "bytemuck",
  "cgmath",
  "dashmap",
  "guillotiere",
  "image",
+ "indexmap",
+ "multi-map",
  "parking_lot",
  "raw-window-handle",
  "rayon",
@@ -2686,6 +2702,7 @@ name = "wgpu-mc-demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "cgmath",
  "crate-root",
  "fs_extra",
@@ -2703,6 +2720,7 @@ dependencies = [
 name = "wgpu-mc-jni"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "crate-root",
  "futures",
  "glfw",

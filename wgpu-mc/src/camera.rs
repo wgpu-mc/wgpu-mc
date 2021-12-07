@@ -2,6 +2,7 @@ use crate::OPENGL_TO_WGPU_MATRIX;
 use cgmath::{Point3, SquareMatrix, Vector3};
 use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
+#[derive(Copy, Clone)]
 pub struct Camera {
     pub position: cgmath::Point3<f32>,
     pub yaw: f32,

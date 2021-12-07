@@ -12,7 +12,7 @@ use jni::{JNIEnv, JavaVM};
 use jni::objects::{JClass, JString, JValue, JObject, ReleaseMode};
 use jni::sys::{jstring, jint, jobjectArray, jbyteArray, jboolean, jobject, jintArray};
 use std::sync::{mpsc, Arc};
-use wgpu_mc::{WmRenderer, WindowSize, HasWindowSize, ShaderProvider};
+use wgpu_mc::{WmRenderer, WindowSize, HasWindowSize};
 use std::mem::MaybeUninit;
 use std::{thread, fs};
 use std::sync::mpsc::{channel, RecvError, Sender};
@@ -28,17 +28,18 @@ use std::time::Instant;
 use winit::event_loop::{ControlFlow, EventLoop};
 use wgpu_mc::mc::chunk::{CHUNK_HEIGHT, Chunk, CHUNK_VOLUME};
 use crate::mc_interface::xyz_to_index;
-use wgpu_mc::mc::datapack::Identifier;
+use wgpu_mc::mc::datapack::{TagOrResource, NamespacedResource};
 use std::convert::{TryFrom, TryInto};
 use std::lazy::OnceCell;
 use wgpu_mc::mc::BlockEntry;
-use wgpu_mc::mc::resource::ResourceProvider;
+use wgpu_mc::mc::resource::{ResourceProvider};
 use parking_lot::{RwLock, Mutex};
 use jni::errors::Error;
 use wgpu_mc::render::pipeline::default::WorldPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::mc::block::{BlockState, BlockDirection};
 use wgpu_mc::render::chunk::BakedChunk;
+use arc_swap::ArcSwap;
 
 #[derive(Debug)]
 enum RenderMessage {
@@ -85,33 +86,19 @@ struct JarShaderProvider {
 
 }
 
-struct SimpleShaderProvider {}
-
-impl ShaderProvider for SimpleShaderProvider {
-    fn get_shader(&self, name: &str) -> String {
-        String::from_utf8(fs::read(Path::new("/Users/birb/wgpu-mc")
-            .join("res").join("shaders").join(name))
-            .expect("Couldn't locate the shaders")).unwrap()
-    }
-}
-
 struct MinecraftResourceManagerAdapter {
     jvm: JavaVM
 }
 
 impl ResourceProvider for MinecraftResourceManagerAdapter {
-    fn get_resource(&self, id: &Identifier) -> Vec<u8> {
+    fn get_resource(&self, id: &NamespacedResource) -> Vec<u8> {
         let env = self.jvm.attach_current_thread()
             .unwrap();
 
-        let ident_parts = match id {
-            Identifier::Tag(_) => unreachable!(),
-            Identifier::Resource(ns) => ns
-        };
+        let ident_ns = env.new_string(&id.0).unwrap();
+        let ident_path = env.new_string(&id.1).unwrap();
 
-        let ident_ns = env.new_string(&ident_parts.0).unwrap();
-        let ident_path = env.new_string(&ident_parts.1).unwrap();
-
+        //Could just simplify this to a formatted string
         let bytes = match env.call_static_method(
             "dev/birb/wgpu/rust/WgpuResourceProvider",
             "getResource",
@@ -175,7 +162,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
     let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock();
     let namespace_str: String = env.get_string(jnamespace).unwrap().into();
     let sprite_type: String = env.get_string(sprite_type).unwrap().into();
-    let identifier = Identifier::try_from(namespace_str.as_str())
+    let identifier = NamespacedResource::try_from(namespace_str.as_str())
         .unwrap();
 
     let buffer_arr = env.get_byte_array_elements(
@@ -212,11 +199,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerEntry(
 
     let mut block_manager = renderer.mc.block_manager.write();
 
-    match entry_type {
-        0 => block_manager.register_block(Identifier::try_from(rname.as_str()).unwrap()),
-        // 1 => renderer.registry.items.insert(rname),
-        _ => unimplemented!()
-    };
+    // match entry_type {
+    //     0 => block_manager.register_block(TagOrResource::try_from(rname.as_str()).unwrap()),
+    //     // 1 => renderer.registry.items.insert(rname),
+    //     _ => unimplemented!()
+    // };
 
 }
 
@@ -247,8 +234,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
     let mut state = block_on(WmRenderer::new(
         &wrapper, Arc::new(MinecraftResourceManagerAdapter {
             jvm: env.get_java_vm().unwrap()
-        }), Arc::new(SimpleShaderProvider {})
-    ));
+        }))
+    );
 
     let (tx, rx) = mpsc::channel::<RenderMessage>();
 
@@ -412,17 +399,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
 
     let renderer = unsafe { RENDERER.assume_init_mut() };
 
-    renderer.mc.generate_block_models();
-    println!("Generated {} block models", renderer.mc.block_manager.read().blocks.len());
-    renderer.mc.bake_blocks(&renderer.wgpu_state.device);
-
-    println!("Baked {} block meshes", renderer.mc.block_manager.read().blocks.len());
+    renderer.mc.bake_blocks();
+    println!("Generated blocks");
 
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
         .unwrap();
 
-    renderer.mc.block_manager.read().blocks.iter().for_each(|(id, entry)| {
-        println!("{:?}", id);
+    renderer.mc.block_manager.read().block_models.iter().for_each(|(id, entry)| {
+        println!("block id {}", id);
 
         let identifier_string = env.new_string(id.to_string())
             .unwrap();
@@ -436,6 +420,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
             JValue::Object(_integer.into())
         ]).unwrap();
     });
+
+    renderer.mc.generate_block_texture_atlas(&renderer.wgpu_state.device, &renderer.wgpu_state.queue, &renderer.pipelines.load().layouts.texture_bind_group_layout);
 
     block_hashmap.into_inner()
 }
@@ -475,9 +461,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunkSimple(
         }
     }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
-    let mut chunk_manager = renderer.mc.chunks.write();
     let mut chunk = Chunk::new((x, z), blocks);
     let baked = BakedChunk::bake(renderer, &chunk);
+
     chunk.baked = Some(baked);
-    chunk_manager.loaded_chunks.push(RwLock::new(chunk));
+    renderer.mc.chunks.loaded_chunks.insert((x, z), ArcSwap::new(Arc::new(chunk)));
 }

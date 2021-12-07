@@ -1,5 +1,6 @@
 use std::env;
 use std::io;
+use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = env::var("OUT_DIR")?;
@@ -8,9 +9,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     copy_options.overwrite = true;
 
     let mut paths_to_copy = Vec::new();
-    paths_to_copy.push("../res/");
+    paths_to_copy.push("./res/");
     fs_extra::copy_items(&paths_to_copy, out_dir, &copy_options)?;
-    let resources_root: std::path::PathBuf = "../res/assets".into();
+
+    fs_extra::dir::copy("./res/wgpu_mc", "./res/assets", &copy_options);
+
+    let resources_root: std::path::PathBuf = "./res/assets".into();
     if !resources_root.is_dir() {
         let path = std::path::PathBuf::from("/tmp/mc-jar-cache");
 
@@ -22,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let content = io::Cursor::new(response.bytes()?);
         let mut zip = zip::read::ZipArchive::new(content)?;
         zip.extract(&path)?;
-        fs_extra::dir::copy(path.join("assets"), "../res/", &copy_options)?;
+        fs_extra::dir::copy(path.join("assets"), "./res/", &copy_options)?;
 
         std::fs::remove_dir_all(path)?;
     }

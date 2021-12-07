@@ -1,28 +1,34 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
-
-use crate::mc::block::{Block, StaticBlock};
-use crate::mc::chunk::ChunkManager;
-use crate::mc::datapack::{BlockModel, Identifier};
-use crate::mc::entity::Entity;
-use crate::model::Material;
-use crate::texture::{WgpuTexture, UV};
-
-use cgmath::{Vector2, Point3, Vector3};
-use guillotiere::euclid::Size2D;
-use guillotiere::AtlasAllocator;
-use image::imageops::overlay;
-use image::{GenericImageView, Rgba, ImageFormat};
-use wgpu::{BindGroupLayout, Extent3d, BufferDescriptor, BindGroupDescriptor, BindGroupEntry};
-use crate::camera::{Camera, Uniforms};
 use std::mem::size_of;
-use crate::render::pipeline::RenderPipelinesManager;
-use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use crate::mc::resource::ResourceProvider;
+
+use arc_swap::ArcSwap;
+use cgmath::{Point3, Vector2, Vector3};
+use guillotiere::AtlasAllocator;
+use guillotiere::euclid::Size2D;
+use image::{GenericImageView, ImageFormat, Rgba};
+use image::imageops::overlay;
 use parking_lot::RwLock;
-use crate::ShaderProvider;
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor, Extent3d};
+
+use crate::camera::{Camera, Uniforms};
+use crate::mc::block::{Block, PackedBlockstateKey, BlockstateVariantKey};
+use crate::mc::chunk::ChunkManager;
+use crate::mc::datapack::{BlockModel, TagOrResource, NamespacedResource};
+use crate::mc::entity::Entity;
+use crate::mc::resource::ResourceProvider;
+use crate::model::Material;
+use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS, Atlases, TextureManager};
+use crate::render::pipeline::RenderPipelinesManager;
+use crate::texture::{UV, WgpuTexture};
+
+use self::block::model::BlockstateVariantMesh;
+use indexmap::map::IndexMap;
+use multi_map::MultiMap;
+use crate::mc::block::blockstate::BlockstateVariantDefinitionModel;
+use crate::WmRenderer;
 
 pub mod block;
 pub mod chunk;
@@ -31,54 +37,71 @@ pub mod entity;
 pub mod gui;
 pub mod resource;
 
+#[derive(Debug)]
 pub struct BlockEntry {
     pub index: Option<usize>,
     pub model: BlockModel
 }
 
 pub struct BlockManager {
-    ///Blocks should be discovered then put into this map. Once they've all been loaded,
-    /// they should be baked into their respective Block trait implementation, and inserted into the
-    /// block_array field
-    pub registered_blocks: HashSet<Identifier>,
-    pub blocks: HashMap<Identifier, BlockEntry>,
-
-    ///For faster indexing
-    pub block_array: Vec<Box<dyn Block>>,
+    pub blocks: IndexMap<NamespacedResource, Block>,
+    pub models: IndexMap<NamespacedResource, BlockModel>,
+    pub baked_block_variants: MultiMap<NamespacedResource, PackedBlockstateKey, BlockstateVariantMesh>
 }
 
 impl BlockManager {
 
-    pub fn register_block(&mut self, block: Identifier) {
-        self.registered_blocks.insert(block);
+    pub fn get_packed_blockstate_key(&self, block_id: &NamespacedResource, variant: &str) -> Option<PackedBlockstateKey> {
+        let block: &Block = self.blocks.get(block_id)?;
+
+        Some(((self.blocks.get_index_of(block_id)? as u32 & 0x3FFFFF) << 22) |
+        (block.states.get_index_of(variant)? as u32 & 0x3FF))
+    }
+}
+
+fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, BlockModel>, model_id: &NamespacedResource, resource_provider: &dyn ResourceProvider) -> Option<&'a BlockModel> {
+    if models.contains_key(model_id) {
+        return models.get(model_id);
     }
 
+    let mut model_map = HashMap::new();
+
+    BlockModel::deserialize(
+        model_id,
+        resource_provider,
+        &mut model_map
+    )?;
+
+    model_map.into_iter().for_each(|model| {
+        if !models.contains_key(&model.0) {
+            models.insert(model.0, model.1);
+        }
+    });
+
+    models.get(model_id)
 }
 
 pub struct MinecraftState {
-    pub sun_position: f32,
+    pub sun_position: ArcSwap<f32>,
 
-    ///Usually I would simply use a DashMap, but considering that the states of the two fields are intertwined,
-    /// this has to be behind a single RwLock
     pub block_manager: RwLock<BlockManager>,
 
-    pub chunks: RwLock<ChunkManager>,
+    pub chunks: ChunkManager,
     pub entities: RwLock<Vec<Entity>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
-    pub shader_provider: Arc<dyn ShaderProvider>,
-    
-    pub camera: RwLock<Camera>,
 
-    pub uniform_buffer: RwLock<wgpu::Buffer>,
-    pub uniform_bind_group: RwLock<wgpu::BindGroup>,
+    pub camera: ArcSwap<Camera>,
+
+    pub uniform_buffer: ArcSwap<wgpu::Buffer>,
+    pub uniform_bind_group: ArcSwap<wgpu::BindGroup>,
 
     pub texture_manager: TextureManager
 }
 
 impl MinecraftState {
     #[must_use]
-    pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>, shader_provider: Arc<dyn ShaderProvider>) -> Self {
+    pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
             size: size_of::<Uniforms>() as wgpu::BufferAddress,
@@ -98,78 +121,84 @@ impl MinecraftState {
         });
 
         MinecraftState {
-            sun_position: 0.0,
-            chunks: RwLock::new(ChunkManager::new()),
+            sun_position: ArcSwap::new(Arc::new(0.0)),
+            chunks: ChunkManager::new(),
             entities: RwLock::new(Vec::new()),
 
             texture_manager: TextureManager::new(),
 
             block_manager: RwLock::new(BlockManager {
-                registered_blocks: HashSet::new(),
-                blocks: HashMap::new(),
-                block_array: Vec::new()
+                blocks: IndexMap::new(),
+                models: IndexMap::new(),
+                baked_block_variants: MultiMap::new()
             }),
 
-            camera: RwLock::new(Camera::new(1.0)),
+            camera: ArcSwap::new(Arc::new(Camera::new(1.0))),
 
-            uniform_buffer: RwLock::new(uniform_buffer),
-            uniform_bind_group: RwLock::new(uniform_bind_group),
+            uniform_buffer: ArcSwap::new(Arc::new(uniform_buffer)),
+            uniform_bind_group: ArcSwap::new(Arc::new(uniform_bind_group)),
 
-            resource_provider,
-            shader_provider
+            resource_provider
         }
     }
 
-    ///Loops through all the blocks in the `BlockManager`, and creates their respective `BlockModel`
-    pub fn generate_block_models(&self) {
+    pub fn bake_blocks(&self, wm: &WmRenderer) {
         let mut block_manager = self.block_manager.write();
+
+        self.bake_block_models(&mut *block_manager);
+        self.generate_block_texture_atlas(wm, &block_manager);
+        self.bake_blockstate_meshes(&mut *block_manager);
+    }
+
+    ///Loops through all the blocks in the `BlockManager`, and bakes their `BlockModel`s and `BlockstateVariantMesh`es
+    fn bake_block_models(&self, block_manager: &mut BlockManager) {
         let mut model_map = HashMap::new();
 
-        block_manager.registered_blocks.iter().for_each(|identifier| {
-            datapack::BlockModel::deserialize(identifier, self.resource_provider.as_ref(), &mut model_map);
-        });
+        block_manager.blocks.iter().for_each(|(name, block): (_, &Block)| {
+            block.states.iter().for_each(|(variant_key, variant_definition): (&BlockstateVariantKey, &BlockstateVariantDefinitionModel)| {
+                let model_resource = &variant_definition.model;
 
-        model_map.into_iter().for_each(|(identifier, model)| {
-            let index = match block_manager.blocks.get(&identifier) {
-                None => None,
-                Some(entry) => entry.index
-            };
-
-            block_manager.blocks.insert(identifier, BlockEntry {
-                index,
-                model
+                BlockModel::deserialize(
+                    &model_resource,
+                    &*self.resource_provider,
+                    &mut model_map
+                );;
             });
         });
+
+        block_manager.models = model_map.into_iter().collect();
     }
 
-    pub fn generate_block_texture_atlas(
+    fn generate_block_texture_atlas(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        t_bgl: &BindGroupLayout,
+        renderer: &WmRenderer,
+        block_manager: &BlockManager
     ) -> Option<()> {
         let mut textures = HashSet::new();
-        let block_manager = self.block_manager.read();
-
-        for entry in block_manager.blocks.values() {
-            for texture_id in entry.model.textures.values() {
-                if let Identifier::Resource(_) = texture_id {
-                    textures.insert(texture_id);
+        block_manager.models.iter().for_each(|(id, model)| {
+            model.textures.iter().for_each(|(key, texture)| {
+                match texture {
+                    TagOrResource::Tag(_) => {}
+                    TagOrResource::Resource(res) => {
+                        textures.insert(res);
+                    }
                 }
-            }
-        }
+            });
+        });
 
-        let mut atlases = self.texture_manager.atlases.write();
+        let mut atlases = Atlases {
+            block: Atlas::new(),
+            gui: Atlas::new()
+        };
 
-        for &id in &textures {
-            let bytes = self.texture_manager.textures.get(id)?;
-
-            atlases.block.allocate(id, &bytes[..])?;
+        for id in &textures {
+            let bytes = self.resource_provider.get_resource(&id.prepend("textures/").append(".png"));
+            atlases.block.allocate(id, &bytes[..]).unwrap();
         }
 
         let texture = WgpuTexture::from_image_raw(
-            device,
-            queue,
+            &renderer.wgpu_state.device,
+            &renderer.wgpu_state.queue,
             atlases.block.image.as_ref(),
             Extent3d {
                 width: ATLAS_DIMENSIONS as u32,
@@ -180,30 +209,68 @@ impl MinecraftState {
         ).ok()?;
 
         atlases.block.material = Some(Material::from_texture(
-            device,
-            queue,
+            &renderer.wgpu_state.device,
+            &renderer.wgpu_state.queue,
             texture,
-            t_bgl,
+            &renderer.pipelines.load().layouts.texture_bind_group_layout,
             "Block Texture Atlas".into(),
         ));
+
+        self.texture_manager.atlases.store(Arc::new(atlases));
 
         Some(())
     }
 
-    pub fn bake_blocks(&self, device: &wgpu::Device) {
-        let mut block_array: Vec<Box<dyn Block>> = Vec::new();
+    fn bake_blockstate_meshes(&self, block_manager: &mut BlockManager) {
+        let mut variants = MultiMap::new();
 
-        let mut block_manager = self.block_manager.write();
+        // let mut models: HashSet<&NamespacedResource> = HashSet::new();
+        //
+        // block_manager.blocks.iter().for_each(|(name, block)| {
+        //     block.states.iter().for_each(|(_, state)| {
+        //         models.insert(&state.model);
+        //     });
+        // });
+        //
+        // let models: HashMap<&NamespacedResource, &BlockModel> = models.iter().map(|&model| {
+        //     (
+        //         model.clone(),
+        //         block_manager.get_model_or_deserialize(model, &*self.resource_provider).unwrap()
+        //     )
+        // }).collect();
 
-        for block_data in block_manager.blocks.values_mut() {
-            if let Some(block) =
-                StaticBlock::from_datapack(device, &block_data.model, self.resource_provider.as_ref(), &self.texture_manager)
-            {
-                block_array.push(Box::new(block));
-                block_data.index = Some(block_array.len() - 1);
-            }
-        }
+        block_manager.blocks.iter().for_each(|(name, block)| {
+            block.states.iter().for_each(|(key, state)| {
+                let block_model = get_model_or_deserialize(
+                    &mut block_manager.models,
+                    &state.model,
+                    &*self.resource_provider)
+                    .expect(&format!("{:?}", state.model));
+                // let &block_model = model_map.get(
+                //     &state.model
+                // ).unwrap();
 
-        block_manager.block_array = block_array;
+                let mesh = BlockstateVariantMesh::bake_block_model(
+                    block_model,
+                    &*self.resource_provider,
+                    &self.texture_manager,
+                    &state.rotations
+                ).expect(&format!("{}", name));
+
+                let variant_resource = if key == "" {
+                    name.clone()
+                } else {
+                    name.append(&format!("[{}]", &key))
+                };
+
+                let u32_variant_key: u32 = (
+                    (block_manager.blocks.get_index_of(name).unwrap() as u32 & 0x3FFFFF) << 22) |
+                    (block.states.get_index_of(key).unwrap() as u32 & 0x3FF);
+
+                variants.insert(variant_resource, u32_variant_key, mesh);
+            });
+        });
+
+        block_manager.baked_block_variants = variants;
     }
 }

@@ -9,7 +9,7 @@ use crate::mc::{MinecraftState, BlockManager};
 use std::sync::Arc;
 use parking_lot::RwLock;
 use dashmap::DashMap;
-use crate::{ShaderProvider, WmRenderer};
+use crate::{WmRenderer};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Range;
@@ -17,22 +17,18 @@ use parking_lot::lock_api::{RwLockReadGuard, RawRwLock};
 use crate::mc::chunk::{ChunkManager, Chunk};
 use crate::mc::entity::Entity;
 use crate::camera::Camera;
+use crate::mc::resource::ResourceProvider;
 
 pub type ShaderMap = DashMap<String, Shader>;
 
 pub trait WmPipeline {
 
-    fn render<'a>(
-        &self,
+    fn render<'a, 'b, 'c, 'd: 'c, 'e: 'd>(
+        &'a self,
 
-        renderer: &'a WmRenderer,
-        render_pass: wgpu::RenderPass<'a>,
-
-        pipelines: &'a RenderPipelinesManager,
-        chunks: &'a [&'a Chunk],
-        entities: &'a [Entity],
-        camera: &'a Camera,
-        uniform_bind_group: &'a BindGroup) -> wgpu::RenderPass<'a>;
+        renderer: &'b WmRenderer,
+        render_pass: &'c mut wgpu::RenderPass<'d>,
+        arena: &'e bumpalo::Bump);
 
 }
 
@@ -44,7 +40,7 @@ pub struct RenderPipelinesManager {
     pub gui_pipeline: wgpu::RenderPipeline,
 
     pub layouts: Layouts,
-    pub shader_provider: Arc<dyn ShaderProvider>
+    pub resource_provider: Arc<dyn ResourceProvider>
 }
 
 pub struct Layouts {
@@ -187,7 +183,7 @@ impl RenderPipelinesManager {
     }
 
     #[must_use]
-    pub fn init(device: &wgpu::Device, shader_map: ShaderMap, shader_provider: Arc<dyn ShaderProvider>) -> Self {
+    pub fn init(device: &wgpu::Device, shader_map: ShaderMap, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         let bg_layouts = Self::create_bind_group_layouts(device);
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
 
@@ -404,7 +400,7 @@ impl RenderPipelinesManager {
                 })
             }),
             layouts: bg_layouts,
-            shader_provider
+            resource_provider
         }
 
     }

@@ -1,50 +1,54 @@
 use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
-use std::sync::Arc;
 
+use crate::mc::block::{Block};
+use crate::mc::datapack::{FaceTexture, TagOrResource, NamespacedResource};
+use crate::mc::datapack;
 use crate::mc::resource::ResourceProvider;
 use crate::model::MeshVertex;
 use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
-use crate::mc::datapack::{Identifier, FaceTexture, BlockModel};
+use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
+use cgmath::Vector3;
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
-    pub north: [MeshVertex; 6],
-    pub east: [MeshVertex; 6],
-    pub south: [MeshVertex; 6],
-    pub west: [MeshVertex; 6],
-    pub up: [MeshVertex; 6],
-    pub down: [MeshVertex; 6],
+    pub north: Option<[MeshVertex; 6]>,
+    pub east: Option<[MeshVertex; 6]>,
+    pub south: Option<[MeshVertex; 6]>,
+    pub west: Option<[MeshVertex; 6]>,
+    pub up: Option<[MeshVertex; 6]>,
+    pub down: Option<[MeshVertex; 6]>,
 }
 
 #[derive(Debug)]
-pub enum BlockShape {
+///Makes chunk mesh baking a bit faster
+pub enum CubeOrComplexMesh {
     Cube(BlockModelFaces),
     Custom(Vec<BlockModelFaces>),
 }
 
-///Non-block entity block
-pub struct StaticBlock {
-    pub name: Identifier,
-    pub textures: HashMap<String, UV>,
-    pub shape: BlockShape,
+pub struct BlockstateVariantMesh {
+    pub name: NamespacedResource,
+    pub shape: CubeOrComplexMesh,
+    pub transparent_or_complex: bool
 }
 
-impl StaticBlock {
-    pub fn relative_atlas_uv(
-        face: &Option<FaceTexture>,
-        textures: &HashMap<String, Identifier>,
-        tex_manager: &TextureManager,
+impl BlockstateVariantMesh {
+    pub fn absolute_atlas_uv(
+        face: &FaceTexture,
+        tex_manager: &TextureManager
     ) -> Option<UV> {
-        let atlas_uv = face.as_ref().map_or(((0.0, 0.0), (0.0, 0.0)), |texture| {
-            let atlases = tex_manager.atlases.read();
-            *atlases.block.map.get(&texture.texture).unwrap()
-        });
+        let atlases = tex_manager.atlases.load();
 
-        let face_uv = face.as_ref().map_or(((0.0, 0.0), (0.0, 0.0)), |texture| {
-            texture.uv
-        });
+        let atlas_uv = atlases.block.map.get(face.texture
+            .as_resource()
+            .expect(
+                &format!("{:?}", face)
+            )
+        ).copied().unwrap();
+
+        let face_uv = &face.uv;
 
         const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
@@ -62,18 +66,24 @@ impl StaticBlock {
         Some(adjusted_uv)
     }
 
-    #[allow(unused_variables)] // TODO parameters device and rp are unused
-    pub fn from_datapack(
-        device: &wgpu::Device,
-        model: &BlockModel,
+    pub fn bake_block_model(
+        model: &datapack::BlockModel,
         rp: &dyn ResourceProvider,
         tex_manager: &TextureManager,
+        transform: &BlockstateVariantModelDefinitionRotations
     ) -> Option<Self> {
         let texture_ids = &model.textures;
 
-        let textures: HashMap<String, UV> = texture_ids.iter().map(|(key, identifier)| {
-            (key.clone(), *tex_manager.atlases.read().block.map.get(identifier).unwrap())
-        }).collect();
+        // let textures: HashMap<String, UV> = texture_ids.iter().map(|(key, identifier)| {
+        //     Some(
+        //         (key.clone(),
+        //          tex_manager.atlases.load()
+        //              .block.map.get(
+        //                  identifier.as_resource()?
+        //              ).copied()?
+        //         )
+        //     )
+        // }).collect::<Option<HashMap<String, UV>>>()?;
 
         let is_cube = model.elements.len() == 1 && {
             let first = model.elements.first().unwrap();
@@ -90,39 +100,49 @@ impl StaticBlock {
             .elements
             .iter()
             .map(|element| {
-                let name = model.id.to_string();
-
                 //Face textures
-                let north = Self::relative_atlas_uv(
-                    &element.face_textures.north,
-                    texture_ids,
-                    tex_manager,
-                )?;
-                let east = Self::relative_atlas_uv(
-                    &element.face_textures.east,
-                    texture_ids,
-                    tex_manager,
-                )?;
-                let south = Self::relative_atlas_uv(
-                    &element.face_textures.south,
-                    texture_ids,
-                    tex_manager,
-                )?;
-                let west = Self::relative_atlas_uv(
-                    &element.face_textures.west,
-                    texture_ids,
-                    tex_manager,
-                )?;
-                let down = Self::relative_atlas_uv(
-                    &element.face_textures.down,
-                    texture_ids,
-                    tex_manager,
-                )?;
-                let up = Self::relative_atlas_uv(
-                    &element.face_textures.up,
-                    texture_ids,
-                    tex_manager,
-                )?;
+
+                let north = element.face_textures.north.as_ref().and_then(|tex| {
+                    Some(Self::absolute_atlas_uv(
+                        tex,
+                        tex_manager,
+                    )?)
+                });
+
+                let east = element.face_textures.east.as_ref().and_then(|tex| {
+                    Some(Self::absolute_atlas_uv(
+                        tex,
+                        tex_manager,
+                    )?)
+                });
+
+                let south = element.face_textures.south.as_ref().and_then(|tex| {
+                    Some(Self::absolute_atlas_uv(
+                        tex,
+                        tex_manager,
+                    )?)
+                });
+
+                let west = element.face_textures.west.as_ref().and_then(|tex| {
+                    Some(Self::absolute_atlas_uv(
+                        tex,
+                        tex_manager,
+                    )?)
+                });
+
+                let up = element.face_textures.up.as_ref().and_then(|tex| {
+                    Some(Self::absolute_atlas_uv(
+                        tex,
+                        tex_manager,
+                    )?)
+                });
+
+                let down = element.face_textures.down.as_ref().and_then(|tex| {
+                    Some(Self::absolute_atlas_uv(
+                        tex,
+                        tex_manager,
+                    )?)
+                });
 
                 let a = [1.0 - element.from.0, element.from.1, element.from.2];
                 let b = [1.0 - element.to.0, element.from.1, element.from.2];
@@ -133,141 +153,75 @@ impl StaticBlock {
                 let g = [1.0 - element.to.0, element.to.1, element.to.2];
                 let h = [1.0 - element.from.0, element.to.1, element.to.2];
 
+                // let a = Vector3::from(a)
+
                 #[rustfmt::skip]
                     let faces = BlockModelFaces {
-                    south: [
+                    south: south.map(|south| {[
                         MeshVertex { position: e, tex_coords: [south.1.0, south.1.1], normal: [0.0, 0.0, -1.0] },
                         MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, -1.0] },
                         MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, -1.0] },
                         MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, -1.0] },
                         MeshVertex { position: g, tex_coords: [south.0.0, south.0.1], normal: [0.0, 0.0, -1.0] },
                         MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, -1.0] },
-                    ],
-                    west: [
+                    ]}),
+                    west: west.map(|west| {[
                         MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
                         MeshVertex { position: b, tex_coords: [west.0.0, west.1.1], normal: [-1.0, 0.0, 0.0] },
                         MeshVertex { position: f, tex_coords: [west.1.0, west.1.1], normal: [-1.0, 0.0, 0.0] },
                         MeshVertex { position: c, tex_coords: [west.0.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
                         MeshVertex { position: b, tex_coords: [west.0.0, west.1.1], normal: [-1.0, 0.0, 0.0] },
                         MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
-                    ],
-                    north: [
+                    ]}),
+                    north: north.map(|north| {[
                         MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, 1.0] },
                         MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, 1.0] },
                         MeshVertex { position: b, tex_coords: [north.1.0, north.1.1], normal: [0.0, 0.0, 1.0] },
                         MeshVertex { position: d, tex_coords: [north.0.0, north.0.1], normal: [0.0, 0.0, 1.0] },
                         MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, 1.0] },
                         MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, 1.0] },
-                    ],
-                    east: [
+                    ]}),
+                    east: east.map(|east| {[
                         MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: a, tex_coords: [east.1.0, east.1.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: d, tex_coords: [east.1.0, east.0.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: d, tex_coords: [east.1.0, east.0.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: h, tex_coords: [east.0.0, east.0.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0] },
-                    ],
-                    up: [
+                    ]}),
+                    up: up.map(|up| {[
                         MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: h, tex_coords: [up.0.0, up.0.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: c, tex_coords: [up.1.0, up.1.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [1.0, 0.0, 0.0] },
                         MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [1.0, 0.0, 0.0] },
-                    ],
-                    down: [
+                    ]}),
+                    down: down.map(|down| {[
                         MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: b, tex_coords: [down.0.0, down.0.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: e, tex_coords: [down.1.0, down.1.1], normal: [0.0, -1.0, 0.0] },
-                    ],
+                    ]}),
                 };
 
                 Some(faces)
             })
-            .collect::<Vec<Option<BlockModelFaces>>>();
+            .collect::<Option<Vec<BlockModelFaces>>>()?;
 
-        for e in results.iter() {
-            if e.is_none() {
-                return None;
-            }
-        }
+        //TODO
+        let has_transparency = false;
 
         Some(Self {
             name: model.id.clone(),
-            textures,
             shape: if is_cube {
-                BlockShape::Cube(results.pop().unwrap().unwrap())
+                CubeOrComplexMesh::Cube(results.pop().unwrap())
             } else {
-                BlockShape::Custom(results.into_iter().map(|x| x.unwrap()).collect())
+                CubeOrComplexMesh::Custom(results)
             },
+            transparent_or_complex: !is_cube || has_transparency
         })
     }
-}
-
-impl Block for StaticBlock {
-    fn get_id(&self) -> &Identifier {
-        &self.name
-    }
-
-    fn get_textures(&self) -> &HashMap<String, UV, RandomState> {
-        &self.textures
-    }
-
-    fn get_shape(&self) -> &BlockShape {
-        &self.shape
-    }
-}
-
-pub trait Block {
-    fn get_id(&self) -> &Identifier;
-    fn get_textures(&self) -> &HashMap<String, UV>;
-    fn get_shape(&self) -> &BlockShape;
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum BlockDirection {
-    North,
-    East,
-    South,
-    West,
-    Up,
-    Down,
-}
-
-pub enum BlockEntityDataKey {
-    ChestOpenTime,
-}
-
-pub struct BlockEntity<'block> {
-    pub block: &'block dyn Block,
-    pub data: HashMap<BlockEntityDataKey, usize>,
-}
-
-impl<'block> Block for BlockEntity<'block> {
-    fn get_id(&self) -> &Identifier {
-        self.block.get_id()
-    }
-
-    fn get_textures(&self) -> &HashMap<String, UV> {
-        self.block.get_textures()
-    }
-
-    fn get_shape(&self) -> &BlockShape {
-        self.block.get_shape()
-    }
-}
-
-pub type BlockPos = (u32, u8, u32);
-
-type BlockIndex = usize;
-
-#[derive(Clone, Copy, Debug)]
-pub struct BlockState {
-    pub block: Option<BlockIndex>,
-    pub direction: BlockDirection,
-    pub damage: u8,
-    pub transparency: bool, //speed things up a bit
 }

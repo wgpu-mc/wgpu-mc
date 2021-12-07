@@ -2,7 +2,7 @@
 name = "wgpu-mc-jni"
 version = "0.1.0"
 authors = ["Birb <birb.seeb@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,6 +16,7 @@ wgpu-mc = { path = "../wgpu-mc" }
 winit = "0.25.0"
 lazy_static = "1.4.0"
 parking_lot = "0.11.2"
+arc-swap = "1.4.0"
 
 [dependencies.glfw]
 git = "https://github.com/bjz/glfw-rs.git"

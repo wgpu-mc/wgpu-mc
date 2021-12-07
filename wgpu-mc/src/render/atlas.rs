@@ -1,7 +1,7 @@
 use guillotiere::AtlasAllocator;
 use image::{Rgba, GenericImageView};
 use crate::model::Material;
-use crate::mc::datapack::Identifier;
+use crate::mc::datapack::{TagOrResource, NamespacedResource};
 use std::collections::HashMap;
 use crate::texture::UV;
 use guillotiere::euclid::Size2D;
@@ -10,6 +10,10 @@ use cgmath::Vector2;
 use dashmap::DashMap;
 use std::sync::Arc;
 use parking_lot::RwLock;
+use arc_swap::ArcSwap;
+use crate::mc::resource::ResourceProvider;
+use std::collections::hash_map::RandomState;
+use dashmap::mapref::one::Ref;
 
 pub const ATLAS_DIMENSIONS: i32 = 1024;
 
@@ -17,7 +21,13 @@ pub struct Atlas {
     pub allocator: AtlasAllocator,
     pub image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
     pub material: Option<Material>,
-    pub map: HashMap<Identifier, UV>
+    pub map: HashMap<NamespacedResource, UV>
+}
+
+pub struct UploadedAtlas {
+    pub image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
+    pub material: Material,
+    pub map: HashMap<TagOrResource, UV>
 }
 
 impl Atlas {
@@ -26,7 +36,7 @@ impl Atlas {
         Self::default()
     }
 
-    pub fn allocate(&mut self, id: &Identifier, image_bytes: &[u8]) -> Option<()> {
+    pub fn allocate(&mut self, id: &NamespacedResource, image_bytes: &[u8]) -> Option<()> {
         let image = image::load_from_memory(image_bytes).ok()?;
 
         let allocation = self.allocator
@@ -74,29 +84,38 @@ pub struct Atlases {
 }
 
 pub struct TextureManager {
-    pub textures: DashMap<Identifier, Vec<u8>>,
-    pub atlases: RwLock<Atlases>
+    pub textures: DashMap<NamespacedResource, Vec<u8>>,
+    pub atlases: ArcSwap<Atlases>,
+    // pub resource_provider: Arc<dyn ResourceProvider>
 }
 
 impl TextureManager {
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn insert_texture(&self, id: Identifier, data: Vec<u8>) {
-        self.textures.insert(id, data);
-    }
-}
-
-impl Default for TextureManager {
-    fn default() -> Self {
         Self {
             textures: DashMap::new(),
-            atlases: RwLock::new(Atlases {
+            atlases: ArcSwap::new(Arc::new(Atlases {
                 block: Atlas::new(),
                 gui: Atlas::new()
-            })
+            }))
         }
     }
+
+    // pub fn insert_texture(&self, id: NamespacedResource, data: Vec<u8>) {
+    //     self.textures.insert(id, data);
+    // }
+    //
+    // pub fn get_texture(&self, id: &NamespacedResource) -> Option<&[u8]> {
+    //     match self.textures.get(id) {
+    //         None => {
+    //             let image = image::load_from_memory(
+    //                 self.resource_provider.get_resource(&id.prepend("textures/"))?
+    //             ).ok()?;
+    //
+    //             self.textures.
+    //         }
+    //         Some(data) => Some(&data.value()[..])
+    //     }
+    // }
+
 }
