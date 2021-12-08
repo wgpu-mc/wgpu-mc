@@ -54,7 +54,7 @@ impl BlockManager {
     pub fn get_packed_blockstate_key(&self, block_id: &NamespacedResource, variant: &str) -> Option<PackedBlockstateKey> {
         let block: &Block = self.blocks.get(block_id)?;
 
-        Some(((self.blocks.get_index_of(block_id)? as u32 & 0x3FFFFF) << 22) |
+        Some(((self.blocks.get_index_of(block_id)? as u32 & 0x3FFFFF) << 10) |
         (block.states.get_index_of(variant)? as u32 & 0x3FF))
     }
 }
@@ -264,12 +264,14 @@ impl MinecraftState {
                 };
 
                 let u32_variant_key: u32 = (
-                    (block_manager.blocks.get_index_of(name).unwrap() as u32 & 0x3FFFFF) << 22) |
+                    (block_manager.blocks.get_index_of(name).unwrap() as u32 & 0x3FFFFF) << 10) |
                     (block.states.get_index_of(key).unwrap() as u32 & 0x3FF);
 
                 variants.insert(variant_resource, u32_variant_key, mesh);
             });
         });
+
+        // println!("{:?}", variants);
 
         block_manager.baked_block_variants = variants;
     }

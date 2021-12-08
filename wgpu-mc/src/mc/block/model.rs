@@ -9,7 +9,7 @@ use crate::model::MeshVertex;
 use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
 use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
-use cgmath::Vector3;
+use cgmath::{Vector3, Matrix3, Euler, Deg};
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
@@ -28,6 +28,7 @@ pub enum CubeOrComplexMesh {
     Custom(Vec<BlockModelFaces>),
 }
 
+#[derive(Debug)]
 pub struct BlockstateVariantMesh {
     pub name: NamespacedResource,
     pub shape: CubeOrComplexMesh,
@@ -74,16 +75,13 @@ impl BlockstateVariantMesh {
     ) -> Option<Self> {
         let texture_ids = &model.textures;
 
-        // let textures: HashMap<String, UV> = texture_ids.iter().map(|(key, identifier)| {
-        //     Some(
-        //         (key.clone(),
-        //          tex_manager.atlases.load()
-        //              .block.map.get(
-        //                  identifier.as_resource()?
-        //              ).copied()?
-        //         )
-        //     )
-        // }).collect::<Option<HashMap<String, UV>>>()?;
+        let matrix = Matrix3::from(
+            Euler {
+                x: Deg(transform.x as f32),
+                y: Deg(transform.y as f32),
+                z: Deg(transform.z as f32)
+            }
+        );
 
         let is_cube = model.elements.len() == 1 && {
             let first = model.elements.first().unwrap();
@@ -144,14 +142,14 @@ impl BlockstateVariantMesh {
                     )?)
                 });
 
-                let a = [1.0 - element.from.0, element.from.1, element.from.2];
-                let b = [1.0 - element.to.0, element.from.1, element.from.2];
-                let c = [1.0 - element.to.0, element.to.1, element.from.2];
-                let d = [1.0 - element.from.0, element.to.1, element.from.2];
-                let e = [1.0 - element.from.0, element.from.1, element.to.2];
-                let f = [1.0 - element.to.0, element.from.1, element.to.2];
-                let g = [1.0 - element.to.0, element.to.1, element.to.2];
-                let h = [1.0 - element.from.0, element.to.1, element.to.2];
+                let a = (matrix * Vector3::new(1.0 - element.from.0, element.from.1, element.from.2)).into();
+                let b = (matrix * Vector3::new(1.0 - element.to.0, element.from.1, element.from.2)).into();
+                let c = (matrix * Vector3::new(1.0 - element.to.0, element.to.1, element.from.2)).into();
+                let d = (matrix * Vector3::new(1.0 - element.from.0, element.to.1, element.from.2)).into();
+                let e = (matrix * Vector3::new(1.0 - element.from.0, element.from.1, element.to.2)).into();
+                let f = (matrix * Vector3::new(1.0 - element.to.0, element.from.1, element.to.2)).into();
+                let g = (matrix * Vector3::new(1.0 - element.to.0, element.to.1, element.to.2)).into();
+                let h = (matrix * Vector3::new(1.0 - element.from.0, element.to.1, element.to.2)).into();
 
                 // let a = Vector3::from(a)
 

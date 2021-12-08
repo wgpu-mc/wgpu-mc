@@ -18,6 +18,7 @@ use crate::mc::chunk::{ChunkManager, Chunk};
 use crate::mc::entity::Entity;
 use crate::camera::Camera;
 use crate::mc::resource::ResourceProvider;
+use crate::render::chunk::ChunkVertex;
 
 pub type ShaderMap = DashMap<String, Shader>;
 
@@ -188,7 +189,7 @@ impl RenderPipelinesManager {
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
 
         let vertex_buffers = [
-            MeshVertex::desc()
+            ChunkVertex::desc()
         ];
 
         Self {

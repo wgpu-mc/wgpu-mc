@@ -9,7 +9,7 @@ pub mod texture;
 pub mod render;
 mod util;
 
-use crate::camera::{Camera, CameraController, Uniforms};
+use crate::camera::{Camera, Uniforms};
 use crate::mc::chunk::Chunk;
 use crate::mc::MinecraftState;
 
@@ -213,7 +213,7 @@ impl WmRenderer {
 
         let mut new_camera = *self.mc.camera.load_full().clone();
 
-        new_camera.aspect = surface_config.height as f32 / surface_config.width as f32;
+        new_camera.aspect = surface_config.width as f32 / surface_config.height as f32;
         self.mc.camera.store(Arc::new(new_camera));
 
         self.depth_texture.store(Arc::new(texture::WgpuTexture::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture")));

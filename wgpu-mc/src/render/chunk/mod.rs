@@ -24,7 +24,7 @@ impl ChunkVertex {
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<MeshVertex>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<ChunkVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 //Position
@@ -79,18 +79,18 @@ pub struct BakedChunkPortion {
 }
 
 impl BakedChunkPortionsContainer {
-    #[must_use]
+
     pub fn bake_portion(wm: &WmRenderer, chunk: &Chunk, section: &ChunkSection) -> Self {
         let block_manager = wm.mc.block_manager.read();
         let section_y = section.offset_y;
 
         //Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
-        let mut north_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
-        let mut east_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
-        let mut south_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
-        let mut west_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
-        let mut up_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
-        let mut down_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 3);
+        let mut north_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
+        let mut east_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
+        let mut south_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
+        let mut west_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
+        let mut up_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
+        let mut down_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 10);
         let mut other_vertices = Vec::new();
 
         for y in 0..CHUNK_SECTION_HEIGHT {
@@ -105,7 +105,7 @@ impl BakedChunkPortionsContainer {
                         ChunkVertex {
                             position: [
                                 v.position[0] + x as f32 + chunk.pos.0 as f32,
-                                v.position[1] + y as f32,
+                                v.position[1] + absolute_y as f32,
                                 v.position[2] + z as f32 + chunk.pos.1 as f32
                             ],
                             tex_coords: v.tex_coords,
@@ -116,6 +116,8 @@ impl BakedChunkPortionsContainer {
                             normal: v.normal
                         }
                     };
+
+                    // println!("{:?}", block_state);
 
                     let baked_mesh = match get_block_mesh(&block_manager, &block_state) {
                         None => continue,
@@ -264,9 +266,8 @@ impl BakedChunkPortionsContainer {
                                         faces.up.as_ref(),
                                         faces.down.as_ref()
                                     ]
-                                }).filter_map(|face| {
-                                    face
                                 })
+                                    .filter_map(|face| face)
                                     .flatten()
                                     .map(mapper)
                             );
@@ -317,6 +318,8 @@ impl BakedChunkPortionsContainer {
             contents: bytemuck::cast_slice(&other_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
+
+        // println!("north verts: {}", north_vertices.len());
 
         Self {
             top: BakedChunkPortion { buffer: top_buffer, vertices: up_vertices },

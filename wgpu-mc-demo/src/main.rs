@@ -6,7 +6,7 @@ use wgpu_mc::mc::datapack::{TagOrResource, NamespacedResource, BlockModel};
 use wgpu_mc::mc::block::{BlockDirection, BlockState, Block};
 use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState};
+use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, DeviceEvent};
 use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize};
 use futures::executor::block_on;
 use winit::window::Window;
@@ -20,6 +20,7 @@ use wgpu_mc::render::pipeline::default::WorldPipeline;
 use arc_swap::ArcSwap;
 use futures::StreamExt;
 use std::collections::HashMap;
+use wgpu_mc::mc::block::model::BlockstateVariantMesh;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -135,11 +136,24 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     let block_manager = state.mc.block_manager.read();
 
-    let block_id = NamespacedResource::try_from("minecraft:block/cobblestone").unwrap();
+    let block_id = NamespacedResource::try_from("anvil.json").unwrap();
+    let key = block_manager.get_packed_blockstate_key(&block_id, "facing=east");
+    // let anvil_model: &BlockModel = block_manager.models.get(&NamespacedResource::try_from("block/cobblestone").unwrap()).unwrap();
+    let mesh: &BlockstateVariantMesh = block_manager.baked_block_variants.get(
+        &NamespacedResource::try_from("cobblestone.json").unwrap()
+    ).unwrap();
 
-    let blocks = (0..CHUNK_VOLUME).map(|_| {
+    let model = block_manager.models.get(
+        &NamespacedResource::try_from("block/cobblestone")
+            .unwrap()
+    ).unwrap();
+
+    println!("Mesh {:?}\n\nModel {:?}", mesh, model);
+
+
+    let blocks: Box<[BlockState; CHUNK_VOLUME]> = (0..CHUNK_VOLUME).map(|block| {
         BlockState {
-            packed_key: block_manager.get_packed_blockstate_key(&block_id, ""),
+            packed_key: if block == 0 { key } else { None },
         }
     }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
@@ -157,7 +171,13 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     state.mc.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
 
+    let mut frame_start = Instant::now();
+    let mut frame_time = 1.0;
+
+    let mut forward = 0.0;
+
     event_loop.run(move |event, _, control_flow| {
+
         *control_flow = ControlFlow::Poll;
         match event {
             Event::MainEventsCleared => window.request_redraw(),
@@ -176,83 +196,42 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                             } => {
                                 //Update a block and re-generate the chunk mesh for testing
 
-                                //removed atm for testing
+                                //removed atm
                             },
-
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Down),
-                                ..
-                            } => {
-                                let mut camera = **state.mc.camera.load();
-                                camera.pitch += 0.01;
-                                state.mc.camera.store(Arc::new(camera));
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Up),
-                                ..
-                            } => {
-                                let mut camera = **state.mc.camera.load();
-                                camera.pitch -= 0.01;
-                                state.mc.camera.store(Arc::new(camera));
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Left),
-                                ..
-                            } => {
-                                let mut camera = **state.mc.camera.load();
-                                camera.yaw -= 0.01;
-                                state.mc.camera.store(Arc::new(camera));
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Right),
-                                ..
-                            } => {
-                                let mut camera = **state.mc.camera.load();
-                                camera.yaw += 0.01;
-                                state.mc.camera.store(Arc::new(camera));
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Q),
-                                ..
-                            } => {
-                                let mut camera = **state.mc.camera.load();
-                                camera.position.y -= 0.01;
-                                state.mc.camera.store(Arc::new(camera));
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::E),
-                                ..
-                            } => {
-                                let mut camera = **state.mc.camera.load();
-                                camera.position.y += 0.01;
-                                state.mc.camera.store(Arc::new(camera));
-                            },
-
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::W),
-                                ..
-                            } => {
-                                let mut camera = **state.mc.camera.load();
-
-                                let direction: cgmath::Vector3<f32> = (camera.yaw.cos(), camera.pitch.sin(), camera.yaw.sin()).into();
-                                camera.position += direction.normalize();
-
-                                state.mc.camera.store(Arc::new(camera));
-                            },
-
                             KeyboardInput {
                                 state: ElementState::Pressed,
                                 virtual_keycode: Some(VirtualKeyCode::Escape),
                                 ..
                             } => {
                                 *control_flow = ControlFlow::Exit;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::W),
+                                ..
+                            } => {
+                                forward = 1.0;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Released,
+                                virtual_keycode: Some(VirtualKeyCode::W),
+                                ..
+                            } => {
+                                forward = 0.0;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::S),
+                                ..
+                            } => {
+                                forward = -1.0;
+                            },
+                            KeyboardInput {
+                                state: ElementState::Released,
+                                virtual_keycode: Some(VirtualKeyCode::S),
+                                ..
+                            } => {
+                                forward = 0.0;
                             }
                             _ => {}
                         },
@@ -267,7 +246,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                                 width: new_inner_size.width,
                                 height: new_inner_size.height
                             });
-                        }
+                        },
                         _ => {}
                     }
                 }
@@ -275,16 +254,40 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
             Event::RedrawRequested(_) => {
                 &state.update();
 
-                let start = Instant::now(); //+1 so we don't divide by zero
+                frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
+
+                let mut camera = **state.mc.camera.load();
+
+                let direction = camera.get_direction();
+
+                println!("{}", frame_time);
+
+                camera.position += direction * 200.0 * frame_time * forward;
+
+                state.mc.camera.store(Arc::new(camera));
 
                 &state.render(&[
                     &WorldPipeline {}
                 ]);
 
-                let delta = Instant::now().duration_since(start).as_micros();
-
-                // println!("Frametime {}μs, FPS {}", delta, 1000000/delta);
-            }
+                frame_start = Instant::now();
+            },
+            Event::DeviceEvent {
+                ref event,
+                ..
+            } => {
+                match event {
+                    // DeviceEvent::Added => {}
+                    // DeviceEvent::Removed => {}
+                    DeviceEvent::MouseMotion { delta } => {
+                        let mut camera = **state.mc.camera.load();
+                        camera.yaw += (delta.0 / 100.0) as f32;
+                        camera.pitch -= (delta.1 / 100.0) as f32;
+                        state.mc.camera.store(Arc::new(camera));
+                    },
+                    _ => {},
+                }
+            },
             _ => {}
         }
     });
