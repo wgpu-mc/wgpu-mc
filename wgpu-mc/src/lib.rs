@@ -9,7 +9,7 @@ pub mod texture;
 pub mod render;
 mod util;
 
-use crate::camera::{Camera, Uniforms};
+use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::chunk::Chunk;
 use crate::mc::MinecraftState;
 
@@ -232,7 +232,7 @@ impl WmRenderer {
         let surface_config = self.surface_config.load();
         camera.aspect = surface_config.height as f32 / surface_config.width as f32;
 
-        let uniforms = Uniforms {
+        let uniforms = UniformMatrixHelper {
             view_proj: camera.build_view_projection_matrix().into()
         };
 

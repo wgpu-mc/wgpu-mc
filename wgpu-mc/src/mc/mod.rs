@@ -13,7 +13,7 @@ use image::imageops::overlay;
 use parking_lot::RwLock;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor, Extent3d};
 
-use crate::camera::{Camera, Uniforms};
+use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::block::{Block, PackedBlockstateKey, BlockstateVariantKey};
 use crate::mc::chunk::ChunkManager;
 use crate::mc::datapack::{BlockModel, TagOrResource, NamespacedResource};
@@ -104,7 +104,7 @@ impl MinecraftState {
     pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
-            size: size_of::<Uniforms>() as wgpu::BufferAddress,
+            size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
         });

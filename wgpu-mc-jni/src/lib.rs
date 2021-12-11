@@ -7,6 +7,7 @@
 /// managable. Feel free to make a pull request.
 
 mod mc_interface;
+mod pipeline;
 
 use jni::{JNIEnv, JavaVM};
 use jni::objects::{JClass, JString, JValue, JObject, ReleaseMode};
@@ -40,6 +41,10 @@ use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::mc::block::{BlockState, BlockDirection};
 use wgpu_mc::render::chunk::BakedChunk;
 use arc_swap::ArcSwap;
+use crate::pipeline::{GuiPipeline, GuiQuad};
+use dashmap::DashMap;
+use wgpu_mc::model::Material;
+use wgpu_mc::texture::WgpuTexture;
 
 #[derive(Debug)]
 enum RenderMessage {
@@ -60,6 +65,8 @@ static mut CHANNEL_TX: MaybeUninit<Mutex<mpsc::Sender<RenderMessage>>> = MaybeUn
 static mut CHANNEL_RX: MaybeUninit<Mutex<mpsc::Receiver<RenderMessage>>> = MaybeUninit::uninit();
 
 static mut MC_STATE: MaybeUninit<RwLock<MinecraftRenderState>> = MaybeUninit::uninit();
+
+static mut GUI_PIPELINE: MaybeUninit<GuiPipeline> = MaybeUninit::uninit();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -108,7 +115,7 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
                 JValue::Object(ident_path.into())
             ]) {
             Ok(jvalue) => jvalue.l().unwrap(),
-            Err(e) => panic!("{:?}", e)
+            Err(e) => panic!("{:?}\nID {}", e, id)
         };
 
         let elements = env.get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack)
@@ -126,7 +133,7 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunk(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunk(
     env: JNIEnv,
     class: JClass,
     world_chunk: JObject) {
@@ -136,7 +143,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunk(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_getBackend(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     env: JNIEnv,
     class: JClass) -> jstring {
 
@@ -150,7 +157,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_getBackend(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerSprite(
     env: JNIEnv,
     class: JClass,
     sprite_type: JString,
@@ -187,7 +194,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerSprite(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerEntry(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
     env: JNIEnv,
     class: JClass,
     entry_type: jint,
@@ -208,16 +215,21 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_registerEntry(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
     env: JNIEnv,
     class: JClass,
     string: JString
 ) {
+    println!("Cam onnn ingerland");
+
     use winit::event_loop::EventLoop;
 
+    println!("227");
     let title: String = env.get_string(string).unwrap().into();
 
+    println!("230");
     let event_loop = EventLoop::new();
+    println!("232");
     let window = winit::window::WindowBuilder::new()
         .with_title(&format!("{} + wgpu-mc", title))
         .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
@@ -227,10 +239,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
         .build(&event_loop)
         .unwrap();
 
+    println!("242");
     let wrapper = &WinitWindowWrapper {
         window: &window
     };
 
+    println!("Cam on ingerland?");
     let mut state = block_on(WmRenderer::new(
         &wrapper, Arc::new(MinecraftResourceManagerAdapter {
             jvm: env.get_java_vm().unwrap()
@@ -239,7 +253,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
 
     let (tx, rx) = mpsc::channel::<RenderMessage>();
 
+    println!("Initializing wgpu-mc bindings...");
+
     unsafe {
+        GUI_PIPELINE = MaybeUninit::new(GuiPipeline {
+            quad_queue: ArcSwap::new(Arc::new(Vec::new())),
+            textures: Arc::new(DashMap::new())
+        });
         CHANNEL_TX = MaybeUninit::new(Mutex::new(tx));
         CHANNEL_RX = MaybeUninit::new(Mutex::new(rx));
         RENDERER = MaybeUninit::new(state);
@@ -252,7 +272,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_initialize(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
     env: JNIEnv,
     class: JClass) {
     // let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
@@ -316,10 +336,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
             }
             Event::RedrawRequested(_) => {
                 state.update();
-                let mut pipelines: Vec<&dyn WmPipeline> = Vec::with_capacity(1);
+                let mut pipelines: Vec<&dyn WmPipeline> = Vec::with_capacity(2);
                 if mc_state.render_world {
                     pipelines.push(&WorldPipeline {});
                 }
+                pipelines.push(
+                    unsafe {
+                        GUI_PIPELINE.assume_init_ref()
+                    }
+                );
                 state.render(&pipelines[..]);
 
                 // let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
@@ -335,7 +360,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_doEventLoop(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_digestInputStream(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
     env: JNIEnv,
     class: JClass,
     input_stream: JObject) -> jbyteArray {
@@ -380,7 +405,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_digestInputStream(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     env: JNIEnv,
     class: JClass,
     jtitle: JString) {
@@ -393,41 +418,39 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_updateWindowTitle(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_bakeBlockModels(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     env: JNIEnv,
     class: JClass) -> jobject {
 
     let renderer = unsafe { RENDERER.assume_init_mut() };
 
-    renderer.mc.bake_blocks();
-    println!("Generated blocks");
+    renderer.mc.bake_blocks(renderer);
+    println!("Baked blocks");
 
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
         .unwrap();
 
-    renderer.mc.block_manager.read().block_models.iter().for_each(|(id, entry)| {
-        println!("block id {}", id);
-
-        let identifier_string = env.new_string(id.to_string())
-            .unwrap();
-        let index = entry.index.unwrap();
-        let _integer = env.new_object("java/lang/Integer", "(I)V", &[
-            JValue::Int(index as i32)
-        ]).unwrap();
-
-        env.call_method(block_hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", &[
-            JValue::Object(identifier_string.into()),
-            JValue::Object(_integer.into())
-        ]).unwrap();
-    });
-
-    renderer.mc.generate_block_texture_atlas(&renderer.wgpu_state.device, &renderer.wgpu_state.queue, &renderer.pipelines.load().layouts.texture_bind_group_layout);
+    // renderer.mc.block_manager.read().block_models.iter().for_each(|(id, entry)| {
+    //     println!("block id {}", id);
+    //
+    //     let identifier_string = env.new_string(id.to_string())
+    //         .unwrap();
+    //     let index = entry.index.unwrap();
+    //     let _integer = env.new_object("java/lang/Integer", "(I)V", &[
+    //         JValue::Int(index as i32)
+    //     ]).unwrap();
+    //
+    //     env.call_method(block_hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", &[
+    //         JValue::Object(identifier_string.into()),
+    //         JValue::Object(_integer.into())
+    //     ]).unwrap();
+    // });
 
     block_hashmap.into_inner()
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_setWorldRenderState(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
     env: JNIEnv,
     class: JClass,
     boolean: jboolean) {
@@ -437,33 +460,99 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_setWorldRenderState(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_Wgpu_uploadChunkSimple(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunkSimple(
     env: JNIEnv,
     class: JClass,
     blocks: jintArray,
     x: jint,
     z: jint) {
+    // let renderer = unsafe { RENDERER.assume_init_ref() };
+    //
+    // let elements = env.get_int_array_elements(blocks, ReleaseMode::NoCopyBack)
+    //     .unwrap();
+    //
+    // let elements_ptr = elements.as_ptr();
+    // let blocks: Box<[BlockState; CHUNK_VOLUME]> = (0..elements.size().unwrap()).map(|index| {
+    //     let element_ptr = unsafe { elements_ptr.offset(index as isize) };
+    //     let block_index = unsafe { *element_ptr } as usize;
+    //
+    //     BlockState {
+    //         block: Some(block_index),
+    //         direction: BlockDirection::North,
+    //         damage: 0,
+    //         transparency: false
+    //     }
+    // }).collect::<Box<[BlockState]>>().try_into().unwrap();
+    //
+    // let mut chunk = Chunk::new((x, z), blocks);
+    // let baked = BakedChunk::bake(renderer, &chunk);
+    //
+    // chunk.baked = Some(baked);
+    // renderer.mc.chunks.loaded_chunks.insert((x, z), ArcSwap::new(Arc::new(chunk)));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_queueDrawQuad(
+    env: JNIEnv,
+    class: JClass,
+    texture_id: jint,
+    x: jint,
+    y: jint,
+    u: jint,
+    v: jint,
+    width: jint,
+    height: jint) {
+
+    let gui_pipeline = unsafe { GUI_PIPELINE.assume_init_ref() };
+    let mut queue = (&*gui_pipeline.quad_queue.load_full()).clone();
+
+    queue.push(GuiQuad {
+        from: (x as u16, y as u16),
+        dimensions: (width as u16, height as u16),
+        texture: texture_id as u32
+    });
+
+    gui_pipeline.quad_queue.store(Arc::new(queue));
+
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearDrawQueue(
+    env: JNIEnv,
+    class: JClass) {
+
+    let gui_pipeline = unsafe { GUI_PIPELINE.assume_init_ref() };
+    gui_pipeline.quad_queue.store(Arc::new(Vec::new()));
+
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getTextureId(
+    env: JNIEnv,
+    class: JClass,
+    resource_jstring: JString
+    ) -> jint {
+
     let renderer = unsafe { RENDERER.assume_init_ref() };
+    let pipeline = unsafe { GUI_PIPELINE.assume_init_ref() };
+    let resource_string: String = env.get_string(resource_jstring).unwrap().into();
+    let namespaced = NamespacedResource::try_from(&resource_string[..]).unwrap();
+    let bytes = renderer.mc.resource_provider.get_resource(&namespaced);
 
-    let elements = env.get_int_array_elements(blocks, ReleaseMode::NoCopyBack)
-        .unwrap();
+    let texture = WgpuTexture::from_bytes(
+        &renderer.wgpu_state.device,
+        &renderer.wgpu_state.queue,
+        &bytes, "").unwrap();
+    let material = Material::from_texture(
+        &renderer.wgpu_state.device,
+        &renderer.wgpu_state.queue,
+        texture,
+        &renderer.pipelines.load().layouts.texture_bind_group_layout,
+        "".into()
+    );
 
-    let elements_ptr = elements.as_ptr();
-    let blocks: Box<[BlockState; CHUNK_VOLUME]> = (0..elements.size().unwrap()).map(|index| {
-        let element_ptr = unsafe { elements_ptr.offset(index as isize) };
-        let block_index = unsafe { *element_ptr } as usize;
+    let id = pipeline.textures.len() as u32;
+    pipeline.textures.insert(pipeline.textures.len() as u32, Arc::new(material));
 
-        BlockState {
-            block: Some(block_index),
-            direction: BlockDirection::North,
-            damage: 0,
-            transparency: false
-        }
-    }).collect::<Box<[BlockState]>>().try_into().unwrap();
-
-    let mut chunk = Chunk::new((x, z), blocks);
-    let baked = BakedChunk::bake(renderer, &chunk);
-
-    chunk.baked = Some(baked);
-    renderer.mc.chunks.loaded_chunks.insert((x, z), ArcSwap::new(Arc::new(chunk)));
+    id as i32
 }

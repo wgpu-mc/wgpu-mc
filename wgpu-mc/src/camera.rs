@@ -18,7 +18,7 @@ impl Camera {
     #[must_use]
     pub fn new(aspect: f32) -> Self {
         Self {
-            position: Point3::new(-20.0, 0.0, 0.0),
+            position: Point3::new(-2.0, 0.0, 0.0),
             yaw: 0.0,
             pitch: 0.0,
             up: Vector3::unit_y(),
@@ -52,6 +52,6 @@ impl Camera {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Uniforms {
+pub struct UniformMatrixHelper {
     pub view_proj: [[f32; 4]; 4],
 }

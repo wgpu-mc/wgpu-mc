@@ -2721,7 +2721,11 @@ name = "wgpu-mc-jni"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "bumpalo",
+ "bytemuck",
+ "cgmath",
  "crate-root",
+ "dashmap",
  "futures",
  "glfw",
  "jni",

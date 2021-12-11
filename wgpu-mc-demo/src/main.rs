@@ -137,14 +137,14 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     let block_manager = state.mc.block_manager.read();
 
     let block_id = NamespacedResource::try_from("anvil.json").unwrap();
-    let key = block_manager.get_packed_blockstate_key(&block_id, "facing=east");
+    let key = block_manager.get_packed_blockstate_key(&block_id, "facing=north");
     // let anvil_model: &BlockModel = block_manager.models.get(&NamespacedResource::try_from("block/cobblestone").unwrap()).unwrap();
     let mesh: &BlockstateVariantMesh = block_manager.baked_block_variants.get(
-        &NamespacedResource::try_from("cobblestone.json").unwrap()
+        &NamespacedResource::try_from("anvil.json[facing=east]").unwrap()
     ).unwrap();
 
     let model = block_manager.models.get(
-        &NamespacedResource::try_from("block/cobblestone")
+        &NamespacedResource::try_from("block/anvil")
             .unwrap()
     ).unwrap();
 
@@ -259,9 +259,6 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                 let mut camera = **state.mc.camera.load();
 
                 let direction = camera.get_direction();
-
-                println!("{}", frame_time);
-
                 camera.position += direction * 200.0 * frame_time * forward;
 
                 state.mc.camera.store(Arc::new(camera));

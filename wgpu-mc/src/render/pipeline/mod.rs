@@ -175,6 +175,7 @@ impl RenderPipelinesManager {
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("GUI Pipeline Layout"),
                     bind_group_layouts: &[
+                        //The camera bind group layout is actually just a transform for a quad
                         &layouts.texture_bind_group_layout, &layouts.camera_bind_group_layout
                     ],
                     push_constant_ranges: &[]

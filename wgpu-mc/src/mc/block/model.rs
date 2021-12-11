@@ -49,18 +49,33 @@ impl BlockstateVariantMesh {
             )
         ).copied().unwrap();
 
+        if face.texture.to_string() == "minecraft:block/anvil" {
+            println!("{:?}", atlas_uv);
+        }
+
         let face_uv = &face.uv;
 
         const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
+        // let adjusted_uv = (
+        //     (
+        //         (atlas_uv.0.0 + face_uv.0.0) / ATLAS,
+        //         (atlas_uv.0.1 + face_uv.0.1) / ATLAS
+        //     ),
+        //     (
+        //         (atlas_uv.1.0 + face_uv.1.0) / ATLAS,
+        //         (atlas_uv.1.1 + face_uv.1.1) / ATLAS
+        //     )
+        // );
+
         let adjusted_uv = (
             (
-                (atlas_uv.0.0 + face_uv.0.0) / ATLAS,
-                (atlas_uv.0.1 + face_uv.0.1) / ATLAS
+                (atlas_uv.0.0) / ATLAS,
+                (atlas_uv.0.1) / ATLAS
             ),
             (
-                (atlas_uv.1.0 + face_uv.1.0) / ATLAS,
-                (atlas_uv.1.1 + face_uv.1.1) / ATLAS
+                (atlas_uv.1.0) / ATLAS,
+                (atlas_uv.1.1) / ATLAS
             )
         );
 
