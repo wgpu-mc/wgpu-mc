@@ -10,6 +10,7 @@ use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
 use std::convert::TryFrom;
 use indexmap::map::IndexMap;
+use serde_json::Value;
 
 pub mod model;
 pub mod blockstate;
@@ -24,7 +25,9 @@ impl Block {
     pub fn from_json(name: &str, json: &str) -> Option<Self> {
         let json_val: serde_json::Value = serde_json::from_str(json).ok()?;
         let states = json_val.as_object()?.get("variants")?.as_object()?.iter().map(|(key, val)| {
-            let obj = val.as_object()?;
+            let obj = val.as_object().or_else(|| {
+                val.as_array()?.first()?.as_object()
+            })?;
 
             Some((key.clone(), BlockstateVariantDefinitionModel {
                 id: NamespacedResource::try_from(key.as_str()).ok()?,

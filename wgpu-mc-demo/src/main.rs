@@ -139,8 +139,10 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     let block_id = NamespacedResource::try_from("anvil.json").unwrap();
     let key = block_manager.get_packed_blockstate_key(&block_id, "facing=north");
     // let anvil_model: &BlockModel = block_manager.models.get(&NamespacedResource::try_from("block/cobblestone").unwrap()).unwrap();
+
+    println!("{:?}", block_manager.baked_block_variants);
     let mesh: &BlockstateVariantMesh = block_manager.baked_block_variants.get(
-        &NamespacedResource::try_from("anvil.json[facing=east]").unwrap()
+        &NamespacedResource::try_from("anvil.json#facing=east").unwrap()
     ).unwrap();
 
     let model = block_manager.models.get(

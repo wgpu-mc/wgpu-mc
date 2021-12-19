@@ -21,9 +21,7 @@ bumpalo = "3.8.0"
 cgmath = "0.17"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 dashmap = "4.0.2"
-
-[dependencies.glfw]
-git = "https://github.com/bjz/glfw-rs.git"
+slab = "0.4.5"
 
 [lib]
 crate-type = ["cdylib"]

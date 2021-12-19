@@ -47,7 +47,7 @@ pub struct RenderPipelinesManager {
 pub struct Layouts {
     pub texture_bind_group_layout: BindGroupLayout,
     pub cubemap_bind_group_layout: BindGroupLayout,
-    pub camera_bind_group_layout: BindGroupLayout
+    pub matrix_bind_group_layout: BindGroupLayout
 }
 
 impl RenderPipelinesManager {
@@ -128,7 +128,7 @@ impl RenderPipelinesManager {
         Layouts {
             texture_bind_group_layout,
             cubemap_bind_group_layout,
-            camera_bind_group_layout
+            matrix_bind_group_layout: camera_bind_group_layout
         }
     }
 
@@ -138,7 +138,7 @@ impl RenderPipelinesManager {
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("Sky Pipeline Layout"),
                     bind_group_layouts: &[
-                        &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                        &layouts.cubemap_bind_group_layout, &layouts.matrix_bind_group_layout
                     ],
                     push_constant_ranges: &[]
                 }
@@ -148,7 +148,7 @@ impl RenderPipelinesManager {
                     label: Some("Terrain Pipeline Layout"),
                     bind_group_layouts: &[
                         // &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
-                        &layouts.texture_bind_group_layout, &layouts.camera_bind_group_layout
+                        &layouts.texture_bind_group_layout, &layouts.matrix_bind_group_layout
                     ],
                     push_constant_ranges: &[]
                 }
@@ -157,7 +157,7 @@ impl RenderPipelinesManager {
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("Grass Pipeline Layout"),
                     bind_group_layouts: &[
-                        &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                        &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.matrix_bind_group_layout
                     ],
                     push_constant_ranges: &[]
                 }
@@ -166,7 +166,7 @@ impl RenderPipelinesManager {
             &wgpu::PipelineLayoutDescriptor {
                     label: Some("Transparent Pipeline Layout"),
                     bind_group_layouts: &[
-                        &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                        &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.matrix_bind_group_layout
                     ],
                     push_constant_ranges: &[]
                 }
@@ -176,7 +176,7 @@ impl RenderPipelinesManager {
                     label: Some("GUI Pipeline Layout"),
                     bind_group_layouts: &[
                         //The camera bind group layout is actually just a transform for a quad
-                        &layouts.texture_bind_group_layout, &layouts.camera_bind_group_layout
+                        &layouts.texture_bind_group_layout, &layouts.matrix_bind_group_layout
                     ],
                     push_constant_ranges: &[]
                 }

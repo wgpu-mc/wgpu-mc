@@ -10,6 +10,7 @@ pub type UV = ( (f32, f32), (f32, f32) );
 
 ///Representation of a texture that has been uploaded to wgpu along with the corresponding view
 /// and sampler
+#[derive(Debug)]
 pub struct WgpuTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,

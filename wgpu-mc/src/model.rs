@@ -75,6 +75,7 @@ impl MeshVertex {
 }
 
 ///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
+#[derive(Debug)]
 pub struct Material {
     pub name: Arc<String>,
     pub diffuse_texture: texture::WgpuTexture,
@@ -112,12 +113,4 @@ impl Material {
             bind_group,
         }
     }
-}
-
-pub struct Mesh {
-    pub name: String,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-    pub num_elements: u32,
-    pub material: usize,
 }

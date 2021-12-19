@@ -111,7 +111,7 @@ impl MinecraftState {
 
         let uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: None,
-            layout: &pipelines.layouts.camera_bind_group_layout,
+            layout: &pipelines.layouts.matrix_bind_group_layout,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -244,11 +244,8 @@ impl MinecraftState {
                 let block_model = get_model_or_deserialize(
                     &mut block_manager.models,
                     &state.model,
-                    &*self.resource_provider)
-                    .expect(&format!("{:?}", state.model));
-                // let &block_model = model_map.get(
-                //     &state.model
-                // ).unwrap();
+                    &*self.resource_provider
+                ).expect(&format!("{:?}", state.model));
 
                 let mesh = BlockstateVariantMesh::bake_block_model(
                     block_model,
@@ -257,11 +254,7 @@ impl MinecraftState {
                     &state.rotations
                 ).expect(&format!("{}", name));
 
-                let variant_resource = if key == "" {
-                    name.clone()
-                } else {
-                    name.append(&format!("[{}]", &key))
-                };
+                let variant_resource = name.append(&format!("#{}", &key));
 
                 let u32_variant_key: u32 = (
                     (block_manager.blocks.get_index_of(name).unwrap() as u32 & 0x3FFFFF) << 10) |
