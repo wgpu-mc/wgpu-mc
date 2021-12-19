@@ -1,7 +1,7 @@
 package dev.birb.wgpu.mixin.core;
 
-import dev.birb.wgpu.game.MainGameThread;
-import dev.birb.wgpu.rust.Wgpu;
+import dev.birb.wgpu.render.Wgpu;
+import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.RunArgs;
 import net.minecraft.client.gui.screen.Screen;
@@ -22,34 +22,44 @@ public abstract class MinecraftClientCoreMixin {
     @Shadow @Nullable
     public Screen currentScreen;
 
-    @Inject(method = "openScreen", at = @At("HEAD"), cancellable = true)
-    public void openScreen(Screen screen, CallbackInfo ci) { //TODO: Temporary!
-        this.currentScreen = screen;
-        ci.cancel();
-    }
+//    @Inject(method = "openScreen", at = @At("HEAD"), cancellable = true)
+//    public void openScreen(Screen screen, CallbackInfo ci) {
+//        screen.init((MinecraftClient) (Object) this, 1280, 720);
+//        this.currentScreen = screen;
+//        ci.cancel();
+//    }
 
     //
     @Inject(method = "updateWindowTitle", at = @At("HEAD"), cancellable = true)
     public void modifyUpdateWindowTitle(CallbackInfo ci) {
-        Wgpu.updateWindowTitle(this.getWindowTitle());
+        WgpuNative.updateWindowTitle(this.getWindowTitle());
         ci.cancel();
     }
 
     @Inject(method = "getWindowTitle", at = @At(value = "RETURN"), cancellable = true)
     public void getWindowTitleAddWgpu(CallbackInfoReturnable<String> cir) {
-        cir.setReturnValue(cir.getReturnValue() + " + Wgpu");
+        String title = cir.getReturnValue();
+        if(!Wgpu.INITIALIZED) {
+            title += " + Wgpu";
+        } else {
+            title += " + " + WgpuNative.getBackend();
+        }
+        cir.setReturnValue(title);
     }
 
     @Inject(method = "run", at = @At("HEAD"))
     public void injectRun(CallbackInfo ci) {
     }
 
+    @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/thread/ReentrantThreadExecutor;<init>(Ljava/lang/String;)V", shift = At.Shift.AFTER))
+    private void injectPreInit(RunArgs args, CallbackInfo ci) {
+        System.out.println("Initializing wgpu-mc");
+        Wgpu.preInit("Minecraft");
+    }
+
     @Inject(method = "<init>", at = @At("TAIL"))
     public void injectWindowHook(RunArgs args, CallbackInfo ci) {
-        MainGameThread.createNewThread((MinecraftClient) (Object) this);
-
-        //Initializing the window hijacks this thread to run the event loop. All communication is now done through channels.
-        Wgpu.doEventLoop();
+        Wgpu.initRenderer((MinecraftClient) (Object) this);
     }
 
 }

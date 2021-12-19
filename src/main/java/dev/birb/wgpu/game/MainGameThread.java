@@ -10,7 +10,7 @@ public class MainGameThread extends Thread {
         Thread gameThread = new Thread() {
             @Override
             public void run() {
-                client.startIntegratedServer("world");
+//                client.startIntegratedServer("New World (1)");
                 client.run();
             }
         };

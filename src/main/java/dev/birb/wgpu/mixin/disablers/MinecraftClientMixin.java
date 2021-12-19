@@ -1,48 +1,23 @@
 package dev.birb.wgpu.mixin.disablers;
 
-import dev.birb.wgpu.game.MainGameThread;
-import dev.birb.wgpu.mixin.accessors.ThreadExecutorAccessor;
-import dev.birb.wgpu.rust.Wgpu;
 import net.minecraft.client.Keyboard;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.Mouse;
-import net.minecraft.client.RunArgs;
-import net.minecraft.client.gui.screen.DeathScreen;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.SleepingChatScreen;
 import net.minecraft.client.render.BufferBuilderStorage;
 import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.client.toast.TutorialToast;
-import net.minecraft.client.tutorial.TutorialManager;
 import net.minecraft.client.util.Window;
 import net.minecraft.client.util.WindowProvider;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.ResourceReloader;
-import net.minecraft.text.Text;
-import net.minecraft.text.TranslatableText;
-import net.minecraft.util.Util;
-import net.minecraft.util.crash.CrashException;
-import net.minecraft.util.crash.CrashReport;
-import net.minecraft.util.crash.CrashReportSection;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.world.World;
-import org.jetbrains.annotations.Nullable;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import sun.misc.Unsafe;
 
 import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.util.Queue;
 
 @Mixin(MinecraftClient.class)
 public abstract class MinecraftClientMixin {
@@ -139,14 +114,9 @@ public abstract class MinecraftClientMixin {
         return (WindowProvider) UNSAFE.allocateInstance(WindowProvider.class);
     }
 
-    @Redirect(method = "<init>", at = @At(value = "NEW", target = "net/minecraft/client/render/GameRenderer"))
-    private GameRenderer redirectGameRenderer(MinecraftClient client, ResourceManager manager, BufferBuilderStorage buffers) throws InstantiationException {
-        return (GameRenderer) UNSAFE.allocateInstance(GameRenderer.class);
-    }
-
-    @Inject(method = "setWorld", cancellable = true, at = @At("HEAD"))
-    public void cancelSetWorld(ClientWorld world, CallbackInfo ci) {
-        ci.cancel();
-    }
+//    @Redirect(method = "<init>", at = @At(value = "NEW", target = "net/minecraft/client/render/GameRenderer"))
+//    private GameRenderer redirectGameRenderer(MinecraftClient client, ResourceManager manager, BufferBuilderStorage buffers) throws InstantiationException {
+//        return (GameRenderer) UNSAFE.allocateInstance(GameRenderer.class);
+//    }
 
 }

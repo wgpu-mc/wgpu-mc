@@ -1,20 +1,21 @@
 {
   "schemaVersion": 1,
-  "id": "wgpu",
+  "id": "wgpu_mc",
   "version": "0.1",
 
   "name": "WebGPU",
   "description": "Replacement of the default Minecraft renderer for one built in native Rust code + WGPU",
   "authors": [
-    "Birb (Birb#0407)"
+    "Birb"
   ],
+  "accessWidener": "wgpu_mc.accesswidener",
   "contact": {
-    "homepage": "https://birb.cloud/",
+    "homepage": "https://birb.dev/",
     "sources": "https://github.com/birbe/wgpu-mc-fabric"
   },
 
   "license": "GPL3",
-  "icon": "assets/wgpu/icon.png",
+  "icon": "assets/wgpu_mc/icon.png",
 
   "environment": "*",
   "entrypoints": {

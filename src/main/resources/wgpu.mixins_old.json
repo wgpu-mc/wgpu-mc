@@ -1,0 +1,44 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.birb.wgpu.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "disablers.MinecraftClientMixin",
+    "accessors.ThreadExecutorAccessor",
+    "disablers.AbstractTextureMixin",
+    "disablers.FontManagerMixin",
+    "disablers.FramebufferMixin",
+    "disablers.GlfwDisablerMixin",
+    "disablers.MonitorTrackerMixin",
+    "disablers.NativeImageBackedTextureMixin",
+    "disablers.NativeImageMixin",
+    "core.RegistryMixin",
+    "disablers.RenderSystemMixin",
+    "render.SpriteAtlasTextureMixin",
+    "resource.TextureManagerMixin",
+    "disablers.TextureUtilMixin",
+    "disablers.WindowProviderMixin",
+    "disablers.WorldRendererMixin",
+    "disablers.ClientWorldMixin",
+    "disablers.GameRendererMixin",
+
+    "render.RenderSystemMixin",
+    "render.MinecraftClientRenderMixin",
+    "render.gui.AbstractButtonWidgetMixin",
+
+    "core.MinecraftClientCoreMixin",
+    "core.GlStateManagerMixin",
+
+    "world.ClientChunkMapMixin",
+
+    "accessors.DefaultClientResourcePackAccessor",
+    "accessors.ReloadableResourceManagerImplAccessor",
+    "accessors.NamespaceResourceManagerAccessor",
+    "accessors.ScreenAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": []
+}
