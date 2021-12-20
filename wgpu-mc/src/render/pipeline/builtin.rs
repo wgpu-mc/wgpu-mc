@@ -10,6 +10,7 @@ use crate::mc::BlockManager;
 use crate::mc::chunk::{ChunkManager, Chunk};
 use crate::mc::entity::Entity;
 use crate::camera::Camera;
+use crate::util::WmArena;
 
 pub struct SkyPipeline {}
 
@@ -19,19 +20,19 @@ pub struct WorldPipeline {}
 
 impl WmPipeline for WorldPipeline {
 
-    fn render<'a, 'b, 'c, 'd: 'c, 'e: 'd>(&'a self, renderer: &'b WmRenderer, mut render_pass: &'c mut RenderPass<'d>, bumpalowo: &'e bumpalo::Bump) {
+    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, renderer: &'b WmRenderer, mut render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
         let pipepines_arc = renderer.pipelines.load();
-        let pipelines = bumpalowo.alloc(pipepines_arc);
+        let pipelines = arena.alloc(pipepines_arc);
 
         render_pass.set_pipeline(&pipelines.terrain_pipeline);
 
-        let atlases = bumpalowo.alloc(renderer.mc.texture_manager.atlases.load());
+        let atlases = arena.alloc(renderer.mc.texture_manager.atlases.load());
 
         render_pass.set_bind_group(0, &atlases.block.material.as_ref().unwrap().bind_group, &[]);
-        render_pass.set_bind_group(1, bumpalowo.alloc(renderer.mc.uniform_bind_group.load()), &[]);
+        render_pass.set_bind_group(1, arena.alloc(renderer.mc.uniform_bind_group.load()), &[]);
 
         renderer.mc.chunks.loaded_chunks.iter().for_each(|chunk_swap| {
-            let chunk = bumpalowo.alloc(chunk_swap.load());
+            let chunk = arena.alloc(chunk_swap.load());
 
             let baked_chunk = match &chunk.baked {
                 None => return,

@@ -10,17 +10,18 @@ use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementSta
 use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize};
 use futures::executor::block_on;
 use winit::window::Window;
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use cgmath::InnerSpace;
 use std::sync::Arc;
 use wgpu_mc::mc::resource::{ResourceProvider};
 use std::convert::{TryFrom, TryInto};
 use wgpu_mc::render::chunk::BakedChunk;
-use wgpu_mc::render::pipeline::default::WorldPipeline;
+use wgpu_mc::render::pipeline::builtin::WorldPipeline;
 use arc_swap::ArcSwap;
 use futures::StreamExt;
 use std::collections::HashMap;
 use wgpu_mc::mc::block::model::BlockstateVariantMesh;
+use wgpu_mc::util::WmArena;
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -54,6 +55,16 @@ unsafe impl HasRawWindowHandle for WinitWindowWrapper {
         self.window.raw_window_handle()
     }
 
+}
+
+struct Test {
+    thing: String
+}
+
+impl Drop for Test {
+    fn drop(&mut self) {
+        println!("dropping test {:?}", self.thing);
+    }
 }
 
 fn main() {
@@ -108,22 +119,21 @@ fn main() {
         });
     }
 
-    let bm = wm.mc.block_manager.read();
+    println!("Testing arena");
 
-    // bm.block_models.iter().for_each(|block| {
-    //     block.1.model.textures.iter().for_each(|(_, texture_identifier)| {
-    //         if matches!(texture_identifier, TagOrResource::Resource(_)) {
-    //             wm.mc.texture_manager.insert_texture(texture_identifier.clone(), wm.mc.resource_provider.get_resource(&texture_identifier.append(".png")))
-    //         }
-    //     });
-    // });
+    {
+        let mut arena = WmArena::new(1024);
+        for _ in 0..10000 {
+            arena.alloc(
+                String::from("Testing arena")
+            );
+        }
+    }
 
-    drop(bm);
+    println!("Arena ok");
 
     println!("Generating blocks");
     wm.mc.bake_blocks(&wm);
-
-    // wm.mc.bake_blockstate_meshes(&wm.wgpu_state.device);
 
     let window = wrapper.window;
 
@@ -140,7 +150,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     let key = block_manager.get_packed_blockstate_key(&block_id, "facing=north");
     // let anvil_model: &BlockModel = block_manager.models.get(&NamespacedResource::try_from("block/cobblestone").unwrap()).unwrap();
 
-    println!("{:?}", block_manager.baked_block_variants);
+    // println!("{:?}", block_manager.baked_block_variants);
     let mesh: &BlockstateVariantMesh = block_manager.baked_block_variants.get(
         &NamespacedResource::try_from("anvil.json#facing=east").unwrap()
     ).unwrap();
@@ -152,7 +162,6 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     println!("Mesh {:?}\n\nModel {:?}", mesh, model);
 
-
     let blocks: Box<[BlockState; CHUNK_VOLUME]> = (0..CHUNK_VOLUME).map(|block| {
         BlockState {
             packed_key: if block == 0 { key } else { None },
@@ -160,8 +169,6 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
     drop(block_manager);
-
-    // println!("")
 
     let mut chunk = Chunk::new((0, 0), blocks);
 
@@ -187,70 +194,68 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                 ref event,
                 window_id,
             } if window_id == window.id() => {
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::KeyboardInput { input, .. } => match input {
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Space),
-                                ..
-                            } => {
-                                //Update a block and re-generate the chunk mesh for testing
+                match event {
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::KeyboardInput { input, .. } => match input {
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Space),
+                            ..
+                        } => {
+                            //Update a block and re-generate the chunk mesh for testing
 
-                                //removed atm
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            } => {
-                                *control_flow = ControlFlow::Exit;
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::W),
-                                ..
-                            } => {
-                                forward = 1.0;
-                            },
-                            KeyboardInput {
-                                state: ElementState::Released,
-                                virtual_keycode: Some(VirtualKeyCode::W),
-                                ..
-                            } => {
-                                forward = 0.0;
-                            },
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::S),
-                                ..
-                            } => {
-                                forward = -1.0;
-                            },
-                            KeyboardInput {
-                                state: ElementState::Released,
-                                virtual_keycode: Some(VirtualKeyCode::S),
-                                ..
-                            } => {
-                                forward = 0.0;
-                            }
-                            _ => {}
+                            //removed atm
                         },
-                        WindowEvent::Resized(physical_size) => {
-                            &state.resize(WindowSize {
-                                width: physical_size.width,
-                                height: physical_size.height
-                            });
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        } => {
+                            *control_flow = ControlFlow::Exit;
+                        },
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::W),
+                            ..
+                        } => {
+                            forward = 1.0;
+                        },
+                        KeyboardInput {
+                            state: ElementState::Released,
+                            virtual_keycode: Some(VirtualKeyCode::W),
+                            ..
+                        } => {
+                            forward = 0.0;
+                        },
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::S),
+                            ..
+                        } => {
+                            forward = -1.0;
+                        },
+                        KeyboardInput {
+                            state: ElementState::Released,
+                            virtual_keycode: Some(VirtualKeyCode::S),
+                            ..
+                        } => {
+                            forward = 0.0;
                         }
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            &state.resize(WindowSize {
-                                width: new_inner_size.width,
-                                height: new_inner_size.height
-                            });
-                        },
                         _ => {}
+                    },
+                    WindowEvent::Resized(physical_size) => {
+                        &state.resize(WindowSize {
+                            width: physical_size.width,
+                            height: physical_size.height
+                        });
                     }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        &state.resize(WindowSize {
+                            width: new_inner_size.width,
+                            height: new_inner_size.height
+                        });
+                    },
+                    _ => {}
                 }
             }
             Event::RedrawRequested(_) => {

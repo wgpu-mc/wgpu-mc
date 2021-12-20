@@ -35,7 +35,7 @@ use wgpu_mc::mc::datapack::{NamespacedResource, TagOrResource};
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::Material;
 use wgpu_mc::render::chunk::BakedChunk;
-use wgpu_mc::render::pipeline::default::WorldPipeline;
+use wgpu_mc::render::pipeline::builtin::WorldPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::texture::WgpuTexture;
 
@@ -273,9 +273,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
             matrix_stack: RefCell::new([Matrix4::identity(); 32]),
             matrix_offset: RefCell::new(0),
             commands: ArcSwap::new(Arc::new(Vec::new())),
-            active_slot: RefCell::new(0),
+            active_texture_slot: RefCell::new(0),
             slots: RefCell::new(HashMap::new()),
-            vertex_attributes: RefCell::new(vec![])
+            vertex_attributes: RefCell::new(HashMap::new()),
+            client_states: RefCell::new(Vec::new()),
+            shaders: RefCell::new(None)
         });
         CHANNEL_TX = MaybeUninit::new(Mutex::new(tx));
         CHANNEL_RX = MaybeUninit::new(Mutex::new(rx));
@@ -332,37 +334,26 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
                 ref event,
                 window_id,
             } if window_id == window.id() => {
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(physical_size) => {
-                            &state.resize(WindowSize {
-                                width: physical_size.width,
-                                height: physical_size.height
-                            });
-                        }
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            &state.resize(WindowSize {
-                                width: new_inner_size.width,
-                                height: new_inner_size.height
-                            });
-                        }
-                        _ => {}
+                match event {
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(physical_size) => {
+                        &state.resize(WindowSize {
+                            width: physical_size.width,
+                            height: physical_size.height
+                        });
                     }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        &state.resize(WindowSize {
+                            width: new_inner_size.width,
+                            height: new_inner_size.height
+                        });
+                    }
+                    _ => {}
                 }
             }
             Event::RedrawRequested(_) => {
                 state.update();
-                // let mut pipelines: Vec<&dyn WmPipeline> = Vec::with_capacity(2);
-                // if mc_state.render_world {
-                //     pipelines.push(&WorldPipeline {});
-                // }
-                // pipelines.push(
-                //     unsafe {
-                //         GUI_PIPELINE.assume_init_ref()
-                //     }
-                // );
-                // state.render(&pipelines[..]);
+
                 state.render(&[
                     unsafe { GL_PIPELINE.assume_init_ref() }
                 ]);
@@ -526,7 +517,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_genTexture(
     env: JNIEnv,
     class: JClass
 ) -> jint {
-    gl::gen_texture() as i32
+    unsafe { gl::gen_texture() as i32 }
 }
 
 #[no_mangle]
@@ -534,7 +525,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_genBuffer(
     env: JNIEnv,
     class: JClass
 ) -> jint {
-    gl::gen_buffer() as i32
+    unsafe { gl::gen_buffer() as i32 }
 }
 
 #[no_mangle]

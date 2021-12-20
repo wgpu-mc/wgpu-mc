@@ -11,6 +11,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
+use wgpu_mc::WmRenderer;
+use wgpu::ImageDataLayout;
 
 pub mod pipeline;
 
@@ -29,6 +31,7 @@ pub struct GlVertexAttribute {
     stride: u8
 }
 
+#[derive(Copy, Clone, Debug)]
 pub enum GlAttributeFormat {
     Short,
     Int,
@@ -99,14 +102,14 @@ impl GlAttributeFormat {
             GlAttributeFormat::Byte => {
                 match count {
                     2 => wgpu::VertexFormat::Unorm8x2,
-                    4 => wgpu::VertexFormat::Unorm8x4,
+                    4 => wgpu::VertexFormat::Sint32,
                     _ => panic!()
                 }
             }
             GlAttributeFormat::UByte => {
                 match count {
                     2 => wgpu::VertexFormat::Unorm8x2,
-                    4 => wgpu::VertexFormat::Unorm8x4,
+                    4 => wgpu::VertexFormat::Uint32,
                     _ => panic!()
                 }
             }
@@ -114,6 +117,7 @@ impl GlAttributeFormat {
     }
 }
 
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Copy)]
 pub enum GlAttributeType {
     Position,
     Normal,
@@ -171,8 +175,8 @@ pub enum GlResource {
     Buffer(GlBuffer)
 }
 
-pub fn gen_texture() -> usize {
-    let slab = unsafe { GL_ALLOC.assume_init_mut() };
+pub unsafe fn gen_texture() -> usize {
+    let slab = GL_ALLOC.assume_init_mut();
     slab.insert(GlResource::Texture(GlTexture {
         width: 0,
         height: 0,
@@ -180,15 +184,15 @@ pub fn gen_texture() -> usize {
     }))
 }
 
-pub fn gen_buffer() -> usize {
-    let slab = unsafe { GL_ALLOC.assume_init_mut() };
+pub unsafe fn gen_buffer() -> usize {
+    let slab = GL_ALLOC.assume_init_mut();
     slab.insert(GlResource::Buffer(GlBuffer {
         buffer: None
     }))
 }
 
-pub fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) {
-    let slab = unsafe { GL_ALLOC.assume_init_mut() };
+pub unsafe fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) {
+    let slab = GL_ALLOC.assume_init_mut();
     match slab.get_mut(id).unwrap() {
         GlResource::Texture(_) => panic!(),
         GlResource::Buffer(buf) => {
@@ -201,11 +205,21 @@ pub fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) {
     }
 }
 
-pub fn upload_texture_data(id: usize, data: &[u8], device: &wgpu::Device) {
-    let slab = unsafe { GL_ALLOC.assume_init_mut() };
+pub unsafe fn upload_texture_data(id: usize, data: &[u8], renderer: &WmRenderer) {
+    let slab = GL_ALLOC.assume_init_mut();
     match slab.get_mut(id).expect("Invalid texture ID") {
         GlResource::Texture(tex) => {
+            // material.diffuse_texture.texture
+        },
+        GlResource::Buffer(_) => panic!("Invalid texture ID")
+    }
+}
 
+pub unsafe fn get_texture(id: usize) -> Option<&'static Material> {
+    let slab = GL_ALLOC.assume_init_mut();
+    match slab.get_mut(id).expect("Invalid texture ID") {
+        GlResource::Texture(tex) => {
+            tex.material.as_ref()
         },
         GlResource::Buffer(_) => panic!("Invalid texture ID")
     }

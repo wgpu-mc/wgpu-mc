@@ -1,6 +1,6 @@
-pub mod default;
+pub mod builtin;
 
-use wgpu::{RenderPipelineDescriptor, BindGroupLayout, BindGroup};
+use wgpu::{RenderPipelineDescriptor, BindGroupLayout, BindGroup, SamplerBindingType};
 use crate::render::shader::Shader;
 use std::mem::size_of;
 use crate::model::{MeshVertex, GuiVertex};
@@ -19,17 +19,18 @@ use crate::mc::entity::Entity;
 use crate::camera::Camera;
 use crate::mc::resource::ResourceProvider;
 use crate::render::chunk::ChunkVertex;
+use crate::util::WmArena;
 
 pub type ShaderMap = DashMap<String, Shader>;
 
 pub trait WmPipeline {
 
-    fn render<'a, 'b, 'c, 'd: 'c, 'e: 'd>(
+    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(
         &'a self,
 
         renderer: &'b WmRenderer,
         render_pass: &'c mut wgpu::RenderPass<'d>,
-        arena: &'e bumpalo::Bump);
+        arena: &'c mut WmArena<'e>);
 
 }
 
@@ -38,7 +39,6 @@ pub struct RenderPipelinesManager {
     pub terrain_pipeline: wgpu::RenderPipeline,
     pub grass_pipeline: wgpu::RenderPipeline,
     pub transparent_pipeline: wgpu::RenderPipeline,
-    pub gui_pipeline: wgpu::RenderPipeline,
 
     pub layouts: Layouts,
     pub resource_provider: Arc<dyn ResourceProvider>
@@ -88,10 +88,7 @@ impl RenderPipelinesManager {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            filtering: true,
-                            comparison: false
-                        },
+                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
                         count: None
                     }
                 ]
@@ -115,10 +112,7 @@ impl RenderPipelinesManager {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            filtering: true,
-                            comparison: false
-                        },
+                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
                         count: None
                     }
                 ]
@@ -132,7 +126,7 @@ impl RenderPipelinesManager {
         }
     }
 
-    fn create_pipeline_layouts(device: &wgpu::Device, layouts: &Layouts) -> (wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout) {
+    fn create_pipeline_layouts(device: &wgpu::Device, layouts: &Layouts) -> (wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout) {
         (
             device.create_pipeline_layout(
                 &wgpu::PipelineLayoutDescriptor {
@@ -170,17 +164,7 @@ impl RenderPipelinesManager {
                     ],
                     push_constant_ranges: &[]
                 }
-            ),
-            device.create_pipeline_layout(
-                &wgpu::PipelineLayoutDescriptor {
-                    label: Some("GUI Pipeline Layout"),
-                    bind_group_layouts: &[
-                        //The camera bind group layout is actually just a transform for a quad
-                        &layouts.texture_bind_group_layout, &layouts.matrix_bind_group_layout
-                    ],
-                    push_constant_ranges: &[]
-                }
-            ),
+            )
         )
     }
 
@@ -207,7 +191,7 @@ impl RenderPipelinesManager {
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
-                    clamp_depth: false,
+                    unclipped_depth: false,
                     polygon_mode: Default::default(),
                     conservative: false
                 },
@@ -229,7 +213,8 @@ impl RenderPipelinesManager {
                         }),
                         write_mask: Default::default()
                     }]
-                })
+                }),
+                multiview: None
             }),
             terrain_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
@@ -244,7 +229,7 @@ impl RenderPipelinesManager {
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
-                    clamp_depth: false,
+                    unclipped_depth: false,
                     polygon_mode: Default::default(),
                     conservative: false
                 },
@@ -271,7 +256,8 @@ impl RenderPipelinesManager {
                         }),
                         write_mask: Default::default()
                     }]
-                })
+                }),
+                multiview: None
             }),
             grass_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
@@ -286,7 +272,7 @@ impl RenderPipelinesManager {
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
-                    clamp_depth: false,
+                    unclipped_depth: false,
                     polygon_mode: Default::default(),
                     conservative: false
                 },
@@ -313,7 +299,8 @@ impl RenderPipelinesManager {
                         }),
                         write_mask: Default::default()
                     }]
-                })
+                }),
+                multiview: None
             }),
             transparent_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
@@ -328,7 +315,7 @@ impl RenderPipelinesManager {
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
-                    clamp_depth: false,
+                    unclipped_depth: false,
                     polygon_mode: Default::default(),
                     conservative: false
                 },
@@ -355,51 +342,8 @@ impl RenderPipelinesManager {
                         }),
                         write_mask: Default::default()
                     }]
-                })
-            }),
-            gui_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layouts.4),
-                vertex: wgpu::VertexState {
-                    module: &shader_map.get("gui").unwrap().vert,
-                    entry_point: "main",
-                    buffers: &[
-                        GuiVertex::desc()
-                    ]
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    clamp_depth: false,
-                    polygon_mode: Default::default(),
-                    conservative: false
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth32Float,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default()
                 }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader_map.get("gui").unwrap().frag,
-                    entry_point: "main",
-                    targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::REPLACE,
-                            alpha: wgpu::BlendComponent::REPLACE
-                        }),
-                        write_mask: Default::default()
-                    }]
-                })
+                multiview: None
             }),
             layouts: bg_layouts,
             resource_provider

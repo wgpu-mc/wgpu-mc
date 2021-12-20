@@ -7,7 +7,7 @@ pub mod camera;
 pub mod model;
 pub mod texture;
 pub mod render;
-mod util;
+pub mod util;
 
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::chunk::Chunk;
@@ -22,13 +22,14 @@ use crate::render::shader::{Shader, ShaderSource};
 use crate::texture::WgpuTexture;
 use std::rc::Rc;
 use std::sync::Arc;
-use parking_lot::RwLock;
+use parking_lot::{RwLock, Mutex};
 use dashmap::DashMap;
 use crate::mc::resource::ResourceProvider;
 use std::ops::{DerefMut, Deref};
 use std::cell::RefCell;
 use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
 use arc_swap::ArcSwap;
+use crate::util::WmArena;
 
 macro_rules! dashmap(
     { $($key:expr => $value:expr),+ } => {
@@ -70,7 +71,9 @@ pub struct WmRenderer {
 
     pub pipelines: ArcSwap<RenderPipelinesManager>,
 
-    pub mc: Arc<mc::MinecraftState>
+    pub mc: Arc<mc::MinecraftState>,
+    
+    pub shaderc: Arc<Mutex<shaderc::Compiler>>
 }
 
 #[derive(Copy, Clone)]
@@ -164,17 +167,8 @@ impl WmRenderer {
                 file_name: "transparent.vsh",
                 source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/transparent.vsh").into())).unwrap(),
                 entry_point: "main"
-            }, &device, &mut sc).unwrap(),
-
-            String::from("gui") => Shader::from_glsl(ShaderSource {
-                file_name: "gui.fsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/gui.fsh").into())).unwrap(),
-                entry_point: "main"
-            }, ShaderSource {
-                file_name: "gui.vsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/gui.vsh").into())).unwrap(),
-                entry_point: "main"
             }, &device, &mut sc).unwrap()
+
         };
         
         let pipelines = render::pipeline::RenderPipelinesManager::init(
@@ -199,7 +193,8 @@ impl WmRenderer {
 
             depth_texture: ArcSwap::new(Arc::new(depth_texture)),
             pipelines: ArcSwap::new(Arc::new(pipelines)),
-            mc: Arc::new(mc)
+            mc: Arc::new(mc),
+            shaderc: Arc::new(Mutex::new(sc))
         }
     }
 
@@ -213,16 +208,10 @@ impl WmRenderer {
 
         let mut new_camera = *self.mc.camera.load_full().clone();
 
-        new_camera.aspect = surface_config.width as f32 / surface_config.height as f32;
+        new_camera.aspect = surface_config.height as f32 / surface_config.width as f32;
         self.mc.camera.store(Arc::new(new_camera));
 
         self.depth_texture.store(Arc::new(texture::WgpuTexture::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture")));
-    }
-
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        // se
-        //lf.camera_controller.process_events(event)
-        false
     }
 
     pub fn update(&mut self) {
@@ -235,6 +224,8 @@ impl WmRenderer {
         let uniforms = UniformMatrixHelper {
             view_proj: camera.build_view_projection_matrix().into()
         };
+
+        self.mc.camera.store(Arc::new(camera));
 
         self.wgpu_state.queue.write_buffer(
             &self.mc.uniform_buffer.load_full(),
@@ -254,8 +245,8 @@ impl WmRenderer {
                 label: Some("Render Encoder"),
             });
 
-        let bumpalowo = bumpalo::Bump::new();
         let depth_texture = self.depth_texture.load();
+        let mut arena = WmArena::new(1024);
 
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -266,9 +257,9 @@ impl WmRenderer {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.1,
-                                g: 0.2,
-                                b: 0.3,
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
                                 a: 1.0
                             }),
                             store: true
@@ -286,7 +277,7 @@ impl WmRenderer {
             });
 
             for &wm_pipeline in wm_pipelines {
-                wm_pipeline.render(self, &mut render_pass, &bumpalowo);
+                wm_pipeline.render(self, &mut render_pass, &mut arena);
             }
 
         }
@@ -296,8 +287,8 @@ impl WmRenderer {
         Ok(())
     }
 
-    #[must_use]
     pub fn get_backend_description(&self) -> String {
-        format!("Wgpu 11.0 ({:?})", self.wgpu_state.adapter.get_info().backend)
+        format!("Wgpu 0.11 ({:?})", self.wgpu_state.adapter.get_info().backend)
     }
+
 }
