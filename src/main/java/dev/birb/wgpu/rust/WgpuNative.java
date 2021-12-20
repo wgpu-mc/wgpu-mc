@@ -79,4 +79,7 @@ public class WgpuNative {
     public static native void texCoordPointer(int size, int type, int stride, long pointer);
 
     public static native void enableClientState(int cap);
+
+    public static native void disableClientState(int cap);
+
 }

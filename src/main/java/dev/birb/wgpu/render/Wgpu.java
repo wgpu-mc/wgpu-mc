@@ -1,18 +1,17 @@
 package dev.birb.wgpu.render;
 
+import ca.weblite.nativeutils.NativeUtils;
 import dev.birb.wgpu.game.MainGameThread;
-import dev.birb.wgpu.mixin.accessors.ScreenAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.AbstractButtonWidget;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.registry.Registry;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.HashMap;
-import java.util.List;
 
 public class Wgpu {
     public static boolean INITIALIZED = false;
@@ -25,7 +24,15 @@ public class Wgpu {
     }
 
     public static void preInit(String windowTitle) {
+//        try {
+//            NativeUtils.loadLibraryFromJar("assets/wgpu_mc/dylib/libwgpu_mc_jni.dylib");
+//            System.out.println("Loaded dylib");
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//            throw new UncheckedIOException(e);
+//        }
         System.load("/Users/birb/wgpu-mc/target/debug/libwgpu_mc_jni.dylib");
+
         WgpuNative.initialize(windowTitle);
     }
 

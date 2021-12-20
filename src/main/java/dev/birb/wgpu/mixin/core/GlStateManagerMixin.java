@@ -796,6 +796,7 @@ public class GlStateManagerMixin {
     @Deprecated
     @Overwrite
     public static void disableClientState(int cap) {
+        WgpuNative.disableClientState(cap);
     }
 
     @Overwrite
