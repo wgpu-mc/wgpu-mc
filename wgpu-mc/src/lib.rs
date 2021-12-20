@@ -1,3 +1,5 @@
+#![feature(set_ptr_value)]
+
 use std::iter;
 
 use wgpu::util::DeviceExt;
@@ -246,7 +248,7 @@ impl WmRenderer {
             });
 
         let depth_texture = self.depth_texture.load();
-        let mut arena = WmArena::new(1024);
+        let mut arena = WmArena::new(8000);
 
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {

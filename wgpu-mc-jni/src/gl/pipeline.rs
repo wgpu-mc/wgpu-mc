@@ -1,4 +1,4 @@
-use wgpu_mc::render::pipeline::WmPipeline;
+use wgpu_mc::render::pipeline::{WmPipeline, Layouts};
 use wgpu_mc::WmRenderer;
 use wgpu::{RenderPass, BufferDescriptor, BufferUsages, BindGroupDescriptor, BindGroupEntry, BindGroup, PipelineLayoutDescriptor, PipelineLayout, RenderPipeline, VertexState, PrimitiveState, FrontFace, ShaderModuleDescriptor};
 use wgpu_mc::texture::{UV, WgpuTexture};
@@ -59,7 +59,6 @@ fn create_wgpu_pipeline(
     attributes: &[SubmittedVertexAttrPointer],
     layout: &wgpu::PipelineLayout,
     shader: &Shader) -> wgpu::RenderPipeline {
-    println!("Creating wgpu pipeline for vertex layout {:?}", attributes);
 
     let mut shader_loc = 0;
     let layout_attrs: Vec<[wgpu::VertexAttribute; 1]> = attributes.iter().map(|attr| {
@@ -86,8 +85,8 @@ fn create_wgpu_pipeline(
 
     wm.wgpu_state.device.create_render_pipeline(
         &wgpu::RenderPipelineDescriptor {
-            label: None,
-            layout: None,
+            label: Some(&format!("OpenGL pipeline ({:?}) with layout ({:?})", layout_attrs, layout)),
+            layout: Some(layout),
             vertex: wgpu::VertexState {
                 module: &shader.vert,
                 entry_point: "main",
@@ -102,7 +101,13 @@ fn create_wgpu_pipeline(
                 polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default()
+            }),
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &shader.frag,
@@ -319,8 +324,6 @@ impl WmPipeline for GlPipeline {
                             )
                         };
 
-                        // println!("{:?} {:?}", attr, slice);
-
                         arena.alloc(device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
                             contents: slice,
@@ -347,9 +350,9 @@ impl WmPipeline for GlPipeline {
                             &attributes,
                             &layout,
                             if needs_tex {
-                                &shaders.as_ref().unwrap().0
-                            } else {
                                 &shaders.as_ref().unwrap().1
+                            } else {
+                                &shaders.as_ref().unwrap().0
                             }
                         );
                         pipelines.insert(pipeline_key.clone(), Rc::new(new_pipeline));
@@ -358,6 +361,8 @@ impl WmPipeline for GlPipeline {
                     let render_pipeline = pipelines.get(&pipeline_key)
                         .unwrap()
                         .clone();
+
+                    render_pass.set_pipeline(arena.alloc(render_pipeline));
 
                     let matrix_stack = self.matrix_stack.borrow();
                     let matrix = UniformMatrixHelper {
@@ -372,6 +377,7 @@ impl WmPipeline for GlPipeline {
                         }
                     );
                     let matrix_uploaded = arena.alloc(buffer);
+
                     let matrix_bind_group = device.create_bind_group(
                         &wgpu::BindGroupDescriptor {
                             label: None,
@@ -386,14 +392,14 @@ impl WmPipeline for GlPipeline {
                     );
 
                     render_pass.set_bind_group(0, arena.alloc(matrix_bind_group), &[]);
+
                     if needs_tex {
+                        return;
                         let active_slot = *self.active_texture_slot.borrow();
                         let bound_texture = *self.slots.borrow().get(&active_slot).unwrap();
                         let texture = unsafe { get_texture(bound_texture as usize) };
                         render_pass.set_bind_group(1, &texture.unwrap().bind_group, &[]);
                     }
-
-                    render_pass.set_pipeline(arena.alloc(render_pipeline));
 
                     render_pass.draw(*first as u32..*first as u32+ *count as u32, 0..1);
                 }
@@ -479,7 +485,8 @@ impl WmPipeline for GlPipeline {
                 GLCommand::DisableClientState(state) => {
                     let mut states = self.client_states.borrow_mut();
                     *states = states.iter().copied().filter(|&client_state| client_state != *state).collect();
-                }
+                },
+                // GLCommand::Ortho()
                 _ => {}
             };
         });

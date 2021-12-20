@@ -205,7 +205,7 @@ pub unsafe fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) 
     }
 }
 
-pub unsafe fn upload_texture_data(id: usize, data: &[u8], renderer: &WmRenderer) {
+pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u32, renderer: &WmRenderer) {
     let slab = GL_ALLOC.assume_init_mut();
     match slab.get_mut(id).expect("Invalid texture ID") {
         GlResource::Texture(tex) => {

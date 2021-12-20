@@ -11,25 +11,31 @@ const ALIGN: usize = 4;
 pub struct WmArena<'a> {
     heap: *mut u8,
     capacity: usize,
+    total_capacity: usize,
     length: usize,
     objects: Vec<(*mut u8, fn (*mut u8))>,
+    heaps: Vec<(*mut u8, usize)>,
     phantom: PhantomData<&'a ()>
 }
 
 impl<'a> WmArena<'a> {
 
     pub fn new(capacity: usize) -> Self {
+        let heap = unsafe {
+            let layout = Layout::from_size_align(
+                capacity,
+                ALIGN
+            ).unwrap();
+            alloc_zeroed(layout)
+        };
+
         Self {
-            heap: unsafe {
-                let layout = Layout::from_size_align(
-                    capacity,
-                    ALIGN
-                ).unwrap();
-                alloc_zeroed(layout)
-            },
+            heap,
             capacity,
+            total_capacity: capacity,
             length: 0,
             objects: Vec::new(),
+            heaps: vec![(heap, capacity)],
             phantom: PhantomData::default()
         }
     }
@@ -43,25 +49,13 @@ impl<'a> WmArena<'a> {
             alloc_zeroed(layout)
         };
 
-        unsafe {
-            std::ptr::copy(self.heap, new_heap, self.capacity);
-        }
+        self.heaps.push(
+            (self.heap, self.capacity)
+        );
 
-        let offset = (new_heap as isize) - (self.heap as isize);
-        self.objects.iter_mut().for_each(|(ptr, _)| {
-            *ptr = unsafe { ptr.add(offset as usize) };
-        });
-
-        unsafe {
-            dealloc(
-                self.heap,
-                Layout::from_size_align(
-                    self.capacity, ALIGN
-                ).unwrap()
-            );
-        }
-
-        self.capacity += increase;
+        self.length = 0;
+        self.capacity = increase;
+        self.total_capacity += increase;
         self.heap = new_heap;
     }
 
@@ -74,6 +68,7 @@ impl<'a> WmArena<'a> {
                 )) % ALIGN
             );
         if self.length + aligned_size > self.capacity {
+            println!("Growing @ capacity {}", self.total_capacity);
             self.grow(512);
         }
         //Pointer to where the data will be allocated
@@ -98,15 +93,26 @@ impl<'a> WmArena<'a> {
 
 }
 
-impl<'a> Drop for WmArena<'a> {
-
-    fn drop(&mut self) {
-        self.objects.iter().for_each(|(ptr, dealloc)| {
-            dealloc(*ptr);
-        });
-    }
-
-}
+// impl<'a> Drop for WmArena<'a> {
+//
+//     fn drop(&mut self) {
+//         self.heaps.iter().for_each(|heap| {
+//             unsafe {
+//                 dealloc(
+//                     heap.0,
+//                     Layout::from_size_align(
+//                         heap.1, ALIGN
+//                     ).unwrap()
+//                 );
+//             }
+//         });
+//
+//         self.objects.iter().for_each(|(ptr, dealloc)| {
+//             dealloc(*ptr);
+//         });
+//     }
+//
+// }
 
 // pub struct AVec<T: Send + Sync> {
 //     capacity: AtomicUsize,

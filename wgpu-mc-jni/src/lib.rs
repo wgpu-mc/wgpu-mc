@@ -583,13 +583,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     env: JNIEnv,
     class: JClass
 ) {
-    // println!("{:?}", unsafe {GL_COMMANDS.assume_init_ref()});
+    let commands = unsafe { GL_COMMANDS.assume_init_mut() };
 
     unsafe { GL_PIPELINE.assume_init_mut() }.commands.store(
         Arc::new(
-            (*unsafe {GL_COMMANDS.assume_init_ref()}).clone()
+            commands.clone()
         )
     );
+
+    commands.clear();
 }
 
 #[no_mangle]
