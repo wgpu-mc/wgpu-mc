@@ -1,4 +1,5 @@
 #![feature(once_cell)]
+#![feature(mixed_integer_ops)]
 
 use std::{fs, thread};
 use std::collections::HashMap;
@@ -12,13 +13,13 @@ use std::sync::mpsc::{channel, RecvError, Sender};
 use std::time::Instant;
 
 use arc_swap::ArcSwap;
-use cgmath::{Matrix4, SquareMatrix};
+use cgmath::{Matrix4, SquareMatrix, Vector3};
 use dashmap::DashMap;
 use futures::executor::block_on;
 use jni::{JavaVM, JNIEnv};
 use jni::errors::Error;
 use jni::objects::{JClass, JObject, JString, JValue, ReleaseMode};
-use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jobjectArray, jstring, jlong};
+use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jobjectArray, jstring, jlong, jfloat};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
@@ -270,8 +271,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
     unsafe {
         GL_PIPELINE = MaybeUninit::new(GlPipeline {
             pipelines: Default::default(),
-            matrix_stack: RefCell::new([Matrix4::identity(); 32]),
-            matrix_offset: RefCell::new(0),
+            matrix_stacks: RefCell::new([([Matrix4::identity(); 32], 0); 3]),
+            matrix_mode: RefCell::new(0),
             commands: ArcSwap::new(Arc::new(Vec::new())),
             active_texture_slot: RefCell::new(0),
             slots: RefCell::new(HashMap::new()),
@@ -287,7 +288,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
             render_world: false
         }));
     }
-    println!("we aint even in the same method anymo");
 }
 
 #[no_mangle]
@@ -734,4 +734,59 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_disableClientState(
 ) {
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
     commands.push(GLCommand::DisableClientState(int as u32));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_ortho(
+    env: JNIEnv,
+    class: JClass,
+    l: jfloat,
+    r: jfloat,
+    b: jfloat,
+    t: jfloat,
+    n: jfloat,
+    f: jfloat,
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::MultMatrix(
+        cgmath::ortho(l,r,b,t,-10000.0,10000.0)
+    ));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_translate(
+    env: JNIEnv,
+    class: JClass,
+    x: jfloat,
+    y: jfloat,
+    z: jfloat
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::MultMatrix(
+        Matrix4::from_translation(Vector3::new(x,y,z))
+    ));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_loadIdentity(
+    env: JNIEnv,
+    class: JClass,
+    x: jfloat,
+    y: jfloat,
+    z: jfloat
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::SetMatrix(
+        Matrix4::identity()
+    ));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_matrixMode(
+    env: JNIEnv,
+    class: JClass,
+    mode: jint
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::MatrixMode(mode as usize));
 }

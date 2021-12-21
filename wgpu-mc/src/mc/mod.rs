@@ -57,6 +57,7 @@ impl BlockManager {
         Some(((self.blocks.get_index_of(block_id)? as u32 & 0x3FFFFF) << 10) |
         (block.states.get_index_of(variant)? as u32 & 0x3FF))
     }
+
 }
 
 fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, BlockModel>, model_id: &NamespacedResource, resource_provider: &dyn ResourceProvider) -> Option<&'a BlockModel> {

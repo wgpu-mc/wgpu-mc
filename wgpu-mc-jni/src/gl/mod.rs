@@ -216,8 +216,8 @@ pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u3
 }
 
 pub unsafe fn get_texture(id: usize) -> Option<&'static Material> {
-    let slab = GL_ALLOC.assume_init_mut();
-    match slab.get_mut(id).expect("Invalid texture ID") {
+    let slab = GL_ALLOC.assume_init_ref();
+    match slab.get(id).expect("Invalid texture ID") {
         GlResource::Texture(tex) => {
             tex.material.as_ref()
         },

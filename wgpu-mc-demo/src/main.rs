@@ -4,7 +4,7 @@ use std::ops::{DerefMut, Deref};
 use std::time::Instant;
 use wgpu_mc::mc::datapack::{TagOrResource, NamespacedResource, BlockModel};
 use wgpu_mc::mc::block::{BlockDirection, BlockState, Block};
-use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME};
+use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME, CHUNK_WIDTH};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, DeviceEvent};
 use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize};
@@ -22,6 +22,11 @@ use std::collections::HashMap;
 use wgpu_mc::mc::block::model::BlockstateVariantMesh;
 use wgpu_mc::util::WmArena;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use fastanvil::{RegionBuffer};
+use std::io::Cursor;
+use fastanvil::pre18::JavaChunk;
+use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
+use fastnbt::de::from_bytes;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -67,7 +72,39 @@ impl Drop for Test {
     }
 }
 
+fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
+    let root = crate_root::root().unwrap().join("wgpu-mc-demo").join("res");
+    let demo_root = root.join("demo_world");
+    let region_dir = std::fs::read_dir(
+        demo_root.join("region")
+    ).unwrap();
+    // let mut model_map = HashMap::new();
+
+    let begin = Instant::now();
+
+    let regions: Vec<Vec<u8>> = region_dir.map(|region| {
+        let region = region.unwrap();
+        fs::read(region.path()).unwrap()
+    }).collect();
+
+    use rayon::iter::ParallelIterator;
+    regions
+        .into_par_iter()
+        .flat_map(|region| {
+            let cursor = Cursor::new(region);
+            let mut region = RegionBuffer::new(cursor);
+            let mut chunks = Vec::new();
+            region.for_each_chunk(|x, z, chunk_data| {
+                let chunk: JavaChunk = from_bytes(&chunk_data[..]).unwrap();
+                chunks.push((x, z, chunk));
+            });
+            chunks
+        }).collect()
+}
+
 fn main() {
+    let anvil_chunks = load_anvil_chunks();
+
     let event_loop = EventLoop::new();
     let title = "wgpu-mc test";
     let window = winit::window::WindowBuilder::new()
@@ -138,47 +175,53 @@ fn main() {
     let window = wrapper.window;
 
     println!("Starting rendering");
-    begin_rendering(event_loop, window, wm);
+    begin_rendering(event_loop, window, wm, anvil_chunks);
 }
 
-fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: WmRenderer) {
+fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: WmRenderer, chunks: Vec<(usize, usize, JavaChunk)>) {
     use futures::executor::block_on;
 
     let block_manager = state.mc.block_manager.read();
 
-    let block_id = NamespacedResource::try_from("anvil.json").unwrap();
-    let key = block_manager.get_packed_blockstate_key(&block_id, "facing=north");
-    // let anvil_model: &BlockModel = block_manager.models.get(&NamespacedResource::try_from("block/cobblestone").unwrap()).unwrap();
+    let mc_state = state.mc.clone();
+    let wgpu_state = state.wgpu_state.clone();
 
-    // println!("{:?}", block_manager.baked_block_variants);
-    let mesh: &BlockstateVariantMesh = block_manager.baked_block_variants.get(
-        &NamespacedResource::try_from("anvil.json#facing=east").unwrap()
-    ).unwrap();
+    println!("Chunks: {}", chunks.len());
 
-    let model = block_manager.models.get(
-        &NamespacedResource::try_from("block/anvil")
-            .unwrap()
-    ).unwrap();
+    use rayon::iter::IndexedParallelIterator;
+    use rayon::iter::ParallelIterator;
+    chunks.into_par_iter().take(100).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
+        let mut chunk_blocks = Box::new([BlockState {
+            packed_key: None
+        }; CHUNK_VOLUME]);
+        (0..16).zip((0..256).zip(0..16)).for_each(|(x,(y,z))| {
+            use fastanvil::Chunk;
+            let block_maybe = java_chunk.block(x as usize, y as isize, z as usize);
+            match block_maybe {
+                None => {}
+                Some(block) => {
+                    let variant = block.encoded_description().replace("|", "#");
 
-    println!("Mesh {:?}\n\nModel {:?}", mesh, model);
+                    chunk_blocks[
+                        (x + (z * CHUNK_WIDTH)) + (y * CHUNK_AREA)
+                    ] = BlockState {
+                        packed_key: Some(*block_manager.baked_block_variants.get_with_key(
+                            &NamespacedResource::try_from(&variant[..]).unwrap()
+                        ).expect(&variant[..]).0)
+                    }
+                }
+            }
+        });
+        let mut chunk = Chunk::new((chunk_x as i32, chunk_z as i32), chunk_blocks);
+        let bm = mc_state.block_manager.read();
+        let wgpu_state_arc = wgpu_state.clone();
+        chunk.bake(&*bm, &wgpu_state_arc.device);
+        println!("Baked chunk @ {},{}", chunk_x, chunk_z);
 
-    let blocks: Box<[BlockState; CHUNK_VOLUME]> = (0..CHUNK_VOLUME).map(|block| {
-        BlockState {
-            packed_key: if block == 0 { key } else { None },
-        }
-    }).collect::<Box<[BlockState]>>().try_into().unwrap();
+        mc_state.chunks.loaded_chunks.insert((chunk_x as i32, chunk_z as i32), ArcSwap::new(Arc::new(chunk)));
+    });
 
     drop(block_manager);
-
-    let mut chunk = Chunk::new((0, 0), blocks);
-
-    let instant = Instant::now();
-    let baked_chunk = BakedChunk::bake(&state, &chunk);
-    println!("Time to generate chunk mesh: {}", Instant::now().duration_since(instant).as_millis());
-
-    chunk.baked = Some(baked_chunk);
-
-    state.mc.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;

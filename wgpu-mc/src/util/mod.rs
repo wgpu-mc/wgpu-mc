@@ -68,7 +68,6 @@ impl<'a> WmArena<'a> {
                 )) % ALIGN
             );
         if self.length + aligned_size > self.capacity {
-            println!("Growing @ capacity {}", self.total_capacity);
             self.grow(512);
         }
         //Pointer to where the data will be allocated

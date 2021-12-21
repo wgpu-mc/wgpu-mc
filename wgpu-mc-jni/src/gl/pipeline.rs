@@ -19,6 +19,14 @@ use wgpu_mc::render::shader::{Shader, ShaderSource};
 use futures::StreamExt;
 use wgpu_mc::util::WmArena;
 
+#[rustfmt::skip]
+pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.5, 0.0,
+    0.0, 0.0, 0.5, 1.0,
+);
+
 #[derive(Clone, Debug)]
 pub enum GLCommand {
     BindTexture(i32),
@@ -32,7 +40,10 @@ pub enum GLCommand {
     TexCoordPointer(i32, i32, i32, u64),
     TexImage2D((RefCell<Option<Vec<u8>>>, u32, u32, wgpu::TextureFormat)),
     EnableClientState(u32),
-    DisableClientState(u32)
+    DisableClientState(u32),
+    MultMatrix(Matrix4<f32>),
+    SetMatrix(Matrix4<f32>),
+    MatrixMode(usize)
 }
 
 pub fn create_wgpu_pipeline_layout(wm: &WmRenderer, tex_bg: bool) -> wgpu::PipelineLayout {
@@ -211,11 +222,34 @@ pub struct SubmittedVertexAttrPointer {
     stride: u32
 }
 
+fn quads_to_tris_transformer(vertex_data: &[u8], vertex_count: usize, stride: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(vertex_count * stride);
+    for x in 0..vertex_count / 4 {
+        let beginning_offset = (x * 4 * stride);
+        let a = &vertex_data[beginning_offset..beginning_offset + stride];
+        let b = &vertex_data[beginning_offset + stride..beginning_offset + (stride * 2)];
+        let c = &vertex_data[beginning_offset + (stride * 2)..beginning_offset + (stride * 3)];
+        let d = &vertex_data[beginning_offset + (stride * 3)..beginning_offset + (stride * 4)];
+        // out.extend(a);
+        // out.extend(b);
+        // out.extend(c);
+        // out.extend(a);
+        // out.extend(c);
+        // out.extend(d);
+        out.extend(a);
+        out.extend(c);
+        out.extend(b);
+        out.extend(a);
+        out.extend(d);
+        out.extend(c);
+    }
+    out
+}
+
 pub struct GlPipeline {
     pub pipelines: RefCell<HashMap<Vec<GlAttributeType>, Rc<wgpu::RenderPipeline>>>,
-    //Probably a fine amount
-    pub matrix_stack: RefCell<[Matrix4<f32>; 32]>,
-    pub matrix_offset: RefCell<i8>,
+    pub matrix_stacks: RefCell<[([Matrix4<f32>; 32], usize); 3]>,
+    pub matrix_mode: RefCell<usize>,
     pub commands: ArcSwap<Vec<GLCommand>>,
     pub active_texture_slot: RefCell<i32>,
     pub slots: RefCell<HashMap<i32, i32>>,
@@ -324,9 +358,18 @@ impl WmPipeline for GlPipeline {
                             )
                         };
 
+                        let data;
+                        let mut vertex_slice = slice;
+                        //GL_QUADS
+                        if *mode == 0x7 {
+                            data = quads_to_tris_transformer(slice, *count as usize, attr.stride as usize);
+                            // println!("{:?}", data);
+                            vertex_slice = &data[..];
+                        }
+
                         arena.alloc(device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
-                            contents: slice,
+                            contents: vertex_slice,
                             usage: wgpu::BufferUsages::VERTEX
                         }))
                     }).enumerate().for_each(|(index, buf)| {
@@ -364,9 +407,14 @@ impl WmPipeline for GlPipeline {
 
                     render_pass.set_pipeline(arena.alloc(render_pipeline));
 
-                    let matrix_stack = self.matrix_stack.borrow();
+                    // let matrix_mode = *self.matrix_mode.borrow();
+                    //1 = GL_PROJECTION matrix stack
+                    // let modelview_mat = self.matrix_stacks.borrow()[0];
+                    let proj_mat = self.matrix_stacks.borrow()[1];
+                    // let gl_matrix = modelview_mat.0[modelview_mat.1] * proj_mat.0[proj_mat.1];
+                    let gl_matrix = proj_mat.0[proj_mat.1];
                     let matrix = UniformMatrixHelper {
-                        view_proj: matrix_stack[*self.matrix_offset.borrow() as usize].into()
+                        view_proj: gl_matrix.into()
                     };
 
                     let buffer = device.create_buffer_init(
@@ -394,23 +442,38 @@ impl WmPipeline for GlPipeline {
                     render_pass.set_bind_group(0, arena.alloc(matrix_bind_group), &[]);
 
                     if needs_tex {
-                        return;
+                        //Don't render pipelines that need textures (yet)
                         let active_slot = *self.active_texture_slot.borrow();
                         let bound_texture = *self.slots.borrow().get(&active_slot).unwrap();
                         let texture = unsafe { get_texture(bound_texture as usize) };
                         render_pass.set_bind_group(1, &texture.unwrap().bind_group, &[]);
                     }
 
-                    render_pass.draw(*first as u32..*first as u32+ *count as u32, 0..1);
+                    let adjusted_count = if *mode == 0x7 {
+                        count + (count / 2) // x times 6 divided by 4
+                    } else {
+                        *count
+                    };
+
+                    // let adjusted_count = *count;
+
+                    render_pass.draw(*first as u32..*first as u32+ adjusted_count as u32, 0..1);
                 }
                 GLCommand::PushMatrix => {
-                    let current_offset = *self.matrix_offset.borrow();
-                    let new_offset = current_offset + 1;
-                    let mut stack = self.matrix_stack.borrow_mut();
-                    stack[new_offset as usize] = stack[current_offset as usize];
+                    let mut stacks = self.matrix_stacks.borrow_mut();
+                    let mode = *self.matrix_mode.borrow();
+                    let mut active_stack_tuple = &mut stacks[mode];
+                    //Duplicate the current stack
+                    active_stack_tuple.0[active_stack_tuple.1 + 1] = active_stack_tuple.0[active_stack_tuple.1];
+                    //Increment the stack offset
+                    active_stack_tuple.1 += 1;
                 }
                 GLCommand::PopMatrix => {
-                    self.matrix_offset.borrow_mut().checked_add(-1).unwrap();
+                    let mut stacks = self.matrix_stacks.borrow_mut();
+                    let mode = *self.matrix_mode.borrow();
+                    let mut active_stack_tuple = &mut stacks[mode];
+                    //Decrement the stack offset
+                    active_stack_tuple.1 -= 1;
                 }
                 GLCommand::TexImage2D(command) => {
                     if command.0.borrow().is_some() {
@@ -486,6 +549,21 @@ impl WmPipeline for GlPipeline {
                     let mut states = self.client_states.borrow_mut();
                     *states = states.iter().copied().filter(|&client_state| client_state != *state).collect();
                 },
+                GLCommand::MultMatrix(mat) => {
+                    let mode = *self.matrix_mode.borrow();
+                    let mut stacks = self.matrix_stacks.borrow_mut();
+                    let mut stack = &mut stacks[mode];
+                    stack.0[stack.1 as usize] = stack.0[stack.1 as usize] * mat;
+                },
+                GLCommand::SetMatrix(mat) => {
+                    let mode = *self.matrix_mode.borrow();
+                    let mut stacks = self.matrix_stacks.borrow_mut();
+                    let mut stack = &mut stacks[mode];
+                    stack.0[stack.1 as usize] = *mat;
+                },
+                GLCommand::MatrixMode(mode) => {
+                    *self.matrix_mode.borrow_mut() = mode - 0x1700;
+                }
                 // GLCommand::Ortho()
                 _ => {}
             };

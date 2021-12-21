@@ -80,8 +80,7 @@ pub struct BakedChunkPortion {
 
 impl BakedChunkPortionsContainer {
 
-    pub fn bake_portion(wm: &WmRenderer, chunk: &Chunk, section: &ChunkSection) -> Self {
-        let block_manager = wm.mc.block_manager.read();
+    pub fn bake_portion(block_manager: &BlockManager, device: &wgpu::Device, chunk: &Chunk, section: &ChunkSection) -> Self {
         let section_y = section.offset_y;
 
         //Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
@@ -277,43 +276,43 @@ impl BakedChunkPortionsContainer {
             }
         }
 
-        let top_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        let top_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&up_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let bottom_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        let bottom_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&down_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let north_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        let north_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&north_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let east_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        let east_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&east_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let south_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        let south_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&south_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let west_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        let west_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&west_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
         });
 
-        let nonstandard_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        let nonstandard_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&other_vertices[..]),
             usage: wgpu::BufferUsages::VERTEX
@@ -341,10 +340,10 @@ pub struct BakedChunk {
 
 impl BakedChunk {
     #[must_use]
-    pub fn bake(wm: &WmRenderer, chunk: &Chunk) -> Self {
+    pub fn bake(bm: &BlockManager, chunk: &Chunk, device: &wgpu::Device) -> Self {
         Self {
             sections: chunk.sections.iter().map(|section| {
-                BakedChunkPortionsContainer::bake_portion(wm, chunk, section)
+                BakedChunkPortionsContainer::bake_portion(bm, device, chunk, section)
             }).collect::<Arc<[BakedChunkPortionsContainer]>>()
         }
     }

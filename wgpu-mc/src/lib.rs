@@ -290,7 +290,7 @@ impl WmRenderer {
     }
 
     pub fn get_backend_description(&self) -> String {
-        format!("Wgpu 0.11 ({:?})", self.wgpu_state.adapter.get_info().backend)
+        format!("Wgpu 0.12 ({:?})", self.wgpu_state.adapter.get_info().backend)
     }
 
 }

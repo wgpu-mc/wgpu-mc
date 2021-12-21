@@ -7,6 +7,8 @@ use std::sync::Arc;
 use std::convert::TryInto;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
+use crate::WmRenderer;
+use crate::mc::BlockManager;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -71,6 +73,11 @@ impl Chunk {
         let z = (pos.2 % 16) as usize;
 
         self.sections[y].blocks[(z * CHUNK_WIDTH) + x]
+    }
+
+    pub fn bake(&mut self, block_manager: &BlockManager, device: &wgpu::Device) {
+        let baked = BakedChunk::bake(block_manager, self, device);
+        self.baked = Some(baked);
     }
 }
 
