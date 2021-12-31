@@ -5,7 +5,7 @@ layout(location=1) in vec2 uv_in;
 
 layout(location=0) out vec2 uv_out;
 
-layout(set=1, binding=0)
+layout(set=0, binding=0)
 uniform Uniforms {
     mat4 matrix;
 };

@@ -8,7 +8,7 @@
   "authors": [
     "Birb"
   ],
-  "accessWidener": "wgpu_mc.accesswidener",
+  "accessWidenerPath": "wgpu_mc.accesswidener",
   "contact": {
     "homepage": "https://birb.dev/",
     "sources": "https://github.com/birbe/wgpu-mc-fabric"
@@ -28,9 +28,9 @@
   ],
 
   "depends": {
-    "fabricloader": ">=0.7.4",
+    "fabricloader": ">=0.12.12",
     "fabric": "*",
-    "minecraft": "1.16.x"
+    "minecraft": "1.18.x"
   },
   "suggests": {
     "another-mod": "*"

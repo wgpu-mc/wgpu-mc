@@ -1,80 +1,79 @@
 package dev.birb.wgpu.mixin.render;
 
-import dev.birb.wgpu.mixin.accessors.VertexFormatElementAccessor;
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
 import dev.birb.wgpu.rust.WgpuNative;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BufferRenderer;
+import net.minecraft.client.render.Shader;
 import net.minecraft.client.render.VertexFormat;
-import net.minecraft.client.render.VertexFormatElement;
+import net.minecraft.client.render.VertexFormats;
+import net.minecraft.client.util.Window;
+import net.minecraft.util.math.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.Shadow;
 
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 
 @Mixin(BufferRenderer.class)
 public class BufferRendererMixin {
 
+    @Shadow private static int currentElementBuffer;
 
     /**
      * @author wgpu-mc
      */
     @Overwrite
-    public static void draw(ByteBuffer buffer, int mode, VertexFormat vertexFormat, int count) {
-        WgpuNative.drawArray(mode, 0, count);
-    }
-
-    private static long packVertexCounts(VertexFormat format) {
-        long out = 0;
-        int loc = 0;
-        for(VertexFormatElement element : format.getElements()) {
-            int count = ((VertexFormatElementAccessor) element).getCount();
-            out |= ((long) count & 0xff) << (loc * 8);
-            loc++;
+    public static void draw(ByteBuffer buffer, VertexFormat.DrawMode drawMode, VertexFormat vertexFormat, int count, VertexFormat.IntType elementFormat, int vertexCount, boolean textured) {
+        if(vertexFormat == VertexFormats.POSITION_COLOR) {
+            WgpuNative.wmUsePipeline(0);
+        } else if(vertexFormat == VertexFormats.POSITION_TEXTURE) {
+            WgpuNative.wmUsePipeline(1);
         }
-        return out;
-    }
 
-    private static long packVertexFormat(VertexFormat format) {
-        long out = 0;
-        int loc = 0;
-        for(VertexFormatElement element : format.getElements()) {
-            if(element.getFormat() == VertexFormatElement.Format.BYTE) {
-                out |= 0b1L << (loc * 8);
-            } else if(element.getFormat() == VertexFormatElement.Format.FLOAT) {
-                out |= 0b10L << (loc * 8);
-            } else if(element.getFormat() == VertexFormatElement.Format.INT) {
-                out |= 0b100L << (loc * 8);
-            } else if(element.getFormat() == VertexFormatElement.Format.SHORT) {
-                out |= 0b1000L << (loc * 8);
-            } else if (element.getFormat() == VertexFormatElement.Format.UBYTE) {
-                out |= 0b10000L << (loc * 8);
-            } else if (element.getFormat() == VertexFormatElement.Format.UINT) {
-                out |= 0b100000L << (loc * 8);
-            } else if (element.getFormat() == VertexFormatElement.Format.USHORT) {
-                out |= 0b1000000L << (loc * 8);
+        int k;
+        int j;
+        Object indexBuffer;
+        RenderSystem.assertOnRenderThread();
+        buffer.clear();
+        if (count <= 0) {
+            return;
+        }
+        int i = count * vertexFormat.getVertexSize();
+        BufferRenderer.bind(vertexFormat);
+        buffer.position(0);
+        buffer.limit(i);
+        GlStateManager._glBufferData(34962, buffer, 35048);
+        if (textured) {
+            indexBuffer = RenderSystem.getSequentialBuffer(drawMode, vertexCount);
+            j = ((RenderSystem.IndexBuffer)indexBuffer).getId();
+            if (j != currentElementBuffer) {
+                GlStateManager._glBindBuffer(34963, j);
+                currentElementBuffer = j;
             }
-            loc++;
-        }
-        return out;
-    }
-
-    private static long packVertexType(VertexFormat format) {
-        long out = 0;
-        int loc = 0;
-        for(VertexFormatElement element : format.getElements()) {
-            if(element.getType() == VertexFormatElement.Type.POSITION) {
-                out |= 0b1L << (loc * 8);
-            } else if(element.getType() == VertexFormatElement.Type.COLOR) {
-                out |= 0b10L << (loc * 8);
-            } else if(element.getType() == VertexFormatElement.Type.GENERIC) {
-                out |= 0b100L << (loc * 8);
-            } else if(element.getType() == VertexFormatElement.Type.NORMAL) {
-                out |= 0b1000L << (loc * 8);
-            } else if (element.getType() == VertexFormatElement.Type.UV) {
-                out |= 0b10000L << (loc * 8);
+            k = ((RenderSystem.IndexBuffer)indexBuffer).getElementFormat().count;
+        } else {
+            int indexBuffer2 = vertexFormat.getElementBuffer();
+            if (indexBuffer2 != currentElementBuffer) {
+                GlStateManager._glBindBuffer(34963, indexBuffer2);
+                currentElementBuffer = indexBuffer2;
             }
-            loc++;
+            buffer.position(i);
+            buffer.limit(i + vertexCount * elementFormat.size);
+            GlStateManager._glBufferData(34963, buffer, 35048);
+            k = elementFormat.count;
         }
-        return out;
+
+//        Matrix4f projMat = RenderSystem.getProjectionMatrix();
+        Matrix4f projMat = Matrix4f.projectionMatrix(1280.0f, 720.0f, 0.0f, 10000.0f);
+        FloatBuffer projMatBuffer = FloatBuffer.allocate(16);
+        projMat.readColumnMajor(projMatBuffer);
+        WgpuNative.bindMatrix4f(0, projMatBuffer.array());
+
+        GlStateManager._drawElements(drawMode.mode, vertexCount, k, 0L);
+        buffer.position(0);
     }
 
 }

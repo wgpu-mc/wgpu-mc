@@ -1,11 +1,11 @@
 package dev.birb.wgpu.render;
 
-import ca.weblite.nativeutils.NativeUtils;
 import dev.birb.wgpu.game.MainGameThread;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.registry.Registry;
 
@@ -31,9 +31,15 @@ public class Wgpu {
 //            e.printStackTrace();
 //            throw new UncheckedIOException(e);
 //        }
-        System.load("/Users/birb/wgpu-mc/target/debug/libwgpu_mc_jni.dylib");
+        try {
+            System.load("/Users/birb/wgpu-mc/target/debug/libwgpu_mc_jni.dylib");
+        } catch(Throwable e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
 
         WgpuNative.initialize(windowTitle);
+
     }
 
     public static void initRenderer(MinecraftClient client) {

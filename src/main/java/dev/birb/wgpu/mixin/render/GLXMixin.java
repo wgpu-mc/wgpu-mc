@@ -12,7 +12,7 @@ public class GLXMixin {
     /**
      * @author wgpu-mc
      */
-    @Overwrite
+    @Overwrite(remap = false)
     public static LongSupplier _initGlfw() {
         return System::nanoTime;
     }

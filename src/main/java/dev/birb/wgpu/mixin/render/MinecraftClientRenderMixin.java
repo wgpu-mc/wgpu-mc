@@ -1,5 +1,7 @@
 package dev.birb.wgpu.mixin.render;
 
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
 import dev.birb.wgpu.mixin.accessors.ThreadExecutorAccessor;
 import dev.birb.wgpu.mixin.accessors.WindowAccessor;
 import dev.birb.wgpu.render.Wgpu;
@@ -27,6 +29,7 @@ import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.util.Queue;
+//import jdk.internal.misc.Unsafe;
 
 @Mixin(MinecraftClient.class)
 public abstract class MinecraftClientRenderMixin {
@@ -74,7 +77,16 @@ public abstract class MinecraftClientRenderMixin {
 
     @Inject(method = "render", at = @At(value = "RETURN"))
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
-        WgpuNative.submitCommands();
+        if(Wgpu.INITIALIZED) WgpuNative.submitCommands();
     }
+
+//    /**
+//     * @author wgpu-mc
+//     * @reason debugging
+//     */
+//    @Overwrite
+//    public void render(boolean tick) {
+//        GlStateManager.enable
+//    }
 
 }

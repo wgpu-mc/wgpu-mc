@@ -18,22 +18,20 @@ import java.util.function.Supplier;
 @Mixin(RenderSystem.class)
 public class RenderSystemMixin {
 
-    @Inject(method = "getApiDescription", at = @At("HEAD"), cancellable = true)
-    private static void getApiDescription(CallbackInfoReturnable<String> cir) {
-        cir.setReturnValue("wgpu-mc 0.1");
-    }
-
-    @Inject(method = "getBackendDescription", at = @At("HEAD"), cancellable = true)
-    private static void getBackendDescription(CallbackInfoReturnable<String> cir) {
-//        cir.setReturnValue(WgpuNative.getBackend());
-        cir.setReturnValue("wgpu-mc (Wgpu 0.11)");
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite(remap = false)
+    public static String getApiDescription() {
+        return "wgpu-mc 0.1";
     }
 
     /**
      * @author wgpu-mc
      */
-    @Overwrite
-    public static void assertThread(Supplier<Boolean> check) {
+    @Overwrite(remap = false)
+    public static String getBackendDescription() {
+        return "Wgpu 0.12";
     }
 
     /**
@@ -64,7 +62,7 @@ public class RenderSystemMixin {
     /**
      * @author wgpu-mc
      */
-    @Overwrite
+    @Overwrite(remap = false)
     public static boolean isOnRenderThread() {
         return true;
     }
@@ -72,7 +70,7 @@ public class RenderSystemMixin {
     /**
      * @author wgpu-mc
      */
-    @Overwrite
+    @Overwrite(remap = false)
     public static int maxSupportedTextureSize() {
         return 2048; //Probably
 //        return WgpuNative.getMaxTextureSize();

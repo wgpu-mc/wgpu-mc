@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 @Mixin(VertexFormatElement.class)
 public interface VertexFormatElementAccessor {
 
-    @Accessor("count")
-    int getCount();
+    @Accessor("length")
+    int getLength();
 
 }

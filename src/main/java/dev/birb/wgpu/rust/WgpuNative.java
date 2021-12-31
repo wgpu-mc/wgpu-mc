@@ -42,7 +42,7 @@ public class WgpuNative {
 
     public static native void bindBuffer(int target, int buffer);
 
-    public static native int uploadBuffer(long ptr, long length, int usage);
+    public static native int bufferData(ByteBuffer buffer, int target, int usage);
 
     public static native int genBuffer();
 
@@ -81,5 +81,32 @@ public class WgpuNative {
     public static native void enableClientState(int cap);
 
     public static native void disableClientState(int cap);
+
+    public static native void translate(float x, float y, float z);
+
+    public static native void ortho(float l, float r, float b, float t, float n, float f);
+
+    public static native void loadIdentity();
+
+    public static native void matrixMode(int mode);
+
+
+    public static native void texSubImage2D(int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, long pixels);
+
+    public static native void bindVertexArray(int array);
+
+    public static native void drawElements(int mode, int first, int type, long indices);
+
+    public static native ByteBuffer mapBuffer(int target, int access);
+
+    public static native void unmapBuffer(int target);
+
+    public static native void initBuffer(int target, long size, int usage);
+
+    public static native void wmUsePipeline(int i);
+
+    public static native void bindMatrix4f(int slot, float[] array);
+
+    public static native void clearColor(float red, float green, float blue);
 
 }

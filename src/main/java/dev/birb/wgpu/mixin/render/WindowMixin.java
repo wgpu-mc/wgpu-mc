@@ -77,4 +77,30 @@ public class WindowMixin {
         return this.getHeight();
     }
 
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public int getScaledWidth() {
+        return this.getWidth();
+    }
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public int getScaledHeight() {
+        return this.getHeight();
+    }
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public void setWindowedSize(int width, int height) {
+        //TODO
+        //WgpuNative.setWindowedSize(width, height);
+    }
+
 }

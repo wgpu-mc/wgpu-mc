@@ -32,6 +32,21 @@ public class FramebufferMixin {
         System.out.println("Deleted framebuffer");
     }
 
+    /**
+     * @author wgpu-mc
+     * @reason i'd rather you didn't
+     */
+    @Overwrite
+    public void initFbo(int width, int height, boolean getError) {
 
+    }
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public void checkFramebufferStatus() {
+
+    }
 
 }
