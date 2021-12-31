@@ -13,15 +13,26 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use wgpu_mc::WmRenderer;
 use wgpu::ImageDataLayout;
+use std::collections::HashMap;
 
 pub mod pipeline;
 
 pub static mut GL_COMMANDS: MaybeUninit<Vec<GLCommand>> = MaybeUninit::uninit();
 pub static mut GL_ALLOC: MaybeUninit<Slab<GlResource>> = MaybeUninit::uninit();
+pub static mut GL_MAPPED_BUFFERS: MaybeUninit<HashMap<usize, Vec<u8>>> = MaybeUninit::uninit();
+pub static mut GL_STATE: MaybeUninit<GlState> = MaybeUninit::uninit();
 
 pub unsafe fn init() {
     GL_ALLOC = MaybeUninit::new(Slab::with_capacity(2048));
     GL_COMMANDS = MaybeUninit::new(Vec::new());
+    GL_MAPPED_BUFFERS = MaybeUninit::new(HashMap::new());
+    GL_STATE = MaybeUninit::new(GlState {
+        buffers: HashMap::new()
+    });
+}
+
+pub struct GlState {
+    pub(crate) buffers: HashMap<i32, i32>
 }
 
 pub struct GlVertexAttribute {
@@ -74,10 +85,10 @@ impl GlAttributeFormat {
             }
             GlAttributeFormat::Int => {
                 match count {
-                    1 => wgpu::VertexFormat::Uint32,
-                    2 => wgpu::VertexFormat::Uint32x2,
-                    3 => wgpu::VertexFormat::Uint32x3,
-                    4 => wgpu::VertexFormat::Uint32x4,
+                    1 => wgpu::VertexFormat::Sint32,
+                    2 => wgpu::VertexFormat::Sint32x2,
+                    3 => wgpu::VertexFormat::Sint32x3,
+                    4 => wgpu::VertexFormat::Sint32x4,
                     _ => panic!()
                 }
             }
@@ -101,7 +112,7 @@ impl GlAttributeFormat {
             }
             GlAttributeFormat::Byte => {
                 match count {
-                    2 => wgpu::VertexFormat::Unorm8x2,
+                    2 => wgpu::VertexFormat::Snorm8x2,
                     4 => wgpu::VertexFormat::Sint32,
                     _ => panic!()
                 }
@@ -163,16 +174,17 @@ pub enum GlAttributeType {
 pub struct GlTexture {
     width: u16,
     height: u16,
-    material: Option<Material>
+    material: Option<Rc<Material>>
 }
 
 pub struct GlBuffer {
-    buffer: Option<Rc<wgpu::Buffer>>
+    pub buffer: Option<Rc<wgpu::Buffer>>,
+    pub data: Option<Vec<u8>>
 }
 
 pub enum GlResource {
     Texture(GlTexture),
-    Buffer(GlBuffer)
+    Buffer(ArcSwap<GlBuffer>)
 }
 
 pub unsafe fn gen_texture() -> usize {
@@ -186,21 +198,29 @@ pub unsafe fn gen_texture() -> usize {
 
 pub unsafe fn gen_buffer() -> usize {
     let slab = GL_ALLOC.assume_init_mut();
-    slab.insert(GlResource::Buffer(GlBuffer {
-        buffer: None
-    }))
+    slab.insert(GlResource::Buffer(ArcSwap::new(Arc::new(GlBuffer {
+        buffer: None,
+        data: None
+    }))))
 }
 
 pub unsafe fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) {
-    let slab = GL_ALLOC.assume_init_mut();
-    match slab.get_mut(id).unwrap() {
+    let slab = GL_ALLOC.assume_init_ref();
+    match slab.get(id).unwrap() {
         GlResource::Texture(_) => panic!(),
         GlResource::Buffer(buf) => {
-            buf.buffer = Some(Rc::new(device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: data,
-                usage: wgpu::BufferUsages::all()
-            })));
+            buf.store(Arc::new(
+                GlBuffer {
+                    buffer: Some(
+                        Rc::new(device.create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: data,
+                            usage: wgpu::BufferUsages::all()
+                        }))
+                    ),
+                    data: Some(Vec::from(data))
+                }
+            ));
         }
     }
 }
@@ -215,12 +235,22 @@ pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u3
     }
 }
 
-pub unsafe fn get_texture(id: usize) -> Option<&'static Material> {
+pub unsafe fn get_texture(id: usize) -> Option<Rc<Material>> {
     let slab = GL_ALLOC.assume_init_ref();
     match slab.get(id).expect("Invalid texture ID") {
         GlResource::Texture(tex) => {
-            tex.material.as_ref()
+            tex.material.to_owned()
         },
         GlResource::Buffer(_) => panic!("Invalid texture ID")
     }
+}
+
+pub unsafe fn get_buffer(id: usize) -> Option<Arc<GlBuffer>> {
+    let slab = GL_ALLOC.assume_init_ref();
+    slab.get(id).and_then(|res| match res {
+        GlResource::Texture(_) => panic!("Invalid buffer ID"),
+        GlResource::Buffer(buf) => {
+            Some(buf.load_full())
+        }
+    })
 }

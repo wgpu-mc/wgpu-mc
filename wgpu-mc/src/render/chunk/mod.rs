@@ -123,6 +123,8 @@ impl BakedChunkPortionsContainer {
                         Some(mesh) => mesh,
                     };
 
+                    println!("{:?}", baked_mesh);
+
                     match &baked_mesh.shape {
                         CubeOrComplexMesh::Cube(model) => {
                             let render_north = !(z > 0 && {

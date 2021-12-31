@@ -2,7 +2,7 @@ use std::{iter, fs};
 use std::path::PathBuf;
 use std::ops::{DerefMut, Deref};
 use std::time::Instant;
-use wgpu_mc::mc::datapack::{TagOrResource, NamespacedResource, BlockModel};
+use wgpu_mc::mc::datapack::{TextureVariableOrResource, NamespacedResource, BlockModel};
 use wgpu_mc::mc::block::{BlockDirection, BlockState, Block};
 use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME, CHUNK_WIDTH};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -187,10 +187,11 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     let wgpu_state = state.wgpu_state.clone();
 
     println!("Chunks: {}", chunks.len());
+    // println!("Blocks {:?}", block_manager.baked_block_variants);
 
     use rayon::iter::IndexedParallelIterator;
     use rayon::iter::ParallelIterator;
-    chunks.into_par_iter().take(100).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
+    chunks.into_par_iter().take(1).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
         let mut chunk_blocks = Box::new([BlockState {
             packed_key: None
         }; CHUNK_VOLUME]);
@@ -200,7 +201,12 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
             match block_maybe {
                 None => {}
                 Some(block) => {
-                    let variant = block.encoded_description().replace("|", "#");
+                    // let variant = block.encoded_description().replace("|", "#");
+                    let splits = block.encoded_description().split_once("|")
+                        .unwrap();
+                    let mut variant = splits.0.to_string();
+                    variant.push_str(".json#");
+                    variant.push_str(splits.1);
 
                     chunk_blocks[
                         (x + (z * CHUNK_WIDTH)) + (y * CHUNK_AREA)
@@ -218,7 +224,8 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
         chunk.bake(&*bm, &wgpu_state_arc.device);
         println!("Baked chunk @ {},{}", chunk_x, chunk_z);
 
-        mc_state.chunks.loaded_chunks.insert((chunk_x as i32, chunk_z as i32), ArcSwap::new(Arc::new(chunk)));
+        // mc_state.chunks.loaded_chunks.insert((chunk_x as i32, chunk_z as i32), ArcSwap::new(Arc::new(chunk)));
+        mc_state.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
     });
 
     drop(block_manager);

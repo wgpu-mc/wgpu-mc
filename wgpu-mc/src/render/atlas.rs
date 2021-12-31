@@ -1,7 +1,7 @@
 use guillotiere::AtlasAllocator;
 use image::{Rgba, GenericImageView};
 use crate::model::Material;
-use crate::mc::datapack::{TagOrResource, NamespacedResource};
+use crate::mc::datapack::{TextureVariableOrResource, NamespacedResource};
 use std::collections::HashMap;
 use crate::texture::UV;
 use guillotiere::euclid::Size2D;
@@ -27,7 +27,7 @@ pub struct Atlas {
 pub struct UploadedAtlas {
     pub image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
     pub material: Material,
-    pub map: HashMap<TagOrResource, UV>
+    pub map: HashMap<TextureVariableOrResource, UV>
 }
 
 impl Atlas {

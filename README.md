@@ -42,7 +42,9 @@ Engine
 - [x] Generate a texture atlas of the textures 
 - [x] Convert the block models into a mesh
 - [x] Generate chunk meshes
-- [ ] Skybox
+- [x] Skybox*
+
+*shader not written yet
 
 Gameplay
 
@@ -60,8 +62,8 @@ Java Interface
 
 Shaders
 
-- [ ] Have built in shaders that mimic the original Minecraft style, and also built-in more advanced shaders
-- [ ] Ability to use custom shaders
+- [x] Have built in shaders that mimic the original Minecraft style, and also built-in more advanced shaders
+- [x] Ability to use custom shaders
 
 Pie in the sky
 

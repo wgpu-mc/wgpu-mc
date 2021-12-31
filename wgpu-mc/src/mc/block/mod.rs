@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::mc::block::blockstate::{BlockstateVariantDefinitionModel, BlockstateVariantModelDefinitionRotations};
-use crate::mc::datapack::{BlockModel, FaceTexture, NamespacedResource, TagOrResource};
+use crate::mc::datapack::{BlockModel, FaceTexture, NamespacedResource, TextureVariableOrResource};
 use crate::mc::resource::ResourceProvider;
 use crate::model::MeshVertex;
 use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};

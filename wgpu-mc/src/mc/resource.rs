@@ -1,4 +1,4 @@
-use crate::mc::datapack::{TagOrResource, NamespacedResource};
+use crate::mc::datapack::{TextureVariableOrResource, NamespacedResource};
 use std::sync::Arc;
 use parking_lot::RwLock;
 

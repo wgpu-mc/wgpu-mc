@@ -16,7 +16,7 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescripto
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::block::{Block, PackedBlockstateKey, BlockstateVariantKey};
 use crate::mc::chunk::ChunkManager;
-use crate::mc::datapack::{BlockModel, TagOrResource, NamespacedResource};
+use crate::mc::datapack::{BlockModel, TextureVariableOrResource, NamespacedResource};
 use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::model::Material;
@@ -179,8 +179,8 @@ impl MinecraftState {
         block_manager.models.iter().for_each(|(id, model)| {
             model.textures.iter().for_each(|(key, texture)| {
                 match texture {
-                    TagOrResource::Tag(_) => {}
-                    TagOrResource::Resource(res) => {
+                    TextureVariableOrResource::Tag(_) => {}
+                    TextureVariableOrResource::Resource(res) => {
                         textures.insert(res);
                     }
                 }

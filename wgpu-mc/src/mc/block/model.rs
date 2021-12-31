@@ -2,14 +2,14 @@ use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 
 use crate::mc::block::{Block};
-use crate::mc::datapack::{FaceTexture, TagOrResource, NamespacedResource};
+use crate::mc::datapack::{FaceTexture, TextureVariableOrResource, NamespacedResource};
 use crate::mc::datapack;
 use crate::mc::resource::ResourceProvider;
 use crate::model::MeshVertex;
 use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
 use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
-use cgmath::{Vector3, Matrix3, Euler, Deg};
+use cgmath::{Vector3, Matrix3, Euler, Deg, SquareMatrix};
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
@@ -86,13 +86,14 @@ impl BlockstateVariantMesh {
     ) -> Option<Self> {
         let texture_ids = &model.textures;
 
-        let matrix = Matrix3::from(
-            Euler {
-                x: Deg(transform.x as f32),
-                y: Deg(transform.y as f32),
-                z: Deg(transform.z as f32)
-            }
-        );
+        // let matrix = Matrix3::from(
+        //     Euler {
+        //         x: Deg(transform.x as f32),
+        //         y: Deg(transform.y as f32),
+        //         z: Deg(transform.z as f32)
+        //     }
+        // );
+        let matrix = Matrix3::identity();
 
         let is_cube = model.elements.len() == 1 && {
             let first = model.elements.first().unwrap();
@@ -105,12 +106,15 @@ impl BlockstateVariantMesh {
                 && first.to.2 == 1.0
         };
 
+        // println!("elements");
+
         let mut results = model
             .elements
             .iter()
             .map(|element| {
                 //Face textures
 
+                // println!("{:?}", element);
                 let north = element.face_textures.north.as_ref().and_then(|tex| {
                     Some(Self::absolute_atlas_uv(
                         tex,

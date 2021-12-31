@@ -1,4 +1,3 @@
-use crate::OPENGL_TO_WGPU_MATRIX;
 use cgmath::{Point3, SquareMatrix, Vector3, EuclideanSpace};
 use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
@@ -46,7 +45,7 @@ impl Camera {
         );
 
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        proj * view * OPENGL_TO_WGPU_MATRIX
+        proj * view
     }
 }
 

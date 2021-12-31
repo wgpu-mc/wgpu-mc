@@ -62,54 +62,54 @@ impl PartialEq for NamespacedResource {
 }
 
 #[derive(Debug, Clone, Eq, Hash)]
-pub enum TagOrResource {
+pub enum TextureVariableOrResource {
     Tag(String),
     Resource(NamespacedResource)
 }
 
-impl TagOrResource {
+impl TextureVariableOrResource {
     #[must_use]
     pub fn is_tag(&self) -> bool {
-        matches!(self, TagOrResource::Tag(_))
+        matches!(self, TextureVariableOrResource::Tag(_))
     }
 
     pub fn as_resource(&self) -> Option<&NamespacedResource> {
         match self {
-            TagOrResource::Tag(_) => None,
-            TagOrResource::Resource(ref res) => Some(res)
+            TextureVariableOrResource::Tag(_) => None,
+            TextureVariableOrResource::Resource(ref res) => Some(res)
         }
     }
 
     pub fn as_tag(&self) -> Option<&str> {
         match self {
-            TagOrResource::Tag(string) => Some(string),
-            TagOrResource::Resource(ref res) => None
+            TextureVariableOrResource::Tag(string) => Some(string),
+            TextureVariableOrResource::Resource(ref res) => None
         }
     }
 
 }
 
-impl Display for TagOrResource {
+impl Display for TextureVariableOrResource {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            TagOrResource::Tag(tag) => f.write_str(&format!("#{}", tag)),
-            TagOrResource::Resource(res) => f.write_str(&format!("{}:{}", res.0, res.1))
+            TextureVariableOrResource::Tag(tag) => f.write_str(&format!("#{}", tag)),
+            TextureVariableOrResource::Resource(res) => f.write_str(&format!("{}:{}", res.0, res.1))
         }
     }
 }
 
-impl PartialEq for TagOrResource {
+impl PartialEq for TextureVariableOrResource {
     fn eq(&self, other: &Self) -> bool {
         match self {
-            TagOrResource::Tag(tag) => {
-                if let TagOrResource::Tag(o) = other {
+            TextureVariableOrResource::Tag(tag) => {
+                if let TextureVariableOrResource::Tag(o) = other {
                     o == tag
                 } else {
                     false
                 }
             }
-            TagOrResource::Resource(nsa) => {
-                if let TagOrResource::Resource(nsb) = other {
+            TextureVariableOrResource::Resource(nsa) => {
+                if let TextureVariableOrResource::Resource(nsb) = other {
                     nsa == nsb
                 } else {
                     false
@@ -119,10 +119,10 @@ impl PartialEq for TagOrResource {
     }
 }
 
-impl TryFrom<&str> for TagOrResource {
+impl TryFrom<&str> for TextureVariableOrResource {
     type Error = ();
 
-    fn try_from(string: &str) -> Result<TagOrResource, Self::Error> {
+    fn try_from(string: &str) -> Result<TextureVariableOrResource, Self::Error> {
         // See if tag and remove # if so
         let is_tag = string.starts_with('#');
         let string = if is_tag { &string[1..] } else { string };
@@ -132,12 +132,12 @@ impl TryFrom<&str> for TagOrResource {
 
         Ok(if !is_tag {
             match (split.next(), split.next()) {
-                (Some(ns), Some(id)) => TagOrResource::Resource(NamespacedResource (ns.into(), id.into())),
-                (Some(id), None) => TagOrResource::Resource(NamespacedResource ("minecraft".into(), id.into())),
+                (Some(ns), Some(id)) => TextureVariableOrResource::Resource(NamespacedResource (ns.into(), id.into())),
+                (Some(id), None) => TextureVariableOrResource::Resource(NamespacedResource ("minecraft".into(), id.into())),
                 _ => return Err(())
             }
         } else {
-            TagOrResource::Tag(string.into())
+            TextureVariableOrResource::Tag(string.into())
         })
     }
 }
@@ -145,7 +145,7 @@ impl TryFrom<&str> for TagOrResource {
 #[derive(Debug, Clone)]
 pub struct FaceTexture {
     pub uv: UV,
-    pub texture: TagOrResource,
+    pub texture: TextureVariableOrResource,
 }
 
 #[derive(Debug, Clone)]
@@ -168,7 +168,7 @@ pub struct Element {
 }
 
 ///A struct that described a block and how it renders
-/// Not a mesh! That would be BlockMesh
+/// Not a mesh! That would be BlockstateVariantMesh
 #[derive(Clone, Debug)]
 pub struct BlockModel {
     pub id: NamespacedResource,
@@ -176,7 +176,7 @@ pub struct BlockModel {
     pub elements: Vec<Element>,
     ///Depending on the camera state, e.g. 3rd or 1st person, the way the block is rendered is changed
     pub display_transforms: HashMap<String, Matrix4<f32>>,
-    pub textures: HashMap<String, TagOrResource>,
+    pub textures: HashMap<String, TextureVariableOrResource>,
 }
 
 impl BlockModel {
@@ -185,17 +185,18 @@ impl BlockModel {
         Some(
             (
                 vec[0].as_f64()? as f32,
-                vec[0].as_f64()? as f32,
-                vec[0].as_f64()? as f32
+                vec[1].as_f64()? as f32,
+                vec[2].as_f64()? as f32
             )
         )
     }
 
     fn parse_face(
         face: Option<&Value>,
-        textures: &HashMap<String, TagOrResource>
+        textures: &HashMap<String, TextureVariableOrResource>
     ) -> Option<FaceTexture> {
         let face = face?.as_object()?;
+        println!("{:?} {:?}", face, textures);
         let uv_arr = face.get("uv")?.as_array()?;
 
         let uv = (
@@ -210,13 +211,15 @@ impl BlockModel {
             ),
         );
 
-        let texture: TagOrResource = face.get("texture")?.as_str()?.try_into().ok()?;
+        let texture: TextureVariableOrResource = face.get("texture")?.as_str()?.try_into().ok()?;
 
         let texture = match texture {
-            TagOrResource::Tag(ref tag_value) => {
+            TextureVariableOrResource::Tag(ref tag_value) => {
+                // println!("{:?} {:?}", face.get("texture"), textures.get(tag_value));
+                // println!("{} {:?}", tag_value, textures.get(tag_value));
                 textures.get(tag_value)?.clone()
             }
-            TagOrResource::Resource(_) => texture
+            TextureVariableOrResource::Resource(_) => texture
         };
 
         Some(FaceTexture {
@@ -228,7 +231,7 @@ impl BlockModel {
     fn parse_elements(
         val: Option<&Value>,
         parent: Option<&BlockModel>,
-        textures: &HashMap<String, TagOrResource>,
+        textures: &HashMap<String, TextureVariableOrResource>,
     ) -> Option<Vec<Element>> {
         match val {
             //No elements, default to parent's elements
@@ -247,6 +250,8 @@ impl BlockModel {
                         let to = (triplet.0 / 16.0, triplet.1 / 16.0, triplet.2 / 16.0);
 
                         let faces = element.get("faces")?.as_object()?;
+
+                        // println!("{:?}", faces);
 
                         Some(Element {
                             from,
@@ -293,7 +298,7 @@ impl BlockModel {
         });
 
         //Get the face texture mappings
-        let mut textures: HashMap<String, TagOrResource> = obj.get("textures").map_or(
+        let mut textures: HashMap<String, TextureVariableOrResource> = obj.get("textures").map_or(
             HashMap::new(),
             |textures_map| {
                 //Map of the faces and their textures
@@ -311,14 +316,16 @@ impl BlockModel {
             }
         );
 
-        let textures = match parent {
-            None => textures,
+        match parent {
+            None => {},
             Some(parent_model) => {
-                let mut resolved_parent = parent_model.textures.iter()
+                println!("{:?}\n{:?}\n\n", parent_model.textures, textures);
+
+                textures.extend(parent_model.textures.iter()
                     //Map the resolvable tags
                     .map(|(key, value)| {
                         match value {
-                            TagOrResource::Tag(tag_value) => {
+                            TextureVariableOrResource::Tag(tag_value) => {
                                 (
                                     key.clone(),
                                     textures.get(tag_value)
@@ -326,17 +333,15 @@ impl BlockModel {
                                         .unwrap_or(value.clone())
                                 )
                             }
-                            TagOrResource::Resource(resource) => {
+                            TextureVariableOrResource::Resource(resource) => {
                                 (
                                     key.clone(),
-                                    TagOrResource::Resource(resource.clone())
+                                    TextureVariableOrResource::Resource(resource.clone())
                                 )
                             }
                         }
-                    })
-                    .collect::<HashMap<String, TagOrResource>>();
-                resolved_parent.extend(textures.into_iter());
-                resolved_parent
+                    }).collect::<Vec<(String, TextureVariableOrResource)>>().into_iter()
+                );
             }
         };
 
@@ -351,6 +356,8 @@ impl BlockModel {
             textures,
             display_transforms: HashMap::new(), //TODO
         };
+
+        // println!("{:?}", model);
 
         model_map.insert(identifier.clone(), model);
 

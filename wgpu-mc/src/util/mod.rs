@@ -92,26 +92,26 @@ impl<'a> WmArena<'a> {
 
 }
 
-// impl<'a> Drop for WmArena<'a> {
-//
-//     fn drop(&mut self) {
-//         self.heaps.iter().for_each(|heap| {
-//             unsafe {
-//                 dealloc(
-//                     heap.0,
-//                     Layout::from_size_align(
-//                         heap.1, ALIGN
-//                     ).unwrap()
-//                 );
-//             }
-//         });
-//
-//         self.objects.iter().for_each(|(ptr, dealloc)| {
-//             dealloc(*ptr);
-//         });
-//     }
-//
-// }
+impl<'a> Drop for WmArena<'a> {
+
+    fn drop(&mut self) {
+        self.objects.iter().for_each(|(ptr, dealloc)| {
+            dealloc(*ptr);
+        });
+
+        self.heaps.iter().for_each(|heap| {
+            unsafe {
+                dealloc(
+                    heap.0,
+                    Layout::from_size_align(
+                        heap.1, ALIGN
+                    ).unwrap()
+                );
+            }
+        });
+    }
+
+}
 
 // pub struct AVec<T: Send + Sync> {
 //     capacity: AtomicUsize,

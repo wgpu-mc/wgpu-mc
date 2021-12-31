@@ -12,7 +12,7 @@ use std::sync::{Arc, mpsc};
 use std::sync::mpsc::{channel, RecvError, Sender};
 use std::time::Instant;
 
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, AsRaw};
 use cgmath::{Matrix4, SquareMatrix, Vector3};
 use dashmap::DashMap;
 use futures::executor::block_on;
@@ -32,7 +32,7 @@ use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use wgpu_mc::mc::block::{Block, BlockDirection, BlockState};
 use wgpu_mc::mc::BlockEntry;
 use wgpu_mc::mc::chunk::{Chunk, CHUNK_HEIGHT, CHUNK_VOLUME};
-use wgpu_mc::mc::datapack::{NamespacedResource, TagOrResource};
+use wgpu_mc::mc::datapack::{NamespacedResource, TextureVariableOrResource};
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::Material;
 use wgpu_mc::render::chunk::BakedChunk;
@@ -47,6 +47,7 @@ use crate::gl::GL_COMMANDS;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use std::num::NonZeroU32;
 use std::rc::Rc;
+use wgpu_mc::camera::UniformMatrixHelper;
 
 ///Foreword here,
 /// the code is quite messy and will be cleaned up at some point.
@@ -269,16 +270,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
     let (tx, rx) = mpsc::channel::<RenderMessage>();
 
     unsafe {
+        gl::init();
         GL_PIPELINE = MaybeUninit::new(GlPipeline {
             pipelines: Default::default(),
             matrix_stacks: RefCell::new([([Matrix4::identity(); 32], 0); 3]),
             matrix_mode: RefCell::new(0),
             commands: ArcSwap::new(Arc::new(Vec::new())),
-            active_texture_slot: RefCell::new(0),
+            active_texture_slot: RefCell::new(0x84C0),
             slots: RefCell::new(HashMap::new()),
-            vertex_attributes: RefCell::new(HashMap::new()),
+            // vertex_attributes: RefCell::new(HashMap::new()),
+            vertex_array: RefCell::new(None),
             client_states: RefCell::new(Vec::new()),
-            shaders: RefCell::new(None)
+            // shaders: RefCell::new(None)
+            active_pipeline: RefCell::new(0)
         });
         CHANNEL_TX = MaybeUninit::new(Mutex::new(tx));
         CHANNEL_RX = MaybeUninit::new(Mutex::new(rx));
@@ -506,7 +510,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunkSimple(
     }).collect::<Box<[BlockState]>>().try_into().unwrap();
 
     let mut chunk = Chunk::new((x, z), blocks);
-    let baked = BakedChunk::bake(renderer, &chunk);
+    let baked = BakedChunk::bake(
+        &*renderer.mc.block_manager.read(),
+        &chunk,
+        &renderer.wgpu_state.device);
 
     chunk.baked = Some(baked);
     renderer.mc.chunks.loaded_chunks.insert((x, z), ArcSwap::new(Arc::new(chunk)));
@@ -545,6 +552,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindBuffer(
     target: jint,
     buffer: jint
 ) {
+    let mut state = unsafe { gl::GL_STATE.assume_init_mut() };
+    state.buffers.insert(target, buffer);
+
+    //TODO: Is this necessary
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
     commands.push(GLCommand::BindBuffer(target, buffer));
 }
@@ -585,6 +596,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
 ) {
     let commands = unsafe { GL_COMMANDS.assume_init_mut() };
 
+    println!("{:?}", commands);
+
     unsafe { GL_PIPELINE.assume_init_mut() }.commands.store(
         Arc::new(
             commands.clone()
@@ -604,7 +617,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_vertexPointer(
     pointer: jlong
 ) {
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
-    commands.push(GLCommand::VertexPointer(size, vertex_type, stride, pointer as u64));
+    commands.push(GLCommand::VertexPointer(size, vertex_type, stride, pointer as *const u8));
 }
 
 #[no_mangle]
@@ -617,7 +630,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_colorPointer(
     pointer: jlong
 ) {
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
-    commands.push(GLCommand::ColorPointer(size, vertex_type, stride, pointer as u64));
+    commands.push(GLCommand::ColorPointer(size, vertex_type, stride, pointer as *const u8));
 }
 
 #[no_mangle]
@@ -630,7 +643,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texCoordPointer(
     pointer: jlong
 ) {
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
-    commands.push(GLCommand::TexCoordPointer(size, vertex_type, stride, pointer as u64));
+    commands.push(GLCommand::TexCoordPointer(size, vertex_type, stride, pointer as *const u8));
 }
 
 #[no_mangle]
@@ -673,8 +686,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     } else {
         vec![0; size]
     };
-
-    let wm = unsafe { RENDERER.assume_init_ref() };
 
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
     commands.push(GLCommand::TexImage2D((
@@ -749,7 +760,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_ortho(
 ) {
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
     commands.push(GLCommand::MultMatrix(
-        cgmath::ortho(l,r,b,t,-10000.0,10000.0)
+        cgmath::ortho(l,r,b,t,n, f)
     ));
 }
 
@@ -789,4 +800,183 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_matrixMode(
 ) {
     let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
     commands.push(GLCommand::MatrixMode(mode as usize));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texSubImage2D(
+    env: JNIEnv,
+    class: JClass,
+    target: jint,
+    level: jint,
+    offsetX: jint,
+    offsetY: jint,
+    width: jint,
+    height: jint,
+    format: jint,
+    gtype: jint,
+    pixels: jlong) {
+
+
+
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindVertexArray(
+    env: JNIEnv,
+    class: JClass,
+    arr: jint
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::BindVertexArray(arr));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawElements(
+    env: JNIEnv,
+    class: JClass,
+    mode: jint,
+    first: jint,
+    type_: jint,
+    indices: jlong
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::DrawElements(mode, first, type_, indices as *const u8));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
+    env: JNIEnv,
+    class: JClass,
+    r: jfloat,
+    g: jfloat,
+    b: jfloat
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::ClearColor(r, g, b));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bufferData(
+    env: JNIEnv,
+    class: JClass,
+    buf: JObject,
+    target: jint,
+    usage: jint
+) {
+    let wm = unsafe { RENDERER.assume_init_ref() };
+    let data = env.get_direct_buffer_address(buf.into()).unwrap();
+    let vec = Vec::from(data);
+
+    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let active_buffer = *state.buffers.get(&target).unwrap();
+
+    unsafe {
+        gl::upload_buffer_data(
+            active_buffer as usize,
+            &vec[..],
+            &wm.wgpu_state.device
+        );
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initBuffer(
+    env: JNIEnv,
+    class: JClass,
+    target: jint,
+    size: jlong,
+    usage: jint
+) {
+    let wm = unsafe { RENDERER.assume_init_ref() };
+
+    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let active_buffer = *state.buffers.get(&target).unwrap();
+    let vec = vec![0u8; size as usize];
+
+    unsafe {
+        gl::upload_buffer_data(
+            active_buffer as usize,
+            &vec[..],
+            &wm.wgpu_state.device
+        );
+    }
+}
+
+//Awful code
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_mapBuffer(
+    env: JNIEnv,
+    class: JClass,
+    target: jint,
+    usage: jint
+) -> jobject {
+    // let wm = unsafe { RENDERER.assume_init_ref() };
+    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let active_buffer = *state.buffers.get(&target).unwrap();
+
+    let buf = unsafe { gl::get_buffer(active_buffer as usize) }.unwrap();
+    let maps = unsafe { gl::GL_MAPPED_BUFFERS.assume_init_mut() };
+
+    if !maps.contains_key(&(target as usize)) {
+        maps.insert(active_buffer as usize, buf.data.as_ref().unwrap().clone());
+    } else {
+        panic!("Buffer {} already mapped!", target);
+    }
+    let mut reference = maps.get_mut(&(active_buffer as usize)).unwrap();
+    env.new_direct_byte_buffer(&mut reference[..]).unwrap().as_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_unmapBuffer(
+    env: JNIEnv,
+    class: JClass,
+    target: jint,
+) {
+    let wm = unsafe { RENDERER.assume_init_ref() };
+    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let active_buffer = state.buffers.remove(&target).unwrap();
+    let mapped = unsafe { gl::GL_MAPPED_BUFFERS.assume_init_mut() };
+    let vec = mapped.remove(&(active_buffer as usize)).unwrap();
+
+    unsafe {
+        gl::upload_buffer_data(
+            active_buffer as usize,
+            &vec[..],
+            &wm.wgpu_state.device
+        );
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
+    env: JNIEnv,
+    class: JClass,
+    pipeline: jint,
+) {
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::UsePipeline(pipeline as usize));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindMatrix4f(
+    env: JNIEnv,
+    class: JClass,
+    slot: jint,
+    floatarr: JObject
+) {
+    let elem = env.get_float_array_elements(floatarr.as_raw(), ReleaseMode::NoCopyBack)
+        .unwrap();
+
+    assert_eq!(elem.size().unwrap(), 16);
+
+    let float_slice = unsafe {
+        std::slice::from_raw_parts(elem.as_ptr(), 16)
+    };`
+
+    let mat_helper: &UniformMatrixHelper = bytemuck::from_bytes(
+        bytemuck::cast_slice::<_, u8>(float_slice)
+    );
+
+    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    commands.push(GLCommand::BindMat(slot as usize, mat_helper.view_proj.into()));
 }
