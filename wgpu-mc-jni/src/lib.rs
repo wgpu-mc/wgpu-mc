@@ -971,7 +971,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindMatrix4f(
 
     let float_slice = unsafe {
         std::slice::from_raw_parts(elem.as_ptr(), 16)
-    };`
+    };
 
     let mat_helper: &UniformMatrixHelper = bytemuck::from_bytes(
         bytemuck::cast_slice::<_, u8>(float_slice)

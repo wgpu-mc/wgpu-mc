@@ -16,7 +16,7 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescripto
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::block::{Block, PackedBlockstateKey, BlockstateVariantKey};
 use crate::mc::chunk::ChunkManager;
-use crate::mc::datapack::{BlockModel, TextureVariableOrResource, NamespacedResource};
+use crate::mc::datapack::{BlockModel, TextureVariableOrResource, NamespacedResource, DatapackContextResolver};
 use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::model::Material;
@@ -60,7 +60,7 @@ impl BlockManager {
 
 }
 
-fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, BlockModel>, model_id: &NamespacedResource, resource_provider: &dyn ResourceProvider) -> Option<&'a BlockModel> {
+fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, BlockModel>, model_id: &NamespacedResource, resource_provider: &dyn ResourceProvider, resolver: &dyn DatapackContextResolver) -> Option<&'a BlockModel> {
     if models.contains_key(model_id) {
         return models.get(model_id);
     }
@@ -70,6 +70,7 @@ fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, Blo
     BlockModel::deserialize(
         model_id,
         resource_provider,
+        resolver,
         &mut model_map
     )?;
 
@@ -91,6 +92,7 @@ pub struct MinecraftState {
     pub entities: RwLock<Vec<Entity>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
+    pub context_resolver: Arc<dyn DatapackContextResolver>,
 
     pub camera: ArcSwap<Camera>,
 
@@ -102,7 +104,11 @@ pub struct MinecraftState {
 
 impl MinecraftState {
     #[must_use]
-    pub fn new(device: &wgpu::Device, pipelines: &RenderPipelinesManager, resource_provider: Arc<dyn ResourceProvider>) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        pipelines: &RenderPipelinesManager,
+        resource_provider: Arc<dyn ResourceProvider>,
+        context_resolver: Arc<dyn DatapackContextResolver>) -> Self {
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
             size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
@@ -139,7 +145,8 @@ impl MinecraftState {
             uniform_buffer: ArcSwap::new(Arc::new(uniform_buffer)),
             uniform_bind_group: ArcSwap::new(Arc::new(uniform_bind_group)),
 
-            resource_provider
+            resource_provider,
+            context_resolver,
         }
     }
 
@@ -162,6 +169,7 @@ impl MinecraftState {
                 BlockModel::deserialize(
                     &model_resource,
                     &*self.resource_provider,
+                    &*self.context_resolver,
                     &mut model_map
                 );;
             });
@@ -245,7 +253,8 @@ impl MinecraftState {
                 let block_model = get_model_or_deserialize(
                     &mut block_manager.models,
                     &state.model,
-                    &*self.resource_provider
+                    &*self.resource_provider,
+                    &*self.context_resolver
                 ).expect(&format!("{:?}", state.model));
 
                 let mesh = BlockstateVariantMesh::bake_block_model(

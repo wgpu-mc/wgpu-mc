@@ -9,6 +9,12 @@ use std::convert::{TryFrom, TryInto};
 use crate::mc::resource::{ResourceProvider};
 use std::fmt::{Display, Formatter};
 
+pub trait DatapackContextResolver: Send + Sync {
+
+    fn resolve(&self, context: &str, resource: &NamespacedResource) -> NamespacedResource;
+
+}
+
 #[derive(Debug, Hash, Clone, std::cmp::Eq)]
 pub struct NamespacedResource (pub String, pub String);
 
@@ -275,6 +281,7 @@ impl BlockModel {
     pub fn deserialize<'a>(
         identifier: &NamespacedResource,
         resource_provider: &dyn ResourceProvider,
+        resolver: &dyn DatapackContextResolver,
         model_map: &'a mut HashMap<NamespacedResource, BlockModel>,
     ) -> Option<&'a Self> {
 
@@ -282,7 +289,12 @@ impl BlockModel {
             return model_map.get(identifier);
         }
 
-        let bytes = resource_provider.get_resource(&identifier.prepend("models/").append(".json"));
+        let bytes = resource_provider.get_resource(
+            &resolver.resolve(
+                "models",
+                &identifier
+            )
+        );
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         let obj = json.as_object()?;
@@ -290,9 +302,12 @@ impl BlockModel {
         //Get information about the parent model, if this model has one
         let parent = obj.get("parent").and_then(|v| {
             let parent_identifier_string = v.as_str()?;
-            let parent_identifier: NamespacedResource = parent_identifier_string.try_into().unwrap();
+            let parent_identifier: NamespacedResource = resolver.resolve(
+                "models",
+                &parent_identifier_string.try_into().unwrap()
+            );
 
-            BlockModel::deserialize(&parent_identifier, resource_provider, model_map);
+            BlockModel::deserialize(&parent_identifier, resource_provider, resolver, model_map);
 
             model_map.get(&parent_identifier)
         });
@@ -309,7 +324,14 @@ impl BlockModel {
                     .map(|(key, val)| {
                         (
                             key.clone(),
-                            val.as_str().unwrap().try_into().unwrap()
+                            match val.as_str().unwrap().try_into().unwrap() {
+                                TextureVariableOrResource::Resource(ns) =>
+                                    TextureVariableOrResource::Resource(
+                                        resolver.resolve("textures",&ns)
+                                    ),
+                                TextureVariableOrResource::Tag(tag) =>
+                                    TextureVariableOrResource::Tag(tag)
+                            }
                         )
                     })
                     .collect()
@@ -319,8 +341,6 @@ impl BlockModel {
         match parent {
             None => {},
             Some(parent_model) => {
-                println!("{:?}\n{:?}\n\n", parent_model.textures, textures);
-
                 textures.extend(parent_model.textures.iter()
                     //Map the resolvable tags
                     .map(|(key, value)| {
@@ -328,9 +348,18 @@ impl BlockModel {
                             TextureVariableOrResource::Tag(tag_value) => {
                                 (
                                     key.clone(),
-                                    textures.get(tag_value)
+                                    textures.get(&tag_value[..])
                                         .cloned()
-                                        .unwrap_or(value.clone())
+                                        .map_or(value.clone(), |tag_var| {
+                                            match tag_var {
+                                                TextureVariableOrResource::Resource(ns) =>
+                                                    TextureVariableOrResource::Resource(
+                                                        resolver.resolve("textures",&ns)
+                                                    ),
+                                                TextureVariableOrResource::Tag(tag) =>
+                                                    TextureVariableOrResource::Tag(tag)
+                                            }
+                                        })
                                 )
                             }
                             TextureVariableOrResource::Resource(resource) => {
@@ -356,8 +385,6 @@ impl BlockModel {
             textures,
             display_transforms: HashMap::new(), //TODO
         };
-
-        // println!("{:?}", model);
 
         model_map.insert(identifier.clone(), model);
 

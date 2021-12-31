@@ -32,6 +32,7 @@ use std::cell::RefCell;
 use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
 use arc_swap::ArcSwap;
 use crate::util::WmArena;
+use crate::mc::datapack::DatapackContextResolver;
 
 macro_rules! dashmap(
     { $($key:expr => $value:expr),+ } => {
@@ -83,7 +84,8 @@ pub trait HasWindowSize {
 impl WmRenderer {
     pub async fn new<W: HasRawWindowHandle + HasWindowSize>(
         window: &W,
-        resource_provider: Arc<dyn ResourceProvider>
+        resource_provider: Arc<dyn ResourceProvider>,
+        context_resolver: Arc<dyn DatapackContextResolver>
     ) -> WmRenderer {
         let size = window.get_window_size();
 
@@ -170,7 +172,7 @@ impl WmRenderer {
             shader_map,
             resource_provider.clone());
 
-        let mc = MinecraftState::new(&device, &pipelines, resource_provider);
+        let mc = MinecraftState::new(&device, &pipelines, resource_provider, context_resolver);
         let depth_texture = WgpuTexture::create_depth_texture(&device, &config, "depth texture");
 
         let wgpu_state = WgpuState {

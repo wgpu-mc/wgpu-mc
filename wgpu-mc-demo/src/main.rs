@@ -2,7 +2,7 @@ use std::{iter, fs};
 use std::path::PathBuf;
 use std::ops::{DerefMut, Deref};
 use std::time::Instant;
-use wgpu_mc::mc::datapack::{TextureVariableOrResource, NamespacedResource, BlockModel};
+use wgpu_mc::mc::datapack::{TextureVariableOrResource, NamespacedResource, BlockModel, DatapackContextResolver};
 use wgpu_mc::mc::block::{BlockDirection, BlockState, Block};
 use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME, CHUNK_WIDTH};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -27,6 +27,21 @@ use std::io::Cursor;
 use fastanvil::pre18::JavaChunk;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
 use fastnbt::de::from_bytes;
+
+struct DemoContextResolver;
+
+impl DatapackContextResolver for DemoContextResolver {
+
+    fn resolve(&self, context: &str, resource: &NamespacedResource) -> NamespacedResource {
+        resource
+            .prepend(&format!("{}/", context))
+            .append(match context {
+                "textures" => ".png",
+                _ => ".json"
+            })
+    }
+
+}
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -60,16 +75,6 @@ unsafe impl HasRawWindowHandle for WinitWindowWrapper {
         self.window.raw_window_handle()
     }
 
-}
-
-struct Test {
-    thing: String
-}
-
-impl Drop for Test {
-    fn drop(&mut self) {
-        println!("dropping test {:?}", self.thing);
-    }
 }
 
 fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
@@ -131,6 +136,7 @@ fn main() {
         WmRenderer::new(
             &wrapper,
             Arc::new(rsp),
+            Arc::new(DemoContextResolver)
         )
     );
 
@@ -146,7 +152,7 @@ fn main() {
 
             let resource_name = NamespacedResource (
                 String::from("minecraft"),
-                String::from(model.file_name().to_str().unwrap())
+                format!("blockstates/{}", model.file_name().to_str().unwrap())
             );
 
             match Block::from_json(model.file_name().to_str().unwrap(), std::str::from_utf8(&fs::read(model.path()).unwrap()).unwrap()) {
@@ -155,19 +161,6 @@ fn main() {
             };
         });
     }
-
-    println!("Testing arena");
-
-    {
-        let mut arena = WmArena::new(1024);
-        for _ in 0..10000 {
-            arena.alloc(
-                String::from("Testing arena")
-            );
-        }
-    }
-
-    println!("Arena ok");
 
     println!("Generating blocks");
     wm.mc.bake_blocks(&wm);
@@ -183,52 +176,59 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
     let block_manager = state.mc.block_manager.read();
 
-    let mc_state = state.mc.clone();
-    let wgpu_state = state.wgpu_state.clone();
-
     println!("Chunks: {}", chunks.len());
     // println!("Blocks {:?}", block_manager.baked_block_variants);
 
-    use rayon::iter::IndexedParallelIterator;
-    use rayon::iter::ParallelIterator;
-    chunks.into_par_iter().take(1).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
-        let mut chunk_blocks = Box::new([BlockState {
-            packed_key: None
-        }; CHUNK_VOLUME]);
-        (0..16).zip((0..256).zip(0..16)).for_each(|(x,(y,z))| {
-            use fastanvil::Chunk;
-            let block_maybe = java_chunk.block(x as usize, y as isize, z as usize);
-            match block_maybe {
-                None => {}
-                Some(block) => {
-                    // let variant = block.encoded_description().replace("|", "#");
-                    let splits = block.encoded_description().split_once("|")
-                        .unwrap();
-                    let mut variant = splits.0.to_string();
-                    variant.push_str(".json#");
-                    variant.push_str(splits.1);
-
-                    chunk_blocks[
-                        (x + (z * CHUNK_WIDTH)) + (y * CHUNK_AREA)
-                    ] = BlockState {
-                        packed_key: Some(*block_manager.baked_block_variants.get_with_key(
-                            &NamespacedResource::try_from(&variant[..]).unwrap()
-                        ).expect(&variant[..]).0)
-                    }
-                }
-            }
-        });
-        let mut chunk = Chunk::new((chunk_x as i32, chunk_z as i32), chunk_blocks);
-        let bm = mc_state.block_manager.read();
-        let wgpu_state_arc = wgpu_state.clone();
-        chunk.bake(&*bm, &wgpu_state_arc.device);
-        println!("Baked chunk @ {},{}", chunk_x, chunk_z);
-
-        // mc_state.chunks.loaded_chunks.insert((chunk_x as i32, chunk_z as i32), ArcSwap::new(Arc::new(chunk)));
-        mc_state.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
-    });
+    // use rayon::iter::IndexedParallelIterator;
+    // use rayon::iter::ParallelIterator;
+    // chunks.into_par_iter().take(1).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
+    //     let mut chunk_blocks = Box::new([BlockState {
+    //         packed_key: None
+    //     }; CHUNK_VOLUME]);
+    //     (0..16).zip((0..256).zip(0..16)).for_each(|(x,(y,z))| {
+    //         use fastanvil::Chunk;
+    //         let block_maybe = java_chunk.block(x as usize, y as isize, z as usize);
+    //         match block_maybe {
+    //             None => {}
+    //             Some(block) => {
+    //                 // let variant = block.encoded_description().replace("|", "#");
+    //                 let splits = block.encoded_description().split_once("|")
+    //                     .unwrap();
+    //                 let mut variant = splits.0.to_string();
+    //                 variant.push_str(".json#");
+    //                 variant.push_str(splits.1);
+    //
+    //                 chunk_blocks[
+    //                     (x + (z * CHUNK_WIDTH)) + (y * CHUNK_AREA)
+    //                 ] = BlockState {
+    //                     packed_key: Some(*block_manager.baked_block_variants.get_with_key(
+    //                         &NamespacedResource::try_from(&variant[..]).unwrap()
+    //                     ).expect(&variant[..]).0)
+    //                 }
+    //             }
+    //         }
+    //     });
+    //     let mut chunk = Chunk::new((chunk_x as i32, chunk_z as i32), chunk_blocks);
+    //     let bm = mc_state.block_manager.read();
+    //     let wgpu_state_arc = wgpu_state.clone();
+    //     chunk.bake(&*bm, &wgpu_state_arc.device);
+    //     println!("Baked chunk @ {},{}", chunk_x, chunk_z);
+    //     // println!("{:?}", )
+    //
+    //     // mc_state.chunks.loaded_chunks.insert((chunk_x as i32, chunk_z as i32), ArcSwap::new(Arc::new(chunk)));
+    //     mc_state.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
+    // });
+    let blocks: Box<[BlockState; CHUNK_VOLUME]> = Box::new([BlockState {
+        packed_key: Some(*block_manager.baked_block_variants.get_with_key(
+            &NamespacedResource::try_from("minecraft:block/cobblestone").unwrap()
+        ).unwrap().0)
+    }; CHUNK_VOLUME]).try_into().unwrap();
+    let mut chunk = Chunk::new((0, 0), blocks);
+    chunk.bake(&block_manager, &state.wgpu_state.device);
 
     drop(block_manager);
+
+    state.mc.chunks.loaded_chunks.insert((0,0), ArcSwap::new(Arc::new(chunk)));
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;
