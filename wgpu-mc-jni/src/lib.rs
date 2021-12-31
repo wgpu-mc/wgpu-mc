@@ -32,7 +32,7 @@ use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use wgpu_mc::mc::block::{Block, BlockDirection, BlockState};
 use wgpu_mc::mc::BlockEntry;
 use wgpu_mc::mc::chunk::{Chunk, CHUNK_HEIGHT, CHUNK_VOLUME};
-use wgpu_mc::mc::datapack::{NamespacedResource, TextureVariableOrResource};
+use wgpu_mc::mc::datapack::{NamespacedResource, TextureVariableOrResource, DatapackContextResolver};
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::Material;
 use wgpu_mc::render::chunk::BakedChunk;
@@ -374,6 +374,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
     // });
 }
 
+struct McDatapackResolver;
+
+impl DatapackContextResolver for McDatapackResolver {
+    fn resolve(&self, context: &str, resource: &NamespacedResource) -> NamespacedResource {
+        resource.prepend(&format!("{}/", context)).append(match context {
+            "textures" => ".png",
+            _ => ".json"
+        })
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
     env: JNIEnv,
@@ -383,9 +394,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
         window: unsafe { WINDOW.assume_init_ref() }
     };
     let mut state = block_on(WmRenderer::new(
-        &wrapper, Arc::new(MinecraftResourceManagerAdapter {
+        &wrapper,
+        Arc::new(MinecraftResourceManagerAdapter {
             jvm: env.get_java_vm().unwrap()
-        }))
+        }),
+        Arc::new(McDatapackResolver))
     );
     unsafe {
         RENDERER = MaybeUninit::new(state);
