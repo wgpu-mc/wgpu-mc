@@ -61,14 +61,19 @@ impl BlockManager {
 }
 
 fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, BlockModel>, model_id: &NamespacedResource, resource_provider: &dyn ResourceProvider, resolver: &dyn DatapackContextResolver) -> Option<&'a BlockModel> {
-    if models.contains_key(model_id) {
-        return models.get(model_id);
+    let resolved = resolver.resolve(
+        "models",
+        model_id
+    );
+
+    if models.contains_key(&resolved) {
+        return models.get(&resolved);
     }
 
     let mut model_map = HashMap::new();
 
     BlockModel::deserialize(
-        model_id,
+        &resolved,
         resource_provider,
         resolver,
         &mut model_map
@@ -167,7 +172,10 @@ impl MinecraftState {
                 let model_resource = &variant_definition.model;
 
                 BlockModel::deserialize(
-                    &model_resource,
+                    &self.context_resolver.resolve(
+                        "models",
+                        model_resource
+                    ),
                     &*self.resource_provider,
                     &*self.context_resolver,
                     &mut model_map
@@ -201,7 +209,9 @@ impl MinecraftState {
         };
 
         for id in &textures {
-            let bytes = self.resource_provider.get_resource(&id.prepend("textures/").append(".png"));
+            let bytes = self.resource_provider.get_resource(
+                &self.context_resolver.resolve("textures", &id)
+            );
             atlases.block.allocate(id, &bytes[..]).unwrap();
         }
 

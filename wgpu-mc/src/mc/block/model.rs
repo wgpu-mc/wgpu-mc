@@ -38,15 +38,17 @@ pub struct BlockstateVariantMesh {
 impl BlockstateVariantMesh {
     pub fn absolute_atlas_uv(
         face: &FaceTexture,
-        tex_manager: &TextureManager
+        tex_manager: &TextureManager,
+        textures: &HashMap<String, TextureVariableOrResource>
     ) -> Option<UV> {
         let atlases = tex_manager.atlases.load();
 
-        let atlas_uv = atlases.block.map.get(face.texture
-            .as_resource()
-            .expect(
-                &format!("{:?}", face)
-            )
+        let atlas_uv = atlases.block.map.get(
+            match &face.texture {
+                TextureVariableOrResource::Tag(ref tag_key) => textures.get(tag_key)
+                    .unwrap().as_resource().unwrap(),
+                TextureVariableOrResource::Resource(resource) => resource
+            }
         ).copied().unwrap();
 
         let face_uv = &face.uv;
@@ -106,8 +108,6 @@ impl BlockstateVariantMesh {
                 && first.to.2 == 1.0
         };
 
-        // println!("elements");
-
         let mut results = model
             .elements
             .iter()
@@ -116,16 +116,24 @@ impl BlockstateVariantMesh {
 
                 // println!("{:?}", element);
                 let north = element.face_textures.north.as_ref().and_then(|tex| {
+                    // Some(Self::absolute_atlas_uv(
+                    //     tex,
+                    //     tex_manager,
+                    // )?)
                     Some(Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
-                    )?)
+                        &model.textures
+                    ).expect(
+                        &format!("{}, {:?}", model.id.to_string(), tex.texture)
+                    ))
                 });
 
                 let east = element.face_textures.east.as_ref().and_then(|tex| {
                     Some(Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
+                        &model.textures
                     )?)
                 });
 
@@ -133,6 +141,7 @@ impl BlockstateVariantMesh {
                     Some(Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
+                        &model.textures
                     )?)
                 });
 
@@ -140,6 +149,7 @@ impl BlockstateVariantMesh {
                     Some(Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
+                        &model.textures
                     )?)
                 });
 
@@ -147,6 +157,7 @@ impl BlockstateVariantMesh {
                     Some(Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
+                        &model.textures
                     )?)
                 });
 
@@ -154,6 +165,7 @@ impl BlockstateVariantMesh {
                     Some(Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
+                        &model.textures
                     )?)
                 });
 
@@ -169,14 +181,14 @@ impl BlockstateVariantMesh {
                 // let a = Vector3::from(a)
 
                 #[rustfmt::skip]
-                    let faces = BlockModelFaces {
+                let faces = BlockModelFaces {
                     south: south.map(|south| {[
-                        MeshVertex { position: e, tex_coords: [south.1.0, south.1.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: g, tex_coords: [south.0.0, south.0.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, -1.0] },
+                        MeshVertex { position: e, tex_coords: [south.1.0, south.1.1], normal: [0.0, 0.0, 1.0] },
+                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, 1.0] },
+                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, 1.0] },
+                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, 1.0] },
+                        MeshVertex { position: g, tex_coords: [south.0.0, south.0.1], normal: [0.0, 0.0, 1.0] },
+                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, 1.0] },
                     ]}),
                     west: west.map(|west| {[
                         MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
@@ -187,12 +199,12 @@ impl BlockstateVariantMesh {
                         MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
                     ]}),
                     north: north.map(|north| {[
-                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: b, tex_coords: [north.1.0, north.1.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: d, tex_coords: [north.0.0, north.0.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, 1.0] },
+                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, -1.0] },
+                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, -1.0] },
+                        MeshVertex { position: b, tex_coords: [north.1.0, north.1.1], normal: [0.0, 0.0, -1.0] },
+                        MeshVertex { position: d, tex_coords: [north.0.0, north.0.1], normal: [0.0, 0.0, -1.0] },
+                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, -1.0] },
+                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, -1.0] },
                     ]}),
                     east: east.map(|east| {[
                         MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0] },
@@ -203,20 +215,20 @@ impl BlockstateVariantMesh {
                         MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0] },
                     ]}),
                     up: up.map(|up| {[
-                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: h, tex_coords: [up.0.0, up.0.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: c, tex_coords: [up.1.0, up.1.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [1.0, 0.0, 0.0] },
+                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [0.0, 1.0, 0.0] },
+                        MeshVertex { position: h, tex_coords: [up.0.0, up.0.1], normal: [0.0, 1.0, 0.0] },
+                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [0.0, 1.0, 0.0] },
+                        MeshVertex { position: c, tex_coords: [up.1.0, up.1.1], normal: [0.0, 1.0, 0.0] },
+                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [0.0, 1.0, 0.0] },
+                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [0.0, 1.0, 0.0] },
                     ]}),
                     down: down.map(|down| {[
-                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
+                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: b, tex_coords: [down.0.0, down.0.1], normal: [0.0, -1.0, 0.0] },
+                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
+                        MeshVertex { position: e, tex_coords: [down.1.0, down.1.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: e, tex_coords: [down.1.0, down.1.1], normal: [0.0, -1.0, 0.0] },
                     ]}),
                 };
 

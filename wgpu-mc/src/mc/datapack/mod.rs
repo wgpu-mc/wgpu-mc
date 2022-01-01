@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 use crate::mc::resource::{ResourceProvider};
 use std::fmt::{Display, Formatter};
+use image::error::ImageFormatHint::Name;
 
 pub trait DatapackContextResolver: Send + Sync {
 
@@ -202,31 +203,24 @@ impl BlockModel {
         textures: &HashMap<String, TextureVariableOrResource>
     ) -> Option<FaceTexture> {
         let face = face?.as_object()?;
-        println!("{:?} {:?}", face, textures);
-        let uv_arr = face.get("uv")?.as_array()?;
-
-        let uv = (
-            //TODO: handle UV rotation
-            (
-                uv_arr[0].as_f64().unwrap() as f32,
-                uv_arr[1].as_f64().unwrap() as f32,
-            ),
-            (
-                uv_arr[2].as_f64().unwrap() as f32,
-                uv_arr[3].as_f64().unwrap() as f32,
-            ),
+        let uv = face.get("uv").map_or(
+            ((0.0, 0.0), (16.0, 16.0)),
+            |uv| {
+                let arr = uv.as_array().unwrap();
+                (
+                    (
+                        arr[0].as_f64().unwrap() as f32,
+                        arr[1].as_f64().unwrap() as f32
+                    ),
+                    (
+                        arr[2].as_f64().unwrap() as f32,
+                        arr[3].as_f64().unwrap() as f32
+                    )
+                )
+            }
         );
 
         let texture: TextureVariableOrResource = face.get("texture")?.as_str()?.try_into().ok()?;
-
-        let texture = match texture {
-            TextureVariableOrResource::Tag(ref tag_value) => {
-                // println!("{:?} {:?}", face.get("texture"), textures.get(tag_value));
-                // println!("{} {:?}", tag_value, textures.get(tag_value));
-                textures.get(tag_value)?.clone()
-            }
-            TextureVariableOrResource::Resource(_) => texture
-        };
 
         Some(FaceTexture {
             uv,
@@ -235,10 +229,16 @@ impl BlockModel {
     }
 
     fn parse_elements(
+        debug: &NamespacedResource,
         val: Option<&Value>,
         parent: Option<&BlockModel>,
         textures: &HashMap<String, TextureVariableOrResource>,
     ) -> Option<Vec<Element>> {
+        let cobble = NamespacedResource(
+            "minecraft".into(),
+            "models/block/cobblestone.json".into()
+        );
+
         match val {
             //No elements, default to parent's elements
             None => match parent {
@@ -289,90 +289,67 @@ impl BlockModel {
             return model_map.get(identifier);
         }
 
-        let bytes = resource_provider.get_resource(
-            &resolver.resolve(
-                "models",
-                &identifier
-            )
-        );
+        let bytes = resource_provider.get_resource(&identifier);
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         let obj = json.as_object()?;
 
         //Get information about the parent model, if this model has one
         let parent = obj.get("parent").and_then(|v| {
-            let parent_identifier_string = v.as_str()?;
+            let parent_identifier_string = v.as_str().unwrap();
             let parent_identifier: NamespacedResource = resolver.resolve(
                 "models",
                 &parent_identifier_string.try_into().unwrap()
             );
 
-            BlockModel::deserialize(&parent_identifier, resource_provider, resolver, model_map);
+            BlockModel::deserialize(&parent_identifier, resource_provider, resolver, model_map)
+                .unwrap();
 
             model_map.get(&parent_identifier)
         });
 
-        //Get the face texture mappings
-        let mut textures: HashMap<String, TextureVariableOrResource> = obj.get("textures").map_or(
-            HashMap::new(),
-            |textures_map| {
-                //Map of the faces and their textures
-                textures_map
-                    .as_object()
-                    .unwrap()
-                    .iter()
-                    .map(|(key, val)| {
-                        (
-                            key.clone(),
-                            match val.as_str().unwrap().try_into().unwrap() {
-                                TextureVariableOrResource::Resource(ns) =>
-                                    TextureVariableOrResource::Resource(
-                                        resolver.resolve("textures",&ns)
-                                    ),
-                                TextureVariableOrResource::Tag(tag) =>
-                                    TextureVariableOrResource::Tag(tag)
-                            }
-                        )
-                    })
-                    .collect()
-            }
-        );
+        let this_textures: HashMap<String, TextureVariableOrResource> = json.get("textures").and_then(|texture_val: &Value| {
+            let val = texture_val.as_object().unwrap();
+            Some(val.iter().map(|(key, value)| {
+                (
+                    key.clone(),
+                    TextureVariableOrResource::try_from(value.as_str().unwrap()).unwrap()
+                )
+            }).collect())
+        }).unwrap_or(HashMap::new());
 
-        match parent {
-            None => {},
+        let mut resolved_parent_textures: HashMap<String, TextureVariableOrResource> = match parent {
+            None => HashMap::new(),
             Some(parent_model) => {
-                textures.extend(parent_model.textures.iter()
-                    //Map the resolvable tags
-                    .map(|(key, value)| {
-                        match value {
-                            TextureVariableOrResource::Tag(tag_value) => {
-                                (
-                                    key.clone(),
-                                    textures.get(&tag_value[..])
-                                        .cloned()
-                                        .map_or(value.clone(), |tag_var| {
-                                            match tag_var {
-                                                TextureVariableOrResource::Resource(ns) =>
-                                                    TextureVariableOrResource::Resource(
-                                                        resolver.resolve("textures",&ns)
-                                                    ),
-                                                TextureVariableOrResource::Tag(tag) =>
-                                                    TextureVariableOrResource::Tag(tag)
-                                            }
-                                        })
-                                )
-                            }
-                            TextureVariableOrResource::Resource(resource) => {
-                                (
-                                    key.clone(),
-                                    TextureVariableOrResource::Resource(resource.clone())
-                                )
+                let mut textures = parent_model.textures.clone();
+
+                textures.iter_mut().for_each(|(key, value)| {
+                    match value.clone() {
+                        TextureVariableOrResource::Tag(tag_key) => {
+                            match this_textures.get(&tag_key) {
+                                None => {}
+                                Some(resolved) => *value = resolved.clone()
                             }
                         }
-                    }).collect::<Vec<(String, TextureVariableOrResource)>>().into_iter()
-                );
+                        TextureVariableOrResource::Resource(_) => {}
+                    }
+                });
+
+                textures
             }
         };
+
+        if identifier.to_string() == "minecraft:models/block/stripped_birch_log_horizontal.json" {
+            dbg!(&parent);
+            dbg!(&this_textures);
+            dbg!(&resolved_parent_textures);
+        }
+
+        resolved_parent_textures.extend(this_textures.into_iter());
+
+        if identifier.to_string() == "minecraft:models/block/stripped_birch_log_horizontal.json" {
+            dbg!(&resolved_parent_textures);
+        }
 
         let model = BlockModel {
             id: identifier.clone(),
@@ -380,9 +357,9 @@ impl BlockModel {
                 some.id.clone()
             }),
             elements: {
-                Self::parse_elements(obj.get("elements"), parent, &textures)?
+                Self::parse_elements(identifier, obj.get("elements"), parent, &resolved_parent_textures)?
             },
-            textures,
+            textures: resolved_parent_textures,
             display_transforms: HashMap::new(), //TODO
         };
 

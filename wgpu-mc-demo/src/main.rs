@@ -175,13 +175,20 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     use futures::executor::block_on;
 
     let block_manager = state.mc.block_manager.read();
+    let mc_state = state.mc.clone();
+    let wgpu_state = state.wgpu_state.clone();
 
     println!("Chunks: {}", chunks.len());
     // println!("Blocks {:?}", block_manager.baked_block_variants);
 
     // use rayon::iter::IndexedParallelIterator;
     // use rayon::iter::ParallelIterator;
-    // chunks.into_par_iter().take(1).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
+
+    // let default_key = *block_manager.baked_block_variants.get_with_key(
+    //     &NamespacedResource::try_from("minecraft:blockstates/bedrock.json#").unwrap()
+    // ).unwrap().0;
+    //
+    // chunks.into_par_iter().take(3).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
     //     let mut chunk_blocks = Box::new([BlockState {
     //         packed_key: None
     //     }; CHUNK_VOLUME]);
@@ -201,9 +208,9 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     //                 chunk_blocks[
     //                     (x + (z * CHUNK_WIDTH)) + (y * CHUNK_AREA)
     //                 ] = BlockState {
-    //                     packed_key: Some(*block_manager.baked_block_variants.get_with_key(
-    //                         &NamespacedResource::try_from(&variant[..]).unwrap()
-    //                     ).expect(&variant[..]).0)
+    //                     packed_key: Some(block_manager.baked_block_variants.get_with_key(
+    //                         &NamespacedResource::try_from(&variant[..]).unwrap().prepend("blockstates/")
+    //                     ).map_or(default_key, |x| *x.0))
     //                 }
     //             }
     //         }
@@ -218,13 +225,17 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     //     // mc_state.chunks.loaded_chunks.insert((chunk_x as i32, chunk_z as i32), ArcSwap::new(Arc::new(chunk)));
     //     mc_state.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
     // });
+
     let blocks: Box<[BlockState; CHUNK_VOLUME]> = Box::new([BlockState {
         packed_key: Some(*block_manager.baked_block_variants.get_with_key(
-            &NamespacedResource::try_from("minecraft:block/cobblestone").unwrap()
+            &NamespacedResource("minecraft".into(), "blockstates/cobblestone.json#".into())
         ).unwrap().0)
     }; CHUNK_VOLUME]).try_into().unwrap();
     let mut chunk = Chunk::new((0, 0), blocks);
+
+    let bake_start = Instant::now();
     chunk.bake(&block_manager, &state.wgpu_state.device);
+    println!("Time to bake chunk: {}ms", Instant::now().duration_since(bake_start).as_millis());
 
     drop(block_manager);
 
