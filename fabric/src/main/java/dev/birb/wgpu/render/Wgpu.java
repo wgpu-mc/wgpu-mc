@@ -1,23 +1,18 @@
 package dev.birb.wgpu.render;
 
-import dev.birb.wgpu.WebGPUNative;
 import dev.birb.wgpu.game.MainGameThread;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.registry.Registry;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.HashMap;
 
 public class Wgpu {
-    public static boolean INITIALIZED = false;
-
     private static final WgpuTextureManager textureManager = new WgpuTextureManager();
+    public static boolean INITIALIZED = false;
     public static HashMap<String, Integer> blocks;
 
     public static WgpuTextureManager getTextureManager() {
@@ -26,22 +21,21 @@ public class Wgpu {
 
     public static void preInit(String windowTitle) {
         try {
-            WebGPUNative.load("wgpu-mc-jni", true);
-        } catch(Throwable e) {
+            WgpuNative.load("wgpu-mc-jni", true);
+        } catch (Throwable e) {
             e.printStackTrace();
             throw new RuntimeException(e);
         }
 
         WgpuNative.initialize(windowTitle);
-
     }
 
     public static void initRenderer(MinecraftClient client) {
-        if(!INITIALIZED) {
+        if (!INITIALIZED) {
             WgpuNative.initRenderer();
             INITIALIZED = true;
 
-            for(Block block : Registry.BLOCK) {
+            for (Block block : Registry.BLOCK) {
                 Identifier blockId = Registry.BLOCK.getId(block);
                 WgpuNative.registerEntry(0, "minecraft:" + blockId.getPath());
             }
@@ -57,5 +51,4 @@ public class Wgpu {
     public static void render(MinecraftClient client) {
         WgpuNative.setWorldRenderState(client.world != null);
     }
-
 }

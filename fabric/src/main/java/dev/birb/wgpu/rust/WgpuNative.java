@@ -4,17 +4,40 @@ package dev.birb.wgpu.rust;
 
 //import net.minecraft.world.chunk.ChunkSection;
 
-import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.world.chunk.WorldChunk;
-import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 
 public class WgpuNative {
+
+    /**
+     * Loads a native library from the resources of this Jar
+     *
+     * @param name           Library to load
+     * @param forceOverwrite Force overwrite the library file
+     * @throws ResourceNotFoundException Library not found in resources
+     * @throws IOException               Cannot move library out of Jar
+     */
+    public static void load(String name, boolean forceOverwrite) throws ResourceNotFoundException, IOException {
+        name = System.mapLibraryName(name);
+        File libDir = new File("lib");
+        if (!libDir.exists()) libDir.mkdirs();
+        File object = new File("lib", name);
+        if (forceOverwrite || !object.exists()) {
+            InputStream is = WgpuNative.class.getClassLoader().getResourceAsStream("META-INF/natives/" + name);
+            if (is == null) throw new ResourceNotFoundException(object, "Could not find lib " + name + " in jar");
+
+            Files.copy(is, object.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        System.load(object.getAbsolutePath());
+    }
 
     public static native int getTextureId(String identifier);
 
