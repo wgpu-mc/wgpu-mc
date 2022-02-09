@@ -37,7 +37,7 @@ public class RenderSystemMixin {
     /**
      * @author wgpu-mc
      */
-    @Overwrite
+    @Overwrite(remap = false)   // Fix for No obfuscation mapping, not sure if this is correct though.
     public static void flipFrame(long window) {
         Tessellator.getInstance().getBuffer().clear();
         //TODO: events
@@ -46,7 +46,7 @@ public class RenderSystemMixin {
     /**
      * @author wgpu-mc
      */
-    @Overwrite
+    @Overwrite(remap = false)   // Fix for No obfuscation mapping, not sure if this is correct though.
     public static void initRenderer(int debugVerbosity, boolean debugSync) {
 
     }
@@ -54,7 +54,7 @@ public class RenderSystemMixin {
     /**
      * @author wgpu-mc
      */
-    @Overwrite
+    @Overwrite(remap = false)   // Fix for No obfuscation mapping, not sure if this is correct though.
     public static void limitDisplayFPS(int fps) {
 
     }
