@@ -26,7 +26,7 @@ public class Wgpu {
 
     public static void preInit(String windowTitle) {
         try {
-            WebGPUNative.load("wgpu-mc", true);
+            WebGPUNative.load("wgpu-mc-jni", true);
         } catch(Throwable e) {
             e.printStackTrace();
             throw new RuntimeException(e);
