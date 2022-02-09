@@ -5,9 +5,11 @@ plugins {
 rust {
     command = "cargo"
 
-    outputs = mapOf("" to System.mapLibraryName("wgpu-mc"))
+    environment = mapOf(Pair("RUSTUP_TOOLCHAIN", "nightly"))
+
+    outputs = mapOf("" to System.mapLibraryName("wgpu_mc_jni"))
 
     outputDirectory = "META-INF/natives"
 
-    profile = "release"
+    profile = "debug"
 }

@@ -8,7 +8,6 @@ pluginManagement {
     }
 }
 
-
 rootProject.name = "wgpu-mc"
 
 subProject("rust");

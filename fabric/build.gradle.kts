@@ -30,10 +30,22 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     modImplementation("net.fabricmc.fabric-api:fabric-api:$fabricVersion")
 
-    rustImport(":wgpu-mc-rust")
+    rustImport(project(":wgpu-mc-rust"))
 }
 
 tasks {
+    processResources {
+        finalizedBy("unpackExports", "deleteExports")
+    }
+
+    jar {
+        dependsOn("unpackExports", "deleteExports")
+    }
+
+    fixImport {
+        enabled = false
+    }
+
     val javaVersion = JavaVersion.VERSION_17
     withType<JavaCompile> {
         options.encoding = "UTF-8"
@@ -52,10 +64,6 @@ tasks {
         sourceCompatibility = javaVersion
         targetCompatibility = javaVersion
         withSourcesJar()
-    }
-
-    fixImport {
-        enabled = false
     }
 }
 
