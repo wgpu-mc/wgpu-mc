@@ -1,5 +1,6 @@
 package dev.birb.wgpu.render;
 
+import dev.birb.wgpu.WebGPUNative;
 import dev.birb.wgpu.game.MainGameThread;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
@@ -24,15 +25,8 @@ public class Wgpu {
     }
 
     public static void preInit(String windowTitle) {
-//        try {
-//            NativeUtils.loadLibraryFromJar("assets/wgpu_mc/dylib/libwgpu_mc_jni.dylib");
-//            System.out.println("Loaded dylib");
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//            throw new UncheckedIOException(e);
-//        }
         try {
-            System.load("/Users/birb/wgpu-mc/target/debug/libwgpu_mc_jni.dylib");
+            WebGPUNative.load("wgpu-mc", true);
         } catch(Throwable e) {
             e.printStackTrace();
             throw new RuntimeException(e);
