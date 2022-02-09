@@ -1,0 +1,9 @@
+# Mac OS 
+.DS_Store
+
+# JetBrains
+.idea/
+*.iml
+
+# Project
+run/
