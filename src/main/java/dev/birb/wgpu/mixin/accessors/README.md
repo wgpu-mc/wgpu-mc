@@ -1,1 +1,0 @@
-Utilities to access data in certain important areas of the game
