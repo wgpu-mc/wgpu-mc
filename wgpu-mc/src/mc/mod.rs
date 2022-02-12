@@ -16,8 +16,8 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescripto
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::block::{Block, PackedBlockstateKey, BlockstateVariantKey};
 use crate::mc::chunk::ChunkManager;
-use crate::mc::datapack::{BlockModel, TextureVariableOrResource, NamespacedResource, DatapackContextResolver};
-use crate::mc::entity::Entity;
+use crate::mc::datapack::{BlockModel, TextureVariableOrResource, NamespacedResource};
+use crate::mc::entity::EntityModel;
 use crate::mc::resource::ResourceProvider;
 use crate::model::Material;
 use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS, Atlases, TextureManager};
@@ -60,12 +60,7 @@ impl BlockManager {
 
 }
 
-fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, BlockModel>, model_id: &NamespacedResource, resource_provider: &dyn ResourceProvider, resolver: &dyn DatapackContextResolver) -> Option<&'a BlockModel> {
-    let resolved = resolver.resolve(
-        "models",
-        model_id
-    );
-
+fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, BlockModel>, model_id: &NamespacedResource, resource_provider: &dyn ResourceProvider) -> Option<&'a BlockModel> {
     if models.contains_key(&resolved) {
         return models.get(&resolved);
     }
@@ -94,15 +89,15 @@ pub struct MinecraftState {
     pub block_manager: RwLock<BlockManager>,
 
     pub chunks: ChunkManager,
-    pub entities: RwLock<Vec<Entity>>,
+    pub entities: RwLock<Vec<EntityModel>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
     pub context_resolver: Arc<dyn DatapackContextResolver>,
 
     pub camera: ArcSwap<Camera>,
 
-    pub uniform_buffer: ArcSwap<wgpu::Buffer>,
-    pub uniform_bind_group: ArcSwap<wgpu::BindGroup>,
+    pub camera_buffer: ArcSwap<wgpu::Buffer>,
+    pub camera_bind_group: ArcSwap<wgpu::BindGroup>,
 
     pub texture_manager: TextureManager
 }
@@ -111,9 +106,9 @@ impl MinecraftState {
     #[must_use]
     pub fn new(
         device: &wgpu::Device,
-        pipelines: &RenderPipelinesManager,
         resource_provider: Arc<dyn ResourceProvider>,
-        context_resolver: Arc<dyn DatapackContextResolver>) -> Self {
+        pipelines: ArcSwap<RenderPipelinesManager>) -> Self {
+
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
             label: None,
             size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
@@ -123,7 +118,7 @@ impl MinecraftState {
 
         let uniform_bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: None,
-            layout: &pipelines.layouts.matrix_bind_group_layout,
+            layout: &pipelines.layouts.matrix,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -147,8 +142,8 @@ impl MinecraftState {
 
             camera: ArcSwap::new(Arc::new(Camera::new(1.0))),
 
-            uniform_buffer: ArcSwap::new(Arc::new(uniform_buffer)),
-            uniform_bind_group: ArcSwap::new(Arc::new(uniform_bind_group)),
+            camera_buffer: ArcSwap::new(Arc::new(uniform_buffer)),
+            camera_bind_group: ArcSwap::new(Arc::new(uniform_bind_group)),
 
             resource_provider,
             context_resolver,
@@ -231,7 +226,7 @@ impl MinecraftState {
             &renderer.wgpu_state.device,
             &renderer.wgpu_state.queue,
             texture,
-            &renderer.pipelines.load().layouts.texture_bind_group_layout,
+            &renderer.pipelines.load().layouts.texture,
             "Block Texture Atlas".into(),
         ));
 

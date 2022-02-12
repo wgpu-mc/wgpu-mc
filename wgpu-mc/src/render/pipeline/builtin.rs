@@ -8,7 +8,7 @@ use std::ops::Range;
 use crate::render::pipeline::{WmPipeline, RenderPipelinesManager};
 use crate::mc::BlockManager;
 use crate::mc::chunk::{ChunkManager, Chunk};
-use crate::mc::entity::Entity;
+use crate::mc::entity::EntityModel;
 use crate::camera::Camera;
 use crate::util::WmArena;
 
@@ -21,15 +21,15 @@ pub struct WorldPipeline {}
 impl WmPipeline for WorldPipeline {
 
     fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, renderer: &'b WmRenderer, mut render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
-        let pipepines_arc = renderer.pipelines.load();
-        let pipelines = arena.alloc(pipepines_arc);
+        let pipelines_arc = renderer.pipelines.load();
+        let pipelines = arena.alloc(pipelines_arc);
 
         render_pass.set_pipeline(&pipelines.terrain_pipeline);
 
         let atlases = arena.alloc(renderer.mc.texture_manager.atlases.load());
 
         render_pass.set_bind_group(0, &atlases.block.material.as_ref().unwrap().bind_group, &[]);
-        render_pass.set_bind_group(1, arena.alloc(renderer.mc.uniform_bind_group.load()), &[]);
+        render_pass.set_bind_group(1, arena.alloc(renderer.mc.camera_bind_group.load()), &[]);
 
         renderer.mc.chunks.loaded_chunks.iter().for_each(|chunk_swap| {
             let chunk = arena.alloc(chunk_swap.load());

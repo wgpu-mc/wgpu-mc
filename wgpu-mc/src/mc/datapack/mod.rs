@@ -10,12 +10,6 @@ use crate::mc::resource::{ResourceProvider};
 use std::fmt::{Display, Formatter};
 use image::error::ImageFormatHint::Name;
 
-pub trait DatapackContextResolver: Send + Sync {
-
-    fn resolve(&self, context: &str, resource: &NamespacedResource) -> NamespacedResource;
-
-}
-
 #[derive(Debug, Hash, Clone, std::cmp::Eq)]
 pub struct NamespacedResource (pub String, pub String);
 
@@ -289,7 +283,7 @@ impl BlockModel {
             return model_map.get(identifier);
         }
 
-        let bytes = resource_provider.get_resource(&identifier);
+        let bytes = resource_provider.get_resource(&identifier.prepend("models"));
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         let obj = json.as_object()?;
@@ -297,10 +291,9 @@ impl BlockModel {
         //Get information about the parent model, if this model has one
         let parent = obj.get("parent").and_then(|v| {
             let parent_identifier_string = v.as_str().unwrap();
-            let parent_identifier: NamespacedResource = resolver.resolve(
-                "models",
-                &parent_identifier_string.try_into().unwrap()
-            );
+            let parent_identifier =
+                NamespacedResource::try_from(parent_identifier_string)
+                    .unwrap();
 
             BlockModel::deserialize(&parent_identifier, resource_provider, resolver, model_map)
                 .unwrap();

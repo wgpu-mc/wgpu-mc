@@ -4,7 +4,6 @@
 use std::{fs, thread};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::lazy::OnceCell;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::path::Path;
@@ -48,6 +47,7 @@ use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use std::num::NonZeroU32;
 use std::rc::Rc;
 use wgpu_mc::camera::UniformMatrixHelper;
+use once_cell::unsync::OnceCell;
 
 ///Foreword here,
 /// the code is quite messy and will be cleaned up at some point.
@@ -57,6 +57,7 @@ use wgpu_mc::camera::UniformMatrixHelper;
 
 mod mc_interface;
 mod gl;
+mod palette;
 
 #[derive(Debug)]
 enum RenderMessage {
@@ -68,17 +69,16 @@ struct MinecraftRenderState {
     render_world: bool
 }
 
-static mut RENDERER: MaybeUninit<WmRenderer> = MaybeUninit::uninit();
+static mut RENDERER: OnceCell<WmRenderer> = OnceCell::new();
 
-static mut EVENT_LOOP: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
-static mut WINDOW: MaybeUninit<Window> = MaybeUninit::uninit();
+static mut EVENT_LOOP: OnceCell<EventLoop<()>> = OnceCell::new();
+static mut WINDOW: OnceCell<Window> = OnceCell::new();
 
-static mut CHANNEL_TX: MaybeUninit<Mutex<mpsc::Sender<RenderMessage>>> = MaybeUninit::uninit();
-static mut CHANNEL_RX: MaybeUninit<Mutex<mpsc::Receiver<RenderMessage>>> = MaybeUninit::uninit();
+static mut CHANNEL_TX: OnceCell<Mutex<mpsc::Sender<RenderMessage>>> = OnceCell::new();
+static mut CHANNEL_RX: OnceCell<Mutex<mpsc::Receiver<RenderMessage>>> = OnceCell::new();
 
-static mut MC_STATE: MaybeUninit<RwLock<MinecraftRenderState>> = MaybeUninit::uninit();
-
-static mut GL_PIPELINE: MaybeUninit<GlPipeline> = MaybeUninit::uninit();
+static mut MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
+static mut GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -159,7 +159,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     env: JNIEnv,
     class: JClass) -> jstring {
 
-    let renderer = unsafe { RENDERER.assume_init_ref() };
+    let renderer = unsafe { RENDERER.get().unwrap() };
     let backend = renderer.get_backend_description();
 
     env.new_string(backend)
@@ -176,7 +176,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
 //     jnamespace: JString,
 //     buffer: jbyteArray) {
 //
-//     let renderer = unsafe { RENDERER.assume_init_ref() };
+//     let renderer = unsafe { RENDERER.get().unwrap() };
 //
 //
 //
@@ -216,7 +216,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
 
     let rname: String = env.get_string(name).unwrap().into();
 
-    let renderer = unsafe { RENDERER.assume_init_mut() };
+    let renderer = unsafe { RENDERER.get_mut().unwrap() };
 
     let mut block_manager = renderer.mc.block_manager.write();
 
@@ -271,7 +271,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
 
     unsafe {
         gl::init();
-        GL_PIPELINE = MaybeUninit::new(GlPipeline {
+        GL_PIPELINE.set(GlPipeline {
             pipelines: Default::default(),
             matrix_stacks: RefCell::new([([Matrix4::identity(); 32], 0); 3]),
             matrix_mode: RefCell::new(0),
@@ -284,11 +284,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
             // shaders: RefCell::new(None)
             active_pipeline: RefCell::new(0)
         });
-        CHANNEL_TX = MaybeUninit::new(Mutex::new(tx));
-        CHANNEL_RX = MaybeUninit::new(Mutex::new(rx));
-        EVENT_LOOP = MaybeUninit::new(event_loop);
-        WINDOW = MaybeUninit::new(window);
-        MC_STATE = MaybeUninit::new(RwLock::new(MinecraftRenderState {
+        CHANNEL_TX.set(Mutex::new(tx));
+        CHANNEL_RX.set(Mutex::new(rx));
+        EVENT_LOOP.set(event_loop);
+        WINDOW.set(window);
+        MC_STATE.set(RwLock::new(MinecraftRenderState {
             render_world: false
         }));
     }
@@ -304,20 +304,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
 
     std::mem::swap(&mut swap, unsafe { &mut EVENT_LOOP });
 
-    let renderer = unsafe { RENDERER.assume_init_mut() };
+    let renderer = unsafe { RENDERER.get_mut().unwrap() };
 
     let event_loop = unsafe { swap.assume_init() };
 
-    let rx = unsafe { CHANNEL_RX.assume_init_ref() }.lock();
+    let rx = unsafe { CHANNEL_RX.get().unwrap() }.lock();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
-        let mc_state = unsafe { MC_STATE.assume_init_ref() }.read();
+        let mc_state = unsafe { MC_STATE.get().unwrap() }.read();
 
         let (mut state, window) = unsafe {
             (
-                RENDERER.assume_init_mut(),
-                WINDOW.assume_init_ref()
+                RENDERER.get_mut().unwrap(),
+                WINDOW.get().unwrap()
             )
         };
 
@@ -359,7 +359,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
                 state.update();
 
                 state.render(&[
-                    unsafe { GL_PIPELINE.assume_init_ref() }
+                    unsafe { GL_PIPELINE.get().unwrap() }
                 ]);
 
                 // let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
@@ -391,7 +391,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
     class: JClass
 ) {
     let wrapper = &WinitWindowWrapper {
-        window: unsafe { WINDOW.assume_init_ref() }
+        window: unsafe { WINDOW.get().unwrap() }
     };
     let mut state = block_on(WmRenderer::new(
         &wrapper,
@@ -400,8 +400,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
         }),
         Arc::new(McDatapackResolver))
     );
+
     unsafe {
-        RENDERER = MaybeUninit::new(state);
+        RENDERER.set(state);
     }
 }
 
@@ -456,7 +457,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     class: JClass,
     jtitle: JString) {
 
-    let tx = unsafe { CHANNEL_TX.assume_init_ref() }.lock();
+    let tx = unsafe { CHANNEL_TX.get().unwrap() }.lock();
 
     let title: String = env.get_string(jtitle).unwrap().into();
 
@@ -468,7 +469,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     env: JNIEnv,
     class: JClass) -> jobject {
 
-    let renderer = unsafe { RENDERER.assume_init_mut() };
+    let renderer = unsafe { RENDERER.get().unwrap() };
 
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
         .unwrap();
@@ -496,7 +497,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
     class: JClass,
     boolean: jboolean) {
 
-    let render_state = unsafe { MC_STATE.assume_init_ref() };
+    let render_state = unsafe { MC_STATE.get().unwrap() };
     render_state.write().render_world = boolean != 0;
 }
 
@@ -507,7 +508,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunkSimple(
     blocks: jintArray,
     x: jint,
     z: jint) {
-    let renderer = unsafe { RENDERER.assume_init_ref() };
+    let renderer = unsafe { RENDERER.get().unwrap() };
     
     let elements = env.get_int_array_elements(blocks, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -554,7 +555,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindTexture(
     class: JClass,
     tex: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::BindTexture(tex));
 }
 
@@ -565,11 +566,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindBuffer(
     target: jint,
     buffer: jint
 ) {
-    let mut state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let mut state = unsafe { gl::GL_STATE.get_mut().unwrap() };
     state.buffers.insert(target, buffer);
 
     //TODO: Is this necessary
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::BindBuffer(target, buffer));
 }
 
@@ -580,7 +581,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_activeTexture(
     class: JClass,
     tex: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::ActiveTexture(tex));
 }
 
@@ -589,7 +590,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_pushMatrix(
     env: JNIEnv,
     class: JClass
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::PushMatrix);
 }
 
@@ -598,7 +599,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_popMatrix(
     env: JNIEnv,
     class: JClass
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::PopMatrix);
 }
 
@@ -607,11 +608,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     env: JNIEnv,
     class: JClass
 ) {
-    let commands = unsafe { GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { GL_COMMANDS.get_mut().unwrap() };
 
     println!("{:?}", commands);
 
-    unsafe { GL_PIPELINE.assume_init_mut() }.commands.store(
+    unsafe { GL_PIPELINE.get_mut().unwrap() }.commands.store(
         Arc::new(
             commands.clone()
         )
@@ -629,7 +630,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_vertexPointer(
     stride: jint,
     pointer: jlong
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::VertexPointer(size, vertex_type, stride, pointer as *const u8));
 }
 
@@ -642,7 +643,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_colorPointer(
     stride: jint,
     pointer: jlong
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::ColorPointer(size, vertex_type, stride, pointer as *const u8));
 }
 
@@ -655,7 +656,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texCoordPointer(
     stride: jint,
     pointer: jlong
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::TexCoordPointer(size, vertex_type, stride, pointer as *const u8));
 }
 
@@ -667,7 +668,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawArray(
     first: jint,
     count: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::DrawArray(mode, first, count));
 }
 
@@ -700,7 +701,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
         vec![0; size]
     };
 
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::TexImage2D((
         RefCell::new(
             Some(data)
@@ -720,7 +721,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getMaxTextureSize(
     env: JNIEnv,
     class: JClass,
 ) -> jint {
-    let wm = unsafe { RENDERER.assume_init_ref() };
+    let wm = unsafe { RENDERER.get().unwrap() };
     wm.wgpu_state.adapter.limits().max_texture_dimension_2d as i32
 }
 
@@ -729,7 +730,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
     env: JNIEnv,
     class: JClass,
 ) -> jint {
-    unsafe { WINDOW.assume_init_ref().inner_size().width as i32 }
+    unsafe { WINDOW.get().unwrap().inner_size().width as i32 }
 }
 
 #[no_mangle]
@@ -737,7 +738,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
     env: JNIEnv,
     class: JClass,
 ) -> jint {
-    unsafe { WINDOW.assume_init_ref().inner_size().height as i32 }
+    unsafe { WINDOW.get().unwrap().inner_size().height as i32 }
 }
 
 #[no_mangle]
@@ -746,7 +747,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_enableClientState(
     class: JClass,
     int: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::EnableClientState(int as u32));
 }
 
@@ -756,7 +757,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_disableClientState(
     class: JClass,
     int: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::DisableClientState(int as u32));
 }
 
@@ -771,7 +772,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_ortho(
     n: jfloat,
     f: jfloat,
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::MultMatrix(
         cgmath::ortho(l,r,b,t,n, f)
     ));
@@ -785,7 +786,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_translate(
     y: jfloat,
     z: jfloat
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::MultMatrix(
         Matrix4::from_translation(Vector3::new(x,y,z))
     ));
@@ -799,7 +800,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_loadIdentity(
     y: jfloat,
     z: jfloat
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::SetMatrix(
         Matrix4::identity()
     ));
@@ -811,7 +812,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_matrixMode(
     class: JClass,
     mode: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::MatrixMode(mode as usize));
 }
 
@@ -839,7 +840,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindVertexArray(
     class: JClass,
     arr: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::BindVertexArray(arr));
 }
 
@@ -852,7 +853,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawElements(
     type_: jint,
     indices: jlong
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::DrawElements(mode, first, type_, indices as *const u8));
 }
 
@@ -864,7 +865,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
     g: jfloat,
     b: jfloat
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::ClearColor(r, g, b));
 }
 
@@ -876,11 +877,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bufferData(
     target: jint,
     usage: jint
 ) {
-    let wm = unsafe { RENDERER.assume_init_ref() };
+    let wm = unsafe { RENDERER.get().unwrap() };
     let data = env.get_direct_buffer_address(buf.into()).unwrap();
     let vec = Vec::from(data);
 
-    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
     let active_buffer = *state.buffers.get(&target).unwrap();
 
     unsafe {
@@ -900,9 +901,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initBuffer(
     size: jlong,
     usage: jint
 ) {
-    let wm = unsafe { RENDERER.assume_init_ref() };
+    let wm = unsafe { RENDERER.get().unwrap() };
 
-    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
     let active_buffer = *state.buffers.get(&target).unwrap();
     let vec = vec![0u8; size as usize];
 
@@ -923,12 +924,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_mapBuffer(
     target: jint,
     usage: jint
 ) -> jobject {
-    // let wm = unsafe { RENDERER.assume_init_ref() };
-    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    // let wm = unsafe { RENDERER.get().unwrap() };
+    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
     let active_buffer = *state.buffers.get(&target).unwrap();
 
     let buf = unsafe { gl::get_buffer(active_buffer as usize) }.unwrap();
-    let maps = unsafe { gl::GL_MAPPED_BUFFERS.assume_init_mut() };
+    let maps = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
 
     if !maps.contains_key(&(target as usize)) {
         maps.insert(active_buffer as usize, buf.data.as_ref().unwrap().clone());
@@ -945,10 +946,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_unmapBuffer(
     class: JClass,
     target: jint,
 ) {
-    let wm = unsafe { RENDERER.assume_init_ref() };
-    let state = unsafe { gl::GL_STATE.assume_init_mut() };
+    let wm = unsafe { RENDERER.get().unwrap() };
+    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
     let active_buffer = state.buffers.remove(&target).unwrap();
-    let mapped = unsafe { gl::GL_MAPPED_BUFFERS.assume_init_mut() };
+    let mapped = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
     let vec = mapped.remove(&(active_buffer as usize)).unwrap();
 
     unsafe {
@@ -966,7 +967,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
     class: JClass,
     pipeline: jint,
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::UsePipeline(pipeline as usize));
 }
 
@@ -990,6 +991,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindMatrix4f(
         bytemuck::cast_slice::<_, u8>(float_slice)
     );
 
-    let commands = unsafe { gl::GL_COMMANDS.assume_init_mut() };
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::BindMat(slot as usize, mat_helper.view_proj.into()));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createArrayPaletteStore(
+    env: JNIEnv,
+    class: JClass
+) -> jlong {
+
 }

@@ -1,4 +1,4 @@
-use cgmath::{Point3, SquareMatrix, Vector3, EuclideanSpace};
+use cgmath::{Point3, SquareMatrix, Vector3, EuclideanSpace, Matrix};
 use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 #[derive(Debug, Copy, Clone)]

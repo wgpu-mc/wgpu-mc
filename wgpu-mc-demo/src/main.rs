@@ -27,6 +27,7 @@ use std::io::Cursor;
 use fastanvil::pre18::JavaChunk;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
 use fastnbt::de::from_bytes;
+use wgpu_mc::mc::entity::{EntityManager, EntityPart, PartTransform, Cuboid, CuboidTextures};
 
 struct DemoContextResolver;
 
@@ -226,20 +227,66 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     //     mc_state.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
     // });
 
-    let blocks: Box<[BlockState; CHUNK_VOLUME]> = Box::new([BlockState {
-        packed_key: Some(*block_manager.baked_block_variants.get_with_key(
-            &NamespacedResource("minecraft".into(), "blockstates/cobblestone.json#".into())
-        ).unwrap().0)
-    }; CHUNK_VOLUME]).try_into().unwrap();
-    let mut chunk = Chunk::new((0, 0), blocks);
+    // let blocks: Box<[BlockState; CHUNK_VOLUME]> = Box::new([BlockState {
+    //     packed_key: Some(*block_manager.baked_block_variants.get_with_key(
+    //         &NamespacedResource("minecraft".into(), "blockstates/anvil.json#facing=west".into())
+    //     ).unwrap().0)
+    // }; CHUNK_VOLUME]).try_into().unwrap();
+    // let mut chunk = Chunk::new((0, 0), blocks);
+    //
+    // let bake_start = Instant::now();
+    // chunk.bake(&block_manager, &state.wgpu_state.device);
+    // println!("Time to bake chunk: {}ms", Instant::now().duration_since(bake_start).as_millis());
+    //
+    // drop(block_manager);
+    //
+    // state.mc.chunks.loaded_chunks.insert((0,0), ArcSwap::new(Arc::new(chunk)));
+    
+    let player_root = {
+        let player_root = EntityPart {
+            transform: PartTransform {
+                pivot_x: 0.0,
+                pivot_y: 0.0,
+                pivot_z: 0.0,
+                yaw: 0.0,
+                pitch: 0.0,
+                roll: 0.0
+            },
+            cuboids: vec![
+                Cuboid {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    width: 1.0,
+                    length: 1.0,
+                    height: 1.0,
+                    textures: CuboidTextures {
+                        north: ((0.0, 0.0), (0.0, 0.0)),
+                        east: ((0.0, 0.0), (0.0, 0.0)),
+                        south: ((0.0, 0.0), (0.0, 0.0)),
+                        west: ((0.0, 0.0), (0.0, 0.0)),
+                        up: ((0.0, 0.0), (0.0, 0.0)),
+                        down: ((0.0, 0.0), (0.0, 0.0))
+                    }
+                }
+            ],
+            children: vec![]
+        };
 
-    let bake_start = Instant::now();
-    chunk.bake(&block_manager, &state.wgpu_state.device);
-    println!("Time to bake chunk: {}ms", Instant::now().duration_since(bake_start).as_millis());
+        player_root
+    };
+
+
+
+    // let entity_manager = EntityManager {
+    //     mob_texture_atlas: Arc::new(Default::default()),
+    //     player_texture_atlas: Default::default(),
+    //     player_type: Arc::new(()),
+    //     entity_types: (),
+    //     entity_instance_buffers: Default::default()
+    // };
 
     drop(block_manager);
-
-    state.mc.chunks.loaded_chunks.insert((0,0), ArcSwap::new(Arc::new(chunk)));
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;

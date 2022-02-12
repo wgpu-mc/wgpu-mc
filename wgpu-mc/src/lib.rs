@@ -16,11 +16,10 @@ use crate::mc::chunk::Chunk;
 use crate::mc::MinecraftState;
 
 use raw_window_handle::HasRawWindowHandle;
-use shaderc::ShaderKind;
 use winit::event::WindowEvent;
 use wgpu::{RenderPass, VertexState, TextureViewDescriptor, RenderPassDescriptor};
 use std::collections::{HashMap, HashSet};
-use crate::render::shader::{Shader, ShaderSource};
+use crate::render::shader::{WmShader};
 use crate::texture::WgpuTexture;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -66,9 +65,7 @@ pub struct WmRenderer {
 
     pub pipelines: ArcSwap<RenderPipelinesManager>,
 
-    pub mc: Arc<mc::MinecraftState>,
-    
-    pub shaderc: Arc<Mutex<shaderc::Compiler>>
+    pub mc: Arc<mc::MinecraftState>
 }
 
 #[derive(Copy, Clone)]
@@ -122,57 +119,13 @@ impl WmRenderer {
         };
         surface.configure(&device, &config);
 
-        let mut sc = shaderc::Compiler::new().unwrap();
-
-        let shader_map = dashmap! {
-            String::from("sky") => Shader::from_glsl(ShaderSource {
-                file_name: "sky.fsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/sky.fsh").into())).unwrap(),
-                entry_point: "main"
-            }, ShaderSource {
-                file_name: "sky.vsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/sky.vsh").into())).unwrap(),
-                entry_point: "main"
-            }, &device, &mut sc).unwrap(),
-
-            String::from("terrain") => Shader::from_glsl(ShaderSource {
-                file_name: "terrain.fsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/terrain.fsh").into())).unwrap(),
-                entry_point: "main"
-            }, ShaderSource {
-                file_name: "terrain.vsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/terrain.vsh").into())).unwrap(),
-                entry_point: "main"
-            }, &device, &mut sc).unwrap(),
-
-            String::from("grass") => Shader::from_glsl(ShaderSource {
-                file_name: "grass.fsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/grass.fsh").into())).unwrap(),
-                entry_point: "main"
-            }, ShaderSource {
-                file_name: "grass.vsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/grass.vsh").into())).unwrap(),
-                entry_point: "main"
-            }, &device, &mut sc).unwrap(),
-
-            String::from("transparent") => Shader::from_glsl(ShaderSource {
-                file_name: "transparent.fsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/transparent.fsh").into())).unwrap(),
-                entry_point: "main"
-            }, ShaderSource {
-                file_name: "transparent.vsh",
-                source: std::str::from_utf8(&resource_provider.get_resource(&("wgpu_mc", "shaders/transparent.vsh").into())).unwrap(),
-                entry_point: "main"
-            }, &device, &mut sc).unwrap()
-
-        };
-        
         let pipelines = render::pipeline::RenderPipelinesManager::init(
             &device,
-            shader_map,
-            resource_provider.clone());
+            &shaders,
+            &*resource_provider
+        );
 
-        let mc = MinecraftState::new(&device, &pipelines, resource_provider, context_resolver);
+        let mc = MinecraftState::new(&device, resource_provider, context_resolver);
         let depth_texture = WgpuTexture::create_depth_texture(&device, &config, "depth texture");
 
         let wgpu_state = WgpuState {
@@ -188,10 +141,19 @@ impl WmRenderer {
             size: ArcSwap::new(Arc::new(size)),
 
             depth_texture: ArcSwap::new(Arc::new(depth_texture)),
-            pipelines: ArcSwap::new(Arc::new(pipelines)),
+            pipelines: ArcSwap::new(Arc::new(Option::None)),
             mc: Arc::new(mc),
-            shaderc: Arc::new(Mutex::new(sc))
         }
+    }
+
+    pub fn build_pipelines(&self, shaders: &HashMap<String, WmShader>) {
+        let pipelines = render::pipeline::RenderPipelinesManager::init(
+            &device,
+            &shaders,
+            &*self.mc.resource_provider
+        );
+
+        self.pipelines.store(Arc::new(Option::Some(pipelines)));
     }
 
     pub fn resize(&self, new_size: WindowSize) {
@@ -224,7 +186,7 @@ impl WmRenderer {
         self.mc.camera.store(Arc::new(camera));
 
         self.wgpu_state.queue.write_buffer(
-            &self.mc.uniform_buffer.load_full(),
+            &self.mc.camera_buffer.load_full(),
             0,
             bytemuck::cast_slice(&[uniforms]),
         );

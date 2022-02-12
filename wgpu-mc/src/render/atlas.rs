@@ -31,7 +31,7 @@ pub struct UploadedAtlas {
 }
 
 impl Atlas {
-    #[must_use]
+
     pub fn new() -> Self {
         Self::default()
     }

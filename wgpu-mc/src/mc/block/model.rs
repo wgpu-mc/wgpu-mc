@@ -178,8 +178,6 @@ impl BlockstateVariantMesh {
                 let g = (matrix * Vector3::new(1.0 - element.to.0, element.to.1, element.to.2)).into();
                 let h = (matrix * Vector3::new(1.0 - element.from.0, element.to.1, element.to.2)).into();
 
-                // let a = Vector3::from(a)
-
                 #[rustfmt::skip]
                 let faces = BlockModelFaces {
                     south: south.map(|south| {[
@@ -223,12 +221,12 @@ impl BlockstateVariantMesh {
                         MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [0.0, 1.0, 0.0] },
                     ]}),
                     down: down.map(|down| {[
-                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
+                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: b, tex_coords: [down.0.0, down.0.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: e, tex_coords: [down.1.0, down.1.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
                         MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
+                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
+                        MeshVertex { position: e, tex_coords: [down.1.0, down.1.1], normal: [0.0, -1.0, 0.0] },
                     ]}),
                 };
 
