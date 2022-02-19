@@ -24,10 +24,6 @@ wgpu-mc is eventually meant to be a full replacement to the standard, official r
 It will be used as a Fabric mod, which will disable the original OpenGL code and interface with wgpu-mc, using the native
 Java interface.
 
-#### Fabric
-
-The repo for the Fabric mod which interfaces with wgpu-mc is located at https://github.com/birbe/wgpu-mc-fabric
-
 #### Current status
 
 The project is currently under active development (I'm solo at the moment though) and it's close

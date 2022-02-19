@@ -1,4 +1,32 @@
-/target
-/wgpu-mc-demo/res/assets
-/.idea
-./\.DS_Store
+# Mac OS 
+.DS_Store
+
+# Idea
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+*.launch
+
+# VSCode
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# Project
+run/
+rust/wgpu-mc-demo/res/assets
+
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build/
+out/
+classes/
+
+target/
