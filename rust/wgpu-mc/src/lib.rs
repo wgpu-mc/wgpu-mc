@@ -11,6 +11,9 @@ pub mod texture;
 pub mod render;
 pub mod util;
 
+pub use wgpu;
+pub use naga;
+
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::chunk::Chunk;
 use crate::mc::MinecraftState;
@@ -30,23 +33,22 @@ use std::ops::{DerefMut, Deref};
 use std::cell::RefCell;
 use crate::render::pipeline::{RenderPipelinesManager, WmPipeline, WmBindGroupLayouts};
 use arc_swap::ArcSwap;
+use winit::dpi::Size;
 use crate::util::WmArena;
 
 pub struct WgpuState {
     pub surface: wgpu::Surface,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
-    pub queue: wgpu::Queue
+    pub queue: wgpu::Queue,
+    pub surface_config: ArcSwap<wgpu::SurfaceConfiguration>,
+    pub size: ArcSwap<WindowSize>,
 }
 
 ///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
 /// goes in `MinecraftState`
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
-
-    pub surface_config: ArcSwap<wgpu::SurfaceConfiguration>,
-
-    pub size: ArcSwap<WindowSize>,
 
     pub depth_texture: ArcSwap<texture::WgpuTexture>,
 
@@ -67,11 +69,8 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-    pub async fn new<W: HasRawWindowHandle + HasWindowSize>(
-        window: &W,
-        resource_provider: Arc<dyn ResourceProvider>,
-        shaders: &HashMap<String, WmShader>
-    ) -> WmRenderer {
+
+    pub async fn init_wgpu<W: HasRawWindowHandle + HasWindowSize>(window: &W) -> WgpuState {
         let size = window.get_window_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
@@ -98,7 +97,7 @@ impl WmRenderer {
             .await
             .unwrap();
 
-        let config = wgpu::SurfaceConfiguration {
+        let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_preferred_format(&adapter).unwrap(),
             width: size.width,
@@ -106,28 +105,35 @@ impl WmRenderer {
             present_mode: wgpu::PresentMode::Fifo,
         };
 
-        surface.configure(&device, &config);
+        surface.configure(&device, &surface_config);
 
+        WgpuState {
+            surface,
+            adapter,
+            device,
+            queue,
+            surface_config: ArcSwap::new(Arc::new(surface_config)),
+            size: ArcSwap::new(Arc::new(size))
+        }
+
+    }
+
+    pub fn new(
+        wgpu_state: WgpuState,
+        resource_provider: Arc<dyn ResourceProvider>,
+        shaders: &HashMap<String, Box<dyn WmShader>>
+    ) -> WmRenderer {
         let pipelines = render::pipeline::RenderPipelinesManager::init(
-            &device,
+            &wgpu_state.device,
             &shaders,
             resource_provider.clone()
         );
 
-        let mc = MinecraftState::new(&device, &pipelines, resource_provider);
-        let depth_texture = WgpuTexture::create_depth_texture(&device, &config, "depth texture");
-
-        let wgpu_state = WgpuState {
-            surface,
-            adapter,
-            device,
-            queue
-        };
+        let mc = MinecraftState::new(&wgpu_state.device, &pipelines, resource_provider);
+        let depth_texture = WgpuTexture::create_depth_texture(&wgpu_state.device, &wgpu_state.surface_config.load(), "depth texture");
 
         Self {
             wgpu_state: Arc::new(wgpu_state),
-            surface_config: ArcSwap::new(Arc::new(config)),
-            size: ArcSwap::new(Arc::new(size)),
 
             depth_texture: ArcSwap::new(Arc::new(depth_texture)),
             pipelines: ArcSwap::new(Arc::new(pipelines)),
@@ -135,7 +141,7 @@ impl WmRenderer {
         }
     }
 
-    pub fn build_pipelines(&self, shaders: &HashMap<String, WmShader>) {
+    pub fn build_pipelines(&self, shaders: &HashMap<String, Box<dyn WmShader>>) {
         let pipelines = render::pipeline::RenderPipelinesManager::init(
             &self.wgpu_state.device,
             &shaders,
@@ -146,7 +152,7 @@ impl WmRenderer {
     }
 
     pub fn resize(&self, new_size: WindowSize) {
-        let mut surface_config = (*self.surface_config.load_full()).clone();
+        let mut surface_config = (*self.wgpu_state.surface_config.load_full()).clone();
 
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
@@ -165,7 +171,7 @@ impl WmRenderer {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
-        let surface_config = self.surface_config.load();
+        let surface_config = self.wgpu_state.surface_config.load();
         camera.aspect = surface_config.height as f32 / surface_config.width as f32;
 
         let uniforms = UniformMatrixHelper {

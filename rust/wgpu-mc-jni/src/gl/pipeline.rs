@@ -1,26 +1,28 @@
-use wgpu_mc::render::pipeline::{WmPipeline, WmBindGroupLayouts};
-use wgpu_mc::WmRenderer;
-use wgpu::{RenderPass, BufferDescriptor, BufferUsages, BindGroupDescriptor, BindGroupEntry, BindGroup, PipelineLayoutDescriptor, PipelineLayout, RenderPipeline, VertexState, PrimitiveState, FrontFace, ShaderModuleDescriptor};
-use wgpu_mc::texture::{UV, WgpuTexture};
-use cgmath::{Matrix2, Matrix3, Matrix4, Vector3, SquareMatrix};
-use wgpu_mc::camera::UniformMatrixHelper;
-use wgpu::util::{DeviceExt, BufferInitDescriptor};
-use std::sync::{Arc, RwLock};
-use dashmap::DashMap;
-use arc_swap::ArcSwap;
-use wgpu_mc::model::Material;
-use std::cell::{RefCell, Cell};
-use crate::gl::{GL_ALLOC, GlResource, GlAttributeType, GlVertexAttribute, GlAttributeFormat, get_texture, get_buffer};
+use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::num::NonZeroU32;
-use wgpu_mc::mc::datapack::NamespacedResource;
-use wgpu_mc::render::shader::{WmShader};
+use std::rc::Rc;
+use std::sync::Arc;
+
+use arc_swap::ArcSwap;
+use cgmath::{Matrix4, SquareMatrix};
 use futures::StreamExt;
+use wgpu::{BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, RenderPass, RenderPipeline, ShaderModule, ShaderModuleDescriptor, VertexState};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+
+use wgpu_mc::{wgpu, WmRenderer};
+use wgpu_mc::camera::UniformMatrixHelper;
+use wgpu_mc::mc::datapack::NamespacedResource;
+use wgpu_mc::mc::resource::ResourceProvider;
+use wgpu_mc::model::Material;
+use wgpu_mc::render::pipeline::WmPipeline;
+use wgpu_mc::render::shader::WmShader;
+use wgpu_mc::texture::WgpuTexture;
 use wgpu_mc::util::WmArena;
-use std::convert::TryInto;
+
+use crate::gl::{get_buffer, GL_ALLOC, GlAttributeFormat, GlAttributeType, GlResource};
 use crate::gl;
-use bytemuck::Pod;
 
 // #[rustfmt::skip]
 // pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -66,11 +68,11 @@ pub enum GLCommand {
 pub fn create_wgpu_pipeline_layout(wm: &WmRenderer, tex_bg: bool) -> wgpu::PipelineLayout {
     let pipelines = wm.pipelines.load();
     let mut layouts = vec![
-        &pipelines.layouts.matrix
+        &pipelines.bind_group_layouts.matrix4
     ];
 
     if tex_bg {
-        layouts.push(&pipelines.layouts.texture);
+        layouts.push(&pipelines.bind_group_layouts.texture);
     }
 
     wm.wgpu_state.device.create_pipeline_layout(
@@ -86,7 +88,7 @@ fn create_wgpu_pipeline(
     wm: &WmRenderer,
     attributes: &[SubmittedVertexAttrPointer],
     layout: &wgpu::PipelineLayout,
-    shader: &WmShader) -> wgpu::RenderPipeline {
+    shader: &dyn WmShader) -> wgpu::RenderPipeline {
 
     let mut shader_loc = 0;
     let layout_attrs: Vec<[wgpu::VertexAttribute; 1]> = attributes.iter().map(|attr| {
@@ -116,8 +118,8 @@ fn create_wgpu_pipeline(
             label: Some(&format!("OpenGL pipeline ({:?}) with layout ({:?})", layout_attrs, layout)),
             layout: Some(layout),
             vertex: wgpu::VertexState {
-                module: &shader.vert,
-                entry_point: "main",
+                module: &shader.get_vert().0,
+                entry_point: &shader.get_vert().1,
                 buffers: &buffers
             },
             primitive: wgpu::PrimitiveState {
@@ -138,8 +140,8 @@ fn create_wgpu_pipeline(
             }),
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &shader.frag,
-                entry_point: "main",
+                module: &shader.get_frag().0,
+                entry_point: shader.get_frag().1,
                 targets: &[
                     wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -205,7 +207,7 @@ fn tex_image_2d(wm: &WmRenderer, width: u32, height: u32, format: wgpu::TextureF
     let bind_group = wm.wgpu_state.device.create_bind_group(
         &BindGroupDescriptor {
             label: None,
-            layout: &wm.pipelines.load().layouts.texture,
+            layout: &wm.pipelines.load().bind_group_layouts.texture,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -264,61 +266,88 @@ fn quads_to_tris_transformer(vertex_data: &[u8], vertex_count: usize, stride: us
 }
 
 #[derive(Debug)]
+pub struct GlslShader {
+    frag: wgpu::ShaderModule,
+    vert: wgpu::ShaderModule
+}
+
+impl GlslShader {
+
+    pub fn init(frag: &NamespacedResource, vert: &NamespacedResource, rp: &dyn ResourceProvider, device: &wgpu::Device) -> Self {
+        let frag_src = rp.get_resource(frag);
+        let vert_src = rp.get_resource(vert);
+
+        let frag_src = std::str::from_utf8(&frag_src).unwrap();
+        let vert_src = std::str::from_utf8(&vert_src).unwrap();
+        
+        let frag_module = device.create_shader_module(&ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Glsl {
+                shader: Cow::from(frag_src),
+                stage: wgpu_mc::naga::ShaderStage::Fragment,
+                defines: Default::default()
+            }
+        });
+
+        let vert_module = device.create_shader_module(&ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Glsl {
+                shader: Cow::from(vert_src),
+                stage: wgpu_mc::naga::ShaderStage::Vertex,
+                defines: Default::default()
+            }
+        });
+
+        Self {
+            frag: frag_module,
+            vert: vert_module
+        }
+    }
+
+}
+
+impl WmShader for GlslShader {
+
+    fn get_frag(&self) -> (&ShaderModule, &str) {
+        (&self.frag, "main")
+    }
+
+    fn get_vert(&self) -> (&ShaderModule, &str) {
+        (&self.vert, "main")
+    }
+
+}
+
+#[derive(Debug)]
 struct GlPipelineShaders {
-    pos_col_uint: WmShader,
-    pos_col_float3: WmShader,
-    pos_tex: WmShader
+    pos_col_uint: GlslShader,
+    pos_col_float3: GlslShader,
+    pos_tex: GlslShader
 }
 
 impl GlPipelineShaders {
 
     pub fn new(renderer: &WmRenderer) -> Self {
-        let mut compiler = renderer.shaderc.lock();
+        let pos_col_float3 = GlslShader::init(
+            &("wgpu_mc", "shaders/gui_col_pos.fsh").into(),
+            &("wgpu_mc", "shaders/gui_col_pos.vsh").into(),
+            &*renderer.mc.resource_provider,
+            &renderer.wgpu_state.device
+        );
 
-        let pos_col_float3 = WmShader::from_glsl(
-            GlslShaderDescription {
-                file_name: "gui_col_pos.fsh",
-                source: std::str::from_utf8(&renderer.mc.resource_provider.get_resource(&("wgpu_mc", "shaders/gui_col_pos.fsh").into())).unwrap(),
-                entry_point: "main"
-            },
-            GlslShaderDescription {
-                file_name: "gui_col_pos.vsh",
-                source: std::str::from_utf8(&renderer.mc.resource_provider.get_resource(&("wgpu_mc", "shaders/gui_col_pos.vsh").into())).unwrap(),
-                entry_point: "main"
-            },
-            &renderer.wgpu_state.device,
-            &mut compiler
-        ).unwrap();
+        let pos_col_uint = GlslShader::init(
+            &("wgpu_mc", "shaders/gui_col_pos_uint.fsh").into(),
+            &("wgpu_mc", "shaders/gui_col_pos_uint.vsh").into(),
+            &*renderer.mc.resource_provider,
+            &renderer.wgpu_state.device
+        );
 
-        let pos_col_uint = WmShader::from_glsl(
-            GlslShaderDescription {
-                file_name: "gui_col_pos_uint.fsh",
-                source: std::str::from_utf8(&renderer.mc.resource_provider.get_resource(&("wgpu_mc", "shaders/gui_col_pos_uint.fsh").into())).unwrap(),
-                entry_point: "main"
-            },
-            GlslShaderDescription {
-                file_name: "gui_col_pos_uint.vsh",
-                source: std::str::from_utf8(&renderer.mc.resource_provider.get_resource(&("wgpu_mc", "shaders/gui_col_pos_uint.vsh").into())).unwrap(),
-                entry_point: "main"
-            },
-            &renderer.wgpu_state.device,
-            &mut compiler
-        ).unwrap();
-
-        let pos_tex = WmShader::from_glsl(
-            GlslShaderDescription {
-                file_name: "gui_uv_pos.fsh",
-                source: std::str::from_utf8(&renderer.mc.resource_provider.get_resource(&("wgpu_mc", "shaders/gui_uv_pos.fsh").into())).unwrap(),
-                entry_point: "main"
-            },
-            GlslShaderDescription {
-                file_name: "gui_uv_pos.vsh",
-                source: std::str::from_utf8(&renderer.mc.resource_provider.get_resource(&("wgpu_mc", "shaders/gui_uv_pos.vsh").into())).unwrap(),
-                entry_point: "main"
-            },
-            &renderer.wgpu_state.device,
-            &mut compiler
-        ).unwrap();
+        let pos_tex = GlslShader::init(
+            &("wgpu_mc", "shaders/gui_uv_pos.fsh").into(),
+            &("wgpu_mc", "shaders/gui_uv_pos.vsh").into(),
+            &*renderer.mc.resource_provider,
+            &renderer.wgpu_state.device
+        );
 
         Self {
             pos_col_uint,
@@ -348,7 +377,7 @@ impl GlPipelineManager {
             &wgpu::PipelineLayoutDescriptor {
                 label: None,
                 bind_group_layouts: &[
-                    &pipelines.layouts.matrix
+                    &pipelines.bind_group_layouts.matrix4
                 ],
                 push_constant_ranges: &[]
             }
@@ -358,8 +387,8 @@ impl GlPipelineManager {
             &wgpu::PipelineLayoutDescriptor {
                 label: None,
                 bind_group_layouts: &[
-                    &pipelines.layouts.matrix,
-                    &pipelines.layouts.texture
+                    &pipelines.bind_group_layouts.matrix4,
+                    &pipelines.bind_group_layouts.texture
                 ],
                 push_constant_ranges: &[]
             }
@@ -576,8 +605,8 @@ fn byte_buffer_to_short(bytes: &[u8]) -> Vec<u16> {
 impl WmPipeline for GlPipeline {
     fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, renderer: &'b WmRenderer, render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
         let wm_pipelines = arena.alloc(renderer.pipelines.load_full());
-        let sc = renderer.surface_config.load();
-        let gl_alloc = unsafe { GL_ALLOC.assume_init_ref() };
+        let sc = renderer.wgpu_state.surface_config.load();
+        let gl_alloc = unsafe { &GL_ALLOC }.get().unwrap();
 
         let mut gl_pipelines = self.pipelines.borrow_mut();
 
@@ -604,7 +633,7 @@ impl WmPipeline for GlPipeline {
                     let group = arena.alloc(renderer.wgpu_state.device.create_bind_group(
                         &wgpu::BindGroupDescriptor {
                             label: None,
-                            layout: &wm_pipelines.layouts.matrix,
+                            layout: &wm_pipelines.bind_group_layouts.matrix4,
                             entries: &[
                                 wgpu::BindGroupEntry {
                                     binding: 0,
@@ -655,14 +684,6 @@ impl WmPipeline for GlPipeline {
                         get_buffer(*slots.get(&0x8892i32).unwrap() as usize)
                     }.unwrap();
 
-                    {
-                        let float_buf = bytemuck::cast_slice::<_, f32>(
-                            vertex_array.data.as_ref().unwrap()
-                        );
-
-                        println!("count: {}\n{:?}\n\n", count, float_buf);
-                    }
-
                     render_pass.set_vertex_buffer(0, arena.alloc(vertex_array).buffer.as_ref().unwrap().slice(..));
 
                     let mut gl_element_buffer = unsafe {
@@ -672,14 +693,6 @@ impl WmPipeline for GlPipeline {
                     let mut index_buffer = arena.alloc(
                         gl_element_buffer.buffer.as_ref().unwrap().clone()
                     );
-
-                    {
-                        let short_buf = bytemuck::cast_slice::<_, f32>(
-                            index_buffer.data.as_ref().unwrap()
-                        );
-
-                        println!("count: {}\n{:?}\n\n", count, index_buffer);
-                    }
 
                     let (index_size, index_format) = match type_ {
                         0x1401 => {
@@ -776,7 +789,7 @@ impl WmPipeline for GlPipeline {
                     let group = arena.alloc(renderer.wgpu_state.device.create_bind_group(
                         &wgpu::BindGroupDescriptor {
                             label: None,
-                            layout: &wm_pipelines.layouts.matrix,
+                            layout: &wm_pipelines.bind_group_layouts.matrix4,
                             entries: &[
                                 wgpu::BindGroupEntry {
                                     binding: 0,
@@ -814,7 +827,7 @@ impl WmPipeline for GlPipeline {
                         let mut slots = self.slots.borrow_mut();
                         let active_slot = *self.active_texture_slot.borrow();
                         let active_texture_id = *slots.get(&active_slot).unwrap();
-                        let slab = unsafe { GL_ALLOC.assume_init_mut() };
+                        let slab = unsafe { &mut GL_ALLOC }.get_mut().unwrap();
                         let resource = slab.get_mut(active_texture_id as usize).unwrap();
                         let material =
                             tex_image_2d(

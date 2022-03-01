@@ -29,21 +29,6 @@ use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
 use fastnbt::de::from_bytes;
 use wgpu_mc::mc::entity::{EntityManager, EntityPart, PartTransform, Cuboid, CuboidTextures};
 
-struct DemoContextResolver;
-
-impl DatapackContextResolver for DemoContextResolver {
-
-    fn resolve(&self, context: &str, resource: &NamespacedResource) -> NamespacedResource {
-        resource
-            .prepend(&format!("{}/", context))
-            .append(match context {
-                "textures" => ".png",
-                _ => ".json"
-            })
-    }
-
-}
-
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
 }
@@ -133,12 +118,14 @@ fn main() {
         .join("assets")
         .join("minecraft");
 
-    let mut wm = block_on(
-        WmRenderer::new(
-            &wrapper,
-            Arc::new(rsp),
-            Arc::new(DemoContextResolver)
-        )
+    let wgpu_state = block_on(WmRenderer::init_wgpu(&wrapper));
+
+    let mut shaders = HashMap::new();
+
+    let mut wm = WmRenderer::new(
+        wgpu_state,
+        Arc::new(rsp),
+        &shaders
     );
 
     let blockstates_path = mc_root.join("blockstates");

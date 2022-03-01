@@ -1,6 +1,8 @@
 use std::mem::MaybeUninit;
 use std::vec::Vec;
 
+use wgpu_mc::wgpu;
+
 use parking_lot::RwLock;
 use slab::Slab;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -14,19 +16,20 @@ use arc_swap::ArcSwap;
 use wgpu_mc::WmRenderer;
 use wgpu::ImageDataLayout;
 use std::collections::HashMap;
+use once_cell::sync::OnceCell;
 
 pub mod pipeline;
 
-pub static mut GL_COMMANDS: MaybeUninit<Vec<GLCommand>> = MaybeUninit::uninit();
-pub static mut GL_ALLOC: MaybeUninit<Slab<GlResource>> = MaybeUninit::uninit();
-pub static mut GL_MAPPED_BUFFERS: MaybeUninit<HashMap<usize, Vec<u8>>> = MaybeUninit::uninit();
-pub static mut GL_STATE: MaybeUninit<GlState> = MaybeUninit::uninit();
+pub static mut GL_COMMANDS: OnceCell<Vec<GLCommand>> = OnceCell::new();
+pub static mut GL_ALLOC: OnceCell<Slab<GlResource>> = OnceCell::new();
+pub static mut GL_MAPPED_BUFFERS: OnceCell<HashMap<usize, Vec<u8>>> = OnceCell::new();
+pub static mut GL_STATE: OnceCell<GlState> = OnceCell::new();
 
 pub unsafe fn init() {
-    GL_ALLOC = MaybeUninit::new(Slab::with_capacity(2048));
-    GL_COMMANDS = MaybeUninit::new(Vec::new());
-    GL_MAPPED_BUFFERS = MaybeUninit::new(HashMap::new());
-    GL_STATE = MaybeUninit::new(GlState {
+    GL_ALLOC.set(Slab::with_capacity(2048));
+    GL_COMMANDS.set(Vec::new());
+    GL_MAPPED_BUFFERS.set(HashMap::new());
+    GL_STATE.set(GlState {
         buffers: HashMap::new()
     });
 }
@@ -188,7 +191,7 @@ pub enum GlResource {
 }
 
 pub unsafe fn gen_texture() -> usize {
-    let slab = GL_ALLOC.assume_init_mut();
+    let slab = GL_ALLOC.get_mut().unwrap();
     slab.insert(GlResource::Texture(GlTexture {
         width: 0,
         height: 0,
@@ -197,7 +200,7 @@ pub unsafe fn gen_texture() -> usize {
 }
 
 pub unsafe fn gen_buffer() -> usize {
-    let slab = GL_ALLOC.assume_init_mut();
+    let slab = GL_ALLOC.get_mut().unwrap();
     slab.insert(GlResource::Buffer(ArcSwap::new(Arc::new(GlBuffer {
         buffer: None,
         data: None
@@ -205,7 +208,7 @@ pub unsafe fn gen_buffer() -> usize {
 }
 
 pub unsafe fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) {
-    let slab = GL_ALLOC.assume_init_ref();
+    let slab = GL_ALLOC.get().unwrap();
     match slab.get(id).unwrap() {
         GlResource::Texture(_) => panic!(),
         GlResource::Buffer(buf) => {
@@ -226,7 +229,7 @@ pub unsafe fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) 
 }
 
 pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u32, renderer: &WmRenderer) {
-    let slab = GL_ALLOC.assume_init_mut();
+    let slab = GL_ALLOC.get_mut().unwrap();
     match slab.get_mut(id).expect("Invalid texture ID") {
         GlResource::Texture(tex) => {
             // material.diffuse_texture.texture
@@ -236,7 +239,7 @@ pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u3
 }
 
 pub unsafe fn get_texture(id: usize) -> Option<Rc<Material>> {
-    let slab = GL_ALLOC.assume_init_ref();
+    let slab = GL_ALLOC.get().unwrap();
     match slab.get(id).expect("Invalid texture ID") {
         GlResource::Texture(tex) => {
             tex.material.to_owned()
@@ -246,7 +249,7 @@ pub unsafe fn get_texture(id: usize) -> Option<Rc<Material>> {
 }
 
 pub unsafe fn get_buffer(id: usize) -> Option<Arc<GlBuffer>> {
-    let slab = GL_ALLOC.assume_init_ref();
+    let slab = GL_ALLOC.get().unwrap();
     slab.get(id).and_then(|res| match res {
         GlResource::Texture(_) => panic!("Invalid buffer ID"),
         GlResource::Buffer(buf) => {

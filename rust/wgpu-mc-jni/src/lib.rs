@@ -39,6 +39,8 @@ use wgpu_mc::render::pipeline::builtin::WorldPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::texture::WgpuTexture;
 
+use wgpu_mc::wgpu;
+
 use crate::mc_interface::xyz_to_index;
 use std::cell::{RefCell, Cell};
 use wgpu::{RenderPipelineDescriptor, PipelineLayoutDescriptor, TextureDescriptor, Extent3d, ImageDataLayout, BindGroupDescriptor, BindGroupEntry, BindingResource, TextureViewDescriptor};
@@ -48,12 +50,10 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 use wgpu_mc::camera::UniformMatrixHelper;
 use once_cell::unsync::OnceCell;
+use wgpu_mc::render::shader::WmShader;
+use crate::gl::pipeline::GlslShader;
 
-///Foreword here,
-/// the code is quite messy and will be cleaned up at some point.
-/// I'm sure there are even some bad practices atm but the general goal is to get things working
-/// relatively well, and then clean them up, while still keeping the prototyped code updateable and
-/// managable. Feel free to make a pull request.
+//SAFETY: It is assumed that this FFI will be accessed only single-threadedly
 
 mod mc_interface;
 mod gl;
@@ -84,7 +84,7 @@ struct WinitWindowWrapper<'a> {
     window: &'a Window
 }
 
-impl HasWindowSize for &WinitWindowWrapper<'_> {
+impl HasWindowSize for WinitWindowWrapper<'_> {
     fn get_window_size(&self) -> WindowSize {
         WindowSize {
             width: self.window.inner_size().width,
@@ -93,7 +93,7 @@ impl HasWindowSize for &WinitWindowWrapper<'_> {
     }
 }
 
-unsafe impl HasRawWindowHandle for &WinitWindowWrapper<'_> {
+unsafe impl HasRawWindowHandle for WinitWindowWrapper<'_> {
 
     fn raw_window_handle(&self) -> RawWindowHandle {
         self.window.raw_window_handle()
@@ -298,15 +298,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
     env: JNIEnv,
     class: JClass) {
-    // let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
-
-    let mut swap: MaybeUninit<EventLoop<()>> = MaybeUninit::uninit();
-
-    std::mem::swap(&mut swap, unsafe { &mut EVENT_LOOP });
 
     let renderer = unsafe { RENDERER.get_mut().unwrap() };
-
-    let event_loop = unsafe { swap.assume_init() };
+    let event_loop = unsafe { EVENT_LOOP.take().unwrap() };
 
     let rx = unsafe { CHANNEL_RX.get().unwrap() }.lock();
 
@@ -371,18 +365,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
         }
     });
 
-    // });
-}
-
-struct McDatapackResolver;
-
-impl DatapackContextResolver for McDatapackResolver {
-    fn resolve(&self, context: &str, resource: &NamespacedResource) -> NamespacedResource {
-        resource.prepend(&format!("{}/", context)).append(match context {
-            "textures" => ".png",
-            _ => ".json"
-        })
-    }
 }
 
 #[no_mangle]
@@ -393,12 +375,38 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
     let wrapper = &WinitWindowWrapper {
         window: unsafe { WINDOW.get().unwrap() }
     };
-    let mut state = block_on(WmRenderer::new(
-        &wrapper,
-        Arc::new(MinecraftResourceManagerAdapter {
-            jvm: env.get_java_vm().unwrap()
-        }),
-        Arc::new(McDatapackResolver))
+
+    let wgpu_state = block_on(
+        WmRenderer::init_wgpu(wrapper)
+    );
+
+    let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
+        jvm: env.get_java_vm().unwrap()
+    });
+
+    let mut shader_map = HashMap::new();
+
+    for name in [
+        "grass",
+        "sky",
+        "terrain",
+        "transparent",
+        "entity"
+    ] {
+        let gl_shader = GlslShader::init(
+            &NamespacedResource::try_from("wgpu_mc:shaders/").unwrap().append(name).append(".fsh"),
+            &NamespacedResource::try_from("wgpu_mc:shaders/").unwrap().append(name).append(".vsh"),
+            &*resource_provider,
+            &wgpu_state.device
+        );
+
+        shader_map.insert(name.to_string(), Box::new(gl_shader) as Box<dyn WmShader>);
+    }
+
+    let mut state = WmRenderer::new(
+        wgpu_state,
+        resource_provider,
+        &shader_map
     );
 
     unsafe {
@@ -1000,5 +1008,5 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createArrayPaletteStor
     env: JNIEnv,
     class: JClass
 ) -> jlong {
-
+    0
 }

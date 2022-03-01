@@ -1,5 +1,7 @@
-#[derive(Debug)]
-pub struct WmShader {
-    pub frag: wgpu::ShaderModule,
-    pub vert: wgpu::ShaderModule
+pub trait WmShader {
+
+    fn get_frag(&self) -> (&wgpu::ShaderModule, &str);
+
+    fn get_vert(&self) -> (&wgpu::ShaderModule, &str);
+
 }

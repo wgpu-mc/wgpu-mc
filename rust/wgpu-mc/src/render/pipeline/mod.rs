@@ -202,7 +202,7 @@ impl RenderPipelinesManager {
     }
 
     #[must_use]
-    pub fn init(device: &wgpu::Device, shader_map: &HashMap<String, WmShader>, resource_provider: Arc<dyn ResourceProvider>) -> Self {
+    pub fn init(device: &wgpu::Device, shader_map: &HashMap<String, Box<dyn WmShader>>, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         let bg_layouts = Self::create_bind_group_layouts(device);
         let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
 
@@ -210,13 +210,20 @@ impl RenderPipelinesManager {
             ChunkVertex::desc()
         ];
 
+        let sky = shader_map.get("sky").unwrap();
+        let terrain = shader_map.get("terrain").unwrap();
+        let grass = shader_map.get("grass").unwrap();
+        let transparent = shader_map.get("transparent").unwrap();
+        //TODO: actually implement entities
+        let entity = shader_map.get("transparent").unwrap();
+
         Self {
             sky_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
                 layout: Some(&pipeline_layouts.0),
                 vertex: wgpu::VertexState {
-                    module: &shader_map.get("sky").unwrap().vert,
-                    entry_point: "main",
+                    module: sky.get_vert().0,
+                    entry_point: sky.get_vert().1,
                     buffers: &[]
                 },
                 primitive: wgpu::PrimitiveState {
@@ -236,8 +243,8 @@ impl RenderPipelinesManager {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader_map.get("sky").unwrap().frag,
-                    entry_point: "main",
+                    module: sky.get_frag().0,
+                    entry_point: sky.get_frag().1,
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
@@ -253,8 +260,8 @@ impl RenderPipelinesManager {
                 label: None,
                 layout: Some(&pipeline_layouts.1),
                 vertex: wgpu::VertexState {
-                    module: &shader_map.get("terrain").unwrap().vert,
-                    entry_point: "main",
+                    module: terrain.get_vert().0,
+                    entry_point: terrain.get_vert().1,
                     buffers: &vertex_buffers
                 },
                 primitive: wgpu::PrimitiveState {
@@ -279,8 +286,8 @@ impl RenderPipelinesManager {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader_map.get("terrain").unwrap().frag,
-                    entry_point: "main",
+                    module: terrain.get_frag().0,
+                    entry_point: terrain.get_frag().1,
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
@@ -296,8 +303,8 @@ impl RenderPipelinesManager {
                 label: None,
                 layout: Some(&pipeline_layouts.2),
                 vertex: wgpu::VertexState {
-                    module: &shader_map.get("grass").unwrap().vert,
-                    entry_point: "main",
+                    module: grass.get_vert().0,
+                    entry_point: grass.get_vert().1,
                     buffers: &vertex_buffers
                 },
                 primitive: wgpu::PrimitiveState {
@@ -322,8 +329,8 @@ impl RenderPipelinesManager {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader_map.get("grass").unwrap().frag,
-                    entry_point: "main",
+                    module: grass.get_frag().0,
+                    entry_point: grass.get_frag().1,
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
@@ -339,8 +346,8 @@ impl RenderPipelinesManager {
                 label: None,
                 layout: Some(&pipeline_layouts.3),
                 vertex: wgpu::VertexState {
-                    module: &shader_map.get("transparent").unwrap().vert,
-                    entry_point: "main",
+                    module: transparent.get_vert().0,
+                    entry_point: transparent.get_vert().1,
                     buffers: &vertex_buffers
                 },
                 primitive: wgpu::PrimitiveState {
@@ -365,8 +372,8 @@ impl RenderPipelinesManager {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader_map.get("transparent").unwrap().frag,
-                    entry_point: "main",
+                    module: transparent.get_frag().0,
+                    entry_point: transparent.get_frag().1,
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {
@@ -383,8 +390,8 @@ impl RenderPipelinesManager {
                 label: None,
                 layout: Some(&pipeline_layouts.3),
                 vertex: wgpu::VertexState {
-                    module: &shader_map.get("transparent").unwrap().vert,
-                    entry_point: "main",
+                    module: entity.get_vert().0,
+                    entry_point: entity.get_vert().1,
                     buffers: &vertex_buffers
                 },
                 primitive: wgpu::PrimitiveState {
@@ -409,8 +416,8 @@ impl RenderPipelinesManager {
                     alpha_to_coverage_enabled: false
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader_map.get("transparent").unwrap().frag,
-                    entry_point: "main",
+                    module: entity.get_frag().0,
+                    entry_point: entity.get_frag().1,
                     targets: &[wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Bgra8UnormSrgb,
                         blend: Some(wgpu::BlendState {

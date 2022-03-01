@@ -10,7 +10,6 @@ edition = "2021"
 crate-root = "0.1.3"
 futures = "0.3"
 raw-window-handle = "0.4.2"
-wgpu = "0.12.0"
 wgpu-mc = { path = "../wgpu-mc" }
 winit = "0.26.0"
 cgmath = "0.17"

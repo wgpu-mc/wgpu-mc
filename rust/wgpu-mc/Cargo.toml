@@ -7,7 +7,8 @@ edition = "2021"
 [dependencies]
 image = "0.23"
 cgmath = "0.17"
-wgpu = "0.12.0"
+wgpu = { version = "0.12.0", features = ["glsl"] }
+naga = "0.8.0"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 anyhow = "1.0"
 winit = "0.26.0"
