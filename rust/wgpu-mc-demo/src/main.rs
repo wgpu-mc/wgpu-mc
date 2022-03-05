@@ -1,4 +1,5 @@
 use std::{iter, fs};
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::ops::{DerefMut, Deref};
 use std::time::Instant;
@@ -7,14 +8,14 @@ use wgpu_mc::mc::block::{BlockDirection, BlockState, Block};
 use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME, CHUNK_WIDTH};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, DeviceEvent};
-use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize};
+use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize, wgpu};
 use futures::executor::block_on;
 use winit::window::Window;
 use cgmath::InnerSpace;
 use std::sync::Arc;
 use wgpu_mc::mc::resource::{ResourceProvider};
 use std::convert::{TryFrom, TryInto};
-use wgpu_mc::render::chunk::BakedChunk;
+use wgpu_mc::render::world::chunk::BakedChunk;
 use wgpu_mc::render::pipeline::builtin::WorldPipeline;
 use arc_swap::ArcSwap;
 use futures::StreamExt;
@@ -28,6 +29,7 @@ use fastanvil::pre18::JavaChunk;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
 use fastnbt::de::from_bytes;
 use wgpu_mc::mc::entity::{EntityManager, EntityPart, PartTransform, Cuboid, CuboidTextures};
+use wgpu_mc::render::shader::{GlslShader, WgslShader, WmShader};
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -107,9 +109,9 @@ fn main() {
         window
     };
 
-    let rsp = SimpleResourceProvider {
+    let rsp = Arc::new(SimpleResourceProvider {
         asset_root: crate_root::root().unwrap().join("wgpu-mc-demo").join("res").join("assets"),
-    };
+    });
 
     let mc_root = crate_root::root()
         .unwrap()
@@ -122,9 +124,27 @@ fn main() {
 
     let mut shaders = HashMap::new();
 
+    for name in [
+        "grass",
+        "sky",
+        "terrain",
+        "transparent",
+        "entity"
+    ] {
+        let wgsl_shader = WgslShader::init(
+            &NamespacedResource::try_from("wgpu_mc:shaders/").unwrap().append(name).append(".wgsl"),
+            &*rsp,
+            &wgpu_state.device,
+            "fs_main".into(),
+            "vs_main".into()
+        );
+
+        shaders.insert(name.to_string(), Box::new(wgsl_shader) as Box<dyn WmShader>);
+    }
+
     let mut wm = WmRenderer::new(
         wgpu_state,
-        Arc::new(rsp),
+        rsp,
         &shaders
     );
 

@@ -38,28 +38,15 @@ Engine
 - [x] Generate a texture atlas of the textures 
 - [x] Convert the block models into a mesh
 - [x] Generate chunk meshes
-- [x] Skybox*
+- [x] Sky
+- [ ] Entities (not tested, but the code structure is there)
 
-*shader not written yet
-
-Gameplay
+Minecraft
 
 - [x] Disable Blaze3d
+- [x] Open a window
 - [ ] Upload basic chunk data to wgpu-mc
-
-Entity rendering
-
-- [ ] Render entity models
-- [ ] Animations
-
-Java Interface
-
-- [x] Interface with the Fabric mod to use wgpu-mc
-
-Shaders
-
-- [x] Have built in shaders that mimic the original Minecraft style, and also built-in more advanced shaders
-- [x] Ability to use custom shaders
+- [ ] Integrate entities
 
 Pie in the sky
 

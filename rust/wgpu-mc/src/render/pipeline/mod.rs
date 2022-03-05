@@ -18,10 +18,11 @@ use crate::mc::chunk::{ChunkManager, Chunk};
 use crate::mc::entity::EntityModel;
 use crate::camera::Camera;
 use crate::mc::resource::ResourceProvider;
-use crate::render::chunk::ChunkVertex;
+use crate::render::world::chunk::ChunkVertex;
 use crate::util::WmArena;
 use crate::render::entity::{EntityVertex, EntityRenderInstance};
 use arc_swap::ArcSwap;
+use crate::render::world::sky::SkyVertex;
 
 pub trait WmPipeline {
 
@@ -162,7 +163,7 @@ impl RenderPipelinesManager {
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("Terrain Pipeline Layout"),
                     bind_group_layouts: &[
-                        // &layouts.texture_bind_group_layout, &layouts.cubemap_bind_group_layout, &layouts.camera_bind_group_layout
+                        //&layouts.texture, &layouts.matrix4, &layouts.cubemap
                         &layouts.texture, &layouts.matrix4
                     ],
                     push_constant_ranges: &[]
@@ -172,7 +173,8 @@ impl RenderPipelinesManager {
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("Grass Pipeline Layout"),
                     bind_group_layouts: &[
-                        &layouts.texture, &layouts.cubemap, &layouts.matrix4
+                        //&layouts.texture, &layouts.matrix4, &layouts.cubemap
+                        &layouts.texture, &layouts.matrix4
                     ],
                     push_constant_ranges: &[]
                 }
@@ -181,7 +183,8 @@ impl RenderPipelinesManager {
             &wgpu::PipelineLayoutDescriptor {
                     label: Some("Transparent Pipeline Layout"),
                     bind_group_layouts: &[
-                        &layouts.texture, &layouts.cubemap, &layouts.matrix4
+                        //&layouts.texture, &layouts.matrix4, &layouts.cubemap
+                        &layouts.texture, &layouts.matrix4
                     ],
                     push_constant_ranges: &[]
                 }
@@ -224,7 +227,7 @@ impl RenderPipelinesManager {
                 vertex: wgpu::VertexState {
                     module: sky.get_vert().0,
                     entry_point: sky.get_vert().1,
-                    buffers: &[]
+                    buffers: &[SkyVertex::desc()]
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,

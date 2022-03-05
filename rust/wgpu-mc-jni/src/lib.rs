@@ -51,7 +51,7 @@ use std::rc::Rc;
 use wgpu_mc::camera::UniformMatrixHelper;
 use once_cell::unsync::OnceCell;
 use wgpu_mc::render::shader::WmShader;
-use crate::gl::pipeline::GlslShader;
+use wgpu_mc::render::shader::GlslShader;
 
 //SAFETY: It is assumed that this FFI will be accessed only single-threadedly
 
@@ -239,7 +239,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
             }).unwrap();
             block_manager.blocks.insert(identifier, model);
         },
-        // 1 => renderer.registry.items.insert(rname),
         _ => unimplemented!()
     };
 

@@ -198,7 +198,7 @@ impl MinecraftState {
 
         for id in &textures {
             let bytes = self.resource_provider.get_resource(
-                &id.prepend("textures")
+                &id.prepend("textures/").append(".png")
             );
             atlases.block.allocate(id, &bytes[..]).unwrap();
         }

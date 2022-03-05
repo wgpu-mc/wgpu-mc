@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -8,16 +7,14 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use cgmath::{Matrix4, SquareMatrix};
 use futures::StreamExt;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, RenderPass, RenderPipeline, ShaderModule, ShaderModuleDescriptor, VertexState};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, RenderPass, RenderPipeline, VertexState};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use wgpu_mc::{wgpu, WmRenderer};
 use wgpu_mc::camera::UniformMatrixHelper;
-use wgpu_mc::mc::datapack::NamespacedResource;
-use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::Material;
 use wgpu_mc::render::pipeline::WmPipeline;
-use wgpu_mc::render::shader::WmShader;
+use wgpu_mc::render::shader::{GlslShader, WmShader};
 use wgpu_mc::texture::WgpuTexture;
 use wgpu_mc::util::WmArena;
 
@@ -263,59 +260,6 @@ fn quads_to_tris_transformer(vertex_data: &[u8], vertex_count: usize, stride: us
         out.extend(c);
     }
     out
-}
-
-#[derive(Debug)]
-pub struct GlslShader {
-    frag: wgpu::ShaderModule,
-    vert: wgpu::ShaderModule
-}
-
-impl GlslShader {
-
-    pub fn init(frag: &NamespacedResource, vert: &NamespacedResource, rp: &dyn ResourceProvider, device: &wgpu::Device) -> Self {
-        let frag_src = rp.get_resource(frag);
-        let vert_src = rp.get_resource(vert);
-
-        let frag_src = std::str::from_utf8(&frag_src).unwrap();
-        let vert_src = std::str::from_utf8(&vert_src).unwrap();
-        
-        let frag_module = device.create_shader_module(&ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Glsl {
-                shader: Cow::from(frag_src),
-                stage: wgpu_mc::naga::ShaderStage::Fragment,
-                defines: Default::default()
-            }
-        });
-
-        let vert_module = device.create_shader_module(&ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Glsl {
-                shader: Cow::from(vert_src),
-                stage: wgpu_mc::naga::ShaderStage::Vertex,
-                defines: Default::default()
-            }
-        });
-
-        Self {
-            frag: frag_module,
-            vert: vert_module
-        }
-    }
-
-}
-
-impl WmShader for GlslShader {
-
-    fn get_frag(&self) -> (&ShaderModule, &str) {
-        (&self.frag, "main")
-    }
-
-    fn get_vert(&self) -> (&ShaderModule, &str) {
-        (&self.vert, "main")
-    }
-
 }
 
 #[derive(Debug)]

@@ -282,7 +282,7 @@ impl BlockModel {
             return model_map.get(identifier);
         }
 
-        let bytes = resource_provider.get_resource(&identifier.prepend("models"));
+        let bytes = resource_provider.get_resource(&identifier.prepend("models/").append(".json"));
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         let obj = json.as_object()?;

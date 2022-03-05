@@ -21,7 +21,7 @@ public class Wgpu {
 
     public static void preInit(String windowTitle) {
         try {
-            WgpuNative.load("wgpu-mc-jni", true);
+            WgpuNative.load("wgpu_mc_jni", true);
         } catch (Throwable e) {
             e.printStackTrace();
             throw new RuntimeException(e);

@@ -1,7 +1,7 @@
 use crate::mc::block::{Block, BlockPos, BlockState};
 use crate::model::MeshVertex;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use crate::render::chunk::BakedChunk;
+use crate::render::world::chunk::BakedChunk;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::convert::TryInto;

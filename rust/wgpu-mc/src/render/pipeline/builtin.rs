@@ -1,6 +1,6 @@
 use crate::WmRenderer;
 use wgpu::{SurfaceTexture, TextureView, CommandEncoder, RenderPassDescriptor, RenderPassColorAttachment, RenderPipeline, BindGroup, Buffer, RenderPass};
-use crate::render::chunk::BakedChunk;
+use crate::render::world::chunk::BakedChunk;
 use std::rc::Rc;
 use std::borrow::BorrowMut;
 use std::cell::RefCell;

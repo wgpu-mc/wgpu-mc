@@ -5,7 +5,7 @@ use std::mem::size_of;
 use std::ptr::drop_in_place;
 use std::marker::PhantomData;
 
-const ALIGN: usize = 4;
+const ALIGN: usize = 8;
 
 ///Untyped arena for render passes
 pub struct WmArena<'a> {

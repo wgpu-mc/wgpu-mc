@@ -1,3 +1,2 @@
 accessWidener v1 named
-accessible class com/mojang/blaze3d/platform/GlStateManager$TexGenCoordState
 accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)V

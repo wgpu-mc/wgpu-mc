@@ -30,6 +30,7 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     modImplementation("net.fabricmc.fabric-api:fabric-api:$fabricVersion")
 
+//    implementation("fr.stardustenterprises", "yanl", "0.7.1")
     rustImport(project(":wgpu-mc-rust"))
 }
 
