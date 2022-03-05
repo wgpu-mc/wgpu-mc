@@ -1,7 +1,7 @@
-use std::collections::hash_map::RandomState;
+
 use std::collections::HashMap;
 
-use crate::mc::block::{Block};
+
 use crate::mc::datapack::{FaceTexture, TextureVariableOrResource, NamespacedResource};
 use crate::mc::datapack;
 use crate::mc::resource::ResourceProvider;
@@ -9,7 +9,7 @@ use crate::model::MeshVertex;
 use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
 use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
-use cgmath::{Vector3, Matrix3, Euler, Deg, SquareMatrix};
+use cgmath::{Vector3, Matrix3, SquareMatrix};
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
@@ -51,7 +51,7 @@ impl BlockstateVariantMesh {
             }
         ).copied().unwrap();
 
-        let face_uv = &face.uv;
+        let _face_uv = &face.uv;
 
         const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
@@ -82,11 +82,11 @@ impl BlockstateVariantMesh {
 
     pub fn bake_block_model(
         model: &datapack::BlockModel,
-        rp: &dyn ResourceProvider,
+        _rp: &dyn ResourceProvider,
         tex_manager: &TextureManager,
-        transform: &BlockstateVariantModelDefinitionRotations
+        _transform: &BlockstateVariantModelDefinitionRotations
     ) -> Option<Self> {
-        let texture_ids = &model.textures;
+        let _texture_ids = &model.textures;
 
         // let matrix = Matrix3::from(
         //     Euler {
@@ -115,58 +115,50 @@ impl BlockstateVariantMesh {
                 //Face textures
 
                 // println!("{:?}", element);
-                let north = element.face_textures.north.as_ref().and_then(|tex| {
-                    // Some(Self::absolute_atlas_uv(
-                    //     tex,
-                    //     tex_manager,
-                    // )?)
-                    Some(Self::absolute_atlas_uv(
+                let north = element.face_textures.north.as_ref().map(|tex| Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    ).expect(
-                        &format!("{}, {:?}", model.id.to_string(), tex.texture)
-                    ))
-                });
+                    ).unwrap_or_else(|| panic!("{}, {:?}", model.id, tex.texture)));
 
                 let east = element.face_textures.east.as_ref().and_then(|tex| {
-                    Some(Self::absolute_atlas_uv(
+                    Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )?)
+                    )
                 });
 
                 let south = element.face_textures.south.as_ref().and_then(|tex| {
-                    Some(Self::absolute_atlas_uv(
+                    Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )?)
+                    )
                 });
 
                 let west = element.face_textures.west.as_ref().and_then(|tex| {
-                    Some(Self::absolute_atlas_uv(
+                    Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )?)
+                    )
                 });
 
                 let up = element.face_textures.up.as_ref().and_then(|tex| {
-                    Some(Self::absolute_atlas_uv(
+                    Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )?)
+                    )
                 });
 
                 let down = element.face_textures.down.as_ref().and_then(|tex| {
-                    Some(Self::absolute_atlas_uv(
+                    Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )?)
+                    )
                 });
 
                 let a = (matrix * Vector3::new(1.0 - element.from.0, element.from.1, element.from.2)).into();

@@ -1,35 +1,35 @@
-use std::{iter, fs};
-use std::borrow::Cow;
+use std::{fs};
+
 use std::path::PathBuf;
-use std::ops::{DerefMut, Deref};
+
 use std::time::Instant;
-use wgpu_mc::mc::datapack::{TextureVariableOrResource, NamespacedResource, BlockModel};
-use wgpu_mc::mc::block::{BlockDirection, BlockState, Block};
-use wgpu_mc::mc::chunk::{ChunkSection, Chunk, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, CHUNK_SECTIONS_PER, CHUNK_VOLUME, CHUNK_WIDTH};
+use wgpu_mc::mc::datapack::{NamespacedResource};
+use wgpu_mc::mc::block::{Block};
+
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, DeviceEvent};
-use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize, wgpu};
+use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize};
 use futures::executor::block_on;
 use winit::window::Window;
-use cgmath::InnerSpace;
+
 use std::sync::Arc;
 use wgpu_mc::mc::resource::{ResourceProvider};
-use std::convert::{TryFrom, TryInto};
-use wgpu_mc::render::world::chunk::BakedChunk;
+use std::convert::{TryFrom};
+
 use wgpu_mc::render::pipeline::builtin::WorldPipeline;
-use arc_swap::ArcSwap;
+
 use futures::StreamExt;
 use std::collections::HashMap;
-use wgpu_mc::mc::block::model::BlockstateVariantMesh;
-use wgpu_mc::util::WmArena;
+
+
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use fastanvil::{RegionBuffer};
 use std::io::Cursor;
 use fastanvil::pre18::JavaChunk;
-use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
+use rayon::iter::{IntoParallelIterator};
 use fastnbt::de::from_bytes;
-use wgpu_mc::mc::entity::{EntityManager, EntityPart, PartTransform, Cuboid, CuboidTextures};
-use wgpu_mc::render::shader::{GlslShader, WgslShader, WmShader};
+use wgpu_mc::mc::entity::{EntityPart, PartTransform, Cuboid, CuboidTextures};
+use wgpu_mc::render::shader::{WgslShader, WmShader};
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -39,7 +39,7 @@ impl ResourceProvider for SimpleResourceProvider {
 
     fn get_resource(&self, id: &NamespacedResource) -> Vec<u8> {
         let real_path = self.asset_root.join(&id.0).join(&id.1);
-        fs::read(&real_path).expect(real_path.to_str().unwrap())
+        fs::read(&real_path).unwrap_or_else(|_| { panic!("{}", real_path.to_str().unwrap().to_string()) })
     }
 
 }
@@ -73,7 +73,7 @@ fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
     ).unwrap();
     // let mut model_map = HashMap::new();
 
-    let begin = Instant::now();
+    let _begin = Instant::now();
 
     let regions: Vec<Vec<u8>> = region_dir.map(|region| {
         let region = region.unwrap();
@@ -142,7 +142,7 @@ fn main() {
         shaders.insert(name.to_string(), Box::new(wgsl_shader) as Box<dyn WmShader>);
     }
 
-    let mut wm = WmRenderer::new(
+    let wm = WmRenderer::new(
         wgpu_state,
         rsp,
         &shaders
@@ -179,12 +179,12 @@ fn main() {
     begin_rendering(event_loop, window, wm, anvil_chunks);
 }
 
-fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state: WmRenderer, chunks: Vec<(usize, usize, JavaChunk)>) {
-    use futures::executor::block_on;
+fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut state: WmRenderer, chunks: Vec<(usize, usize, JavaChunk)>) {
+    
 
     let block_manager = state.mc.block_manager.read();
-    let mc_state = state.mc.clone();
-    let wgpu_state = state.wgpu_state.clone();
+    let _mc_state = state.mc.clone();
+    let _wgpu_state = state.wgpu_state.clone();
 
     println!("Chunks: {}", chunks.len());
     // println!("Blocks {:?}", block_manager.baked_block_variants);
@@ -249,8 +249,10 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
     //
     // state.mc.chunks.loaded_chunks.insert((0,0), ArcSwap::new(Arc::new(chunk)));
     
-    let player_root = {
-        let player_root = EntityPart {
+    let _player_root = {
+        
+
+        EntityPart {
             transform: PartTransform {
                 pivot_x: 0.0,
                 pivot_y: 0.0,
@@ -278,9 +280,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                 }
             ],
             children: vec![]
-        };
-
-        player_root
+        }
     };
 
 
@@ -359,13 +359,13 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                         _ => {}
                     },
                     WindowEvent::Resized(physical_size) => {
-                        &state.resize(WindowSize {
+                        let _ = state.resize(WindowSize {
                             width: physical_size.width,
                             height: physical_size.height
                         });
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        &state.resize(WindowSize {
+                        let _ = state.resize(WindowSize {
                             width: new_inner_size.width,
                             height: new_inner_size.height
                         });
@@ -374,7 +374,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
                 }
             }
             Event::RedrawRequested(_) => {
-                &state.update();
+                let _ = state.update();
 
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
@@ -385,7 +385,7 @@ fn begin_rendering(mut event_loop: EventLoop<()>, mut window: Window, mut state:
 
                 state.mc.camera.store(Arc::new(camera));
 
-                &state.render(&[
+                let _ = state.render(&[
                     &WorldPipeline {}
                 ]);
 

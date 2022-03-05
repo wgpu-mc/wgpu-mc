@@ -4,7 +4,7 @@ use crate::texture::UV;
 use crate::render::atlas::Atlas;
 use indexmap::map::IndexMap;
 use std::collections::HashMap;
-use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
+use cgmath::{Matrix4, SquareMatrix, Vector4};
 use crate::render::entity::EntityVertex;
 use arc_swap::ArcSwap;
 
@@ -202,8 +202,8 @@ pub struct EntityInstance {
 fn recurse_transforms(
     mat: cgmath::Matrix4<f32>,
     part: &EntityPart,
-    mut vec: &mut Vec<cgmath::Matrix4<f32>>,
-    mut index: &mut usize,
+    vec: &mut Vec<cgmath::Matrix4<f32>>,
+    index: &mut usize,
     instance_transforms: &[cgmath::Matrix4<f32>]) {
     let instance_part_transform = instance_transforms[*index];
     let new_mat = mat * part.transform.describe() * instance_part_transform;
@@ -214,14 +214,14 @@ fn recurse_transforms(
 
     part.children.iter().for_each(|child| {
         *index += 1;
-        recurse_transforms(new_mat, child, &mut vec, index, instance_transforms);
+        recurse_transforms(new_mat, child, vec, index, instance_transforms);
     });
 }
 
 impl EntityInstance {
 
     pub fn describe_instance(&self, entity_manager: &EntityManager) -> Vec<[[f32; 4]; 4]> {
-        let (entity_name, model): (&NamespacedResource, &Arc<EntityModel>) =
+        let (_entity_name, model): (&NamespacedResource, &Arc<EntityModel>) =
             entity_manager.entity_types.get_index(self.entity_model).unwrap();
 
         let transforms: Vec<Matrix4<f32>> =

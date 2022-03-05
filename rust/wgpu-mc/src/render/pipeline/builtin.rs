@@ -1,15 +1,15 @@
 use crate::WmRenderer;
-use wgpu::{SurfaceTexture, TextureView, CommandEncoder, RenderPassDescriptor, RenderPassColorAttachment, RenderPipeline, BindGroup, Buffer, RenderPass};
-use crate::render::world::chunk::BakedChunk;
-use std::rc::Rc;
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
-use std::ops::Range;
-use crate::render::pipeline::{WmPipeline, RenderPipelinesManager};
-use crate::mc::BlockManager;
-use crate::mc::chunk::{ChunkManager, Chunk};
-use crate::mc::entity::EntityModel;
-use crate::camera::Camera;
+use wgpu::{RenderPass};
+
+
+
+
+
+use crate::render::pipeline::{WmPipeline};
+
+
+
+
 use crate::util::WmArena;
 
 pub struct SkyPipeline {}
@@ -20,7 +20,7 @@ pub struct WorldPipeline {}
 
 impl WmPipeline for WorldPipeline {
 
-    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, renderer: &'b WmRenderer, mut render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
+    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, renderer: &'b WmRenderer, render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
         let pipelines_arc = renderer.pipelines.load();
         let pipelines = arena.alloc(pipelines_arc);
 

@@ -34,7 +34,7 @@ use wgpu_mc::mc::chunk::{Chunk, CHUNK_HEIGHT, CHUNK_VOLUME};
 use wgpu_mc::mc::datapack::{NamespacedResource, TextureVariableOrResource};
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::Material;
-use wgpu_mc::render::chunk::BakedChunk;
+use wgpu_mc::render::world::chunk::BakedChunk;
 use wgpu_mc::render::pipeline::builtin::WorldPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::texture::WgpuTexture;

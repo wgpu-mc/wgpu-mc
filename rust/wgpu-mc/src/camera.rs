@@ -1,5 +1,5 @@
-use cgmath::{Point3, SquareMatrix, Vector3, EuclideanSpace, Matrix};
-use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
+use cgmath::{Point3, Vector3};
+
 
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {

@@ -2,7 +2,7 @@
 
 use std::iter;
 
-use wgpu::util::DeviceExt;
+
 
 pub mod mc;
 pub mod camera;
@@ -14,26 +14,26 @@ pub mod util;
 pub use wgpu;
 pub use naga;
 
-use crate::camera::{Camera, UniformMatrixHelper};
-use crate::mc::chunk::Chunk;
+use crate::camera::{UniformMatrixHelper};
+
 use crate::mc::MinecraftState;
 
 use raw_window_handle::HasRawWindowHandle;
-use winit::event::WindowEvent;
-use wgpu::{RenderPass, VertexState, TextureViewDescriptor, RenderPassDescriptor};
-use std::collections::{HashMap, HashSet};
+
+use wgpu::{TextureViewDescriptor, RenderPassDescriptor};
+use std::collections::{HashMap};
 use crate::render::shader::{WmShader};
 use crate::texture::WgpuTexture;
-use std::rc::Rc;
+
 use std::sync::Arc;
-use parking_lot::{RwLock, Mutex};
-use dashmap::DashMap;
+
+
 use crate::mc::resource::ResourceProvider;
-use std::ops::{DerefMut, Deref};
-use std::cell::RefCell;
-use crate::render::pipeline::{RenderPipelinesManager, WmPipeline, WmBindGroupLayouts};
+
+
+use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
 use arc_swap::ArcSwap;
-use winit::dpi::Size;
+
 use crate::util::WmArena;
 
 pub struct WgpuState {
@@ -125,7 +125,7 @@ impl WmRenderer {
     ) -> WmRenderer {
         let pipelines = render::pipeline::RenderPipelinesManager::init(
             &wgpu_state.device,
-            &shaders,
+            shaders,
             resource_provider.clone()
         );
 
@@ -144,7 +144,7 @@ impl WmRenderer {
     pub fn build_pipelines(&self, shaders: &HashMap<String, Box<dyn WmShader>>) {
         let pipelines = render::pipeline::RenderPipelinesManager::init(
             &self.wgpu_state.device,
-            &shaders,
+            shaders,
             self.mc.resource_provider.clone()
         );
 
@@ -159,7 +159,7 @@ impl WmRenderer {
 
         self.wgpu_state.surface.configure(&self.wgpu_state.device, &surface_config);
 
-        let mut new_camera = *self.mc.camera.load_full().clone();
+        let mut new_camera = *self.mc.camera.load_full();
 
         new_camera.aspect = surface_config.height as f32 / surface_config.width as f32;
         self.mc.camera.store(Arc::new(new_camera));

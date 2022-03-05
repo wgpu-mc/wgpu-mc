@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+
 
 use crate::texture::UV;
 
-use cgmath::{Matrix4, Vector2};
+use cgmath::{Matrix4};
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 use crate::mc::resource::{ResourceProvider};
 use std::fmt::{Display, Formatter};
-use image::error::ImageFormatHint::Name;
+
 
 #[derive(Debug, Hash, Clone, std::cmp::Eq)]
 pub struct NamespacedResource (pub String, pub String);
@@ -84,7 +84,7 @@ impl TextureVariableOrResource {
     pub fn as_tag(&self) -> Option<&str> {
         match self {
             TextureVariableOrResource::Tag(string) => Some(string),
-            TextureVariableOrResource::Resource(ref res) => None
+            TextureVariableOrResource::Resource(ref _res) => None
         }
     }
 
@@ -194,7 +194,7 @@ impl BlockModel {
 
     fn parse_face(
         face: Option<&Value>,
-        textures: &HashMap<String, TextureVariableOrResource>
+        _textures: &HashMap<String, TextureVariableOrResource>
     ) -> Option<FaceTexture> {
         let face = face?.as_object()?;
         let uv = face.get("uv").map_or(
@@ -223,12 +223,12 @@ impl BlockModel {
     }
 
     fn parse_elements(
-        debug: &NamespacedResource,
+        _debug: &NamespacedResource,
         val: Option<&Value>,
         parent: Option<&BlockModel>,
         textures: &HashMap<String, TextureVariableOrResource>,
     ) -> Option<Vec<Element>> {
-        let cobble = NamespacedResource(
+        let _cobble = NamespacedResource(
             "minecraft".into(),
             "models/block/cobblestone.json".into()
         );
@@ -258,12 +258,12 @@ impl BlockModel {
                             to,
                             face_textures: {
                                 ElementFaces {
-                                    up: Self::parse_face(faces.get("up"), &textures),
-                                    down: Self::parse_face(faces.get("down"), &textures),
-                                    north: Self::parse_face(faces.get("north"), &textures),
-                                    east: Self::parse_face(faces.get("east"), &textures),
-                                    south: Self::parse_face(faces.get("south"), &textures),
-                                    west: Self::parse_face(faces.get("west"), &textures),
+                                    up: Self::parse_face(faces.get("up"), textures),
+                                    down: Self::parse_face(faces.get("down"), textures),
+                                    north: Self::parse_face(faces.get("north"), textures),
+                                    east: Self::parse_face(faces.get("east"), textures),
+                                    south: Self::parse_face(faces.get("south"), textures),
+                                    west: Self::parse_face(faces.get("west"), textures),
                                 }
                             },
                         })
@@ -300,22 +300,22 @@ impl BlockModel {
             model_map.get(&parent_identifier)
         });
 
-        let this_textures: HashMap<String, TextureVariableOrResource> = json.get("textures").and_then(|texture_val: &Value| {
+        let this_textures: HashMap<String, TextureVariableOrResource> = json.get("textures").map(|texture_val: &Value| {
             let val = texture_val.as_object().unwrap();
-            Some(val.iter().map(|(key, value)| {
+            val.iter().map(|(key, value)| {
                 (
                     key.clone(),
                     TextureVariableOrResource::try_from(value.as_str().unwrap()).unwrap()
                 )
-            }).collect())
-        }).unwrap_or(HashMap::new());
+            }).collect()
+        }).unwrap_or_default();
 
         let mut resolved_parent_textures: HashMap<String, TextureVariableOrResource> = match parent {
             None => HashMap::new(),
             Some(parent_model) => {
                 let mut textures = parent_model.textures.clone();
 
-                textures.iter_mut().for_each(|(key, value)| {
+                textures.iter_mut().for_each(|(_key, value)| {
                     match value.clone() {
                         TextureVariableOrResource::Tag(tag_key) => {
                             match this_textures.get(&tag_key) {

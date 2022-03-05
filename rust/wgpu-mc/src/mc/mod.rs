@@ -1,17 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::mem::size_of;
-use std::path::PathBuf;
-use std::rc::Rc;
+
+
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use cgmath::{Point3, Vector2, Vector3};
-use guillotiere::AtlasAllocator;
-use guillotiere::euclid::Size2D;
-use image::{GenericImageView, ImageFormat, Rgba};
-use image::imageops::overlay;
+
+
+
+
+
 use parking_lot::RwLock;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor, Extent3d};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, Extent3d};
 
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::block::{Block, PackedBlockstateKey, BlockstateVariantKey};
@@ -22,7 +22,7 @@ use crate::mc::resource::ResourceProvider;
 use crate::model::Material;
 use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS, Atlases, TextureManager};
 use crate::render::pipeline::RenderPipelinesManager;
-use crate::texture::{UV, WgpuTexture};
+use crate::texture::{WgpuTexture};
 
 use self::block::model::BlockstateVariantMesh;
 use indexmap::map::IndexMap;
@@ -68,7 +68,7 @@ fn get_model_or_deserialize<'a>(models: &'a mut IndexMap<NamespacedResource, Blo
     let mut model_map = HashMap::new();
 
     BlockModel::deserialize(
-        &model_id,
+        model_id,
         resource_provider,
         &mut model_map
     )?;
@@ -159,8 +159,8 @@ impl MinecraftState {
     fn bake_block_models(&self, block_manager: &mut BlockManager) {
         let mut model_map = HashMap::new();
 
-        block_manager.blocks.iter().for_each(|(name, block): (_, &Block)| {
-            block.states.iter().for_each(|(variant_key, variant_definition): (&BlockstateVariantKey, &BlockstateVariantDefinitionModel)| {
+        block_manager.blocks.iter().for_each(|(_name, block): (_, &Block)| {
+            block.states.iter().for_each(|(_variant_key, variant_definition): (&BlockstateVariantKey, &BlockstateVariantDefinitionModel)| {
                 let model_resource = &variant_definition.model;
 
                 BlockModel::deserialize(
@@ -180,8 +180,8 @@ impl MinecraftState {
         block_manager: &BlockManager
     ) -> Option<()> {
         let mut textures = HashSet::new();
-        block_manager.models.iter().for_each(|(id, model)| {
-            model.textures.iter().for_each(|(key, texture)| {
+        block_manager.models.iter().for_each(|(_id, model)| {
+            model.textures.iter().for_each(|(_key, texture)| {
                 match texture {
                     TextureVariableOrResource::Tag(_) => {}
                     TextureVariableOrResource::Resource(res) => {
@@ -252,14 +252,14 @@ impl MinecraftState {
                     &mut block_manager.models,
                     &state.model,
                     &*self.resource_provider
-                ).expect(&format!("{:?}", state.model));
+                ).unwrap_or_else(|| panic!("{:?}", state.model));
 
                 let mesh = BlockstateVariantMesh::bake_block_model(
                     block_model,
                     &*self.resource_provider,
                     &self.texture_manager,
                     &state.rotations
-                ).expect(&format!("{}", name));
+                ).unwrap_or_else(|| panic!("{}", name));
 
                 let variant_resource = name.append(&format!("#{}", &key));
 

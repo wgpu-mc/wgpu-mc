@@ -1,13 +1,13 @@
-use crate::mc::block::{Block, BlockPos, BlockState};
-use crate::model::MeshVertex;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use crate::mc::block::{BlockPos, BlockState};
+
+
 use crate::render::world::chunk::BakedChunk;
-use parking_lot::RwLock;
+
 use std::sync::Arc;
 use std::convert::TryInto;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
-use crate::WmRenderer;
+
 use crate::mc::BlockManager;
 
 pub const CHUNK_WIDTH: usize = 16;
@@ -44,7 +44,7 @@ pub struct Chunk {
 
 impl Chunk {
     #[must_use]
-    pub fn new(pos: ChunkPos, mut blocks: Box<[BlockState; CHUNK_AREA * CHUNK_HEIGHT]>) -> Self {
+    pub fn new(pos: ChunkPos, blocks: Box<[BlockState; CHUNK_AREA * CHUNK_HEIGHT]>) -> Self {
         let sections: Box<[ChunkSection; CHUNK_SECTIONS_PER]> = (0..CHUNK_SECTIONS_PER).map(|section| {
             let start_index = section * SECTION_VOLUME;
             let end_index = (section + 1) * SECTION_VOLUME;

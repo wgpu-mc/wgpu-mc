@@ -6,14 +6,14 @@ use std::collections::HashMap;
 use crate::texture::UV;
 use guillotiere::euclid::Size2D;
 use image::imageops::overlay;
-use cgmath::Vector2;
+
 use dashmap::DashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
+
 use arc_swap::ArcSwap;
-use crate::mc::resource::ResourceProvider;
-use std::collections::hash_map::RandomState;
-use dashmap::mapref::one::Ref;
+
+
+
 
 pub const ATLAS_DIMENSIONS: i32 = 1024;
 

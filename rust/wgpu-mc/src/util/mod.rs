@@ -1,6 +1,6 @@
-use std::sync::atomic::AtomicUsize;
+
 use std::alloc::{Layout, alloc_zeroed, dealloc};
-use bytemuck::__core::sync::atomic::Ordering;
+
 use std::mem::size_of;
 use std::ptr::drop_in_place;
 use std::marker::PhantomData;

@@ -1,13 +1,13 @@
 use crate::model::MeshVertex;
-use crate::mc::chunk::{CHUNK_SECTIONS_PER, ChunkSection, CHUNK_AREA, CHUNK_HEIGHT, CHUNK_WIDTH, CHUNK_SECTION_HEIGHT, Chunk};
-use parking_lot::RwLock;
+use crate::mc::chunk::{ChunkSection, CHUNK_AREA, CHUNK_WIDTH, CHUNK_SECTION_HEIGHT, Chunk};
+
 use std::sync::Arc;
-use crate::mc::block::{BlockState, Block};
-use crate::WmRenderer;
+use crate::mc::block::{BlockState};
+
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
-use rayon::iter::{IntoParallelRefIterator, FromParallelIterator, IntoParallelIterator};
+
 use crate::mc::block::model::{CubeOrComplexMesh, BlockstateVariantMesh};
-use crate::mc::datapack::{NamespacedResource, BlockModel};
+
 use crate::mc::BlockManager;
 
 #[repr(C)]
@@ -118,7 +118,7 @@ impl BakedChunkPortionsContainer {
 
                     // println!("{:?}", block_state);
 
-                    let baked_mesh = match get_block_mesh(&block_manager, &block_state) {
+                    let baked_mesh = match get_block_mesh(block_manager, &block_state) {
                         None => continue,
                         Some(mesh) => mesh,
                     };
@@ -127,7 +127,7 @@ impl BakedChunkPortionsContainer {
                         CubeOrComplexMesh::Cube(model) => {
                             let render_north = !(z > 0 && {
                                 let north_block_mesh = get_block_mesh(
-                                    &block_manager,
+                                    block_manager,
                                     &section.blocks[((z - 1) * CHUNK_WIDTH) + x]
                                 );
 
@@ -139,7 +139,7 @@ impl BakedChunkPortionsContainer {
 
                             let render_south = !(z < 15 && {
                                 let south_block_mesh = get_block_mesh(
-                                    &block_manager,
+                                    block_manager,
                                     &section.blocks[((z + 1) * CHUNK_WIDTH) + x]
                                 );
 
@@ -151,7 +151,7 @@ impl BakedChunkPortionsContainer {
 
                             let render_up = !(absolute_y < 255 && {
                                 let up_block_mesh = get_block_mesh(
-                                    &block_manager,
+                                    block_manager,
                                     &chunk.sections[(absolute_y + 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)]
                                 );
 
@@ -163,7 +163,7 @@ impl BakedChunkPortionsContainer {
 
                             let render_down = !(absolute_y > 0 && {
                                 let down_block_mesh = get_block_mesh(
-                                    &block_manager,
+                                    block_manager,
                                     &chunk.sections[(absolute_y - 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)]
                                 );
 
@@ -175,7 +175,7 @@ impl BakedChunkPortionsContainer {
 
                             let render_west = !(x > 0 && {
                                 let west_block_mesh = get_block_mesh(
-                                    &block_manager,
+                                    block_manager,
                                     &section.blocks[(z * CHUNK_WIDTH) + (x - 1)]
                                 );
 
@@ -187,7 +187,7 @@ impl BakedChunkPortionsContainer {
 
                             let render_east = !(x < 15 && {
                                 let east_block_mesh = get_block_mesh(
-                                    &block_manager,
+                                    block_manager,
                                     &section.blocks[(z * CHUNK_WIDTH) + (x + 1)]
                                 );
 
@@ -266,7 +266,7 @@ impl BakedChunkPortionsContainer {
                                         faces.down.as_ref()
                                     ]
                                 })
-                                    .filter_map(|face| face)
+                                    .flatten()
                                     .flatten()
                                     .map(mapper)
                             );
