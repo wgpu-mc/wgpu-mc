@@ -36,20 +36,28 @@ pub struct BlockstateVariantMesh {
 }
 
 impl BlockstateVariantMesh {
+
     pub fn absolute_atlas_uv(
         face: &FaceTexture,
         tex_manager: &TextureManager,
         textures: &HashMap<String, TextureVariableOrResource>
     ) -> Option<UV> {
-        let atlases = tex_manager.atlases.load();
+        let block_atlas = tex_manager.block_texture_atlas.load_full();
+        let atlas_map = block_atlas.uv_map.read();
 
-        let atlas_uv = atlases.block.map.get(
-            match &face.texture {
-                TextureVariableOrResource::Tag(ref tag_key) => textures.get(tag_key)
-                    .unwrap().as_resource().unwrap(),
-                TextureVariableOrResource::Resource(resource) => resource
-            }
-        ).copied().unwrap();
+        let face_resource = face.texture.recurse_resolve_as_resource(textures)?;
+
+        let atlas_uv = atlas_map.get(
+            face_resource
+        ).expect(
+            &format!(
+                "{:?}\n{:?} {} {}",
+                block_atlas,
+                face_resource,
+                face_resource.0.len(),
+                face_resource.1.len()
+            )
+        );
 
         let _face_uv = &face.uv;
 
@@ -116,10 +124,10 @@ impl BlockstateVariantMesh {
 
                 // println!("{:?}", element);
                 let north = element.face_textures.north.as_ref().map(|tex| Self::absolute_atlas_uv(
-                        tex,
-                        tex_manager,
-                        &model.textures
-                    ).unwrap_or_else(|| panic!("{}, {:?}", model.id, tex.texture)));
+                    tex,
+                    tex_manager,
+                    &model.textures
+                ).unwrap_or_else(|| panic!("{}, {:?}", model.id, tex.texture)));
 
                 let east = element.face_textures.east.as_ref().and_then(|tex| {
                     Self::absolute_atlas_uv(

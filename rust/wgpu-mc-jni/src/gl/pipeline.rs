@@ -12,10 +12,10 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use wgpu_mc::{wgpu, WmRenderer};
 use wgpu_mc::camera::UniformMatrixHelper;
-use wgpu_mc::model::Material;
+use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{GlslShader, WmShader};
-use wgpu_mc::texture::WgpuTexture;
+use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::util::WmArena;
 
 use crate::gl::{get_buffer, GL_ALLOC, GlAttributeFormat, GlAttributeType, GlResource};
@@ -155,7 +155,7 @@ fn create_wgpu_pipeline(
     )
 }
 
-fn tex_image_2d(wm: &WmRenderer, width: u32, height: u32, format: wgpu::TextureFormat, data: &[u8]) -> Material {
+fn tex_image_2d(wm: &WmRenderer, width: u32, height: u32, format: wgpu::TextureFormat, data: &[u8]) -> BindableTexture {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -218,9 +218,8 @@ fn tex_image_2d(wm: &WmRenderer, width: u32, height: u32, format: wgpu::TextureF
         }
     );
 
-    Material {
-        name: Arc::new("".to_string()),
-        diffuse_texture: WgpuTexture {
+    BindableTexture {
+        tsv: TextureSamplerView {
             texture,
             view,
             sampler

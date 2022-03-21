@@ -19,16 +19,16 @@ use crate::mc::chunk::ChunkManager;
 use crate::mc::datapack::{BlockModel, TextureVariableOrResource, NamespacedResource};
 use crate::mc::entity::EntityModel;
 use crate::mc::resource::ResourceProvider;
-use crate::model::Material;
-use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS, Atlases, TextureManager};
-use crate::render::pipeline::RenderPipelinesManager;
-use crate::texture::{WgpuTexture};
+use crate::model::BindableTexture;
+use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS, TextureManager};
+use crate::render::pipeline::RenderPipelineManager;
+use crate::texture::{TextureSamplerView};
 
 use self::block::model::BlockstateVariantMesh;
 use indexmap::map::IndexMap;
 use multi_map::MultiMap;
 use crate::mc::block::blockstate::BlockstateVariantDefinitionModel;
-use crate::WmRenderer;
+use crate::{WgpuState, WmRenderer};
 
 pub mod block;
 pub mod chunk;
@@ -103,18 +103,18 @@ pub struct MinecraftState {
 impl MinecraftState {
     #[must_use]
     pub fn new(
-        device: &wgpu::Device,
-        pipelines: &RenderPipelinesManager,
+        wgpu_state: &WgpuState,
+        pipelines: &RenderPipelineManager,
         resource_provider: Arc<dyn ResourceProvider>) -> Self {
 
-        let camera_buffer = device.create_buffer(&BufferDescriptor {
+        let camera_buffer = wgpu_state.device.create_buffer(&BufferDescriptor {
             label: None,
             size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
         });
 
-        let camera_bind_group = device.create_bind_group(&BindGroupDescriptor {
+        let camera_bind_group = wgpu_state.device.create_bind_group(&BindGroupDescriptor {
             label: None,
             layout: &pipelines.bind_group_layouts.matrix4,
             entries: &[
@@ -130,7 +130,7 @@ impl MinecraftState {
             chunks: ChunkManager::new(),
             entities: RwLock::new(Vec::new()),
 
-            texture_manager: TextureManager::new(),
+            texture_manager: TextureManager::new(wgpu_state, pipelines),
 
             block_manager: RwLock::new(BlockManager {
                 blocks: IndexMap::new(),
@@ -150,13 +150,13 @@ impl MinecraftState {
     pub fn bake_blocks(&self, wm: &WmRenderer) {
         let mut block_manager = self.block_manager.write();
 
-        self.bake_block_models(&mut *block_manager);
+        self.generate_block_models(&mut *block_manager);
         self.generate_block_texture_atlas(wm, &block_manager);
         self.bake_blockstate_meshes(&mut *block_manager);
     }
 
-    ///Loops through all the blocks in the `BlockManager`, and bakes their `BlockModel`s and `BlockstateVariantMesh`es
-    fn bake_block_models(&self, block_manager: &mut BlockManager) {
+    ///Loops through all the blocks in the `BlockManager`, and generates their `BlockModel`s
+    fn generate_block_models(&self, block_manager: &mut BlockManager) {
         let mut model_map = HashMap::new();
 
         block_manager.blocks.iter().for_each(|(_name, block): (_, &Block)| {
@@ -176,9 +176,9 @@ impl MinecraftState {
 
     fn generate_block_texture_atlas(
         &self,
-        renderer: &WmRenderer,
+        wm: &WmRenderer,
         block_manager: &BlockManager
-    ) -> Option<()> {
+    ) {
         let mut textures = HashSet::new();
         block_manager.models.iter().for_each(|(_id, model)| {
             model.textures.iter().for_each(|(_key, texture)| {
@@ -191,41 +191,24 @@ impl MinecraftState {
             });
         });
 
-        let mut atlases = Atlases {
-            block: Atlas::new(),
-            gui: Atlas::new()
-        };
+        let block_atlas = Atlas::new(&*wm.wgpu_state, &*wm.pipelines.load_full());
+        //TODO: this goes somewhere else, and do we even need it?
+        let gui_atlas = Atlas::new(&*wm.wgpu_state, &*wm.pipelines.load_full());
 
-        for id in &textures {
-            let bytes = self.resource_provider.get_resource(
-                &id.prepend("textures/").append(".png")
-            );
-            atlases.block.allocate(id, &bytes[..]).unwrap();
-        }
+        block_atlas.allocate(
+            &textures.iter().map(|resource| {
+                    (
+                        *resource,
+                        self.resource_provider.get_resource(
+                            &resource.prepend("textures/").append(".png")
+                        )
+                    )
+                }).collect::<Vec<(&NamespacedResource, Vec<u8>)>>()[..]
+        );
 
-        let texture = WgpuTexture::from_image_raw(
-            &renderer.wgpu_state.device,
-            &renderer.wgpu_state.queue,
-            atlases.block.image.as_ref(),
-            Extent3d {
-                width: ATLAS_DIMENSIONS as u32,
-                height: ATLAS_DIMENSIONS as u32,
-                depth_or_array_layers: 1,
-            },
-            Some("Block Texture Atlas"),
-        ).ok()?;
+        block_atlas.upload(wm);
 
-        atlases.block.material = Some(Material::from_texture(
-            &renderer.wgpu_state.device,
-            &renderer.wgpu_state.queue,
-            texture,
-            &renderer.pipelines.load().bind_group_layouts.texture,
-            "Block Texture Atlas".into(),
-        ));
-
-        self.texture_manager.atlases.store(Arc::new(atlases));
-
-        Some(())
+        wm.mc.texture_manager.block_texture_atlas.store(Arc::new(block_atlas));
     }
 
     fn bake_blockstate_meshes(&self, block_manager: &mut BlockManager) {
@@ -252,14 +235,14 @@ impl MinecraftState {
                     &mut block_manager.models,
                     &state.model,
                     &*self.resource_provider
-                ).unwrap_or_else(|| panic!("{:?}", state.model));
+                ).expect(&format!("{:?}", state.model));
 
                 let mesh = BlockstateVariantMesh::bake_block_model(
                     block_model,
                     &*self.resource_provider,
                     &self.texture_manager,
                     &state.rotations
-                ).unwrap_or_else(|| panic!("{}", name));
+                ).expect(&format!("{}", name));
 
                 let variant_resource = name.append(&format!("#{}", &key));
 

@@ -42,7 +42,7 @@ pub struct WmBindGroupLayouts {
     pub instanced_entity_storage: BindGroupLayout
 }
 
-pub struct RenderPipelinesManager {
+pub struct RenderPipelineManager {
     pub sky_pipeline: wgpu::RenderPipeline,
     pub terrain_pipeline: wgpu::RenderPipeline,
     pub grass_pipeline: wgpu::RenderPipeline,
@@ -53,7 +53,7 @@ pub struct RenderPipelinesManager {
     pub resource_provider: Arc<dyn ResourceProvider>
 }
 
-impl RenderPipelinesManager {
+impl RenderPipelineManager {
     
     fn create_bind_group_layouts(device: &wgpu::Device) -> WmBindGroupLayouts {
         let camera_bind_group_layout = device.create_bind_group_layout(

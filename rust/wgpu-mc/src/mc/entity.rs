@@ -7,16 +7,31 @@ use std::collections::HashMap;
 use cgmath::{Matrix4, SquareMatrix, Vector4};
 use crate::render::entity::EntityVertex;
 use arc_swap::ArcSwap;
+use parking_lot::RwLock;
+use crate::render::pipeline::RenderPipelineManager;
+use crate::WgpuState;
 
 pub type Position = (f64, f64, f64);
 pub type EntityType = usize;
 
 pub struct EntityManager {
-    pub mob_texture_atlas: Arc<ArcSwap<Atlas>>,
-    pub player_texture_atlas: Atlas,
-    pub player_type: Arc<EntityModel>,
+    pub mob_texture_atlas: RwLock<Atlas>,
+    pub player_texture_atlas: RwLock<Atlas>,
     pub entity_types: IndexMap<NamespacedResource, Arc<EntityModel>>,
-    pub entity_instance_buffers: ArcSwap<HashMap<usize, Arc<wgpu::BindGroup>>>
+    pub entity_vertex_buffers: ArcSwap<HashMap<usize, Arc<wgpu::BindGroup>>>
+}
+
+impl EntityManager {
+
+    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager) -> Self {
+        Self {
+            mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines)),
+            player_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines)),
+            entity_types: IndexMap::new(),
+            entity_vertex_buffers: Default::default()
+        }
+    }
+
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -60,7 +75,7 @@ impl PartTransform {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct CuboidTextures {
+pub struct CuboidUV {
     pub north: UV,
     pub east: UV,
     pub south: UV,
@@ -79,7 +94,7 @@ pub struct Cuboid {
     pub length: f32,
     pub height: f32,
 
-    pub textures: CuboidTextures
+    pub textures: CuboidUV
 }
 
 impl Cuboid {

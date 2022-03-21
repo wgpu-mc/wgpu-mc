@@ -74,6 +74,15 @@ impl TextureVariableOrResource {
         matches!(self, TextureVariableOrResource::Tag(_))
     }
 
+    pub fn recurse_resolve_as_resource<'a, 'b: 'a>(&'a self, map: &'b HashMap<String, TextureVariableOrResource>) -> Option<&'a NamespacedResource> {
+        match &self {
+            TextureVariableOrResource::Tag(tag) => {
+                map.get(tag)?.recurse_resolve_as_resource(map)
+            }
+            TextureVariableOrResource::Resource(resource) => Some(resource)
+        }
+    }
+
     pub fn as_resource(&self) -> Option<&NamespacedResource> {
         match self {
             TextureVariableOrResource::Tag(_) => None,

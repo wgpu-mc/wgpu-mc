@@ -28,8 +28,10 @@ use std::io::Cursor;
 use fastanvil::pre18::JavaChunk;
 use rayon::iter::{IntoParallelIterator};
 use fastnbt::de::from_bytes;
-use wgpu_mc::mc::entity::{EntityPart, PartTransform, Cuboid, CuboidTextures};
+use wgpu_mc::mc::entity::{EntityPart, PartTransform, Cuboid, CuboidUV, EntityManager};
+use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
+use wgpu_mc::texture::TextureSamplerView;
 
 struct SimpleResourceProvider {
     pub asset_root: PathBuf
@@ -180,78 +182,8 @@ fn main() {
 }
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut state: WmRenderer, chunks: Vec<(usize, usize, JavaChunk)>) {
-    
 
-    let block_manager = state.mc.block_manager.read();
-    let _mc_state = state.mc.clone();
-    let _wgpu_state = state.wgpu_state.clone();
-
-    println!("Chunks: {}", chunks.len());
-    // println!("Blocks {:?}", block_manager.baked_block_variants);
-
-    // use rayon::iter::IndexedParallelIterator;
-    // use rayon::iter::ParallelIterator;
-
-    // let default_key = *block_manager.baked_block_variants.get_with_key(
-    //     &NamespacedResource::try_from("minecraft:blockstates/bedrock.json#").unwrap()
-    // ).unwrap().0;
-    //
-    // chunks.into_par_iter().take(3).for_each(|(chunk_x, chunk_z, java_chunk): (usize, usize, JavaChunk)| {
-    //     let mut chunk_blocks = Box::new([BlockState {
-    //         packed_key: None
-    //     }; CHUNK_VOLUME]);
-    //     (0..16).zip((0..256).zip(0..16)).for_each(|(x,(y,z))| {
-    //         use fastanvil::Chunk;
-    //         let block_maybe = java_chunk.block(x as usize, y as isize, z as usize);
-    //         match block_maybe {
-    //             None => {}
-    //             Some(block) => {
-    //                 // let variant = block.encoded_description().replace("|", "#");
-    //                 let splits = block.encoded_description().split_once("|")
-    //                     .unwrap();
-    //                 let mut variant = splits.0.to_string();
-    //                 variant.push_str(".json#");
-    //                 variant.push_str(splits.1);
-    //
-    //                 chunk_blocks[
-    //                     (x + (z * CHUNK_WIDTH)) + (y * CHUNK_AREA)
-    //                 ] = BlockState {
-    //                     packed_key: Some(block_manager.baked_block_variants.get_with_key(
-    //                         &NamespacedResource::try_from(&variant[..]).unwrap().prepend("blockstates/")
-    //                     ).map_or(default_key, |x| *x.0))
-    //                 }
-    //             }
-    //         }
-    //     });
-    //     let mut chunk = Chunk::new((chunk_x as i32, chunk_z as i32), chunk_blocks);
-    //     let bm = mc_state.block_manager.read();
-    //     let wgpu_state_arc = wgpu_state.clone();
-    //     chunk.bake(&*bm, &wgpu_state_arc.device);
-    //     println!("Baked chunk @ {},{}", chunk_x, chunk_z);
-    //     // println!("{:?}", )
-    //
-    //     // mc_state.chunks.loaded_chunks.insert((chunk_x as i32, chunk_z as i32), ArcSwap::new(Arc::new(chunk)));
-    //     mc_state.chunks.loaded_chunks.insert((0, 0), ArcSwap::new(Arc::new(chunk)));
-    // });
-
-    // let blocks: Box<[BlockState; CHUNK_VOLUME]> = Box::new([BlockState {
-    //     packed_key: Some(*block_manager.baked_block_variants.get_with_key(
-    //         &NamespacedResource("minecraft".into(), "blockstates/anvil.json#facing=west".into())
-    //     ).unwrap().0)
-    // }; CHUNK_VOLUME]).try_into().unwrap();
-    // let mut chunk = Chunk::new((0, 0), blocks);
-    //
-    // let bake_start = Instant::now();
-    // chunk.bake(&block_manager, &state.wgpu_state.device);
-    // println!("Time to bake chunk: {}ms", Instant::now().duration_since(bake_start).as_millis());
-    //
-    // drop(block_manager);
-    //
-    // state.mc.chunks.loaded_chunks.insert((0,0), ArcSwap::new(Arc::new(chunk)));
-    
     let _player_root = {
-        
-
         EntityPart {
             transform: PartTransform {
                 pivot_x: 0.0,
@@ -269,7 +201,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut state: WmRende
                     width: 1.0,
                     length: 1.0,
                     height: 1.0,
-                    textures: CuboidTextures {
+                    textures: CuboidUV {
                         north: ((0.0, 0.0), (0.0, 0.0)),
                         east: ((0.0, 0.0), (0.0, 0.0)),
                         south: ((0.0, 0.0), (0.0, 0.0)),
@@ -283,17 +215,24 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut state: WmRende
         }
     };
 
+    let alex_skin_ns: NamespacedResource = "minecraft:textures/entity/alex.png".try_into().unwrap();
+    let alex_skin_resource = state.mc.resource_provider.get_resource(&alex_skin_ns);
+    let alex_texture = BindableTexture::from_tsv(
+        &*state.wgpu_state,
+        &*state.pipelines.load_full(),
+        TextureSamplerView::from_image_file_bytes(
+            &*state.wgpu_state,
+            &alex_skin_resource,
+            "Alex"
+        ).unwrap()
+    );
+
+    let entity_manager = EntityManager::new(
+        &*state.wgpu_state,
+        &state.pipelines.load_full()
+    );
 
 
-    // let entity_manager = EntityManager {
-    //     mob_texture_atlas: Arc::new(Default::default()),
-    //     player_texture_atlas: Default::default(),
-    //     player_type: Arc::new(()),
-    //     entity_types: (),
-    //     entity_instance_buffers: Default::default()
-    // };
-
-    drop(block_manager);
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;

@@ -1,8 +1,9 @@
-use crate::texture;
-use crate::texture::WgpuTexture;
+use crate::{texture, WgpuState, WmRenderer};
+use crate::texture::TextureSamplerView;
 
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingResource};
 use std::sync::Arc;
+use crate::render::pipeline::RenderPipelineManager;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -76,25 +77,23 @@ impl MeshVertex {
 
 ///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
 #[derive(Debug)]
-pub struct Material {
-    pub name: Arc<String>,
-    pub diffuse_texture: texture::WgpuTexture,
+pub struct BindableTexture {
+    pub tsv: texture::TextureSamplerView,
     pub bind_group: wgpu::BindGroup
 }
 
-impl Material {
-    #[allow(unused_variables)] // TODO queue is an unused parameter
+impl BindableTexture {
+
     #[must_use]
-    pub fn from_texture(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        texture: WgpuTexture,
-        bgl: &BindGroupLayout,
-        name: String,
+    pub fn from_tsv(
+        wgpu_state: &WgpuState,
+        pipelines: &RenderPipelineManager,
+
+        texture: TextureSamplerView
     ) -> Self {
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+        let bind_group = wgpu_state.device.create_bind_group(&BindGroupDescriptor {
             label: None,
-            layout: bgl,
+            layout: &pipelines.bind_group_layouts.texture,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -108,8 +107,7 @@ impl Material {
         });
 
         Self {
-            name: Arc::new(name),
-            diffuse_texture: texture,
+            tsv: texture,
             bind_group,
         }
     }

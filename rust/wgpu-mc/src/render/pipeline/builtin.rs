@@ -26,9 +26,10 @@ impl WmPipeline for WorldPipeline {
 
         render_pass.set_pipeline(&pipelines.terrain_pipeline);
 
-        let atlases = arena.alloc(renderer.mc.texture_manager.atlases.load());
+        let block_atlas = arena.alloc(renderer.mc.texture_manager.block_texture_atlas.load());
+        let bindable_texture = arena.alloc(block_atlas.bindable_texture.load_full());
 
-        render_pass.set_bind_group(0, &atlases.block.material.as_ref().unwrap().bind_group, &[]);
+        render_pass.set_bind_group(0, &bindable_texture.bind_group, &[]);
         render_pass.set_bind_group(1, arena.alloc(renderer.mc.camera_bind_group.load()), &[]);
 
         renderer.mc.chunks.loaded_chunks.iter().for_each(|chunk_swap| {

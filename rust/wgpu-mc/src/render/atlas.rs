@@ -1,9 +1,10 @@
 use guillotiere::AtlasAllocator;
-use image::{Rgba, GenericImageView};
-use crate::model::Material;
+use image::{Rgba, GenericImageView, ImageBuffer};
+use crate::model::BindableTexture;
 use crate::mc::datapack::{TextureVariableOrResource, NamespacedResource};
 use std::collections::HashMap;
-use crate::texture::UV;
+use std::fmt::{Debug, Formatter};
+use crate::texture::{TextureSamplerView, UV};
 use guillotiere::euclid::Size2D;
 use image::imageops::overlay;
 
@@ -11,45 +12,106 @@ use dashmap::DashMap;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-
-
+use parking_lot::RwLock;
+use wgpu::Extent3d;
+use crate::wgpu::TextureDimension;
+use crate::{WgpuState, WmRenderer};
+use crate::render::pipeline::RenderPipelineManager;
 
 
 pub const ATLAS_DIMENSIONS: i32 = 1024;
 
 pub struct Atlas {
-    pub allocator: AtlasAllocator,
-    pub image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
-    pub material: Option<Material>,
-    pub map: HashMap<NamespacedResource, UV>
+    pub allocator: RwLock<AtlasAllocator>,
+    pub image: RwLock<image::ImageBuffer<Rgba<u8>, Vec<u8>>>,
+    pub uv_map: RwLock<HashMap<NamespacedResource, UV>>,
+    pub bindable_texture: ArcSwap<BindableTexture>
 }
 
-pub struct UploadedAtlas {
-    pub image: image::ImageBuffer<Rgba<u8>, Vec<u8>>,
-    pub material: Material,
-    pub map: HashMap<TextureVariableOrResource, UV>
+impl Debug for Atlas {
+
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Atlas {{ uv_map: {:?} }}", self.uv_map.read())
+    }
+
 }
 
 impl Atlas {
 
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager) -> Self {
+        let bindable_texture = BindableTexture::from_tsv(
+            wgpu_state,
+            pipelines,
+
+            TextureSamplerView::from_rgb_bytes(
+                wgpu_state,
+                &[0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
+                Extent3d {
+                    width: ATLAS_DIMENSIONS as u32,
+                    height: ATLAS_DIMENSIONS as u32,
+                    depth_or_array_layers: 1
+                },
+                None
+            ).unwrap()
+        );
+
+        Self {
+            allocator: RwLock::new(AtlasAllocator::new(Size2D {
+                width: ATLAS_DIMENSIONS,
+                height: ATLAS_DIMENSIONS,
+                _unit: Default::default()
+            })),
+            image: RwLock::new(
+                ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32)
+            ),
+            uv_map: Default::default(),
+            bindable_texture: ArcSwap::new(Arc::new(bindable_texture))
+        }
     }
 
-    pub fn allocate(&mut self, id: &NamespacedResource, image_bytes: &[u8]) -> Option<()> {
-        let image = image::load_from_memory(image_bytes).ok()?;
+    pub fn allocate<T: AsRef<[u8]>>(&self, images: &[(&NamespacedResource, T)]) {
+        let mut allocator = self.allocator.write();
+        let mut image_buffer = self.image.write();
+        let mut map = self.uv_map.write();
 
-        let allocation = self.allocator
-            .allocate(Size2D::new(image.width() as i32, image.height() as i32))?;
+        images.iter().for_each(|(name, slice)| {
+            self.allocate_one(
+                &mut *image_buffer,
+                &mut *map,
+                &mut *allocator,
+                name,
+                slice.as_ref()
+            )
+        });
+    }
+
+    fn allocate_one(
+        &self,
+        image_buffer: &mut image::ImageBuffer<Rgba<u8>, Vec<u8>>,
+        map: &mut HashMap<NamespacedResource, UV>,
+
+        allocator: &mut AtlasAllocator,
+        id: &NamespacedResource,
+        image_bytes: &[u8]
+    ) {
+        let image = image::load_from_memory(image_bytes).unwrap();
+
+        let allocation = allocator
+            .allocate(
+                Size2D::new(
+                    image.width() as i32,
+                    image.height() as i32
+                )
+            ).unwrap();
 
         overlay(
-            &mut self.image,
+            image_buffer,
             &image,
             allocation.rectangle.min.x as u32,
             allocation.rectangle.min.y as u32,
         );
 
-        self.map.insert(
+        map.insert(
             id.clone(),
             (
                 (
@@ -62,60 +124,48 @@ impl Atlas {
                 )
             ),
         );
-
-        Some(())
     }
-}
 
-impl Default for Atlas {
-    fn default() -> Self {
-        Self {
-            allocator: AtlasAllocator::new(guillotiere::Size::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
-            image: image::ImageBuffer::new(ATLAS_DIMENSIONS as u32, ATLAS_DIMENSIONS as u32),
-            material: None,
-            map: HashMap::new()
-        }
+    pub fn upload(&self, wm: &WmRenderer) {
+        let tsv = TextureSamplerView::from_rgb_bytes(
+            &*wm.wgpu_state,
+            &self.image.read(),
+            Extent3d {
+                width: ATLAS_DIMENSIONS as u32,
+                height: ATLAS_DIMENSIONS as u32,
+                depth_or_array_layers: 1
+            },
+            None
+        ).unwrap();
+        let bindable_texture = BindableTexture::from_tsv(&*wm.wgpu_state, &*wm.pipelines.load_full(), tsv);
+        self.bindable_texture.store(Arc::new(bindable_texture));
     }
+
 }
 
-pub struct Atlases {
-    pub block: Atlas,
-    pub gui: Atlas
-}
-
+///Stores uplodaded textures which will be automatically updated whenever necessary
 pub struct TextureManager {
-    pub textures: DashMap<NamespacedResource, Vec<u8>>,
-    pub atlases: ArcSwap<Atlases>,
-    // pub resource_provider: Arc<dyn ResourceProvider>
+    ///Using RwLock<HashMap>> instead of DashMap because when doing a resource pack reload,
+    /// we need potentially a lot of textures to be updated and it's better to be able to
+    /// have some other thread work on building a new HashMap, and then just blocking any other
+    /// readers for a bit to update the whole map
+    pub textures: RwLock<HashMap<NamespacedResource, Arc<BindableTexture>>>,
+
+    ///ArcSwap because we potentially want to be able to swap out an old atlas for a new one instantly
+    pub block_texture_atlas: ArcSwap<Atlas>,
+    pub gui_atlas: ArcSwap<Atlas>
 }
 
 impl TextureManager {
+
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager) -> Self {
         Self {
-            textures: DashMap::new(),
-            atlases: ArcSwap::new(Arc::new(Atlases {
-                block: Atlas::new(),
-                gui: Atlas::new()
-            }))
+            textures: RwLock::new(HashMap::new()),
+
+            block_texture_atlas: ArcSwap::new(Arc::new(Atlas::new(wgpu_state, pipelines))),
+            gui_atlas: ArcSwap::new(Arc::new(Atlas::new(wgpu_state, pipelines)))
         }
     }
-
-    // pub fn insert_texture(&self, id: NamespacedResource, data: Vec<u8>) {
-    //     self.textures.insert(id, data);
-    // }
-    //
-    // pub fn get_texture(&self, id: &NamespacedResource) -> Option<&[u8]> {
-    //     match self.textures.get(id) {
-    //         None => {
-    //             let image = image::load_from_memory(
-    //                 self.resource_provider.get_resource(&id.prepend("textures/"))?
-    //             ).ok()?;
-    //
-    //             self.textures.
-    //         }
-    //         Some(data) => Some(&data.value()[..])
-    //     }
-    // }
 
 }

@@ -1,8 +1,7 @@
 #![feature(set_ptr_value)]
 
 use std::iter;
-
-
+use tracing::{span, Level};
 
 pub mod mc;
 pub mod camera;
@@ -23,7 +22,7 @@ use raw_window_handle::HasRawWindowHandle;
 use wgpu::{TextureViewDescriptor, RenderPassDescriptor};
 use std::collections::{HashMap};
 use crate::render::shader::{WmShader};
-use crate::texture::WgpuTexture;
+use crate::texture::TextureSamplerView;
 
 use std::sync::Arc;
 
@@ -31,8 +30,9 @@ use std::sync::Arc;
 use crate::mc::resource::ResourceProvider;
 
 
-use crate::render::pipeline::{RenderPipelinesManager, WmPipeline};
+use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
 use arc_swap::ArcSwap;
+use crate::mc::datapack::NamespacedResource;
 
 use crate::util::WmArena;
 
@@ -50,9 +50,9 @@ pub struct WgpuState {
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
 
-    pub depth_texture: ArcSwap<texture::WgpuTexture>,
+    pub depth_texture: ArcSwap<texture::TextureSamplerView>,
 
-    pub pipelines: ArcSwap<RenderPipelinesManager>,
+    pub pipelines: ArcSwap<RenderPipelineManager>,
     // pub bind_group_layouts: Arc<WmBindGroupLayouts>,
 
     pub mc: Arc<mc::MinecraftState>
@@ -123,14 +123,14 @@ impl WmRenderer {
         resource_provider: Arc<dyn ResourceProvider>,
         shaders: &HashMap<String, Box<dyn WmShader>>
     ) -> WmRenderer {
-        let pipelines = render::pipeline::RenderPipelinesManager::init(
+        let pipelines = render::pipeline::RenderPipelineManager::init(
             &wgpu_state.device,
             shaders,
             resource_provider.clone()
         );
 
-        let mc = MinecraftState::new(&wgpu_state.device, &pipelines, resource_provider);
-        let depth_texture = WgpuTexture::create_depth_texture(&wgpu_state.device, &wgpu_state.surface_config.load(), "depth texture");
+        let mc = MinecraftState::new(&wgpu_state, &pipelines, resource_provider);
+        let depth_texture = TextureSamplerView::create_depth_texture(&wgpu_state.device, &wgpu_state.surface_config.load(), "depth texture");
 
         Self {
             wgpu_state: Arc::new(wgpu_state),
@@ -142,7 +142,7 @@ impl WmRenderer {
     }
 
     pub fn build_pipelines(&self, shaders: &HashMap<String, Box<dyn WmShader>>) {
-        let pipelines = render::pipeline::RenderPipelinesManager::init(
+        let pipelines = render::pipeline::RenderPipelineManager::init(
             &self.wgpu_state.device,
             shaders,
             self.mc.resource_provider.clone()
@@ -164,7 +164,7 @@ impl WmRenderer {
         new_camera.aspect = surface_config.height as f32 / surface_config.width as f32;
         self.mc.camera.store(Arc::new(new_camera));
 
-        self.depth_texture.store(Arc::new(texture::WgpuTexture::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture")));
+        self.depth_texture.store(Arc::new(texture::TextureSamplerView::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture")));
     }
 
     pub fn update(&mut self) {
@@ -188,6 +188,8 @@ impl WmRenderer {
     }
 
     pub fn render(&self, wm_pipelines: &[&dyn WmPipeline]) -> Result<(), wgpu::SurfaceError> {
+        let _span_ = span!(Level::TRACE, "rendering").entered();
+
         let output = self.wgpu_state.surface.get_current_texture()?;
         let view = output.texture.create_view(&TextureViewDescriptor::default());
 

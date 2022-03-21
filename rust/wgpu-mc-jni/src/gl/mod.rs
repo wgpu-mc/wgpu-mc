@@ -8,7 +8,7 @@ use slab::Slab;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use pipeline::GLCommand;
-use wgpu_mc::model::Material;
+use wgpu_mc::model::BindableTexture;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -177,7 +177,7 @@ pub enum GlAttributeType {
 pub struct GlTexture {
     width: u16,
     height: u16,
-    material: Option<Rc<Material>>
+    material: Option<Rc<BindableTexture>>
 }
 
 pub struct GlBuffer {
@@ -238,7 +238,7 @@ pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u3
     }
 }
 
-pub unsafe fn get_texture(id: usize) -> Option<Rc<Material>> {
+pub unsafe fn get_texture(id: usize) -> Option<Rc<BindableTexture>> {
     let slab = GL_ALLOC.get().unwrap();
     match slab.get(id).expect("Invalid texture ID") {
         GlResource::Texture(tex) => {
