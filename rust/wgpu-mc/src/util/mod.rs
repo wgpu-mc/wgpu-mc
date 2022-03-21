@@ -68,7 +68,7 @@ impl<'a> WmArena<'a> {
                 )) % ALIGN
             );
         if self.length + aligned_size > self.capacity {
-            self.grow(512);
+            self.grow(1024);
         }
         //Pointer to where the data will be allocated
         let t_ptr = unsafe { self.heap.add(self.length) };

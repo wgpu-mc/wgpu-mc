@@ -6,19 +6,28 @@ use crate::mc::entity::EntityManager;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use crate::model::BindableTexture;
 
-pub struct EntityTypeInstanceFrame {
+pub struct EntityGroupInstancingFrame {
+    ///The model for the entity
     pub vertex_buffer: Arc<wgpu::Buffer>,
+    ///`EntityRenderInstance`s
     pub instance_buffer: Arc<wgpu::Buffer>,
 
+    ///mat4[][] for part transforms per instance
     pub instance_transform_bind_group: Rc<wgpu::BindGroup>,
-    pub texture_bind_group: Arc<wgpu::BindGroup>,
+    ///vec2[] for offsets for mob variant textures
+    pub texture_offsets: Arc<wgpu::BindGroup>,
+    ///the texture
+    pub texture: Arc<BindableTexture>,
+    ///how many entities to draw
     pub instance_count: u32,
+    ///how many vertices per entity
     pub vertex_count: u32
 }
 
 pub struct EntityPipeline {
-    pub frame: Vec<EntityTypeInstanceFrame>
+    pub frames: Vec<Arc<EntityGroupInstancingFrame>>
 }
 
 impl WmPipeline for EntityPipeline {
@@ -27,13 +36,7 @@ impl WmPipeline for EntityPipeline {
         let pipelines = arena.alloc(renderer.pipelines.load_full());
         render_pass.set_pipeline(&pipelines.entity_pipeline);
 
-        render_pass.set_bind_group(
-            3,
-            arena.alloc(renderer.mc.camera_bind_group.load_full()),
-            &[]
-        );
-
-        self.frame.iter().for_each(|instance_type| {
+        self.frames.iter().for_each(|instance_type| {
             render_pass.set_bind_group(
                 0,
                 arena.alloc(instance_type.instance_transform_bind_group.clone()),
@@ -42,7 +45,18 @@ impl WmPipeline for EntityPipeline {
 
             render_pass.set_bind_group(
                 1,
-                arena.alloc(instance_type.texture_bind_group.clone()),
+                arena.alloc(instance_type.texture_offsets.clone()),
+                &[]
+            );
+
+            render_pass.set_bind_group(
+                2, &arena.alloc(instance_type.texture.clone()).bind_group,
+                &[]
+            );
+
+            render_pass.set_bind_group(
+                3,
+                arena.alloc(renderer.mc.camera_bind_group.load_full()),
                 &[]
             );
 

@@ -9,7 +9,8 @@ use crate::render::entity::EntityVertex;
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use crate::render::pipeline::RenderPipelineManager;
-use crate::WgpuState;
+use crate::{WgpuState, WmRenderer};
+use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 pub type Position = (f64, f64, f64);
 pub type EntityType = usize;
@@ -17,7 +18,7 @@ pub type EntityType = usize;
 pub struct EntityManager {
     pub mob_texture_atlas: RwLock<Atlas>,
     pub player_texture_atlas: RwLock<Atlas>,
-    pub entity_types: IndexMap<NamespacedResource, Arc<EntityModel>>,
+    pub entity_types: RwLock<Vec<Arc<EntityModel>>>,
     pub entity_vertex_buffers: ArcSwap<HashMap<usize, Arc<wgpu::BindGroup>>>
 }
 
@@ -27,7 +28,7 @@ impl EntityManager {
         Self {
             mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines)),
             player_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines)),
-            entity_types: IndexMap::new(),
+            entity_types: RwLock::new(Vec::new()),
             entity_vertex_buffers: Default::default()
         }
     }
@@ -172,9 +173,9 @@ pub struct EntityPart {
 
 #[derive(Clone, Debug)]
 pub struct EntityModel {
-    root: EntityPart,
+    pub root: EntityPart,
     /// Names of each part referencing an index for applicable transforms
-    parts: HashMap<String, usize>
+    pub parts: HashMap<String, usize>
 }
 
 fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id: &mut u32) {
@@ -204,40 +205,61 @@ impl EntityModel {
 
 }
 
-pub struct EntityInstance {
-    entity_model: usize,
-    position: Position,
-    ///Rotation around the Y axis (yaw)
-    looking_yaw: f32,
-    uv_offset: (f32, f32),
-    hurt: bool,
-    part_transforms: Vec<PartTransform>,
+pub struct DescribedEntityInstances {
+    ///the mat4[] for part transforms that's found in the shader
+    pub matrices: Vec<Vec<[[f32; 4]; 4]>>
 }
 
-fn recurse_transforms(
-    mat: cgmath::Matrix4<f32>,
-    part: &EntityPart,
-    vec: &mut Vec<cgmath::Matrix4<f32>>,
-    index: &mut usize,
-    instance_transforms: &[cgmath::Matrix4<f32>]) {
-    let instance_part_transform = instance_transforms[*index];
-    let new_mat = mat * part.transform.describe() * instance_part_transform;
+impl DescribedEntityInstances {
 
-    vec.push(
-        new_mat
-    );
+    pub fn upload(&self, wm: &WmRenderer) -> (wgpu::Buffer, wgpu::BindGroup) {
+        let cast_matrices = self.matrices.iter().flat_map(|vec1| {
+            vec1.iter().flatten().flatten()
+        }).copied().collect::<Vec<f32>>();
 
-    part.children.iter().for_each(|child| {
-        *index += 1;
-        recurse_transforms(new_mat, child, vec, index, instance_transforms);
-    });
+        let buffer = wm.wgpu_state.device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&cast_matrices[..]),
+                usage: wgpu::BufferUsages::STORAGE
+            }
+        );
+
+        let pipelines = wm.pipelines.load();
+
+        let bind_group = wm.wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &pipelines.bind_group_layouts.ssbo,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding()
+                }
+            ]
+        });
+
+        (buffer, bind_group)
+    }
+
+}
+
+pub struct EntityInstance {
+    ///Index
+    pub entity_model: usize,
+    pub position: Position,
+    ///Rotation around the Y axis (yaw)
+    pub looking_yaw: f32,
+    pub uv_offset: (f32, f32),
+    ///Paint it red. Or something
+    pub hurt: bool,
+    pub part_transforms: Vec<PartTransform>,
 }
 
 impl EntityInstance {
 
     pub fn describe_instance(&self, entity_manager: &EntityManager) -> Vec<[[f32; 4]; 4]> {
-        let (_entity_name, model): (&NamespacedResource, &Arc<EntityModel>) =
-            entity_manager.entity_types.get_index(self.entity_model).unwrap();
+        let model: &Arc<EntityModel> =
+            &entity_manager.entity_types.read()[self.entity_model];
 
         let transforms: Vec<Matrix4<f32>> =
             self.part_transforms.iter().map(|pt| pt.describe())
@@ -257,4 +279,23 @@ impl EntityInstance {
         vec.iter().map(|mat| (*mat).into()).collect()
     }
 
+}
+
+fn recurse_transforms(
+    mat: cgmath::Matrix4<f32>,
+    part: &EntityPart,
+    vec: &mut Vec<cgmath::Matrix4<f32>>,
+    index: &mut usize,
+    instance_transforms: &[cgmath::Matrix4<f32>]) {
+    let instance_part_transform = instance_transforms[*index];
+    let new_mat = mat * part.transform.describe() * instance_part_transform;
+
+    vec.push(
+        new_mat
+    );
+
+    part.children.iter().for_each(|child| {
+        *index += 1;
+        recurse_transforms(new_mat, child, vec, index, instance_transforms);
+    });
 }

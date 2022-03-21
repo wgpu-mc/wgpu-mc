@@ -5,39 +5,6 @@ use bytemuck::{Zeroable, Pod};
 
 pub mod pipeline;
 
-pub struct EntityInstancesSSBO {
-    pub instances: Vec<EntityRenderInstance>
-}
-
-impl EntityInstancesSSBO {
-
-    pub fn upload(&self, wm: &WmRenderer) -> (wgpu::Buffer, wgpu::BindGroup) {
-        let buffer = wm.wgpu_state.device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&self.instances[..]),
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE
-            }
-        );
-
-        let pipelines = wm.pipelines.load();
-
-        let bind_group = wm.wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &pipelines.bind_group_layouts.instanced_entity_storage,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding()
-                }
-            ]
-        });
-
-        (buffer, bind_group)
-    }
-
-}
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct EntityVertex {
@@ -79,7 +46,7 @@ impl EntityVertex {
                     shader_location: 3,
                     format: wgpu::VertexFormat::Uint32
                 }
-            ],
+            ]
         }
     }
 }
@@ -88,17 +55,19 @@ impl EntityVertex {
 #[repr(C)]
 /// Data to describe an instance of an entity type on the GPU
 pub struct EntityRenderInstance {
-    /// Index into the mat4[][]. First part is the entity index
+    /// Index into mat4[][]
     pub entity_index: u32,
     /// Index into the float2[] to describe the offset of this entities texture
-    pub entity_texture_index: u32
+    pub entity_texture_index: u32,
+    pub parts_per_entity: u32
 }
 
 impl EntityRenderInstance {
 
-    const VAA: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+    const VAA: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
         4 => Uint32,
-        5 => Uint32
+        5 => Uint32,
+        6 => Uint32
     ];
 
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {

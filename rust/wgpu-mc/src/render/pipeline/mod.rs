@@ -18,6 +18,7 @@ use crate::{WmRenderer};
 
 
 use crate::mc::resource::ResourceProvider;
+use crate::render::entity::{EntityRenderInstance, EntityVertex};
 use crate::render::world::chunk::ChunkVertex;
 use crate::util::WmArena;
 
@@ -39,7 +40,7 @@ pub struct WmBindGroupLayouts {
     pub texture: BindGroupLayout,
     pub cubemap: BindGroupLayout,
     pub matrix4: BindGroupLayout,
-    pub instanced_entity_storage: BindGroupLayout
+    pub ssbo: BindGroupLayout
 }
 
 pub struct RenderPipelineManager {
@@ -56,7 +57,7 @@ pub struct RenderPipelineManager {
 impl RenderPipelineManager {
     
     fn create_bind_group_layouts(device: &wgpu::Device) -> WmBindGroupLayouts {
-        let camera_bind_group_layout = device.create_bind_group_layout(
+        let matrix4 = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("Camera Bind Group Layout"),
                 entries: &[
@@ -74,7 +75,7 @@ impl RenderPipelineManager {
             }
         );
 
-        let texture_bind_group_layout = device.create_bind_group_layout(
+        let texture = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("Texture Bind Group Layout Descriptor"),
                 entries: &[
@@ -98,7 +99,7 @@ impl RenderPipelineManager {
             }
         );
 
-        let cubemap_bind_group_layout = device.create_bind_group_layout(
+        let cubemap = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("Cubemap Bind Group Layout Descriptor"),
                 entries: &[
@@ -122,7 +123,7 @@ impl RenderPipelineManager {
             }
         );
         
-        let instanced_entity_storage = device.create_bind_group_layout(
+        let ssbo = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
                 entries: &[
@@ -141,10 +142,10 @@ impl RenderPipelineManager {
         );
 
         WmBindGroupLayouts {
-            texture: texture_bind_group_layout,
-            cubemap: cubemap_bind_group_layout,
-            matrix4: camera_bind_group_layout,
-            instanced_entity_storage
+            texture,
+            cubemap,
+            matrix4,
+            ssbo
         }
     }
 
@@ -193,9 +194,9 @@ impl RenderPipelineManager {
                 &wgpu::PipelineLayoutDescriptor {
                     label: None,
                     bind_group_layouts: &[
-                        &layouts.instanced_entity_storage,
+                        &layouts.ssbo,
+                        &layouts.ssbo,
                         &layouts.texture,
-                        // &layouts.cubemap,
                         &layouts.matrix4
                     ],
                     push_constant_ranges: &[]
@@ -217,8 +218,7 @@ impl RenderPipelineManager {
         let terrain = shader_map.get("terrain").unwrap();
         let grass = shader_map.get("grass").unwrap();
         let transparent = shader_map.get("transparent").unwrap();
-        //TODO: actually implement entities
-        let entity = shader_map.get("transparent").unwrap();
+        let entity = shader_map.get("entity").unwrap();
 
         Self {
             sky_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -388,14 +388,16 @@ impl RenderPipelineManager {
                 }),
                 multiview: None
             }),
-            //Not actually an entity pipeline, TODO
             entity_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
-                layout: Some(&pipeline_layouts.3),
+                layout: Some(&pipeline_layouts.4),
                 vertex: wgpu::VertexState {
                     module: entity.get_vert().0,
                     entry_point: entity.get_vert().1,
-                    buffers: &vertex_buffers
+                    buffers: &[
+                        EntityVertex::desc(),
+                        EntityRenderInstance::desc()
+                    ]
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
