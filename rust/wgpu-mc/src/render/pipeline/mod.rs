@@ -238,7 +238,7 @@ impl RenderPipelineManager {
                     polygon_mode: Default::default(),
                     conservative: false
                 },
-                //TODO: probably don't need a depth stencil (this is a reminder in case I do)
+                //TODO: probably don't need a depth stencil
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState {
                     count: 1,

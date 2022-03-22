@@ -12,10 +12,10 @@ pub struct EntityGroupInstancingFrame {
     ///The model for the entity
     pub vertex_buffer: Arc<wgpu::Buffer>,
     ///`EntityRenderInstance`s
-    pub instance_buffer: Arc<wgpu::Buffer>,
+    pub entity_instance_vb: Arc<wgpu::Buffer>,
 
     ///mat4[][] for part transforms per instance
-    pub instance_transform_bind_group: Rc<wgpu::BindGroup>,
+    pub part_transform_matrices: Rc<wgpu::BindGroup>,
     ///vec2[] for offsets for mob variant textures
     pub texture_offsets: Arc<wgpu::BindGroup>,
     ///the texture
@@ -39,7 +39,7 @@ impl WmPipeline for EntityPipeline {
         self.frames.iter().for_each(|instance_type| {
             render_pass.set_bind_group(
                 0,
-                arena.alloc(instance_type.instance_transform_bind_group.clone()),
+                arena.alloc(instance_type.part_transform_matrices.clone()),
                 &[]
             );
 
@@ -67,7 +67,7 @@ impl WmPipeline for EntityPipeline {
 
             render_pass.set_vertex_buffer(
                 1,
-                arena.alloc(instance_type.instance_buffer.clone()).slice(..)
+                arena.alloc(instance_type.entity_instance_vb.clone()).slice(..)
             );
 
             render_pass.draw(0..instance_type.vertex_count, 0..instance_type.instance_count);

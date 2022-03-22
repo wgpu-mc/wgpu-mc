@@ -74,7 +74,7 @@ impl EntityRenderInstance {
 
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<EntityVertex>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<EntityRenderInstance>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &Self::VAA
         }

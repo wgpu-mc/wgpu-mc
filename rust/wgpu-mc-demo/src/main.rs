@@ -156,30 +156,30 @@ fn main() {
         &shaders
     );
 
-    let blockstates_path = mc_root.join("blockstates");
+    // let blockstates_path = mc_root.join("blockstates");
+    //
+    // {
+    //     let blockstate_dir = std::fs::read_dir(blockstates_path).unwrap();
+    //     // let mut model_map = HashMap::new();
+    //     let mut bm = wm.mc.block_manager.write();
+    //
+    //     blockstate_dir.for_each(|m| {
+    //         let model = m.unwrap();
+    //
+    //         let resource_name = NamespacedResource (
+    //             String::from("minecraft"),
+    //             format!("blockstates/{}", model.file_name().to_str().unwrap())
+    //         );
+    //
+    //         match Block::from_json(model.file_name().to_str().unwrap(), std::str::from_utf8(&fs::read(model.path()).unwrap()).unwrap()) {
+    //             None => {}
+    //             Some(block) => { bm.blocks.insert(resource_name, block); }
+    //         };
+    //     });
+    // }
 
-    {
-        let blockstate_dir = std::fs::read_dir(blockstates_path).unwrap();
-        // let mut model_map = HashMap::new();
-        let mut bm = wm.mc.block_manager.write();
-
-        blockstate_dir.for_each(|m| {
-            let model = m.unwrap();
-
-            let resource_name = NamespacedResource (
-                String::from("minecraft"),
-                format!("blockstates/{}", model.file_name().to_str().unwrap())
-            );
-
-            match Block::from_json(model.file_name().to_str().unwrap(), std::str::from_utf8(&fs::read(model.path()).unwrap()).unwrap()) {
-                None => {}
-                Some(block) => { bm.blocks.insert(resource_name, block); }
-            };
-        });
-    }
-
-    println!("Generating blocks");
-    wm.mc.bake_blocks(&wm);
+    // println!("Generating blocks");
+    // wm.mc.bake_blocks(&wm);
 
     let window = wrapper.window;
 
@@ -278,13 +278,13 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
 
     let entity_instance_bind_group = Rc::new(entity_instance_bind_group);
 
-    let entity_vertices = player_model.get_mesh();
-    println!("{:?}", entity_vertices);
+    let entity_mesh_vertices = player_model.get_mesh();
+    println!("{:?}", entity_mesh_vertices);
 
     let entity_vertex_buffer = Arc::new(wm.wgpu_state.device.create_buffer_init(
         &BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&entity_vertices),
+            contents: bytemuck::cast_slice(&entity_mesh_vertices),
             usage: wgpu_mc::wgpu::BufferUsages::VERTEX
         }
     ));
@@ -342,12 +342,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
 
     let egif = Arc::new(EntityGroupInstancingFrame {
         vertex_buffer: entity_vertex_buffer.clone(),
-        instance_buffer,
-        instance_transform_bind_group: entity_instance_bind_group.clone(),
+        entity_instance_vb: instance_buffer,
+        part_transform_matrices: entity_instance_bind_group.clone(),
         texture_offsets: texture_offsets_bind_group.clone(),
         texture: entity_manager.player_texture_atlas.read().bindable_texture.load_full(),
-        instance_count: 0,
-        vertex_count: 0
+        instance_count: 1,
+        vertex_count: entity_mesh_vertices.len() as u32
     });
 
     let mut frame_start = Instant::now();
