@@ -11,12 +11,9 @@ https://matrix.to/#/#wgpu-mc:matrix.org
 #### Intro
 
 WebGPU is a new web specification designed to provide modern graphics and compute capabilities in an API.
-It is in its very early stages in web browsers, but has had a very promising cycle of development. It's inspired by
-Metal & Vulkan's render pipelines, and is able to efficiently provide lower level access to graphics hardware, in a modern
-and (relatively) easy to use API. 
 
-`wgpu` is the name of a crate which implements this specification, and it is written in Rust, allowing safe and blazing-fast
-use of the WebGPU standard, which makes it a prime candidate for a replacement of Blaze3D.
+`wgpu` is the name of a crate which implements this specification, and it is written in Rust, allowing safe and fast
+usage of the WebGPU standard, which makes it a great platform to build a cross-platform renderer on.
 
 #### Goals
 
@@ -39,7 +36,7 @@ Engine
 - [x] Convert the block models into a mesh
 - [x] Generate chunk meshes
 - [x] Sky
-- [ ] Entities (not tested, but the code structure is there)
+- [x] Instanced Entity Rendering
 
 Minecraft
 
