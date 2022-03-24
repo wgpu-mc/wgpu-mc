@@ -32,6 +32,7 @@ use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::atlas::Atlas;
 use wgpu_mc::render::entity::EntityRenderInstance;
 use wgpu_mc::render::entity::pipeline::{EntityGroupInstancingFrame};
+use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
@@ -171,8 +172,9 @@ fn main() {
 
     wm.init(
         &[
-            &*(Box::new(EntityPipeline { frames: &[] }) as Box<dyn WmPipeline>),
-            &*(Box::new(TerrainPipeline) as Box<dyn WmPipeline>)
+            &EntityPipeline { frames: &[] },
+            &TerrainPipeline,
+            &DebugLinesPipeline
         ]
     );
 
@@ -467,11 +469,11 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                     part_transforms: vec![
                         PartTransform {
                             pivot_x: 0.5,
-                            pivot_y: 0.0,
+                            pivot_y: 0.5,
                             pivot_z: 0.5,
                             yaw: spin,
-                            pitch: 0.0,
-                            roll: 0.0
+                            pitch: spin,
+                            roll: spin
                         }
                     ]
                 };
@@ -479,8 +481,6 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                 let described_instance = entity_instance.describe_instance(
                     &entity_manager
                 );
-
-                println!("{:?}", described_instance);
 
                 wm.wgpu_state.queue.write_buffer(
                     &*entity_instance_buffer.clone(),
@@ -499,7 +499,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                     // &WorldPipeline {}
                     &EntityPipeline {
                         frames: &vec![ &*egif.clone() ]
-                    }
+                    },
+                    &DebugLinesPipeline
                 ]);
 
                 frame_start = Instant::now();

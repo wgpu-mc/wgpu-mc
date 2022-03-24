@@ -3,6 +3,7 @@ pub mod grass;
 pub mod entity;
 pub mod sky;
 pub mod terrain;
+pub mod debug_lines;
 
 use wgpu::{RenderPipelineDescriptor, BindGroupLayout, SamplerBindingType, PipelineLayout};
 use crate::render::shader::WmShader;
