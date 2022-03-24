@@ -37,6 +37,7 @@ use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
 use wgpu_mc::texture::TextureSamplerView;
+use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 
@@ -106,6 +107,18 @@ fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
 
 fn main() {
     let anvil_chunks = load_anvil_chunks();
+
+    {
+        println!("Allocating 100 strings");
+        let mut arena = WmArena::new(1024);
+        let time = Instant::now();
+        for _ in 0..100 {
+            arena.alloc(String::from("test"));
+        }
+        println!("Allocated in {}ms", Instant::now().duration_since(time).as_millis());
+        drop(arena);
+        println!("Drop works")
+    }
 
     let event_loop = EventLoop::new();
     let title = "wgpu-mc test";
@@ -443,20 +456,20 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
 
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
-                spin += 0.001;
+                spin += 0.5;
 
                 let entity_instance = EntityInstance {
                     entity_model: 0,
                     position: (0.0, 0.0, 0.0),
-                    looking_yaw: spin,
+                    looking_yaw: 0.0,
                     uv_offset: (0.0, 0.0),
                     hurt: false,
                     part_transforms: vec![
                         PartTransform {
-                            pivot_x: 0.0,
+                            pivot_x: 0.5,
                             pivot_y: 0.0,
-                            pivot_z: 0.0,
-                            yaw: 0.0,
+                            pivot_z: 0.5,
+                            yaw: spin,
                             pitch: 0.0,
                             roll: 0.0
                         }
@@ -466,6 +479,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                 let described_instance = entity_instance.describe_instance(
                     &entity_manager
                 );
+
+                println!("{:?}", described_instance);
 
                 wm.wgpu_state.queue.write_buffer(
                     &*entity_instance_buffer.clone(),

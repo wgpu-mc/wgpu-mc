@@ -10,19 +10,19 @@ const ALIGN: usize = 8;
 
 ///Untyped arena for render passes
 pub struct WmArena<'a> {
-    heap: *mut (),
+    heap: *mut u8,
     capacity: usize,
     total_capacity: usize,
     length: usize,
-    objects: Vec<(*mut (), fn (*mut ()))>,
-    heaps: Vec<(*mut (), usize)>,
+    objects: Vec<(*mut u8, fn (*mut u8))>,
+    heaps: Vec<(*mut u8, usize)>,
     phantom: PhantomData<&'a ()>
 }
 
 impl<'a> WmArena<'a> {
 
     pub fn new(capacity: usize) -> Self {
-        let heap = unsafe { Self::alloc_heap(capacity) };
+        let heap = Self::alloc_heap(capacity);
 
         Self {
             heap,
@@ -42,9 +42,11 @@ impl<'a> WmArena<'a> {
         self.capacity = size;
         self.total_capacity += size;
         self.heap = new_heap;
+
+        self.heaps.push((new_heap, size));
     }
 
-    fn alloc_heap(size: usize) -> *mut () {
+    fn alloc_heap(size: usize) -> *mut u8 {
         assert!(size > 0);
 
         unsafe {
@@ -53,26 +55,29 @@ impl<'a> WmArena<'a> {
                     size,
                     ALIGN
                 ).unwrap()
-            ) as *mut ()
+            )
         }
     }
 
     pub fn alloc<T>(&mut self, t: T) -> &'a mut T {
-        let heap_length = unsafe { self.heap.add(self.length) };
+        let heap_end = unsafe { self.heap.add(self.length) };
 
         let t_size = size_of::<T>();
         let t_alignment = align_of::<T>();
 
-        let align_offset = heap_length.align_offset(t_alignment);
+        let align_offset = heap_end.align_offset(t_alignment);
+        assert_ne!(align_offset, usize::MAX);
 
         let t_allocate_size = t_size + align_offset;
 
         if self.length + t_allocate_size > self.capacity {
-            Self::alloc_heap(min(t_allocate_size, 4096));
+            self.grow(min(t_allocate_size, 4096));
+
+            return self.alloc(t);
         }
 
         //Pointer to where the data will be allocated
-        let t_alloc_ptr = unsafe { heap_length.add(align_offset) };
+        let t_alloc_ptr = unsafe { heap_end.add(align_offset) };
 
         //Bump
         self.length += t_allocate_size;
@@ -92,10 +97,10 @@ impl<'a> WmArena<'a> {
         };
 
         let transmuted_callback = unsafe {
-            std::mem::transmute::<fn(*mut T), fn(*mut ())>(callback)
+            std::mem::transmute::<fn(*mut T), fn(*mut u8)>(callback)
         };
 
-        self.objects.push((heap_length, transmuted_callback));
+        self.objects.push((t_alloc_ptr, transmuted_callback));
 
         t_mut_ref
     }
