@@ -93,7 +93,7 @@ impl BindableTexture {
     ) -> Self {
         let bind_group = wgpu_state.device.create_bind_group(&BindGroupDescriptor {
             label: None,
-            layout: &pipelines.bind_group_layouts.texture,
+            layout: &pipelines.bind_group_layouts.read().get("texture").unwrap(),
             entries: &[
                 BindGroupEntry {
                     binding: 0,

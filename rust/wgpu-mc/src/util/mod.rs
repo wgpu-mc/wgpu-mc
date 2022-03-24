@@ -1,7 +1,8 @@
 
 use std::alloc::{Layout, alloc_zeroed, dealloc};
+use std::cmp::min;
 
-use std::mem::size_of;
+use std::mem::{align_of, ManuallyDrop, size_of};
 use std::ptr::drop_in_place;
 use std::marker::PhantomData;
 
@@ -9,25 +10,19 @@ const ALIGN: usize = 8;
 
 ///Untyped arena for render passes
 pub struct WmArena<'a> {
-    heap: *mut u8,
+    heap: *mut (),
     capacity: usize,
     total_capacity: usize,
     length: usize,
-    objects: Vec<(*mut u8, fn (*mut u8))>,
-    heaps: Vec<(*mut u8, usize)>,
+    objects: Vec<(*mut (), fn (*mut ()))>,
+    heaps: Vec<(*mut (), usize)>,
     phantom: PhantomData<&'a ()>
 }
 
 impl<'a> WmArena<'a> {
 
     pub fn new(capacity: usize) -> Self {
-        let heap = unsafe {
-            let layout = Layout::from_size_align(
-                capacity,
-                ALIGN
-            ).unwrap();
-            alloc_zeroed(layout)
-        };
+        let heap = unsafe { Self::alloc_heap(capacity) };
 
         Self {
             heap,
@@ -40,54 +35,69 @@ impl<'a> WmArena<'a> {
         }
     }
 
-    fn grow(&mut self, increase: usize) {
-        let new_heap = unsafe {
-            let layout = Layout::from_size_align(
-                self.capacity + increase,
-                ALIGN
-            ).unwrap();
-            alloc_zeroed(layout)
-        };
-
-        self.heaps.push(
-            (self.heap, self.capacity)
-        );
+    fn grow(&mut self, size: usize) {
+        let new_heap = Self::alloc_heap(size);
 
         self.length = 0;
-        self.capacity = increase;
-        self.total_capacity += increase;
+        self.capacity = size;
+        self.total_capacity += size;
         self.heap = new_heap;
     }
 
-    pub fn alloc<T>(&mut self, t: T) -> &'a mut T {
-        let size = size_of::<T>();
-        let aligned_size =
-            size + (
-                (ALIGN.wrapping_add(
-                    -(size as isize) as usize
-                )) % ALIGN
-            );
-        if self.length + aligned_size > self.capacity {
-            self.grow(1024);
-        }
-        //Pointer to where the data will be allocated
-        let t_ptr = unsafe { self.heap.add(self.length) };
-        //Bump
-        self.length += aligned_size;
-        //Pointer to reference
-        let t_ref = unsafe { (t_ptr as *mut T).as_mut().unwrap() };
-        //Move `t` into the heap, and forget the zero-initialized T that was returned
+    fn alloc_heap(size: usize) -> *mut () {
+        assert!(size > 0);
+
         unsafe {
-            std::mem::forget(std::mem::replace(t_ref, t))
+            alloc_zeroed(
+                Layout::from_size_align(
+                    size,
+                    ALIGN
+                ).unwrap()
+            ) as *mut ()
         }
+    }
+
+    pub fn alloc<T>(&mut self, t: T) -> &'a mut T {
+        let heap_length = unsafe { self.heap.add(self.length) };
+
+        let t_size = size_of::<T>();
+        let t_alignment = align_of::<T>();
+
+        let align_offset = heap_length.align_offset(t_alignment);
+
+        let t_allocate_size = t_size + align_offset;
+
+        if self.length + t_allocate_size > self.capacity {
+            Self::alloc_heap(min(t_allocate_size, 4096));
+        }
+
+        //Pointer to where the data will be allocated
+        let t_alloc_ptr = unsafe { heap_length.add(align_offset) };
+
+        //Bump
+        self.length += t_allocate_size;
+
+        ///SAFETY: This new pointer is up until now unused
+        let t_mut_ref = unsafe { (t_alloc_ptr as *mut T).as_mut().unwrap() };
+
+        //Move `t` into the allocated spot and forget the zero-initialized T that was returned
+        let uninitialized_t = std::mem::replace(t_mut_ref, t);
+
+        std::mem::forget(uninitialized_t);
+
         let callback = |ptr: *mut T| {
+            ///SAFETY: this will only be called once WmArena is dropped, meaning that there are no
+            /// references to this data.
             unsafe { drop_in_place(ptr); }
         };
+
         let transmuted_callback = unsafe {
-            std::mem::transmute::<fn(*mut T), fn(*mut u8)>(callback)
+            std::mem::transmute::<fn(*mut T), fn(*mut ())>(callback)
         };
-        self.objects.push((t_ptr, transmuted_callback));
-        t_ref
+
+        self.objects.push((heap_length, transmuted_callback));
+
+        t_mut_ref
     }
 
 }
@@ -102,7 +112,7 @@ impl<'a> Drop for WmArena<'a> {
         self.heaps.iter().for_each(|heap| {
             unsafe {
                 dealloc(
-                    heap.0,
+                    heap.0 as *mut u8,
                     Layout::from_size_align(
                         heap.1, ALIGN
                     ).unwrap()

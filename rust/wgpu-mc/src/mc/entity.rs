@@ -4,7 +4,7 @@ use crate::texture::UV;
 use crate::render::atlas::Atlas;
 use indexmap::map::IndexMap;
 use std::collections::HashMap;
-use cgmath::{Matrix4, SquareMatrix, Vector4};
+use cgmath::{Matrix, Matrix4, SquareMatrix, Vector4};
 use crate::render::entity::EntityVertex;
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
@@ -56,10 +56,11 @@ impl PartTransform {
             * cgmath::Matrix4::from_angle_x(cgmath::Deg(self.pitch))
             * cgmath::Matrix4::from_angle_y(cgmath::Deg(self.yaw))
             * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
-            -self.pivot_x,
-            -self.pivot_y,
-            -self.pivot_z,
-        ))
+                -self.pivot_x,
+                -self.pivot_y,
+                -self.pivot_z
+            )
+        )
     }
 
     pub fn zero() -> Self {
@@ -221,15 +222,15 @@ impl DescribedEntityInstances {
             &BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(&cast_matrices[..]),
-                usage: wgpu::BufferUsages::STORAGE
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST
             }
         );
 
-        let pipelines = wm.pipelines.load();
+        let pipelines = wm.render_pipeline_manager.load();
 
         let bind_group = wm.wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &pipelines.bind_group_layouts.ssbo,
+            layout: pipelines.bind_group_layouts.read().get("ssbo").unwrap(),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,

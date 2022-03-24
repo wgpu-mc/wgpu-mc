@@ -1,20 +1,20 @@
-pub mod builtin;
+pub mod transparent;
+pub mod grass;
+pub mod entity;
+pub mod sky;
+pub mod terrain;
 
-use wgpu::{RenderPipelineDescriptor, BindGroupLayout, SamplerBindingType};
+use wgpu::{RenderPipelineDescriptor, BindGroupLayout, SamplerBindingType, PipelineLayout};
 use crate::render::shader::WmShader;
 
-
 use std::collections::HashMap;
-
 use std::sync::Arc;
+use arc_swap::ArcSwap;
+use parking_lot::RwLock;
 
 
-use crate::{WmRenderer};
-
-
-
-
-
+use crate::{WgpuState, WmRenderer};
+use crate::mc::datapack::NamespacedResource;
 
 
 use crate::mc::resource::ResourceProvider;
@@ -24,420 +24,221 @@ use crate::util::WmArena;
 
 
 use crate::render::world::sky::SkyVertex;
+use crate::wgpu::RenderPipeline;
 
 pub trait WmPipeline {
+
+    fn name(&self) -> &'static str;
+
+    fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>>;
+
+    ///Names of the atlases this pipeline will create
+    fn atlases(&self) -> &'static [&'static str];
+
+    fn build_wgpu_pipeline_layouts(
+        &self,
+        wm: &WmRenderer
+    ) -> HashMap<String, wgpu::PipelineLayout>;
+
+    fn build_wgpu_pipelines(
+        &self,
+        wm: &WmRenderer,
+    ) -> HashMap<String, wgpu::RenderPipeline>;
 
     fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(
         &'a self,
 
-        renderer: &'b WmRenderer,
+        wm: &'b WmRenderer,
         render_pass: &'c mut wgpu::RenderPass<'d>,
-        arena: &'c mut WmArena<'e>);
+        arena: &'c mut WmArena<'e>
+    );
 
-}
-
-pub struct WmBindGroupLayouts {
-    pub texture: BindGroupLayout,
-    pub cubemap: BindGroupLayout,
-    pub matrix4: BindGroupLayout,
-    pub ssbo: BindGroupLayout
 }
 
 pub struct RenderPipelineManager {
-    pub sky_pipeline: wgpu::RenderPipeline,
-    pub terrain_pipeline: wgpu::RenderPipeline,
-    pub grass_pipeline: wgpu::RenderPipeline,
-    pub transparent_pipeline: wgpu::RenderPipeline,
-    pub entity_pipeline: wgpu::RenderPipeline,
+    pub pipeline_layouts: ArcSwap<HashMap<String, Arc<PipelineLayout>>>,
+    pub render_pipelines: ArcSwap<HashMap<String, Arc<RenderPipeline>>>,
 
-    pub bind_group_layouts: Arc<WmBindGroupLayouts>,
+    pub shader_map: RwLock<HashMap<String, Box<dyn WmShader>>>,
+    pub bind_group_layouts: RwLock<HashMap<String, BindGroupLayout>>,
     pub resource_provider: Arc<dyn ResourceProvider>
 }
 
 impl RenderPipelineManager {
     
-    fn create_bind_group_layouts(device: &wgpu::Device) -> WmBindGroupLayouts {
-        let matrix4 = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                label: Some("Camera Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None
-                        },
-                        count: None
+    fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindGroupLayout> {
+        [
+            (
+                "camera".into(),
+                device.create_bind_group_layout(
+                    &wgpu::BindGroupLayoutDescriptor {
+                        label: Some("Camera Bind Group Layout"),
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None
+                                },
+                                count: None
+                            }
+                        ]
                     }
-                ]
-            }
-        );
-
-        let texture = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture Bind Group Layout Descriptor"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false
-                        },
-                        count: None
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
-                        count: None
+                )
+            ),
+            (
+                "texture".into(),
+                device.create_bind_group_layout(
+                    &wgpu::BindGroupLayoutDescriptor {
+                        label: Some("Texture Bind Group Layout Descriptor"),
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: false
+                                },
+                                count: None
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
+                                count: None
+                            }
+                        ]
                     }
-                ]
-            }
-        );
-
-        let cubemap = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                label: Some("Cubemap Bind Group Layout Descriptor"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::Cube,
-                            multisampled: false
-                        },
-                        count: None
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
-                        count: None
+                )
+            ),
+            (
+                "cubemap".into(),
+                device.create_bind_group_layout(
+                    &wgpu::BindGroupLayoutDescriptor {
+                        label: Some("Cubemap Bind Group Layout Descriptor"),
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                    view_dimension: wgpu::TextureViewDimension::Cube,
+                                    multisampled: false
+                                },
+                                count: None
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
+                                count: None
+                            }
+                        ]
                     }
-                ]
-            }
-        );
-        
-        let ssbo = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None
-                        },
-                        count: None
+                )
+            ),
+            (
+                "ssbo".into(),
+                device.create_bind_group_layout(
+                    &wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None
+                                },
+                                count: None
+                            }
+                        ]
                     }
-                ]
-            }
-        );
-
-        WmBindGroupLayouts {
-            texture,
-            cubemap,
-            matrix4,
-            ssbo
-        }
+                )
+            ),
+            (
+                "matrix4".into(),
+                device.create_bind_group_layout(
+                    &wgpu::BindGroupLayoutDescriptor {
+                        label: Some("Mat4x4<f32> Bind Group Layout"),
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None
+                                },
+                                count: None
+                            }
+                        ]
+                    }
+                )
+            )
+        ].into_iter().collect()
     }
 
-    fn create_pipeline_layouts(device: &wgpu::Device, layouts: &WmBindGroupLayouts) -> (wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout, wgpu::PipelineLayout) {
-        (
-            device.create_pipeline_layout(
-                &wgpu::PipelineLayoutDescriptor {
-                    label: Some("Sky Pipeline Layout"),
-                    bind_group_layouts: &[
-                        &layouts.cubemap, &layouts.matrix4
-                    ],
-                    push_constant_ranges: &[]
-                }
-            ),
-            device.create_pipeline_layout(
-                &wgpu::PipelineLayoutDescriptor {
-                    label: Some("Terrain Pipeline Layout"),
-                    bind_group_layouts: &[
-                        //&layouts.texture, &layouts.matrix4, &layouts.cubemap
-                        &layouts.texture, &layouts.matrix4
-                    ],
-                    push_constant_ranges: &[]
-                }
-            ),
-            device.create_pipeline_layout(
-                &wgpu::PipelineLayoutDescriptor {
-                    label: Some("Grass Pipeline Layout"),
-                    bind_group_layouts: &[
-                        //&layouts.texture, &layouts.matrix4, &layouts.cubemap
-                        &layouts.texture, &layouts.matrix4
-                    ],
-                    push_constant_ranges: &[]
-                }
-            ),
-            device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                    label: Some("Transparent Pipeline Layout"),
-                    bind_group_layouts: &[
-                        //&layouts.texture, &layouts.matrix4, &layouts.cubemap
-                        &layouts.texture, &layouts.matrix4
-                    ],
-                    push_constant_ranges: &[]
-                }
-            ),
-            device.create_pipeline_layout(
-                &wgpu::PipelineLayoutDescriptor {
-                    label: None,
-                    bind_group_layouts: &[
-                        &layouts.ssbo,
-                        &layouts.ssbo,
-                        &layouts.texture,
-                        &layouts.matrix4
-                    ],
-                    push_constant_ranges: &[]
-                }
-            )
-        )
+    pub fn build_shaders(wm: &WmRenderer, wm_pipelines: &[&dyn WmPipeline]) -> HashMap<String, Box<dyn WmShader>> {
+        wm_pipelines.iter().flat_map(|wm_pipeline| {
+            wm_pipeline.provide_shaders(wm)
+        }).collect()
+    }
+
+    pub fn build_pipeline_layouts(wm: &WmRenderer, wm_pipelines: &[&dyn WmPipeline]) -> HashMap<String, PipelineLayout> {
+        wm_pipelines.iter().flat_map(|wm_pipeline| {
+            wm_pipeline.build_wgpu_pipeline_layouts(wm)
+        }).collect()
+    }
+
+    pub fn build_pipelines(wm: &WmRenderer, wm_pipelines: &[&dyn WmPipeline]) -> HashMap<String, RenderPipeline> {
+        wm_pipelines.iter().flat_map(|wm_pipeline| {
+            wm_pipeline.build_wgpu_pipelines(wm)
+        }).collect()
+    }
+
+    pub fn new(resource_provider: Arc<dyn ResourceProvider>) -> Self {
+        Self {
+            pipeline_layouts: ArcSwap::new(Arc::new(HashMap::new())),
+            render_pipelines: ArcSwap::new(Arc::new(HashMap::new())),
+            resource_provider,
+            bind_group_layouts: RwLock::new(HashMap::new()),
+            shader_map: RwLock::new(HashMap::new())
+        }
+
     }
 
     #[must_use]
-    pub fn init(device: &wgpu::Device, shader_map: &HashMap<String, Box<dyn WmShader>>, resource_provider: Arc<dyn ResourceProvider>) -> Self {
-        let bg_layouts = Self::create_bind_group_layouts(device);
-        let pipeline_layouts = Self::create_pipeline_layouts(device, &bg_layouts);
-
-        let vertex_buffers = [
-            ChunkVertex::desc()
-        ];
-
-        let sky = shader_map.get("sky").unwrap();
-        let terrain = shader_map.get("terrain").unwrap();
-        let grass = shader_map.get("grass").unwrap();
-        let transparent = shader_map.get("transparent").unwrap();
-        let entity = shader_map.get("entity").unwrap();
-
-        Self {
-            sky_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layouts.0),
-                vertex: wgpu::VertexState {
-                    module: sky.get_vert().0,
-                    entry_point: sky.get_vert().1,
-                    buffers: &[SkyVertex::desc()]
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    unclipped_depth: false,
-                    polygon_mode: Default::default(),
-                    conservative: false
-                },
-                //TODO: probably don't need a depth stencil
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: sky.get_frag().0,
-                    entry_point: sky.get_frag().1,
-                    targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::REPLACE,
-                            alpha: wgpu::BlendComponent::REPLACE
-                        }),
-                        write_mask: Default::default()
-                    }]
-                }),
-                multiview: None
-            }),
-            terrain_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layouts.1),
-                vertex: wgpu::VertexState {
-                    module: terrain.get_vert().0,
-                    entry_point: terrain.get_vert().1,
-                    buffers: &vertex_buffers
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    unclipped_depth: false,
-                    polygon_mode: Default::default(),
-                    conservative: false
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth32Float,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default()
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: terrain.get_frag().0,
-                    entry_point: terrain.get_frag().1,
-                    targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::REPLACE,
-                            alpha: wgpu::BlendComponent::REPLACE
-                        }),
-                        write_mask: Default::default()
-                    }]
-                }),
-                multiview: None
-            }),
-            grass_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layouts.2),
-                vertex: wgpu::VertexState {
-                    module: grass.get_vert().0,
-                    entry_point: grass.get_vert().1,
-                    buffers: &vertex_buffers
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    unclipped_depth: false,
-                    polygon_mode: Default::default(),
-                    conservative: false
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth32Float,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default()
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: grass.get_frag().0,
-                    entry_point: grass.get_frag().1,
-                    targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::REPLACE,
-                            alpha: wgpu::BlendComponent::REPLACE
-                        }),
-                        write_mask: Default::default()
-                    }]
-                }),
-                multiview: None
-            }),
-            transparent_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layouts.3),
-                vertex: wgpu::VertexState {
-                    module: transparent.get_vert().0,
-                    entry_point: transparent.get_vert().1,
-                    buffers: &vertex_buffers
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    unclipped_depth: false,
-                    polygon_mode: Default::default(),
-                    conservative: false
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth32Float,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default()
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: transparent.get_frag().0,
-                    entry_point: transparent.get_frag().1,
-                    targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::REPLACE,
-                            alpha: wgpu::BlendComponent::REPLACE
-                        }),
-                        write_mask: Default::default()
-                    }]
-                }),
-                multiview: None
-            }),
-            entity_pipeline: device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layouts.4),
-                vertex: wgpu::VertexState {
-                    module: entity.get_vert().0,
-                    entry_point: entity.get_vert().1,
-                    buffers: &[
-                        EntityVertex::desc(),
-                        EntityRenderInstance::desc()
-                    ]
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    unclipped_depth: false,
-                    polygon_mode: Default::default(),
-                    conservative: false
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth32Float,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default()
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: entity.get_frag().0,
-                    entry_point: entity.get_frag().1,
-                    targets: &[wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::REPLACE,
-                            alpha: wgpu::BlendComponent::REPLACE
-                        }),
-                        write_mask: Default::default()
-                    }]
-                }),
-                multiview: None
-            }),
-            resource_provider,
-            bind_group_layouts: Arc::new(bg_layouts)
+    pub fn init(&self, wm: &WmRenderer, wm_pipelines: &[&dyn WmPipeline]) {
+        {
+            self.bind_group_layouts.write().extend(
+                Self::create_bind_group_layouts(&wm.wgpu_state.device).into_iter()
+            )
         }
 
+        let pipeline_layouts = Self::build_pipeline_layouts(wm, wm_pipelines)
+            .into_iter()
+            .map(|(name, layout)| (name, Arc::new(layout)))
+            .collect();
+
+        self.pipeline_layouts.store(Arc::new(pipeline_layouts));
+
+        let shaders = Self::build_shaders(wm, wm_pipelines);
+
+        {
+            *self.shader_map.write() = shaders;
+        }
+
+        let pipelines = Self::build_pipelines(wm, wm_pipelines)
+            .into_iter()
+            .map(|(name, layout)| (name, Arc::new(layout)))
+            .collect();
+
+        self.render_pipelines.store(Arc::new(pipelines));
     }
 
 }

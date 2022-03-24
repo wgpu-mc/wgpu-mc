@@ -45,15 +45,14 @@ pub struct WgpuState {
     pub size: ArcSwap<WindowSize>,
 }
 
-///Data specific to wgpu and rendering goes here, everything specific to Minecraft and it's state
+///Data specific to wgpu and rendering goes here, everything specific to Minecraft
 /// goes in `MinecraftState`
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
 
     pub depth_texture: ArcSwap<texture::TextureSamplerView>,
 
-    pub pipelines: ArcSwap<RenderPipelineManager>,
-    // pub bind_group_layouts: Arc<WmBindGroupLayouts>,
+    pub render_pipeline_manager: ArcSwap<RenderPipelineManager>,
 
     pub mc: Arc<mc::MinecraftState>
 }
@@ -120,12 +119,9 @@ impl WmRenderer {
 
     pub fn new(
         wgpu_state: WgpuState,
-        resource_provider: Arc<dyn ResourceProvider>,
-        shaders: &HashMap<String, Box<dyn WmShader>>
+        resource_provider: Arc<dyn ResourceProvider>
     ) -> WmRenderer {
-        let pipelines = render::pipeline::RenderPipelineManager::init(
-            &wgpu_state.device,
-            shaders,
+        let pipelines = render::pipeline::RenderPipelineManager::new(
             resource_provider.clone()
         );
 
@@ -136,19 +132,23 @@ impl WmRenderer {
             wgpu_state: Arc::new(wgpu_state),
 
             depth_texture: ArcSwap::new(Arc::new(depth_texture)),
-            pipelines: ArcSwap::new(Arc::new(pipelines)),
+            render_pipeline_manager: ArcSwap::new(Arc::new(pipelines)),
             mc: Arc::new(mc),
         }
     }
 
-    pub fn build_pipelines(&self, shaders: &HashMap<String, Box<dyn WmShader>>) {
-        let pipelines = render::pipeline::RenderPipelineManager::init(
-            &self.wgpu_state.device,
-            shaders,
-            self.mc.resource_provider.clone()
-        );
+    pub fn init(&self, pipelines: &[&dyn WmPipeline]) {
+        self.init_pipeline_manager(pipelines);
+        self.init_mc();
+    }
 
-        self.pipelines.store(Arc::new(pipelines));
+    fn init_pipeline_manager(&self, pipelines: &[&dyn WmPipeline]) {
+        self.render_pipeline_manager.load()
+            .init(&self, pipelines);
+    }
+
+    fn init_mc(&self) {
+        self.mc.init_camera(&self);
     }
 
     pub fn resize(&self, new_size: WindowSize) {
@@ -181,7 +181,9 @@ impl WmRenderer {
         self.mc.camera.store(Arc::new(camera));
 
         self.wgpu_state.queue.write_buffer(
-            &self.mc.camera_buffer.load_full(),
+            (*self.mc.camera_buffer.load_full())
+                .as_ref()
+                .unwrap(),
             0,
             bytemuck::cast_slice(&[uniforms]),
         );

@@ -16,8 +16,6 @@ use std::sync::Arc;
 use wgpu_mc::mc::resource::{ResourceProvider};
 use std::convert::{TryFrom};
 
-use wgpu_mc::render::pipeline::builtin::WorldPipeline;
-
 use futures::StreamExt;
 use std::collections::HashMap;
 
@@ -33,7 +31,10 @@ use wgpu_mc::mc::entity::{EntityPart, PartTransform, Cuboid, CuboidUV, EntityMan
 use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::atlas::Atlas;
 use wgpu_mc::render::entity::EntityRenderInstance;
-use wgpu_mc::render::entity::pipeline::{EntityGroupInstancingFrame, EntityPipeline};
+use wgpu_mc::render::entity::pipeline::{EntityGroupInstancingFrame};
+use wgpu_mc::render::pipeline::entity::EntityPipeline;
+use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
+use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
 use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
@@ -152,8 +153,14 @@ fn main() {
 
     let wm = WmRenderer::new(
         wgpu_state,
-        rsp,
-        &shaders
+        rsp
+    );
+
+    wm.init(
+        &[
+            &*(Box::new(EntityPipeline { frames: &[] }) as Box<dyn WmPipeline>),
+            &*(Box::new(TerrainPipeline) as Box<dyn WmPipeline>)
+        ]
     );
 
     // let blockstates_path = mc_root.join("blockstates");
@@ -224,7 +231,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
     let alex_skin_ns: NamespacedResource = "minecraft:textures/entity/alex.png".try_into().unwrap();
     let alex_skin_resource = wm.mc.resource_provider.get_resource(&alex_skin_ns);
 
-    let player_atlas = Atlas::new(&*wm.wgpu_state, &*wm.pipelines.load_full());
+    let player_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
 
     player_atlas.allocate(
         &[
@@ -236,7 +243,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
 
     let entity_manager = EntityManager::new(
         &*wm.wgpu_state,
-        &wm.pipelines.load_full()
+        &wm.render_pipeline_manager.load_full()
     );
 
     {
@@ -255,7 +262,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
     let entity_instance = EntityInstance {
         entity_model: 0,
         position: (0.0, 0.0, 0.0),
-        looking_yaw: 45.0,
+        looking_yaw: 0.0,
         uv_offset: (0.0, 0.0),
         hurt: false,
         part_transforms: vec![PartTransform {
@@ -276,7 +283,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
         matrices: vec![ described_instance ]
     }.upload(&wm);
 
-    let entity_instance_bind_group = Rc::new(entity_instance_bind_group);
+    let entity_instance_buffer = Arc::new(entity_instance_buffer);
+    let entity_instance_bind_group = Arc::new(entity_instance_bind_group);
 
     let entity_mesh_vertices = player_model.get_mesh();
     println!("{:?}", entity_mesh_vertices);
@@ -342,7 +350,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
 
     let egif = Arc::new(EntityGroupInstancingFrame {
         vertex_buffer: entity_vertex_buffer.clone(),
-        entity_instance_vb: instance_buffer,
+        entity_instance_vb: instance_buffer.clone(),
         part_transform_matrices: entity_instance_bind_group.clone(),
         texture_offsets: texture_offsets_bind_group.clone(),
         texture: entity_manager.player_texture_atlas.read().bindable_texture.load_full(),
@@ -354,6 +362,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
     let mut frame_time = 1.0;
 
     let mut forward = 0.0;
+
+    let mut spin = 0.0;
 
     event_loop.run(move |event, _, control_flow| {
 
@@ -433,6 +443,36 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
 
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
+                spin += 0.001;
+
+                let entity_instance = EntityInstance {
+                    entity_model: 0,
+                    position: (0.0, 0.0, 0.0),
+                    looking_yaw: spin,
+                    uv_offset: (0.0, 0.0),
+                    hurt: false,
+                    part_transforms: vec![
+                        PartTransform {
+                            pivot_x: 0.0,
+                            pivot_y: 0.0,
+                            pivot_z: 0.0,
+                            yaw: 0.0,
+                            pitch: 0.0,
+                            roll: 0.0
+                        }
+                    ]
+                };
+
+                let described_instance = entity_instance.describe_instance(
+                    &entity_manager
+                );
+
+                wm.wgpu_state.queue.write_buffer(
+                    &*entity_instance_buffer.clone(),
+                    0,
+                    bytemuck::cast_slice(&described_instance)
+                );
+
                 let mut camera = **wm.mc.camera.load();
 
                 let direction = camera.get_direction();
@@ -443,7 +483,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                 let _ = wm.render(&[
                     // &WorldPipeline {}
                     &EntityPipeline {
-                        frames: vec![ egif.clone() ]
+                        frames: &vec![ &*egif.clone() ]
                     }
                 ]);
 

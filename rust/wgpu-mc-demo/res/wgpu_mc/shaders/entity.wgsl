@@ -34,7 +34,7 @@ fn vs_main(
     var part_transform: mat4x4<f32> = transforms.mats[part_transform_index];
 
     //vr.pos = uniform_data.view_proj * part_transform * vec4<f32>(pos_in, 0.0);
-    vr.pos = uniform_data.view_proj * vec4<f32>(pos_in, 0.0);
+    vr.pos = uniform_data.view_proj * vec4<f32>(pos_in, 1.0);
     vr.tex_coords = tex_coords;
     vr.normal = mat3x3<f32>(part_transform[0].xyz, part_transform[1].xyz, part_transform[2].xyz) * normal;
 
@@ -49,6 +49,6 @@ var t_sampler: sampler;
 
 [[stage(fragment)]]
 fn fs_main(in: VertexResult) -> [[location(0)]] vec4<f32> {
-    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
-    // return textureSample(t_texture, t_sampler, in.tex_coords);
+    return vec4<f32>(1.0, 0.0, 1.0, 1.0);
+   // return textureSample(t_texture, t_sampler, in.tex_coords);
 }

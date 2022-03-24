@@ -10,6 +10,7 @@ use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
 use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
 use cgmath::{Vector3, Matrix3, SquareMatrix};
+use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
@@ -42,7 +43,11 @@ impl BlockstateVariantMesh {
         tex_manager: &TextureManager,
         textures: &HashMap<String, TextureVariableOrResource>
     ) -> Option<UV> {
-        let block_atlas = tex_manager.block_texture_atlas.load_full();
+        let block_atlas = tex_manager.atlases.load()
+            .get(BLOCK_ATLAS_NAME)
+            .unwrap()
+            .load_full();
+
         let atlas_map = block_atlas.uv_map.read();
 
         let face_resource = face.texture.recurse_resolve_as_resource(textures)?;

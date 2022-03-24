@@ -63,7 +63,7 @@ pub enum GLCommand {
 }
 
 pub fn create_wgpu_pipeline_layout(wm: &WmRenderer, tex_bg: bool) -> wgpu::PipelineLayout {
-    let pipelines = wm.pipelines.load();
+    let pipelines = wm.render_pipeline_manager.load();
     let mut layouts = vec![
         &pipelines.bind_group_layouts.matrix4
     ];
@@ -204,7 +204,7 @@ fn tex_image_2d(wm: &WmRenderer, width: u32, height: u32, format: wgpu::TextureF
     let bind_group = wm.wgpu_state.device.create_bind_group(
         &BindGroupDescriptor {
             label: None,
-            layout: &wm.pipelines.load().bind_group_layouts.texture,
+            layout: &wm.render_pipeline_manager.load().bind_group_layouts.texture,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -314,7 +314,7 @@ impl GlPipelineManager {
 
     pub fn new(wm: &WmRenderer) -> Self {
         let shaders = GlPipelineShaders::new(wm);
-        let pipelines = wm.pipelines.load();
+        let pipelines = wm.render_pipeline_manager.load();
 
         let pos_col_layout = wm.wgpu_state.device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
@@ -547,7 +547,7 @@ fn byte_buffer_to_short(bytes: &[u8]) -> Vec<u16> {
 
 impl WmPipeline for GlPipeline {
     fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, renderer: &'b WmRenderer, render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
-        let wm_pipelines = arena.alloc(renderer.pipelines.load_full());
+        let wm_pipelines = arena.alloc(renderer.render_pipeline_manager.load_full());
         let sc = renderer.wgpu_state.surface_config.load();
         let gl_alloc = unsafe { &GL_ALLOC }.get().unwrap();
 

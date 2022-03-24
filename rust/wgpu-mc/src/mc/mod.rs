@@ -29,6 +29,7 @@ use indexmap::map::IndexMap;
 use multi_map::MultiMap;
 use crate::mc::block::blockstate::BlockstateVariantDefinitionModel;
 use crate::{WgpuState, WmRenderer};
+use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 
 pub mod block;
 pub mod chunk;
@@ -94,8 +95,8 @@ pub struct MinecraftState {
 
     pub camera: ArcSwap<Camera>,
 
-    pub camera_buffer: ArcSwap<wgpu::Buffer>,
-    pub camera_bind_group: ArcSwap<wgpu::BindGroup>,
+    pub camera_buffer: ArcSwap<Option<wgpu::Buffer>>,
+    pub camera_bind_group: ArcSwap<Option<wgpu::BindGroup>>,
 
     pub texture_manager: TextureManager
 }
@@ -107,30 +108,12 @@ impl MinecraftState {
         pipelines: &RenderPipelineManager,
         resource_provider: Arc<dyn ResourceProvider>) -> Self {
 
-        let camera_buffer = wgpu_state.device.create_buffer(&BufferDescriptor {
-            label: None,
-            size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false
-        });
-
-        let camera_bind_group = wgpu_state.device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: &pipelines.bind_group_layouts.matrix4,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(camera_buffer.as_entire_buffer_binding())
-                }
-            ]
-        });
-
         MinecraftState {
             sun_position: ArcSwap::new(Arc::new(0.0)),
             chunks: ChunkManager::new(),
             entities: RwLock::new(Vec::new()),
 
-            texture_manager: TextureManager::new(wgpu_state, pipelines),
+            texture_manager: TextureManager::new(),
 
             block_manager: RwLock::new(BlockManager {
                 blocks: IndexMap::new(),
@@ -140,11 +123,36 @@ impl MinecraftState {
 
             camera: ArcSwap::new(Arc::new(Camera::new(1.0))),
 
-            camera_buffer: ArcSwap::new(Arc::new(camera_buffer)),
-            camera_bind_group: ArcSwap::new(Arc::new(camera_bind_group)),
+            camera_buffer: ArcSwap::new(Arc::new(None)),
+            camera_bind_group: ArcSwap::new(Arc::new(None)),
 
             resource_provider
         }
+    }
+
+    pub fn init_camera(&self, wm: &WmRenderer) {
+        let camera_buffer = wm.wgpu_state.device.create_buffer(&BufferDescriptor {
+            label: None,
+            size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false
+        });
+
+        let camera_bind_group = wm.wgpu_state.device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: wm.render_pipeline_manager.load()
+                .bind_group_layouts.read()
+                .get("matrix4").unwrap(),
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(camera_buffer.as_entire_buffer_binding())
+                }
+            ]
+        });
+
+        self.camera_buffer.store(Arc::new(Some(camera_buffer)));
+        self.camera_bind_group.store(Arc::new(Some(camera_bind_group)))
     }
 
     pub fn bake_blocks(&self, wm: &WmRenderer) {
@@ -191,9 +199,9 @@ impl MinecraftState {
             });
         });
 
-        let block_atlas = Atlas::new(&*wm.wgpu_state, &*wm.pipelines.load_full());
+        let block_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
         //TODO: this goes somewhere else, and do we even need it?
-        let gui_atlas = Atlas::new(&*wm.wgpu_state, &*wm.pipelines.load_full());
+        let gui_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
 
         block_atlas.allocate(
             &textures.iter().map(|resource| {
@@ -208,7 +216,11 @@ impl MinecraftState {
 
         block_atlas.upload(wm);
 
-        wm.mc.texture_manager.block_texture_atlas.store(Arc::new(block_atlas));
+        wm.mc.texture_manager.atlases
+            .load_full()
+            .get(BLOCK_ATLAS_NAME)
+            .unwrap()
+            .store(Arc::new(block_atlas));
     }
 
     fn bake_blockstate_meshes(&self, block_manager: &mut BlockManager) {

@@ -1,14 +1,3 @@
-
-
-
-
-use crate::texture::UV;
-use std::collections::HashMap;
-
-pub struct TextAtlas {
-    pub map: HashMap<u32, UV>
-}
-
 // pub struct TextPipeline<'a> {
 //     pub atlas: &'a TextAtlas,
 //     // pub text:

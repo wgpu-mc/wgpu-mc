@@ -137,7 +137,7 @@ impl Atlas {
             },
             None
         ).unwrap();
-        let bindable_texture = BindableTexture::from_tsv(&*wm.wgpu_state, &*wm.pipelines.load_full(), tsv);
+        let bindable_texture = BindableTexture::from_tsv(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full(), tsv);
         self.bindable_texture.store(Arc::new(bindable_texture));
     }
 
@@ -151,20 +151,16 @@ pub struct TextureManager {
     /// readers for a bit to update the whole map
     pub textures: RwLock<HashMap<NamespacedResource, Arc<BindableTexture>>>,
 
-    ///ArcSwap because we potentially want to be able to swap out an old atlas for a new one instantly
-    pub block_texture_atlas: ArcSwap<Atlas>,
-    pub gui_atlas: ArcSwap<Atlas>
+    pub atlases: ArcSwap<HashMap<String, Arc<ArcSwap<Atlas>>>>,
 }
 
 impl TextureManager {
 
     #[must_use]
-    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager) -> Self {
+    pub fn new() -> Self {
         Self {
             textures: RwLock::new(HashMap::new()),
-
-            block_texture_atlas: ArcSwap::new(Arc::new(Atlas::new(wgpu_state, pipelines))),
-            gui_atlas: ArcSwap::new(Arc::new(Atlas::new(wgpu_state, pipelines)))
+            atlases: ArcSwap::new(Arc::new(HashMap::new()))
         }
     }
 
