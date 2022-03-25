@@ -46,12 +46,12 @@ pub trait WmPipeline {
         wm: &WmRenderer,
     ) -> HashMap<String, wgpu::RenderPipeline>;
 
-    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(
-        &'a self,
+    fn render<'pipeline: 'render_pass, 'wm, 'pass_borrow, 'render_pass: 'pass_borrow, 'arena: 'pass_borrow + 'render_pass>(
+        &'pipeline self,
 
-        wm: &'b WmRenderer,
-        render_pass: &'c mut wgpu::RenderPass<'d>,
-        arena: &'c mut WmArena<'e>
+        wm: &'wm WmRenderer,
+        render_pass: &'pass_borrow mut wgpu::RenderPass<'render_pass>,
+        arena: &'pass_borrow mut WmArena<'arena>
     );
 
 }
