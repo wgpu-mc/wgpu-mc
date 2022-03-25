@@ -35,7 +35,6 @@ use wgpu_mc::mc::datapack::{NamespacedResource, TextureVariableOrResource};
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::world::chunk::BakedChunk;
-use wgpu_mc::render::pipeline::world::WorldPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::texture::TextureSamplerView;
 
@@ -271,7 +270,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
     unsafe {
         gl::init();
         GL_PIPELINE.set(GlPipeline {
-            pipelines: Default::default(),
             matrix_stacks: RefCell::new([([Matrix4::identity(); 32], 0); 3]),
             matrix_mode: RefCell::new(0),
             commands: ArcSwap::new(Arc::new(Vec::new())),
@@ -404,8 +402,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
 
     let mut state = WmRenderer::new(
         wgpu_state,
-        resource_provider,
-        &shader_map
+        resource_provider
     );
 
     unsafe {

@@ -17,6 +17,7 @@ use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{GlslShader, WmShader};
 use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::util::WmArena;
+use wgpu_mc::wgpu::PipelineLayout;
 
 use crate::gl::{get_buffer, GL_ALLOC, GlAttributeFormat, GlAttributeType, GlResource};
 use crate::gl;
@@ -60,25 +61,6 @@ pub enum GLCommand {
     BufferData(RefCell<Option<Vec<u8>>>, i32, i32),
     UsePipeline(usize),
     BindMat(usize, Matrix4<f32>)
-}
-
-pub fn create_wgpu_pipeline_layout(wm: &WmRenderer, tex_bg: bool) -> wgpu::PipelineLayout {
-    let pipelines = wm.render_pipeline_manager.load();
-    let mut layouts = vec![
-        &pipelines.bind_group_layouts.matrix4
-    ];
-
-    if tex_bg {
-        layouts.push(&pipelines.bind_group_layouts.texture);
-    }
-
-    wm.wgpu_state.device.create_pipeline_layout(
-        &PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &layouts,
-            push_constant_ranges: &[]
-        }
-    )
 }
 
 fn create_wgpu_pipeline(
@@ -204,7 +186,7 @@ fn tex_image_2d(wm: &WmRenderer, width: u32, height: u32, format: wgpu::TextureF
     let bind_group = wm.wgpu_state.device.create_bind_group(
         &BindGroupDescriptor {
             label: None,
-            layout: &wm.render_pipeline_manager.load().bind_group_layouts.texture,
+            layout: &wm.render_pipeline_manager.load().bind_group_layouts.read().get("texture").unwrap(),
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -262,274 +244,7 @@ fn quads_to_tris_transformer(vertex_data: &[u8], vertex_count: usize, stride: us
 }
 
 #[derive(Debug)]
-struct GlPipelineShaders {
-    pos_col_uint: GlslShader,
-    pos_col_float3: GlslShader,
-    pos_tex: GlslShader
-}
-
-impl GlPipelineShaders {
-
-    pub fn new(renderer: &WmRenderer) -> Self {
-        let pos_col_float3 = GlslShader::init(
-            &("wgpu_mc", "shaders/gui_col_pos.fsh").into(),
-            &("wgpu_mc", "shaders/gui_col_pos.vsh").into(),
-            &*renderer.mc.resource_provider,
-            &renderer.wgpu_state.device
-        );
-
-        let pos_col_uint = GlslShader::init(
-            &("wgpu_mc", "shaders/gui_col_pos_uint.fsh").into(),
-            &("wgpu_mc", "shaders/gui_col_pos_uint.vsh").into(),
-            &*renderer.mc.resource_provider,
-            &renderer.wgpu_state.device
-        );
-
-        let pos_tex = GlslShader::init(
-            &("wgpu_mc", "shaders/gui_uv_pos.fsh").into(),
-            &("wgpu_mc", "shaders/gui_uv_pos.vsh").into(),
-            &*renderer.mc.resource_provider,
-            &renderer.wgpu_state.device
-        );
-
-        Self {
-            pos_col_uint,
-            pos_col_float3,
-            pos_tex
-        }
-    }
-
-}
-
-#[derive(Debug)]
-pub struct GlPipelineManager {
-    pos_col_uint: Rc<RenderPipeline>,
-    pos_col_float3: Rc<RenderPipeline>,
-    pos_tex: Rc<RenderPipeline>,
-    shaders: GlPipelineShaders
-    // other: HashMap<>
-}
-
-impl GlPipelineManager {
-
-    pub fn new(wm: &WmRenderer) -> Self {
-        let shaders = GlPipelineShaders::new(wm);
-        let pipelines = wm.render_pipeline_manager.load();
-
-        let pos_col_layout = wm.wgpu_state.device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[
-                    &pipelines.bind_group_layouts.matrix4
-                ],
-                push_constant_ranges: &[]
-            }
-        );
-
-        let pos_tex_layout = wm.wgpu_state.device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[
-                    &pipelines.bind_group_layouts.matrix4,
-                    &pipelines.bind_group_layouts.texture
-                ],
-                push_constant_ranges: &[]
-            }
-        );
-
-        let pos_col_float3 = wm.wgpu_state.device.create_render_pipeline(
-            &wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pos_col_layout),
-                vertex: VertexState {
-                    module: &shaders.pos_col_float3.vert,
-                    entry_point: "main",
-                    buffers: &[
-                        wgpu::VertexBufferLayout {
-                            array_stride: 24,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[
-                                wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Float32x3,
-                                    offset: 0,
-                                    shader_location: 0
-                                },
-                                wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Float32x3,
-                                    offset: 12,
-                                    shader_location: 1
-                                }
-                            ]
-                        }
-                    ]
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false
-                },
-                depth_stencil: Some(
-                    wgpu::DepthStencilState {
-                        format: wgpu::TextureFormat::Depth32Float,
-                        depth_write_enabled: false,
-                        depth_compare: wgpu::CompareFunction::Never,
-                        stencil: Default::default(),
-                        bias: Default::default()
-                    }
-                ),
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shaders.pos_col_float3.frag,
-                    entry_point: "main",
-                    targets: &[
-                        wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                            blend: None,
-                            write_mask: Default::default()
-                        }
-                    ]
-                }),
-                multiview: None
-            }
-        );
-
-        let pos_col_uint = wm.wgpu_state.device.create_render_pipeline(
-            &wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pos_col_layout),
-                vertex: VertexState {
-                    module: &shaders.pos_col_uint.vert,
-                    entry_point: "main",
-                    buffers: &[
-                        wgpu::VertexBufferLayout {
-                            array_stride: 16,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[
-                                wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Float32x3,
-                                    offset: 0,
-                                    shader_location: 0
-                                },
-                                wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Uint32,
-                                    offset: 12,
-                                    shader_location: 1
-                                }
-                            ]
-                        }
-                    ]
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false
-                },
-                depth_stencil: Some(
-                    wgpu::DepthStencilState {
-                        format: wgpu::TextureFormat::Depth32Float,
-                        depth_write_enabled: false,
-                        depth_compare: wgpu::CompareFunction::Never,
-                        stencil: Default::default(),
-                        bias: Default::default()
-                    }
-                ),
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shaders.pos_col_uint.frag,
-                    entry_point: "main",
-                    targets: &[
-                        wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                            blend: None,
-                            write_mask: Default::default()
-                        }
-                    ]
-                }),
-                multiview: None
-            }
-        );
-
-        let pos_tex = wm.wgpu_state.device.create_render_pipeline(
-            &wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pos_tex_layout),
-                vertex: VertexState {
-                    module: &shaders.pos_tex.vert,
-                    entry_point: "main",
-                    buffers: &[
-                        wgpu::VertexBufferLayout {
-                            array_stride: 20,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[
-                                wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Float32x3,
-                                    offset: 0,
-                                    shader_location: 0
-                                },
-                                wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Float32x2,
-                                    offset: 12,
-                                    shader_location: 1
-                                }
-                            ]
-                        }
-                    ]
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false
-                },
-                depth_stencil: Some(
-                    wgpu::DepthStencilState {
-                        format: wgpu::TextureFormat::Depth32Float,
-                        depth_write_enabled: false,
-                        depth_compare: wgpu::CompareFunction::Never,
-                        stencil: Default::default(),
-                        bias: Default::default()
-                    }
-                ),
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shaders.pos_tex.frag,
-                    entry_point: "main",
-                    targets: &[
-                        wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                            blend: None,
-                            write_mask: Default::default()
-                        }
-                    ]
-                }),
-                multiview: None
-            }
-        );
-
-        Self {
-            pos_col_uint: Rc::new(pos_col_uint),
-            pos_col_float3: Rc::new(pos_col_float3),
-            pos_tex: Rc::new(pos_tex),
-            shaders
-        }
-    }
-
-}
-
-#[derive(Debug)]
 pub struct GlPipeline {
-    pub pipelines: RefCell<Option<Rc<GlPipelineManager>>>,
     pub matrix_stacks: RefCell<[([Matrix4<f32>; 32], usize); 3]>,
     pub matrix_mode: RefCell<usize>,
     pub commands: ArcSwap<Vec<GLCommand>>,
@@ -546,16 +261,281 @@ fn byte_buffer_to_short(bytes: &[u8]) -> Vec<u16> {
 }
 
 impl WmPipeline for GlPipeline {
+    fn name(&self) -> &'static str {
+        "OpenGL"
+    }
+
+    fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
+        [
+            (
+                "wgpu_mc_ogl:shaders/pos_col_float3".into(),
+                Box::new(GlslShader::init(
+                    &("wgpu_mc", "shaders/gui_col_pos.fsh").into(),
+                    &("wgpu_mc", "shaders/gui_col_pos.vsh").into(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device
+                )) as Box<dyn WmShader>
+            ),
+            (
+                "wpgu_mc_ogl:shaders/pos_col_uint".into(),
+                Box::new(GlslShader::init(
+                    &("wgpu_mc", "shaders/gui_col_pos_uint.fsh").into(),
+                    &("wgpu_mc", "shaders/gui_col_pos_uint.vsh").into(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device
+                )) as Box<dyn WmShader>
+            ),
+            (
+                "wgpu_mc_ogl:shaders/pos_tex".into(),
+                Box::new(GlslShader::init(
+                    &("wgpu_mc", "shaders/gui_uv_pos.fsh").into(),
+                    &("wgpu_mc", "shaders/gui_uv_pos.vsh").into(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device
+                )) as Box<dyn WmShader>
+            )
+        ].into_iter().collect()
+    }
+
+    fn atlases(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    fn build_wgpu_pipeline_layouts(&self, wm: &WmRenderer) -> HashMap<String, PipelineLayout> {
+        let pipeline_manager = wm.render_pipeline_manager.load();
+        let layouts = pipeline_manager.bind_group_layouts.read();
+
+        [
+            (
+                "wgpu_mc_ogl:layouts/pos_col_layout".into(),
+                wm.wgpu_state.device.create_pipeline_layout(
+                    &wgpu::PipelineLayoutDescriptor {
+                        label: None,
+                        bind_group_layouts: &[
+                            &layouts.get("matrix4").unwrap()
+                        ],
+                        push_constant_ranges: &[]
+                    }
+                )
+            ),
+            (
+                "wpgu_mc_ogl:layouts/pos_tex".into(),
+                wm.wgpu_state.device.create_pipeline_layout(
+                    &wgpu::PipelineLayoutDescriptor {
+                        label: None,
+                        bind_group_layouts: &[
+                            &layouts.get("matrix4").unwrap(),
+                            &layouts.get("texture").unwrap()
+                        ],
+                        push_constant_ranges: &[]
+                    }
+                )
+            )
+        ].into_iter().collect()
+    }
+
+    fn build_wgpu_pipelines(&self, wm: &WmRenderer) -> HashMap<String, RenderPipeline> {
+        let pipeline_manager = wm.render_pipeline_manager.load();
+        let layouts = pipeline_manager.pipeline_layouts.load();
+        let shaders = pipeline_manager.shader_map.read();
+
+        let pos_col_float3_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_float3").unwrap();
+        let pos_col_uint_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_uint").unwrap();
+        let pos_tex_shader = shaders.get("wgpu_mc_ogl:shaders/pos_tex").unwrap();
+
+        [
+            (
+                "wgpu_mc_ogl:pipelines/pos_col_float3".into(),
+                wm.wgpu_state.device.create_render_pipeline(
+                    &wgpu::RenderPipelineDescriptor {
+                        label: None,
+                        layout: Some(&layouts.get("wgpu_mc_ogl:layouts/pos_col").unwrap()),
+                        vertex: VertexState {
+                            module: &pos_col_float3_shader.get_vert().0,
+                            entry_point: &pos_col_float3_shader.get_vert().1,
+                            buffers: &[
+                                wgpu::VertexBufferLayout {
+                                    array_stride: 24,
+                                    step_mode: wgpu::VertexStepMode::Vertex,
+                                    attributes: &[
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Float32x3,
+                                            offset: 0,
+                                            shader_location: 0
+                                        },
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Float32x3,
+                                            offset: 12,
+                                            shader_location: 1
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: None,
+                            unclipped_depth: false,
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            conservative: false
+                        },
+                        depth_stencil: Some(
+                            wgpu::DepthStencilState {
+                                format: wgpu::TextureFormat::Depth32Float,
+                                depth_write_enabled: false,
+                                depth_compare: wgpu::CompareFunction::Always,
+                                stencil: Default::default(),
+                                bias: Default::default()
+                            }
+                        ),
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &pos_col_float3_shader.get_frag().0,
+                            entry_point: &pos_col_float3_shader.get_frag().1,
+                            targets: &[
+                                wgpu::ColorTargetState {
+                                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                                    blend: None,
+                                    write_mask: Default::default()
+                                }
+                            ]
+                        }),
+                        multiview: None
+                    }
+                )
+            ),
+            (
+                "pos_tex".into(),
+                wm.wgpu_state.device.create_render_pipeline(
+                    &wgpu::RenderPipelineDescriptor {
+                        label: None,
+                        layout: Some(&layouts.get("wgpu_mc_ogl:layouts/pos_tex").unwrap()),
+                        vertex: VertexState {
+                            module: &pos_tex_shader.get_vert().0,
+                            entry_point: &pos_tex_shader.get_vert().1,
+                            buffers: &[
+                                wgpu::VertexBufferLayout {
+                                    array_stride: 20,
+                                    step_mode: wgpu::VertexStepMode::Vertex,
+                                    attributes: &[
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Float32x3,
+                                            offset: 0,
+                                            shader_location: 0
+                                        },
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Float32x2,
+                                            offset: 12,
+                                            shader_location: 1
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: None,
+                            unclipped_depth: false,
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            conservative: false
+                        },
+                        depth_stencil: Some(
+                            wgpu::DepthStencilState {
+                                format: wgpu::TextureFormat::Depth32Float,
+                                depth_write_enabled: false,
+                                depth_compare: wgpu::CompareFunction::Always,
+                                stencil: Default::default(),
+                                bias: Default::default()
+                            }
+                        ),
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &pos_tex_shader.get_frag().0,
+                            entry_point: &pos_tex_shader.get_frag().1,
+                            targets: &[
+                                wgpu::ColorTargetState {
+                                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                                    blend: None,
+                                    write_mask: Default::default()
+                                }
+                            ]
+                        }),
+                        multiview: None
+                    }
+                )
+            ),
+            (
+                "pos_col_uint".into(),
+                wm.wgpu_state.device.create_render_pipeline(
+                    &wgpu::RenderPipelineDescriptor {
+                        label: None,
+                        layout: Some(&layouts.get("wgpu_mc_ogl:layouts/pos_col").unwrap()),
+                        vertex: VertexState {
+                            module: &pos_col_uint_shader.get_vert().0,
+                            entry_point: &pos_col_uint_shader.get_vert().1,
+                            buffers: &[
+                                wgpu::VertexBufferLayout {
+                                    array_stride: 16,
+                                    step_mode: wgpu::VertexStepMode::Vertex,
+                                    attributes: &[
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Float32x3,
+                                            offset: 0,
+                                            shader_location: 0
+                                        },
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Uint32,
+                                            offset: 12,
+                                            shader_location: 1
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: None,
+                            unclipped_depth: false,
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            conservative: false
+                        },
+                        depth_stencil: Some(
+                            wgpu::DepthStencilState {
+                                format: wgpu::TextureFormat::Depth32Float,
+                                depth_write_enabled: false,
+                                depth_compare: wgpu::CompareFunction::Always,
+                                stencil: Default::default(),
+                                bias: Default::default()
+                            }
+                        ),
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &pos_col_uint_shader.get_frag().0,
+                            entry_point: &pos_col_uint_shader.get_vert().1,
+                            targets: &[
+                                wgpu::ColorTargetState {
+                                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                                    blend: None,
+                                    write_mask: Default::default()
+                                }
+                            ]
+                        }),
+                        multiview: None
+                    }
+                )
+            )
+        ].into()
+    }
+
     fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, renderer: &'b WmRenderer, render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
-        let wm_pipelines = arena.alloc(renderer.render_pipeline_manager.load_full());
-        let sc = renderer.wgpu_state.surface_config.load();
+        let pipeline_manager = renderer.render_pipeline_manager.load();
         let gl_alloc = unsafe { &GL_ALLOC }.get().unwrap();
-
-        let mut gl_pipelines = self.pipelines.borrow_mut();
-
-        if gl_pipelines.is_none() {
-            *gl_pipelines = Some(Rc::new(GlPipelineManager::new(renderer)));
-        }
 
         let commands = self.commands.load();
         commands.iter().for_each(|command| {
@@ -576,7 +556,7 @@ impl WmPipeline for GlPipeline {
                     let group = arena.alloc(renderer.wgpu_state.device.create_bind_group(
                         &wgpu::BindGroupDescriptor {
                             label: None,
-                            layout: &wm_pipelines.bind_group_layouts.matrix4,
+                            layout: &pipeline_manager.bind_group_layouts.read().get("matrix4").unwrap(),
                             entries: &[
                                 wgpu::BindGroupEntry {
                                     binding: 0,
@@ -586,18 +566,18 @@ impl WmPipeline for GlPipeline {
                         }
                     ));
 
-                    render_pass.set_bind_group(*slot as u32, group, &[]);
+                    render_pass.set_bind_group(0, group, &[]);
                 },
                 GLCommand::UsePipeline(pipeline) => {
                     *self.active_pipeline.borrow_mut() = *pipeline;
-                    let pipelines = arena.alloc(
-                        gl_pipelines.as_ref().unwrap().clone()
-                    );
-                    match pipeline {
-                        0 => render_pass.set_pipeline(&pipelines.pos_col_uint),
-                        1 => render_pass.set_pipeline(&pipelines.pos_tex),
-                        _ => unimplemented!()
-                    }
+
+                    render_pass.set_pipeline(
+                        arena.alloc(match pipeline {
+                            0 => pipeline_manager.render_pipelines.load().get("pos_col_uint").unwrap().clone(),
+                            1 => pipeline_manager.render_pipelines.load().get("pos_tex").unwrap().clone(),
+                            _ => unimplemented!()
+                        })
+                    )
                 },
                 GLCommand::BindVertexArray(array) => {
                     *self.vertex_array.borrow_mut() = Some(*array);
@@ -732,7 +712,7 @@ impl WmPipeline for GlPipeline {
                     let group = arena.alloc(renderer.wgpu_state.device.create_bind_group(
                         &wgpu::BindGroupDescriptor {
                             label: None,
-                            layout: &wm_pipelines.bind_group_layouts.matrix4,
+                            layout: &pipeline_manager.bind_group_layouts.read().get("matrix4").unwrap(),
                             entries: &[
                                 wgpu::BindGroupEntry {
                                     binding: 0,
@@ -744,7 +724,7 @@ impl WmPipeline for GlPipeline {
 
                     render_pass.set_bind_group(0, group, &[]);
 
-                    render_pass.set_pipeline(arena.alloc(gl_pipelines.as_ref().unwrap().pos_col_float3.clone()));
+                    render_pass.set_pipeline(arena.alloc(pipeline_manager.render_pipelines.load().get("pos_col_float3").unwrap().clone()));
                     render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                     render_pass.set_index_buffer(indices_buffer.slice(..), wgpu::IndexFormat::Uint16);
                     render_pass.draw_indexed(0..6, 0, 0..1);
