@@ -14,7 +14,7 @@ use wgpu_mc::{wgpu, WmRenderer};
 use wgpu_mc::camera::UniformMatrixHelper;
 use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::pipeline::WmPipeline;
-use wgpu_mc::render::shader::{GlslShader, WmShader};
+use wgpu_mc::render::shader::{GlslShader, WgslShader, WmShader};
 use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::PipelineLayout;
@@ -269,29 +269,32 @@ impl WmPipeline for GlPipeline {
         [
             (
                 "wgpu_mc_ogl:shaders/pos_col_float3".into(),
-                Box::new(GlslShader::init(
-                    &("wgpu_mc", "shaders/gui_col_pos.fsh").into(),
-                    &("wgpu_mc", "shaders/gui_col_pos.vsh").into(),
+                Box::new(WgslShader::init(
+                    &("wgpu_mc", "shaders/gui_col_pos.wgsl").into(),
                     &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into()
                 )) as Box<dyn WmShader>
             ),
             (
-                "wpgu_mc_ogl:shaders/pos_col_uint".into(),
-                Box::new(GlslShader::init(
-                    &("wgpu_mc", "shaders/gui_col_pos_uint.fsh").into(),
-                    &("wgpu_mc", "shaders/gui_col_pos_uint.vsh").into(),
+                "wgpu_mc_ogl:shaders/pos_col_uint".into(),
+                Box::new(WgslShader::init(
+                    &("wgpu_mc", "shaders/gui_col_pos_uint.wgsl").into(),
                     &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into()
                 )) as Box<dyn WmShader>
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_tex".into(),
-                Box::new(GlslShader::init(
-                    &("wgpu_mc", "shaders/gui_uv_pos.fsh").into(),
-                    &("wgpu_mc", "shaders/gui_uv_pos.vsh").into(),
+                Box::new(WgslShader::init(
+                    &("wgpu_mc", "shaders/gui_uv_pos.wgsl").into(),
                     &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into()
                 )) as Box<dyn WmShader>
             )
         ].into_iter().collect()
@@ -307,7 +310,7 @@ impl WmPipeline for GlPipeline {
 
         [
             (
-                "wgpu_mc_ogl:layouts/pos_col_layout".into(),
+                "wgpu_mc_ogl:layouts/pos_col".into(),
                 wm.wgpu_state.device.create_pipeline_layout(
                     &wgpu::PipelineLayoutDescriptor {
                         label: None,
@@ -319,7 +322,7 @@ impl WmPipeline for GlPipeline {
                 )
             ),
             (
-                "wpgu_mc_ogl:layouts/pos_tex".into(),
+                "wgpu_mc_ogl:layouts/pos_tex".into(),
                 wm.wgpu_state.device.create_pipeline_layout(
                     &wgpu::PipelineLayoutDescriptor {
                         label: None,
@@ -517,7 +520,7 @@ impl WmPipeline for GlPipeline {
                         multisample: Default::default(),
                         fragment: Some(wgpu::FragmentState {
                             module: &pos_col_uint_shader.get_frag().0,
-                            entry_point: &pos_col_uint_shader.get_vert().1,
+                            entry_point: &pos_col_uint_shader.get_frag().1,
                             targets: &[
                                 wgpu::ColorTargetState {
                                     format: wgpu::TextureFormat::Bgra8UnormSrgb,

@@ -49,6 +49,7 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 use wgpu_mc::camera::UniformMatrixHelper;
 use once_cell::unsync::OnceCell;
+use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::shader::WmShader;
 use wgpu_mc::render::shader::GlslShader;
 
@@ -381,28 +382,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
         jvm: env.get_java_vm().unwrap()
     });
 
-    let mut shader_map = HashMap::new();
-
-    for name in [
-        "grass",
-        "sky",
-        "terrain",
-        "transparent",
-        "entity"
-    ] {
-        let gl_shader = GlslShader::init(
-            &NamespacedResource::try_from("wgpu_mc:shaders/").unwrap().append(name).append(".fsh"),
-            &NamespacedResource::try_from("wgpu_mc:shaders/").unwrap().append(name).append(".vsh"),
-            &*resource_provider,
-            &wgpu_state.device
-        );
-
-        shader_map.insert(name.to_string(), Box::new(gl_shader) as Box<dyn WmShader>);
-    }
-
     let mut state = WmRenderer::new(
         wgpu_state,
         resource_provider
+    );
+
+    state.init(
+        &[
+            &TerrainPipeline,
+            unsafe { &GL_PIPELINE }.get().unwrap()
+        ]
     );
 
     unsafe {

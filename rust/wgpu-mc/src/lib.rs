@@ -33,6 +33,7 @@ use crate::mc::resource::ResourceProvider;
 use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
 use arc_swap::ArcSwap;
 use crate::mc::datapack::NamespacedResource;
+use crate::render::atlas::Atlas;
 
 use crate::util::WmArena;
 
@@ -139,6 +140,26 @@ impl WmRenderer {
 
     pub fn init(&self, pipelines: &[&dyn WmPipeline]) {
         self.init_pipeline_manager(pipelines);
+
+        let pipeline_manager = self.render_pipeline_manager.load();
+
+        let atlas_map: HashMap<_, _> = pipelines.iter().flat_map(|&pipeline| {
+            let atlases = pipeline.atlases();
+
+            atlases.iter().map(|&atlas_name| {
+                (
+                    String::from(atlas_name),
+                    Arc::new(
+                        ArcSwap::new(Arc::new(
+                            Atlas::new(&self.wgpu_state, &pipeline_manager)
+                        ))
+                    )
+                )
+            })
+        }).collect();
+
+        self.mc.texture_manager.atlases.store(Arc::new(atlas_map));
+
         self.init_mc();
     }
 
