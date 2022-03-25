@@ -49,6 +49,5 @@ var t_sampler: sampler;
 
 [[stage(fragment)]]
 fn fs_main(in: VertexResult) -> [[location(0)]] vec4<f32> {
-    return vec4<f32>(1.0, 0.0, 1.0, 1.0);
-   // return textureSample(t_texture, t_sampler, in.tex_coords);
+   return textureSample(t_texture, t_sampler, in.tex_coords);
 }

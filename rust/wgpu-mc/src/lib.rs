@@ -161,7 +161,7 @@ impl WmRenderer {
 
         let mut new_camera = *self.mc.camera.load_full();
 
-        new_camera.aspect = surface_config.height as f32 / surface_config.width as f32;
+        new_camera.aspect = surface_config.width as f32 / surface_config.height as f32;
         self.mc.camera.store(Arc::new(new_camera));
 
         self.depth_texture.store(Arc::new(texture::TextureSamplerView::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture")));
@@ -172,7 +172,7 @@ impl WmRenderer {
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
         let surface_config = self.wgpu_state.surface_config.load();
-        camera.aspect = surface_config.height as f32 / surface_config.width as f32;
+        camera.aspect = surface_config.width as f32 / surface_config.height as f32;
 
         let uniforms = UniformMatrixHelper {
             view_proj: camera.build_view_projection_matrix().into()

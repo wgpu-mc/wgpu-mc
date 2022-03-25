@@ -29,7 +29,7 @@ use rayon::iter::{IntoParallelIterator};
 use fastnbt::de::from_bytes;
 use wgpu_mc::mc::entity::{EntityPart, PartTransform, Cuboid, CuboidUV, EntityManager, EntityModel, EntityInstance, DescribedEntityInstances};
 use wgpu_mc::model::BindableTexture;
-use wgpu_mc::render::atlas::Atlas;
+use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::render::entity::EntityRenderInstance;
 use wgpu_mc::render::entity::pipeline::{EntityGroupInstancingFrame};
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
@@ -110,10 +110,10 @@ fn main() {
     let anvil_chunks = load_anvil_chunks();
 
     {
-        println!("Allocating 100 strings");
+        println!("Allocating 100k strings");
         let mut arena = WmArena::new(1024);
         let time = Instant::now();
-        for _ in 0..100 {
+        for _ in 0..100_000 {
             arena.alloc(String::from("test"));
         }
         println!("Allocated in {}ms", Instant::now().duration_since(time).as_millis());
@@ -211,12 +211,17 @@ fn main() {
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer, chunks: Vec<(usize, usize, JavaChunk)>) {
 
+    let atlas_1px = 1.0 / (ATLAS_DIMENSIONS as f32);
+    let atlas_16px = 16.0 / (ATLAS_DIMENSIONS as f32);
+
+    let one = 1.0 / 16.0;
+
     let _player_root = {
         EntityPart {
             transform: PartTransform {
-                pivot_x: 0.0,
-                pivot_y: 0.0,
-                pivot_z: 0.0,
+                pivot_x: 0.5,
+                pivot_y: 0.5,
+                pivot_z: 0.5,
                 yaw: 0.0,
                 pitch: 0.0,
                 roll: 0.0
@@ -226,20 +231,53 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                     x: 0.0,
                     y: 0.0,
                     z: 0.0,
+
                     width: 1.0,
-                    length: 1.0,
                     height: 1.0,
+                    length: 1.0,
+
                     textures: CuboidUV {
-                        north: ((0.0, 0.0), (0.0, 0.0)),
-                        east: ((0.0, 0.0), (0.0, 0.0)),
-                        south: ((0.0, 0.0), (0.0, 0.0)),
-                        west: ((0.0, 0.0), (0.0, 0.0)),
-                        up: ((0.0, 0.0), (0.0, 0.0)),
-                        down: ((0.0, 0.0), (0.0, 0.0))
+                        north: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                        east: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                        south: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                        west: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                        up: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                        down: ((0.0, 0.0), (atlas_16px, atlas_16px))
                     }
                 }
             ],
-            children: vec![]
+            children: vec![
+                //head
+                // EntityPart {
+                //     transform: PartTransform {
+                //         pivot_x: 0.0,
+                //         pivot_y: 0.0,
+                //         pivot_z: 0.0,
+                //         yaw: 0.0,
+                //         pitch: 0.0,
+                //         roll: 0.0
+                //     },
+                //     cuboids: vec![
+                //         Cuboid {
+                //             x: 0.0,
+                //             y: one * 24.0,
+                //             z: 0.0,
+                //             width: one * 8.0,
+                //             height: one * 10.0,
+                //             length: one * 8.0,
+                //             textures: CuboidUV {
+                //                 north: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                //                 east: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                //                 south: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                //                 west: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                //                 up: ((0.0, 0.0), (atlas_16px, atlas_16px)),
+                //                 down: ((0.0, 0.0), (atlas_16px, atlas_16px))
+                //             }
+                //         }
+                //     ],
+                //     children: vec![]
+                // }
+            ]
         }
     };
 
@@ -280,14 +318,24 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
         looking_yaw: 0.0,
         uv_offset: (0.0, 0.0),
         hurt: false,
-        part_transforms: vec![PartTransform {
-            pivot_x: 0.0,
-            pivot_y: 0.0,
-            pivot_z: 0.0,
-            yaw: 0.0,
-            pitch: 0.0,
-            roll: 0.0
-        }]
+        part_transforms: vec![
+            PartTransform {
+                pivot_x: 0.0,
+                pivot_y: 0.0,
+                pivot_z: 0.0,
+                yaw: 0.0,
+                pitch: 0.0,
+                roll: 0.0
+            },
+            // PartTransform {
+            //     pivot_x: 0.0,
+            //     pivot_y: 0.0,
+            //     pivot_z: 0.0,
+            //     yaw: 0.0,
+            //     pitch: 0.0,
+            //     roll: 0.0
+            // }
+        ]
     };
 
     let described_instance = entity_instance.describe_instance(
@@ -468,13 +516,21 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                     hurt: false,
                     part_transforms: vec![
                         PartTransform {
-                            pivot_x: 0.5,
-                            pivot_y: 0.5,
-                            pivot_z: 0.5,
+                            pivot_x: 0.0,
+                            pivot_y: 0.0,
+                            pivot_z: 0.0,
                             yaw: spin,
-                            pitch: spin,
-                            roll: spin
-                        }
+                            pitch: 0.0,
+                            roll: 0.0
+                        },
+                        // PartTransform {
+                        //     pivot_x: 0.0,
+                        //     pivot_y: 0.0,
+                        //     pivot_z: 0.0,
+                        //     yaw: 0.0,
+                        //     pitch: 0.0,
+                        //     roll: 0.0
+                        // },
                     ]
                 };
 

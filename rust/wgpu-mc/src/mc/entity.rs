@@ -93,8 +93,8 @@ pub struct Cuboid {
     pub z: f32,
 
     pub width: f32,
-    pub length: f32,
     pub height: f32,
+    pub length: f32,
 
     pub textures: CuboidUV
 }
