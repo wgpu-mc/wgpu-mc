@@ -12,7 +12,7 @@ use std::sync::mpsc::{channel, RecvError, Sender};
 use std::time::Instant;
 
 use arc_swap::{ArcSwap, AsRaw};
-use cgmath::{Matrix4, SquareMatrix, Vector3};
+use cgmath::{Matrix4, Ortho, SquareMatrix, Vector3};
 use dashmap::DashMap;
 use futures::executor::block_on;
 use jni::{JavaVM, JNIEnv};
@@ -467,9 +467,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
         .unwrap();
 
-    renderer.mc.bake_blocks(renderer);
-    println!("Baked block models");
+    // let instant = Instant::now();
+    // renderer.mc.bake_blocks(renderer);
+    // println!("Baked block models in {}", Instant::now().duration_since(instant).as_millis());
 
+    let instant = Instant::now();
     renderer.mc.block_manager.read().baked_block_variants.iter().for_each(|(identifier, (key, _))| {
         let _integer = env.new_object("java/lang/Integer", "(I)V", &[
             JValue::Int(*key as i32)
@@ -480,6 +482,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
             JValue::Object(_integer.into())
         ]).unwrap();
     });
+    println!("Uploaded blocks to java HashMap in {}ms", Instant::now().duration_since(instant).as_millis());
 
     block_hashmap.into_inner()
 }
@@ -603,7 +606,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
 ) {
     let commands = unsafe { GL_COMMANDS.get_mut().unwrap() };
 
-    println!("{:?}", commands);
+    // println!("{:?}", commands);
 
     unsafe { GL_PIPELINE.get_mut().unwrap() }.commands.store(
         Arc::new(
@@ -985,7 +988,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindMatrix4f(
     );
 
     let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::BindMat(slot as usize, mat_helper.view_proj.into()));
+    commands.push(GLCommand::BindMat(slot as usize, Matrix4::from(
+        Ortho {
+            left: 0.0,
+            right: 1280.0,
+            bottom: 720.0,
+            top: 0.0,
+            near: 0.0,
+            far: 10000.0
+        }
+    )));
+    // commands.push(GLCommand::BindMat(slot as usize, mat_helper.view_proj.into()));
 }
 
 #[no_mangle]

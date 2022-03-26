@@ -541,6 +541,7 @@ impl WmPipeline for GlPipeline {
         let gl_alloc = unsafe { &GL_ALLOC }.get().unwrap();
 
         let commands = self.commands.load();
+
         commands.iter().for_each(|command| {
             match command {
                 GLCommand::BindMat(slot, mat) => {
@@ -727,7 +728,7 @@ impl WmPipeline for GlPipeline {
 
                     render_pass.set_bind_group(0, group, &[]);
 
-                    render_pass.set_pipeline(arena.alloc(pipeline_manager.render_pipelines.load().get("pos_col_float3").unwrap().clone()));
+                    render_pass.set_pipeline(arena.alloc(pipeline_manager.render_pipelines.load().get("wgpu_mc_ogl:pipelines/pos_col_float3").unwrap().clone()));
                     render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                     render_pass.set_index_buffer(indices_buffer.slice(..), wgpu::IndexFormat::Uint16);
                     render_pass.draw_indexed(0..6, 0, 0..1);
