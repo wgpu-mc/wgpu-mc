@@ -340,17 +340,7 @@ impl BlockModel {
             }
         };
 
-        if identifier.to_string() == "minecraft:models/block/stripped_birch_log_horizontal.json" {
-            dbg!(&parent);
-            dbg!(&this_textures);
-            dbg!(&resolved_parent_textures);
-        }
-
         resolved_parent_textures.extend(this_textures.into_iter());
-
-        if identifier.to_string() == "minecraft:models/block/stripped_birch_log_horizontal.json" {
-            dbg!(&resolved_parent_textures);
-        }
 
         let model = BlockModel {
             id: identifier.clone(),

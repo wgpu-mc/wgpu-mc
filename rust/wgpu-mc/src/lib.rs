@@ -19,8 +19,9 @@ use crate::mc::MinecraftState;
 
 use raw_window_handle::HasRawWindowHandle;
 
-use wgpu::{TextureViewDescriptor, RenderPassDescriptor};
+use wgpu::{TextureViewDescriptor, RenderPassDescriptor, TextureFormat};
 use std::collections::{HashMap};
+use std::num::NonZeroU32;
 use crate::render::shader::{WmShader};
 use crate::texture::TextureSamplerView;
 
@@ -99,7 +100,7 @@ impl WmRenderer {
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_preferred_format(&adapter).unwrap(),
+            format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
@@ -214,7 +215,16 @@ impl WmRenderer {
         let _span_ = span!(Level::TRACE, "rendering").entered();
 
         let output = self.wgpu_state.surface.get_current_texture()?;
-        let view = output.texture.create_view(&TextureViewDescriptor::default());
+        let view = output.texture.create_view(&TextureViewDescriptor {
+            label: None,
+            format: Some(TextureFormat::Bgra8Unorm),
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None
+        });
 
         let mut encoder = self
             .wgpu_state

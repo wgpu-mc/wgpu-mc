@@ -96,7 +96,7 @@ impl WmPipeline for GrassPipeline {
                 module: shader.get_frag().0,
                 entry_point: shader.get_frag().1,
                 targets: &[wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    format: wgpu::TextureFormat::Bgra8Unorm,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent::REPLACE,
                         alpha: wgpu::BlendComponent::REPLACE

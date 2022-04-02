@@ -4,7 +4,6 @@ use std::vec::Vec;
 use wgpu_mc::wgpu;
 
 use parking_lot::RwLock;
-use slab::Slab;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use pipeline::GLCommand;
@@ -21,12 +20,12 @@ use once_cell::sync::OnceCell;
 pub mod pipeline;
 
 pub static mut GL_COMMANDS: OnceCell<Vec<GLCommand>> = OnceCell::new();
-pub static mut GL_ALLOC: OnceCell<Slab<GlResource>> = OnceCell::new();
+pub static mut GL_ALLOC: OnceCell<HashMap<i32, GlResource>> = OnceCell::new();
 pub static mut GL_MAPPED_BUFFERS: OnceCell<HashMap<usize, Vec<u8>>> = OnceCell::new();
 pub static mut GL_STATE: OnceCell<GlState> = OnceCell::new();
 
 pub unsafe fn init() {
-    GL_ALLOC.set(Slab::with_capacity(2048));
+    GL_ALLOC.set(HashMap::new());
     GL_COMMANDS.set(Vec::new());
     GL_MAPPED_BUFFERS.set(HashMap::new());
     GL_STATE.set(GlState {
@@ -174,10 +173,11 @@ pub enum GlAttributeType {
 //     }
 // }
 
+#[derive(Debug)]
 pub struct GlTexture {
-    width: u16,
-    height: u16,
-    material: Option<Rc<BindableTexture>>
+    pub width: u16,
+    pub height: u16,
+    pub bindable_texture: Option<Rc<BindableTexture>>
 }
 
 pub struct GlBuffer {
@@ -186,74 +186,57 @@ pub struct GlBuffer {
 }
 
 pub enum GlResource {
-    Texture(GlTexture),
+    Texture(GlTexture, Vec<u8>),
     Buffer(ArcSwap<GlBuffer>)
 }
 
-pub unsafe fn gen_texture() -> usize {
-    let slab = GL_ALLOC.get_mut().unwrap();
-    slab.insert(GlResource::Texture(GlTexture {
-        width: 0,
-        height: 0,
-        material: None
-    }))
-}
+// pub unsafe fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) {
+//     let gl_resources = GL_ALLOC.get().unwrap();
+//     match gl_resources.get(id).unwrap() {
+//         GlResource::Texture(_) => panic!(),
+//         GlResource::Buffer(buf) => {
+//             buf.store(Arc::new(
+//                 GlBuffer {
+//                     buffer: Some(
+//                         Rc::new(device.create_buffer_init(&BufferInitDescriptor {
+//                             label: None,
+//                             contents: data,
+//                             usage: wgpu::BufferUsages::all()
+//                         }))
+//                     ),
+//                     data: Some(Vec::from(data))
+//                 }
+//             ));
+//         }
+//     }
+// }
 
-pub unsafe fn gen_buffer() -> usize {
-    let slab = GL_ALLOC.get_mut().unwrap();
-    slab.insert(GlResource::Buffer(ArcSwap::new(Arc::new(GlBuffer {
-        buffer: None,
-        data: None
-    }))))
-}
-
-pub unsafe fn upload_buffer_data(id: usize, data: &[u8], device: &wgpu::Device) {
-    let slab = GL_ALLOC.get().unwrap();
-    match slab.get(id).unwrap() {
-        GlResource::Texture(_) => panic!(),
-        GlResource::Buffer(buf) => {
-            buf.store(Arc::new(
-                GlBuffer {
-                    buffer: Some(
-                        Rc::new(device.create_buffer_init(&BufferInitDescriptor {
-                            label: None,
-                            contents: data,
-                            usage: wgpu::BufferUsages::all()
-                        }))
-                    ),
-                    data: Some(Vec::from(data))
-                }
-            ));
-        }
-    }
-}
-
-pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u32, renderer: &WmRenderer) {
-    let slab = GL_ALLOC.get_mut().unwrap();
-    match slab.get_mut(id).expect("Invalid texture ID") {
-        GlResource::Texture(tex) => {
-            // material.diffuse_texture.texture
-        },
-        GlResource::Buffer(_) => panic!("Invalid texture ID")
-    }
-}
-
-pub unsafe fn get_texture(id: usize) -> Option<Rc<BindableTexture>> {
-    let slab = GL_ALLOC.get().unwrap();
-    match slab.get(id).expect("Invalid texture ID") {
-        GlResource::Texture(tex) => {
-            tex.material.to_owned()
-        },
-        GlResource::Buffer(_) => panic!("Invalid texture ID")
-    }
-}
-
-pub unsafe fn get_buffer(id: usize) -> Option<Arc<GlBuffer>> {
-    let slab = GL_ALLOC.get().unwrap();
-    slab.get(id).and_then(|res| match res {
-        GlResource::Texture(_) => panic!("Invalid buffer ID"),
-        GlResource::Buffer(buf) => {
-            Some(buf.load_full())
-        }
-    })
-}
+// pub unsafe fn upload_texture_data(id: usize, data: &[u8], width: u32, height: u32, renderer: &WmRenderer) {
+//     let slab = GL_ALLOC.get_mut().unwrap();
+//     match slab.get_mut(id).expect("Invalid texture ID") {
+//         GlResource::Texture(tex) => {
+//             // material.diffuse_texture.texture
+//         },
+//         GlResource::Buffer(_) => panic!("Invalid texture ID")
+//     }
+// }
+//
+// pub unsafe fn get_texture(id: usize) -> Option<Rc<BindableTexture>> {
+//     let slab = GL_ALLOC.get().unwrap();
+//     match slab.get(id).expect("Invalid texture ID") {
+//         GlResource::Texture(tex) => {
+//             tex.bindable_texture.to_owned()
+//         },
+//         GlResource::Buffer(_) => panic!("Invalid texture ID")
+//     }
+// }
+//
+// pub unsafe fn get_buffer(id: usize) -> Option<Arc<GlBuffer>> {
+//     let slab = GL_ALLOC.get().unwrap();
+//     slab.get(id).and_then(|res| match res {
+//         GlResource::Texture(_) => panic!("Invalid buffer ID"),
+//         GlResource::Buffer(buf) => {
+//             Some(buf.load_full())
+//         }
+//     })
+// }

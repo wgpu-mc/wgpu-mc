@@ -51,7 +51,8 @@ impl Atlas {
                     height: ATLAS_DIMENSIONS as u32,
                     depth_or_array_layers: 1
                 },
-                None
+                None,
+                wgpu::TextureFormat::Rgba8Unorm
             ).unwrap()
         );
 
@@ -135,7 +136,8 @@ impl Atlas {
                 height: ATLAS_DIMENSIONS as u32,
                 depth_or_array_layers: 1
             },
-            None
+            None,
+            wgpu::TextureFormat::Rgba8Unorm
         ).unwrap();
         let bindable_texture = BindableTexture::from_tsv(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full(), tsv);
         self.bindable_texture.store(Arc::new(bindable_texture));

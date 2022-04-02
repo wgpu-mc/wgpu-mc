@@ -5,8 +5,10 @@ import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.Tessellator;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -17,6 +19,10 @@ import java.util.function.Supplier;
 
 @Mixin(RenderSystem.class)
 public class RenderSystemMixin {
+
+    @Shadow @Nullable private static Thread renderThread;
+
+    @Shadow @Nullable private static Thread gameThread;
 
     /**
      * @author wgpu-mc
@@ -31,22 +37,30 @@ public class RenderSystemMixin {
      */
     @Overwrite(remap = false)
     public static String getBackendDescription() {
-        return "Wgpu 0.12";
+        return "wgpu 0.12";
     }
 
     /**
      * @author wgpu-mc
      */
-    @Overwrite(remap = false)   // Fix for No obfuscation mapping, not sure if this is correct though.
+    @Overwrite(remap = false)
     public static void flipFrame(long window) {
         Tessellator.getInstance().getBuffer().clear();
         //TODO: events
     }
 
+//    /**
+//     * @author wgpu-mc
+//     */
+//    @Overwrite(remap = false)
+//    public static void initGameThread(boolean assertNotRenderThread) {
+//        renderThread = Thread.currentThread();
+//    }
+
     /**
      * @author wgpu-mc
      */
-    @Overwrite(remap = false)   // Fix for No obfuscation mapping, not sure if this is correct though.
+    @Overwrite(remap = false)
     public static void initRenderer(int debugVerbosity, boolean debugSync) {
 
     }
@@ -54,7 +68,7 @@ public class RenderSystemMixin {
     /**
      * @author wgpu-mc
      */
-    @Overwrite(remap = false)   // Fix for No obfuscation mapping, not sure if this is correct though.
+    @Overwrite(remap = false)
     public static void limitDisplayFPS(int fps) {
 
     }

@@ -45,8 +45,6 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
             .i()
             .unwrap();
 
-        dbg!(section_y_offset);
-
         let container = env.get_field(
             *section,
             "container",

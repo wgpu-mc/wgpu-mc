@@ -1,16 +1,12 @@
 package dev.birb.wgpu.mixin.core;
 
-import com.google.common.base.Charsets;
 import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
+import dev.birb.wgpu.render.GlWmState;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.util.math.Matrix4f;
 import net.minecraft.util.math.Vec3f;
 import net.minecraft.util.math.Vector4f;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.PointerBuffer;
-import org.lwjgl.opengl.*;
-import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -18,7 +14,6 @@ import org.spongepowered.asm.mixin.Overwrite;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.Iterator;
 import java.util.List;
 
 @SuppressWarnings("OverwriteAuthorRequired")
@@ -343,6 +338,7 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static void glActiveTexture(int texture) {
+        GlWmState.activeTexture = texture;
     }
 
     @Overwrite(remap = false)
@@ -444,13 +440,14 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static int _genTexture() {
-        return WgpuNative.genTexture();
+        GlWmState.generatedTextures.add(new GlWmState.WmTexture());
+        return GlWmState.generatedTextures.size() - 1;
     }
 
     @Overwrite(remap = false)
     public static void _genTextures(int[] textures) {
         for(int i = 0; i < textures.length; i++) {
-            textures[i] = WgpuNative.genTexture();
+            textures[i] = _genTexture();
         }
     }
 
@@ -467,7 +464,8 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static void _bindTexture(int texture) {
-        WgpuNative.bindTexture(texture);
+//        WgpuNative.bindTexture(0, texture);
+        GlWmState.textureSlots.put(GlWmState.activeTexture, texture);
     }
 
     @Overwrite(remap = false)
@@ -477,7 +475,7 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static int _getActiveTexture() {
-        return 0;
+        return GlWmState.activeTexture;
 //        return WgpuNative.get
     }
 
@@ -487,11 +485,30 @@ public class GlStateManagerMixin {
         if(pixels != null) {
             ptr = MemoryUtil.memAddress(pixels);
         }
-        WgpuNative.texImage2D(target, level, internalFormat, width, height, border, format, type, ptr);
+        WgpuNative.texImage2D(
+                GlWmState.textureSlots.get(GlWmState.activeTexture),
+                target,
+                level,
+                internalFormat,
+                width,
+                height, border, format, type, ptr
+        );
     }
 
     @Overwrite(remap = false)
     public static void _texSubImage2D(int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, long pixels) {
+        WgpuNative.subImage2D(
+                GlWmState.textureSlots.get(GlWmState.activeTexture),
+                target,
+                level,
+                offsetX,
+                offsetY,
+                width,
+                height,
+                format,
+                type,
+                pixels
+        );
     }
 
     @Overwrite(remap = false)

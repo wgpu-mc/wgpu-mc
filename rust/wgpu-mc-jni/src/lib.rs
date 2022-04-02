@@ -1,6 +1,9 @@
 #![feature(once_cell)]
 #![feature(mixed_integer_ops)]
 
+extern crate core;
+
+use core::slice;
 use std::{fs, thread};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -17,8 +20,8 @@ use dashmap::DashMap;
 use futures::executor::block_on;
 use jni::{JavaVM, JNIEnv};
 use jni::errors::Error;
-use jni::objects::{JClass, JObject, JString, JValue, ReleaseMode};
-use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jobjectArray, jstring, jlong, jfloat};
+use jni::objects::{JByteBuffer, JClass, JObject, JString, JValue, ReleaseMode};
+use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jobjectArray, jstring, jlong, jfloat, jfloatArray, jbyte};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
@@ -42,16 +45,19 @@ use wgpu_mc::wgpu;
 
 use crate::mc_interface::xyz_to_index;
 use std::cell::{RefCell, Cell};
+use std::io::Cursor;
 use wgpu::{RenderPipelineDescriptor, PipelineLayoutDescriptor, TextureDescriptor, Extent3d, ImageDataLayout, BindGroupDescriptor, BindGroupEntry, BindingResource, TextureViewDescriptor};
-use crate::gl::GL_COMMANDS;
+use crate::gl::{GL_ALLOC, GL_COMMANDS, GlResource, GlTexture};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use std::num::NonZeroU32;
 use std::rc::Rc;
+use byteorder::{LittleEndian, ReadBytesExt};
 use wgpu_mc::camera::UniformMatrixHelper;
-use once_cell::unsync::OnceCell;
+use once_cell::sync::OnceCell;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::shader::WmShader;
 use wgpu_mc::render::shader::GlslShader;
+use crate::gl::pipeline::GlPipelineState;
 
 //SAFETY: It is assumed that this FFI will be accessed only single-threadedly
 
@@ -59,9 +65,9 @@ mod mc_interface;
 mod gl;
 mod palette;
 
-#[derive(Debug)]
 enum RenderMessage {
-    SetTitle(String)
+    SetTitle(String),
+    Task(Box<dyn FnOnce() -> ()>)
 }
 
 struct MinecraftRenderState {
@@ -74,8 +80,7 @@ static mut RENDERER: OnceCell<WmRenderer> = OnceCell::new();
 static mut EVENT_LOOP: OnceCell<EventLoop<()>> = OnceCell::new();
 static mut WINDOW: OnceCell<Window> = OnceCell::new();
 
-static mut CHANNEL_TX: OnceCell<Mutex<mpsc::Sender<RenderMessage>>> = OnceCell::new();
-static mut CHANNEL_RX: OnceCell<Mutex<mpsc::Receiver<RenderMessage>>> = OnceCell::new();
+static mut CHANNELS: OnceCell<(Mutex<mpsc::Sender<RenderMessage>>, Mutex<mpsc::Receiver<RenderMessage>>)> = OnceCell::new();
 
 static mut MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
 static mut GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
@@ -266,24 +271,26 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
         .build(&event_loop)
         .unwrap();
 
-    let (tx, rx) = mpsc::channel::<RenderMessage>();
-
     unsafe {
         gl::init();
         GL_PIPELINE.set(GlPipeline {
-            matrix_stacks: RefCell::new([([Matrix4::identity(); 32], 0); 3]),
-            matrix_mode: RefCell::new(0),
-            commands: ArcSwap::new(Arc::new(Vec::new())),
-            active_texture_slot: RefCell::new(0x84C0),
-            slots: RefCell::new(HashMap::new()),
-            // vertex_attributes: RefCell::new(HashMap::new()),
-            vertex_array: RefCell::new(None),
-            client_states: RefCell::new(Vec::new()),
-            // shaders: RefCell::new(None)
-            active_pipeline: RefCell::new(0)
+            state: RefCell::new(GlPipelineState {
+                matrix_stacks: [([Matrix4::identity(); 32], 0); 3],
+                matrix_mode: 0,
+                // vertex_attributes: RefCell::new(HashMap::new()),
+                active_texture_unit: 0,
+                texture_units: HashMap::new(),
+                vertex_array: None,
+                client_states: Vec::new(),
+                // shaders: RefCell::new(None)
+                active_pipeline: 0
+            }),
+            commands: ArcSwap::new(Arc::new(Vec::new()))
         });
-        CHANNEL_TX.set(Mutex::new(tx));
-        CHANNEL_RX.set(Mutex::new(rx));
+        CHANNELS.get_or_init(|| {
+            let (tx, rx) = mpsc::channel::<RenderMessage>();
+            (Mutex::new(tx), Mutex::new(rx))
+        });
         EVENT_LOOP.set(event_loop);
         WINDOW.set(window);
         MC_STATE.set(RwLock::new(MinecraftRenderState {
@@ -300,7 +307,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
     let renderer = unsafe { RENDERER.get_mut().unwrap() };
     let event_loop = unsafe { EVENT_LOOP.take().unwrap() };
 
-    let rx = unsafe { CHANNEL_RX.get().unwrap() }.lock();
+    let (_, rx) = unsafe { CHANNELS.get().unwrap() };
+    let rx = rx.lock();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -319,6 +327,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
 
             match msg {
                 RenderMessage::SetTitle(title) => window.set_title(&title),
+                RenderMessage::Task(func) => func()
             };
 
             msg_r = rx.try_recv();
@@ -450,7 +459,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     class: JClass,
     jtitle: JString) {
 
-    let tx = unsafe { CHANNEL_TX.get().unwrap() }.lock();
+    let (tx, _) = unsafe { CHANNELS.get().unwrap() };
+    let tx = tx.lock();
 
     let title: String = env.get_string(jtitle).unwrap().into();
 
@@ -527,32 +537,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunkSimple(
 
     chunk.baked = Some(baked);
     renderer.mc.chunks.loaded_chunks.insert((x, z), ArcSwap::new(Arc::new(chunk)));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_genTexture(
-    env: JNIEnv,
-    class: JClass
-) -> jint {
-    unsafe { gl::gen_texture() as i32 }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_genBuffer(
-    env: JNIEnv,
-    class: JClass
-) -> jint {
-    unsafe { gl::gen_buffer() as i32 }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindTexture(
-    env: JNIEnv,
-    class: JClass,
-    tex: jint
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::BindTexture(tex));
 }
 
 #[no_mangle]
@@ -672,6 +656,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawArray(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     env: JNIEnv,
     class: JClass,
+    texture_id: jint,
     target: jint,
     level: jint,
     internal_format: jint,
@@ -682,34 +667,162 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     _type: jint,
     pixels_ptr: jlong
 ) {
-    let area = width * height;
-    //In bytes
-    assert_eq!(_type, 0x1401);
-    let size = area as usize * 24;
+    //For when the renderer is initialized
+    let task = move || {
+        let area = width * height;
+        //In bytes
+        assert_eq!(_type, 0x1401);
+        let size = area as usize * 4;
 
-    let data = if pixels_ptr != 0 {
-        Vec::from(
-            unsafe {
-                std::slice::from_raw_parts(pixels_ptr as *const u8, size)
+        let data = if pixels_ptr != 0 {
+            println!("Non null pointer provided for tex image command");
+            Vec::from(
+                unsafe {
+                    std::slice::from_raw_parts(pixels_ptr as *const u8, size)
+                }
+            )
+        } else {
+            println!("Null pointer provided for tex image command");
+            vec![0; size]
+        };
+
+        let wm = unsafe { &RENDERER }.get().unwrap();
+
+        let tsv = TextureSamplerView::from_rgb_bytes(
+            &wm.wgpu_state,
+            &data[..],
+            wgpu::Extent3d {
+                width: width as u32,
+                height: height as u32,
+                depth_or_array_layers: 1
+            },
+            None,
+            match format {
+                0x1908 => wgpu::TextureFormat::Rgba8Unorm,
+                0x80E1 => wgpu::TextureFormat::Bgra8Unorm,
+                _ => unimplemented!()
             }
-        )
-    } else {
-        vec![0; size]
+        ).unwrap();
+
+        let bindable = BindableTexture::from_tsv(
+            &wm.wgpu_state,
+            &wm.render_pipeline_manager.load(),
+            tsv,
+        );
+
+        unsafe { GL_ALLOC.get_mut() }.unwrap().insert(texture_id, GlResource::Texture(
+            GlTexture {
+                width: width as u16,
+                height: height as u16,
+                bindable_texture: Some(Rc::new(bindable))
+            },
+            data
+        ));
     };
 
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::TexImage2D((
-        RefCell::new(
-            Some(data)
-        ),
-        width as u32,
-        height as u32,
-        match format {
-            0x1908 => wgpu::TextureFormat::Rgba8UnormSrgb,
-            0x80E1 => wgpu::TextureFormat::Bgra8UnormSrgb,
-            _ => panic!("Unknown format {:x}", format)
+    let (tx, _) = unsafe { &CHANNELS }.get_or_init(|| {
+        let (tx, rx) = channel();
+        (Mutex::new( tx), Mutex::new(rx))
+    });
+
+    let tx = tx.lock();
+    tx.send(RenderMessage::Task(Box::new(task)));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
+    env: JNIEnv,
+    class: JClass,
+    texture_id: jint,
+    target: jint,
+    level: jint,
+    offsetX: jint,
+    offsetY: jint,
+    width: jint,
+    height: jint,
+    format: jint,
+    _type: jint,
+    pixels: jlong
+) {
+    let pixel_size = match format {
+        0x1908 | 0x80E1 => 4,
+        _ => panic!("Unknown format {:x}", format)
+    };
+
+    //For when the renderer is initialized
+    let task = move || {
+        let area = width * height;
+        //In bytes
+        assert_eq!(_type, 0x1401);
+        let size = area as usize * 4 ;
+
+        let mut pixel_data = if pixels != 0 {
+            println!("Non null pointer provided for sub tex image command");
+            Vec::from(
+                unsafe {
+                    std::slice::from_raw_parts(pixels as *const u8, size)
+                }
+            )
+        } else {
+            println!("Null pointer provided for sub tex image command");
+            vec![0; size]
+        };
+
+        let wm = unsafe { &RENDERER }.get().unwrap();
+
+        match unsafe { GL_ALLOC.get_mut() }.unwrap().get_mut(&texture_id).unwrap() {
+            GlResource::Texture(gl_texture, data) => {
+                let src_row_byte_width = (width * pixel_size);
+                let dest_row_byte_width = gl_texture.width as i32 * pixel_size;
+
+                for y in 0..height {
+                    let src_begin = src_row_byte_width * y;
+                    let src_end = src_begin + src_row_byte_width;
+                    let src_slice = &pixel_data[src_begin as usize..src_end as usize];
+
+                    let dest_begin = (dest_row_byte_width * (y + offsetY)) + (offsetX * pixel_size);
+                    let dest_end = dest_begin + (width * pixel_size);
+
+                    assert_eq!(dest_end - dest_begin, src_end - src_begin);
+                    let dest_slice = &mut data[dest_begin as usize..dest_end as usize];
+                    dest_slice.copy_from_slice(src_slice)
+                }
+
+                let tsv = TextureSamplerView::from_rgb_bytes(
+                    &wm.wgpu_state,
+                    &data,
+                    Extent3d {
+                        width: gl_texture.width as u32,
+                        height: gl_texture.height as u32,
+                        depth_or_array_layers: 1
+                    },
+                    None,
+                    match format {
+                        0x1908 => wgpu::TextureFormat::Rgba8Unorm,
+                        0x80E1 => wgpu::TextureFormat::Bgra8Unorm,
+                        _ => unimplemented!()
+                    }
+                ).unwrap();
+
+                let bindable_texture = BindableTexture::from_tsv(
+                    &wm.wgpu_state,
+                    &wm.render_pipeline_manager.load(),
+                    tsv
+                );
+
+                gl_texture.bindable_texture = Some(Rc::new(bindable_texture));
+            }
+            GlResource::Buffer(_) => panic!("Invalid texture")
         }
-    )));
+    };
+
+    let (tx, _) = unsafe { &CHANNELS }.get_or_init(|| {
+        let (tx, rx) = channel();
+        (Mutex::new( tx), Mutex::new(rx))
+    });
+
+    let tx = tx.lock();
+    tx.send(RenderMessage::Task(Box::new(task)));
 }
 
 #[no_mangle]
@@ -766,7 +879,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_ortho(
     b: jfloat,
     t: jfloat,
     n: jfloat,
-    f: jfloat,
+    f: jfloat
 ) {
     let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::MultMatrix(
@@ -866,96 +979,106 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bufferData(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_attachTextureBindGroup(
     env: JNIEnv,
     class: JClass,
-    buf: JObject,
-    target: jint,
-    usage: jint
+    id: i32
 ) {
-    let wm = unsafe { RENDERER.get().unwrap() };
-    let data = env.get_direct_buffer_address(buf.into()).unwrap();
-    let vec = Vec::from(data);
-
-    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-    let active_buffer = *state.buffers.get(&target).unwrap();
-
-    unsafe {
-        gl::upload_buffer_data(
-            active_buffer as usize,
-            &vec[..],
-            &wm.wgpu_state.device
-        );
-    }
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
+    commands.push(GLCommand::AttachTexture(id));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initBuffer(
-    env: JNIEnv,
-    class: JClass,
-    target: jint,
-    size: jlong,
-    usage: jint
-) {
-    let wm = unsafe { RENDERER.get().unwrap() };
+// #[no_mangle]
+// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bufferData(
+//     env: JNIEnv,
+//     class: JClass,
+//     buf: JObject,
+//     target: jint,
+//     usage: jint
+// ) {
+//     let wm = unsafe { RENDERER.get().unwrap() };
+//     let data = env.get_direct_buffer_address(buf.into()).unwrap();
+//     let vec = Vec::from(data);
+//
+//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
+//     let active_buffer = *state.buffers.get(&target).unwrap();
+//
+//     unsafe {
+//         gl::upload_buffer_data(
+//             active_buffer as usize,
+//             &vec[..],
+//             &wm.wgpu_state.device
+//         );
+//     }
+// }
 
-    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-    let active_buffer = *state.buffers.get(&target).unwrap();
-    let vec = vec![0u8; size as usize];
-
-    unsafe {
-        gl::upload_buffer_data(
-            active_buffer as usize,
-            &vec[..],
-            &wm.wgpu_state.device
-        );
-    }
-}
+// #[no_mangle]
+// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initBuffer(
+//     env: JNIEnv,
+//     class: JClass,
+//     target: jint,
+//     size: jlong,
+//     usage: jint
+// ) {
+//     let wm = unsafe { RENDERER.get().unwrap() };
+//
+//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
+//     let active_buffer = *state.buffers.get(&target).unwrap();
+//     let vec = vec![0u8; size as usize];
+//
+//     unsafe {
+//         gl::upload_buffer_data(
+//             active_buffer as usize,
+//             &vec[..],
+//             &wm.wgpu_state.device
+//         );
+//     }
+// }
 
 //Awful code
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_mapBuffer(
-    env: JNIEnv,
-    class: JClass,
-    target: jint,
-    usage: jint
-) -> jobject {
-    // let wm = unsafe { RENDERER.get().unwrap() };
-    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-    let active_buffer = *state.buffers.get(&target).unwrap();
+// #[no_mangle]
+// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_mapBuffer(
+//     env: JNIEnv,
+//     class: JClass,
+//     target: jint,
+//     usage: jint
+// ) -> jobject {
+//     // let wm = unsafe { RENDERER.get().unwrap() };
+//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
+//     let active_buffer = *state.buffers.get(&target).unwrap();
+//
+//     let buf = unsafe { gl::get_buffer(active_buffer as usize) }.unwrap();
+//     let maps = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
+//
+//     if !maps.contains_key(&(target as usize)) {
+//         maps.insert(active_buffer as usize, buf.data.as_ref().unwrap().clone());
+//     } else {
+//         panic!("Buffer {} already mapped!", target);
+//     }
+//     let mut reference = maps.get_mut(&(active_buffer as usize)).unwrap();
+//     env.new_direct_byte_buffer(&mut reference[..]).unwrap().as_raw()
+// }
 
-    let buf = unsafe { gl::get_buffer(active_buffer as usize) }.unwrap();
-    let maps = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
-
-    if !maps.contains_key(&(target as usize)) {
-        maps.insert(active_buffer as usize, buf.data.as_ref().unwrap().clone());
-    } else {
-        panic!("Buffer {} already mapped!", target);
-    }
-    let mut reference = maps.get_mut(&(active_buffer as usize)).unwrap();
-    env.new_direct_byte_buffer(&mut reference[..]).unwrap().as_raw()
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_unmapBuffer(
-    env: JNIEnv,
-    class: JClass,
-    target: jint,
-) {
-    let wm = unsafe { RENDERER.get().unwrap() };
-    let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-    let active_buffer = state.buffers.remove(&target).unwrap();
-    let mapped = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
-    let vec = mapped.remove(&(active_buffer as usize)).unwrap();
-
-    unsafe {
-        gl::upload_buffer_data(
-            active_buffer as usize,
-            &vec[..],
-            &wm.wgpu_state.device
-        );
-    }
-}
+// #[no_mangle]
+// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_unmapBuffer(
+//     env: JNIEnv,
+//     class: JClass,
+//     target: jint,
+// ) {
+//     let wm = unsafe { RENDERER.get().unwrap() };
+//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
+//     let active_buffer = state.buffers.remove(&target).unwrap();
+//     let mapped = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
+//     let vec = mapped.remove(&(active_buffer as usize)).unwrap();
+//
+//     unsafe {
+//         gl::upload_buffer_data(
+//             active_buffer as usize,
+//             &vec[..],
+//             &wm.wgpu_state.device
+//         );
+//     }
+// }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
@@ -1008,3 +1131,99 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createArrayPaletteStor
 ) -> jlong {
     0
 }
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
+    env: JNIEnv,
+    class: JClass,
+    float_array: jfloatArray
+) {
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
+    let elements = env.get_float_array_elements(float_array, ReleaseMode::NoCopyBack)
+        .unwrap();
+
+    let slice = unsafe {
+        slice::from_raw_parts(elements.as_ptr() as *mut f32, elements.size().unwrap() as usize)
+    };
+
+    let mut cursor = Cursor::new(bytemuck::cast_slice::<f32, u8>(slice));
+    let mut converted = Vec::with_capacity(slice.len());
+
+    for _ in 0..slice.len() {
+        use byteorder::ByteOrder;
+        converted.push(cursor.read_f32::<LittleEndian>().unwrap());
+    }
+
+    let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(
+        bytemuck::cast_slice(&converted)
+    );
+
+    let matrix = Matrix4::from_translation(
+        Vector3::new(0.0, 0.0, 2.1)
+    ) * Matrix4::from(slice_4x4);
+
+    commands.push(
+        GLCommand::SetMatrix(matrix)
+    );
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawIndexed(
+    env: JNIEnv,
+    class: JClass,
+    count: jint
+) {
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
+
+    commands.push(
+        GLCommand::DrawIndexed(count as u32)
+    );
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setVertexBuffer(
+    env: JNIEnv,
+    class: JClass,
+    byte_array: jbyteArray
+) {
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
+
+    let mut bytes = vec![0; env.get_array_length(byte_array).unwrap() as usize];
+    env.get_byte_array_region(byte_array, 0, &mut bytes[..])
+        .unwrap();
+
+    let byte_slice = bytemuck::cast_slice(&bytes);
+    let mut cursor = Cursor::new(byte_slice);
+    let mut converted = Vec::with_capacity(bytes.len() / 4);
+
+    assert_eq!(bytes.len() % 4, 0);
+
+    for _ in 0..bytes.len() / 4 {
+        use byteorder::ByteOrder;
+        converted.push(cursor.read_f32::<LittleEndian>().unwrap());
+    }
+
+    commands.push(
+        GLCommand::SetVertexBuffer(Vec::from(bytemuck::cast_slice(&converted)))
+    );
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
+    env: JNIEnv,
+    class: JClass,
+    int_array: jintArray
+) {
+    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
+    let elements = env.get_int_array_elements(int_array, ReleaseMode::NoCopyBack)
+        .unwrap();
+
+    let slice = unsafe {
+        slice::from_raw_parts(elements.as_ptr() as *mut u32, elements.size().unwrap() as usize)
+    };
+
+    commands.push(
+        GLCommand::SetIndexBuffer(Vec::from(slice))
+    );
+}
+

@@ -3,7 +3,7 @@ struct CameraUniform {
 };
 
 [[group(0), binding(0)]]
-var<uniform> camera_uniform: CameraUniform;
+var<uniform> projection: CameraUniform;
 
 struct VertexResult {
     [[builtin(position)]] pos: vec4<f32>;
@@ -13,10 +13,10 @@ struct VertexResult {
 [[stage(vertex)]]
 fn vs_main(
     [[location(0)]] pos_in: vec3<f32>,
-    [[location(1)]] tex_coords: vec2<f32>,
+    [[location(1)]] tex_coords: vec2<f32>
 ) -> VertexResult {
     var vr: VertexResult;
-    vr.pos = camera_uniform.view_proj * vec4<f32>(pos_in, 0.0);
+    vr.pos = projection.view_proj * vec4<f32>(pos_in, 1.0);
     vr.tex_coords = tex_coords;
 
     return vr;

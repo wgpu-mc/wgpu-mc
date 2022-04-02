@@ -6,13 +6,16 @@ import dev.birb.wgpu.mixin.accessors.ThreadExecutorAccessor;
 import dev.birb.wgpu.mixin.accessors.WindowAccessor;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
+import dev.birb.wgpu.rust.WgpuResourceProvider;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.WindowSettings;
 import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.client.util.Window;
 import net.minecraft.client.util.WindowProvider;
+import net.minecraft.resource.ReloadableResourceManagerImpl;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.resource.ResourceReloader;
+import net.minecraft.resource.ResourceType;
 import net.minecraft.util.crash.CrashException;
 import net.minecraft.util.crash.CrashReport;
 import net.minecraft.util.crash.CrashReportSection;
@@ -63,6 +66,14 @@ public abstract class MinecraftClientRenderMixin {
     @Redirect(method = "<init>", at = @At(value = "NEW", target = "net/minecraft/client/util/WindowProvider"))
     private WindowProvider redirectWindowProvider(MinecraftClient client) throws InstantiationException {
         return (WindowProvider) UNSAFE.allocateInstance(WindowProvider.class);
+    }
+
+    @Redirect(method = "<init>", at = @At(value = "NEW", target = "net/minecraft/resource/ReloadableResourceManagerImpl"))
+    private ReloadableResourceManagerImpl redirectWindowProvider(ResourceType type) {
+        ReloadableResourceManagerImpl manager = new ReloadableResourceManagerImpl(type);
+        WgpuResourceProvider.manager = manager;
+
+        return manager;
     }
 
     @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/WindowProvider;createWindow(Lnet/minecraft/client/WindowSettings;Ljava/lang/String;Ljava/lang/String;)Lnet/minecraft/client/util/Window;"))

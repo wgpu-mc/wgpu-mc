@@ -32,6 +32,8 @@ public class Wgpu {
 
     public static void initRenderer(MinecraftClient client) {
         if (!INITIALIZED) {
+            System.loadLibrary("renderdoc");
+
             WgpuNative.initRenderer();
             INITIALIZED = true;
 

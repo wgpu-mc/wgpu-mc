@@ -90,6 +90,7 @@ impl TextureSamplerView {
                 depth_or_array_layers: 1,
             },
             label,
+            wgpu::TextureFormat::Rgba8Unorm
         )
     }
 
@@ -98,6 +99,7 @@ impl TextureSamplerView {
         bytes: &[u8],
         size: wgpu::Extent3d,
         label: Option<&str>,
+        format: wgpu::TextureFormat
     ) -> Result<Self, anyhow::Error> {
         let texture = wgpu_state.device.create_texture(&wgpu::TextureDescriptor {
             label,
@@ -105,7 +107,7 @@ impl TextureSamplerView {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format,
             usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING
         });
 

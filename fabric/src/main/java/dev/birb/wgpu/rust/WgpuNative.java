@@ -85,11 +85,13 @@ public class WgpuNative {
 
     public static native int genTexture();
 
-    public static native void texImage2D(int target, int level, int internalFormat, int width, int height, int border, int format, int type, long pixels_ptr);
+    public static native void texImage2D(int textureId, int target, int level, int internalFormat, int width, int height, int border, int format, int _type, long pixels_ptr);
+
+    public static native void subImage2D(int textureId, int target, int level, int offsetX, int offsetY, int width, int height, int format, int _type, long pixels);
 
     public static native void activeTexture(int slot);
 
-    public static native void bindTexture(int textureId);
+    public static native void bindTexture(int type, int textureId);
 
     public static native void submitCommands();
 
@@ -113,9 +115,6 @@ public class WgpuNative {
 
     public static native void matrixMode(int mode);
 
-
-    public static native void texSubImage2D(int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, long pixels);
-
     public static native void bindVertexArray(int array);
 
     public static native void drawElements(int mode, int first, int type, long indices);
@@ -131,5 +130,17 @@ public class WgpuNative {
     public static native void bindMatrix4f(int slot, float[] array);
 
     public static native void clearColor(float red, float green, float blue);
+
+    public static native void setIndexBuffer(int[] buffer);
+
+    public static native void setVertexBuffer(byte[] buffer);
+
+    public static native void setProjectionMatrix(float[] mat);
+
+    public static native void drawIndexed(int count);
+
+    public static native void draw(int count);
+
+    public static native void attachTextureBindGroup(int texture);
 
 }

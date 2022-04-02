@@ -1,5 +1,6 @@
 package dev.birb.wgpu.mixin.core;
 
+import dev.birb.wgpu.game.MainGameThread;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
@@ -49,6 +50,7 @@ public abstract class MinecraftClientCoreMixin {
 
     @Inject(method = "run", at = @At("HEAD"))
     public void injectRun(CallbackInfo ci) {
+        Wgpu.initRenderer((MinecraftClient) (Object) this);
     }
 
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/thread/ReentrantThreadExecutor;<init>(Ljava/lang/String;)V", shift = At.Shift.AFTER))
@@ -57,9 +59,9 @@ public abstract class MinecraftClientCoreMixin {
         Wgpu.preInit("Minecraft");
     }
 
-    @Inject(method = "<init>", at = @At("TAIL"))
-    public void injectWindowHook(RunArgs args, CallbackInfo ci) {
-        Wgpu.initRenderer((MinecraftClient) (Object) this);
-    }
+//    @Inject(method = "<init>", at = @At("TAIL"))
+//    public void injectWindowHook(RunArgs args, CallbackInfo ci) {
+//        Wgpu.initRenderer((MinecraftClient) (Object) this);
+//    }
 
 }

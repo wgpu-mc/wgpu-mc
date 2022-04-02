@@ -13,6 +13,10 @@
     "render.MinecraftClientRenderMixin",
     "render.GLXMixin",
     "render.WindowMixin",
+    "render.WorldRendererMixin",
+    "render.GameRendererMixin",
+    "render.BufferRendererMixin",
+    "render.WindowFramebufferMixin",
 
     "core.MinecraftClientCoreMixin",
     "core.GlStateManagerMixin",

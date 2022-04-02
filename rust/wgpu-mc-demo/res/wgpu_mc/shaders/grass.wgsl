@@ -18,7 +18,7 @@ fn vs_main(
     [[location(2)]] normal: vec3<f32>
 ) -> VertexResult {
     var vr: VertexResult;
-    vr.pos = camera_uniform.view_proj * vec4<f32>(pos_in, 0.0);
+    vr.pos = camera_uniform.view_proj * vec4<f32>(pos_in, 1.0);
     vr.tex_coords = tex_coords;
     vr.normal = normal;
 

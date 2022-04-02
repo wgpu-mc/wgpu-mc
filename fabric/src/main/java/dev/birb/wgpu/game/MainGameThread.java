@@ -1,5 +1,6 @@
 package dev.birb.wgpu.game;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ConnectScreen;
 import net.minecraft.client.network.ServerInfo;
@@ -16,6 +17,8 @@ public class MainGameThread extends Thread {
         };
 
         gameThread.setName("Run loop, diverted");
+//        RenderSystem.gameThread = gameThread;
+//        RenderSystem.renderThread = Thread.currentThread();
         gameThread.start();
     }
 
