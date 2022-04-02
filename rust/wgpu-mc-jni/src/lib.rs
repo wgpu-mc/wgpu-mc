@@ -45,6 +45,7 @@ use wgpu_mc::wgpu;
 
 use crate::mc_interface::xyz_to_index;
 use std::cell::{RefCell, Cell};
+use std::cmp::min;
 use std::io::Cursor;
 use wgpu::{RenderPipelineDescriptor, PipelineLayoutDescriptor, TextureDescriptor, Extent3d, ImageDataLayout, BindGroupDescriptor, BindGroupEntry, BindingResource, TextureViewDescriptor};
 use crate::gl::{GL_ALLOC, GL_COMMANDS, GlResource, GlTexture};
@@ -57,7 +58,6 @@ use once_cell::sync::OnceCell;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::shader::WmShader;
 use wgpu_mc::render::shader::GlslShader;
-use crate::gl::pipeline::GlPipelineState;
 
 //SAFETY: It is assumed that this FFI will be accessed only single-threadedly
 
@@ -274,17 +274,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
     unsafe {
         gl::init();
         GL_PIPELINE.set(GlPipeline {
-            state: RefCell::new(GlPipelineState {
-                matrix_stacks: [([Matrix4::identity(); 32], 0); 3],
-                matrix_mode: 0,
-                // vertex_attributes: RefCell::new(HashMap::new()),
-                active_texture_unit: 0,
-                texture_units: HashMap::new(),
-                vertex_array: None,
-                client_states: Vec::new(),
-                // shaders: RefCell::new(None)
-                active_pipeline: 0
-            }),
             commands: ArcSwap::new(Arc::new(Vec::new()))
         });
         CHANNELS.get_or_init(|| {
@@ -477,10 +466,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
         .unwrap();
 
-    // let instant = Instant::now();
-    // renderer.mc.bake_blocks(renderer);
-    // println!("Baked block models in {}", Instant::now().duration_since(instant).as_millis());
-
     let instant = Instant::now();
     renderer.mc.block_manager.read().baked_block_variants.iter().for_each(|(identifier, (key, _))| {
         let _integer = env.new_object("java/lang/Integer", "(I)V", &[
@@ -508,82 +493,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunkSimple(
-    env: JNIEnv,
-    class: JClass,
-    blocks: jintArray,
-    x: jint,
-    z: jint) {
-    let renderer = unsafe { RENDERER.get().unwrap() };
-    
-    let elements = env.get_int_array_elements(blocks, ReleaseMode::NoCopyBack)
-        .unwrap();
-    
-    let elements_ptr = elements.as_ptr();
-    let blocks: Box<[BlockState; CHUNK_VOLUME]> = (0..elements.size().unwrap()).map(|index| {
-        let element_ptr = unsafe { elements_ptr.offset(index as isize) };
-        let block_index = unsafe { *element_ptr } as usize;
-    
-        BlockState {
-            packed_key: Some(block_index as u32)
-        }
-    }).collect::<Box<[BlockState]>>().try_into().unwrap();
-
-    let mut chunk = Chunk::new((x, z), blocks);
-    let baked = BakedChunk::bake(
-        &*renderer.mc.block_manager.read(),
-        &chunk,
-        &renderer.wgpu_state.device);
-
-    chunk.baked = Some(baked);
-    renderer.mc.chunks.loaded_chunks.insert((x, z), ArcSwap::new(Arc::new(chunk)));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindBuffer(
-    env: JNIEnv,
-    class: JClass,
-    target: jint,
-    buffer: jint
-) {
-    let mut state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-    state.buffers.insert(target, buffer);
-
-    //TODO: Is this necessary
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::BindBuffer(target, buffer));
-}
-
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_activeTexture(
-    env: JNIEnv,
-    class: JClass,
-    tex: jint
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::ActiveTexture(tex));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_pushMatrix(
-    env: JNIEnv,
-    class: JClass
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::PushMatrix);
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_popMatrix(
-    env: JNIEnv,
-    class: JClass
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::PopMatrix);
-}
-
-#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     env: JNIEnv,
     class: JClass
@@ -602,57 +511,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_vertexPointer(
-    env: JNIEnv,
-    class: JClass,
-    size: jint,
-    vertex_type: jint,
-    stride: jint,
-    pointer: jlong
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::VertexPointer(size, vertex_type, stride, pointer as *const u8));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_colorPointer(
-    env: JNIEnv,
-    class: JClass,
-    size: jint,
-    vertex_type: jint,
-    stride: jint,
-    pointer: jlong
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::ColorPointer(size, vertex_type, stride, pointer as *const u8));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texCoordPointer(
-    env: JNIEnv,
-    class: JClass,
-    size: jint,
-    vertex_type: jint,
-    stride: jint,
-    pointer: jlong
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::TexCoordPointer(size, vertex_type, stride, pointer as *const u8));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawArray(
-    env: JNIEnv,
-    class: JClass,
-    mode: jint,
-    first: jint,
-    count: jint
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::DrawArray(mode, first, count));
-}
-
-#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     env: JNIEnv,
     class: JClass,
@@ -667,6 +525,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     _type: jint,
     pixels_ptr: jlong
 ) {
+    let pixel_size = match format {
+        0x1908 | 0x80E1 => 4,
+        _ => panic!("Unknown format {:x}", format)
+    };
+
     //For when the renderer is initialized
     let task = move || {
         let area = width * height;
@@ -675,14 +538,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
         let size = area as usize * 4;
 
         let data = if pixels_ptr != 0 {
-            println!("Non null pointer provided for tex image command");
             Vec::from(
                 unsafe {
                     std::slice::from_raw_parts(pixels_ptr as *const u8, size)
                 }
             )
         } else {
-            println!("Null pointer provided for tex image command");
             vec![0; size]
         };
 
@@ -754,43 +615,54 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
         let area = width * height;
         //In bytes
         assert_eq!(_type, 0x1401);
-        let size = area as usize * 4 ;
+        let size = area as usize * pixel_size;
 
-        let mut pixel_data = if pixels != 0 {
-            println!("Non null pointer provided for sub tex image command");
+        let mut source_tex_data = if pixels != 0 {
             Vec::from(
                 unsafe {
                     std::slice::from_raw_parts(pixels as *const u8, size)
                 }
             )
         } else {
-            println!("Null pointer provided for sub tex image command");
             vec![0; size]
         };
 
         let wm = unsafe { &RENDERER }.get().unwrap();
 
         match unsafe { GL_ALLOC.get_mut() }.unwrap().get_mut(&texture_id).unwrap() {
-            GlResource::Texture(gl_texture, data) => {
-                let src_row_byte_width = (width * pixel_size);
-                let dest_row_byte_width = gl_texture.width as i32 * pixel_size;
+            GlResource::Texture(gl_texture, texture_data) => {
+                let src_row_byte_width = (width * pixel_size as i32);
+                let dest_row_byte_width = gl_texture.width as i32 * pixel_size as i32;
+
+                assert!(width <= gl_texture.width as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
+                assert!(height <= gl_texture.height as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
+
+                if width + offsetX > gl_texture.width as i32 {
+                    return;
+                }
+
+                if height + offsetY > gl_texture.height as i32 {
+                    return;
+                }
 
                 for y in 0..height {
                     let src_begin = src_row_byte_width * y;
-                    let src_end = src_begin + src_row_byte_width;
-                    let src_slice = &pixel_data[src_begin as usize..src_end as usize];
+                    let src_end = src_row_byte_width * (y + 1);
+                    assert!(src_end <= source_tex_data.len() as i32, "{} > {}\nofx {} ofy {} size {} width {} height {}\n", src_end, source_tex_data.len(), offsetX, offsetY, size, width, height);
+                    let src_slice = &source_tex_data[src_begin as usize..src_end as usize];
 
-                    let dest_begin = (dest_row_byte_width * (y + offsetY)) + (offsetX * pixel_size);
-                    let dest_end = dest_begin + (width * pixel_size);
+                    let dest_begin = (dest_row_byte_width * (y + offsetY)) + (offsetX * pixel_size as i32);
+                    let dest_end = dest_begin + (width * pixel_size as i32);
 
-                    assert_eq!(dest_end - dest_begin, src_end - src_begin);
-                    let dest_slice = &mut data[dest_begin as usize..dest_end as usize];
-                    dest_slice.copy_from_slice(src_slice)
+                    // assert_eq!(dest_end - dest_begin, src_end - src_begin);
+                    assert!(dest_end <= texture_data.len() as i32, "{} > {}\nofx {} ofy {} size {} width {} height {}\n", dest_end, texture_data.len(), offsetX, offsetY, size, width, height);
+                    let dest_slice = &mut texture_data[dest_begin as usize..dest_end as usize];
+                    dest_slice.copy_from_slice(src_slice);
                 }
 
                 let tsv = TextureSamplerView::from_rgb_bytes(
                     &wm.wgpu_state,
-                    &data,
+                    &texture_data,
                     Extent3d {
                         width: gl_texture.width as u32,
                         height: gl_texture.height as u32,
@@ -851,122 +723,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_enableClientState(
-    env: JNIEnv,
-    class: JClass,
-    int: jint
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::EnableClientState(int as u32));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_disableClientState(
-    env: JNIEnv,
-    class: JClass,
-    int: jint
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::DisableClientState(int as u32));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_ortho(
-    env: JNIEnv,
-    class: JClass,
-    l: jfloat,
-    r: jfloat,
-    b: jfloat,
-    t: jfloat,
-    n: jfloat,
-    f: jfloat
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::MultMatrix(
-        cgmath::ortho(l,r,b,t,n, f)
-    ));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_translate(
-    env: JNIEnv,
-    class: JClass,
-    x: jfloat,
-    y: jfloat,
-    z: jfloat
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::MultMatrix(
-        Matrix4::from_translation(Vector3::new(x,y,z))
-    ));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_loadIdentity(
-    env: JNIEnv,
-    class: JClass,
-    x: jfloat,
-    y: jfloat,
-    z: jfloat
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::SetMatrix(
-        Matrix4::identity()
-    ));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_matrixMode(
-    env: JNIEnv,
-    class: JClass,
-    mode: jint
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::MatrixMode(mode as usize));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texSubImage2D(
-    env: JNIEnv,
-    class: JClass,
-    target: jint,
-    level: jint,
-    offsetX: jint,
-    offsetY: jint,
-    width: jint,
-    height: jint,
-    format: jint,
-    gtype: jint,
-    pixels: jlong) {
-
-
-
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindVertexArray(
-    env: JNIEnv,
-    class: JClass,
-    arr: jint
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::BindVertexArray(arr));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawElements(
-    env: JNIEnv,
-    class: JClass,
-    mode: jint,
-    first: jint,
-    type_: jint,
-    indices: jlong
-) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::DrawElements(mode, first, type_, indices as *const u8));
-}
-
-#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
     env: JNIEnv,
     class: JClass,
@@ -988,98 +744,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_attachTextureBindGroup
     commands.push(GLCommand::AttachTexture(id));
 }
 
-// #[no_mangle]
-// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bufferData(
-//     env: JNIEnv,
-//     class: JClass,
-//     buf: JObject,
-//     target: jint,
-//     usage: jint
-// ) {
-//     let wm = unsafe { RENDERER.get().unwrap() };
-//     let data = env.get_direct_buffer_address(buf.into()).unwrap();
-//     let vec = Vec::from(data);
-//
-//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-//     let active_buffer = *state.buffers.get(&target).unwrap();
-//
-//     unsafe {
-//         gl::upload_buffer_data(
-//             active_buffer as usize,
-//             &vec[..],
-//             &wm.wgpu_state.device
-//         );
-//     }
-// }
-
-// #[no_mangle]
-// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initBuffer(
-//     env: JNIEnv,
-//     class: JClass,
-//     target: jint,
-//     size: jlong,
-//     usage: jint
-// ) {
-//     let wm = unsafe { RENDERER.get().unwrap() };
-//
-//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-//     let active_buffer = *state.buffers.get(&target).unwrap();
-//     let vec = vec![0u8; size as usize];
-//
-//     unsafe {
-//         gl::upload_buffer_data(
-//             active_buffer as usize,
-//             &vec[..],
-//             &wm.wgpu_state.device
-//         );
-//     }
-// }
-
-//Awful code
-// #[no_mangle]
-// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_mapBuffer(
-//     env: JNIEnv,
-//     class: JClass,
-//     target: jint,
-//     usage: jint
-// ) -> jobject {
-//     // let wm = unsafe { RENDERER.get().unwrap() };
-//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-//     let active_buffer = *state.buffers.get(&target).unwrap();
-//
-//     let buf = unsafe { gl::get_buffer(active_buffer as usize) }.unwrap();
-//     let maps = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
-//
-//     if !maps.contains_key(&(target as usize)) {
-//         maps.insert(active_buffer as usize, buf.data.as_ref().unwrap().clone());
-//     } else {
-//         panic!("Buffer {} already mapped!", target);
-//     }
-//     let mut reference = maps.get_mut(&(active_buffer as usize)).unwrap();
-//     env.new_direct_byte_buffer(&mut reference[..]).unwrap().as_raw()
-// }
-
-// #[no_mangle]
-// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_unmapBuffer(
-//     env: JNIEnv,
-//     class: JClass,
-//     target: jint,
-// ) {
-//     let wm = unsafe { RENDERER.get().unwrap() };
-//     let state = unsafe { gl::GL_STATE.get_mut().unwrap() };
-//     let active_buffer = state.buffers.remove(&target).unwrap();
-//     let mapped = unsafe { gl::GL_MAPPED_BUFFERS.get_mut().unwrap() };
-//     let vec = mapped.remove(&(active_buffer as usize)).unwrap();
-//
-//     unsafe {
-//         gl::upload_buffer_data(
-//             active_buffer as usize,
-//             &vec[..],
-//             &wm.wgpu_state.device
-//         );
-//     }
-// }
-
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
     env: JNIEnv,
@@ -1088,40 +752,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
 ) {
     let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     commands.push(GLCommand::UsePipeline(pipeline as usize));
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bindMatrix4f(
-    env: JNIEnv,
-    class: JClass,
-    slot: jint,
-    floatarr: JObject
-) {
-    let elem = env.get_float_array_elements(floatarr.as_raw(), ReleaseMode::NoCopyBack)
-        .unwrap();
-
-    assert_eq!(elem.size().unwrap(), 16);
-
-    let float_slice = unsafe {
-        std::slice::from_raw_parts(elem.as_ptr(), 16)
-    };
-
-    let mat_helper: &UniformMatrixHelper = bytemuck::from_bytes(
-        bytemuck::cast_slice::<_, u8>(float_slice)
-    );
-
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::BindMat(slot as usize, Matrix4::from(
-        Ortho {
-            left: 0.0,
-            right: 1280.0,
-            bottom: 720.0,
-            top: 0.0,
-            near: 0.0,
-            far: 10000.0
-        }
-    )));
-    // commands.push(GLCommand::BindMat(slot as usize, mat_helper.view_proj.into()));
 }
 
 #[no_mangle]

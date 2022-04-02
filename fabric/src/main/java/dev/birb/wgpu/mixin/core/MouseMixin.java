@@ -15,4 +15,12 @@ public class MouseMixin {
 
     }
 
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public void updateMouse() {
+
+    }
+
 }

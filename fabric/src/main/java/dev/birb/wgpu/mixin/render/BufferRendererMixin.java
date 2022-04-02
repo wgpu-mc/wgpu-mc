@@ -39,6 +39,8 @@ public class BufferRendererMixin {
         } else if(vertexFormat == VertexFormats.POSITION_TEXTURE) {
             WgpuNative.wmUsePipeline(1);
             WgpuNative.attachTextureBindGroup(GlWmState.textureSlots.get(GlWmState.activeTexture));
+        } else {
+            return;
         }
 
         Matrix4f mat = RenderSystem.getProjectionMatrix();

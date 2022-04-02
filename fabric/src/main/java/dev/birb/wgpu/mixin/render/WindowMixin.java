@@ -11,6 +11,31 @@ import java.io.InputStream;
 @Mixin(Window.class)
 public class WindowMixin {
 
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public void setVsync(boolean vsync) {
+        
+    }
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public void setRawMouseMotion(boolean rawMouseMotion) {
+
+    }
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public void logOnGlError() {
+
+    }
+
     /**
      * @author wgpu-mc
      */

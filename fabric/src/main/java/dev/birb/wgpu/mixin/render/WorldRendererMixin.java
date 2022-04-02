@@ -1,6 +1,7 @@
 package dev.birb.wgpu.mixin.render;
 
 import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.resource.ResourceManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
@@ -28,6 +29,15 @@ public class WorldRendererMixin {
      */
     @Overwrite
     public void renderStars() {
+
+    }
+
+    /**
+     * @author wgpu-mc
+     * @reason do no such thing
+     */
+    @Overwrite
+    public void reload(ResourceManager manager) {
 
     }
 

@@ -88,6 +88,8 @@ public abstract class MinecraftClientRenderMixin {
 
     @Inject(method = "render", at = @At(value = "RETURN"))
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
+        RenderSystem.replayQueue();
+
         if(Wgpu.INITIALIZED) WgpuNative.submitCommands();
     }
 

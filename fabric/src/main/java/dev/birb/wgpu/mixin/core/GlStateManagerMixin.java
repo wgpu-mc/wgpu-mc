@@ -230,7 +230,7 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static int _glGenBuffers() {
-        return WgpuNative.genBuffer();
+        return -1;
     }
 
     @Overwrite(remap = false)
@@ -241,34 +241,28 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static void _glBindBuffer(int target, int buffer) {
-        WgpuNative.bindBuffer(target, buffer);
     }
 
     @Overwrite(remap = false)
     public static void _glBindVertexArray(int array) {
-        WgpuNative.bindVertexArray(array);
     }
 
     @Overwrite(remap = false)
     public static void _glBufferData(int target, ByteBuffer data, int usage) {
-//        data.array()
-        WgpuNative.bufferData(data, target, usage);
     }
 
     @Overwrite(remap = false)
     public static void _glBufferData(int target, long size, int usage) {
-        WgpuNative.initBuffer(target, size, usage);
     }
 
     @Nullable
     @Overwrite(remap = false)
     public static ByteBuffer mapBuffer(int target, int access) {
-        return WgpuNative.mapBuffer(target, access);
+        return ByteBuffer.allocate(0);
     }
 
     @Overwrite(remap = false)
     public static void _glUnmapBuffer(int target) {
-        WgpuNative.unmapBuffer(target);
     }
 
     @Overwrite(remap = false)
@@ -470,7 +464,7 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static int _getTextureId(int texture) {
-        return 0;
+        return GlWmState.textureSlots.get(texture);
     }
 
     @Overwrite(remap = false)
@@ -481,12 +475,25 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static void _texImage2D(int target, int level, int internalFormat, int width, int height, int border, int format, int type, @Nullable IntBuffer pixels) {
+        if(level != 0) return;
+
+        int texId = GlWmState.textureSlots.get(GlWmState.activeTexture);
+        GlWmState.WmTexture texture = GlWmState.generatedTextures.get(texId);
+
+        if(width < texture.width || height < texture.height) {
+            System.out.println("Tried to make texture smaller?");
+            return;
+        }
+
+        texture.width = width;
+        texture.height = height;
+
         long ptr = 0;
         if(pixels != null) {
             ptr = MemoryUtil.memAddress(pixels);
         }
         WgpuNative.texImage2D(
-                GlWmState.textureSlots.get(GlWmState.activeTexture),
+                texId,
                 target,
                 level,
                 internalFormat,
@@ -497,8 +504,15 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static void _texSubImage2D(int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, long pixels) {
-        WgpuNative.subImage2D(
-                GlWmState.textureSlots.get(GlWmState.activeTexture),
+        //we do not care about mip maps
+        if(level != 0) return;
+
+        int texId = GlWmState.textureSlots.get(GlWmState.activeTexture);
+        GlWmState.WmTexture texture = GlWmState.generatedTextures.get(texId);
+
+        if(width + offsetX <= texture.width && height + offsetY <= texture.height) {
+            WgpuNative.subImage2D(
+                texId,
                 target,
                 level,
                 offsetX,
@@ -508,7 +522,10 @@ public class GlStateManagerMixin {
                 format,
                 type,
                 pixels
-        );
+            );
+        } else {
+            System.out.println("uhh");
+        }
     }
 
     @Overwrite(remap = false)
@@ -585,7 +602,6 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static void _drawElements(int mode, int first, int type, long indices) {
-        WgpuNative.drawElements(mode, first, type, indices);
     }
 
     @Overwrite(remap = false)

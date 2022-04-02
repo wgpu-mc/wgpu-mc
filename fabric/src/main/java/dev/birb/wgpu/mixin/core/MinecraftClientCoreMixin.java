@@ -1,6 +1,5 @@
 package dev.birb.wgpu.mixin.core;
 
-import dev.birb.wgpu.game.MainGameThread;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
@@ -8,6 +7,7 @@ import net.minecraft.client.RunArgs;
 import net.minecraft.client.gui.screen.Screen;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -48,20 +48,23 @@ public abstract class MinecraftClientCoreMixin {
         cir.setReturnValue(title);
     }
 
-    @Inject(method = "run", at = @At("HEAD"))
-    public void injectRun(CallbackInfo ci) {
-        Wgpu.initRenderer((MinecraftClient) (Object) this);
-    }
-
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/thread/ReentrantThreadExecutor;<init>(Ljava/lang/String;)V", shift = At.Shift.AFTER))
     private void injectPreInit(RunArgs args, CallbackInfo ci) {
-        System.out.println("Initializing wgpu-mc");
+        System.out.println("wgpu-mc pre-init");
         Wgpu.preInit("Minecraft");
     }
 
-//    @Inject(method = "<init>", at = @At("TAIL"))
-//    public void injectWindowHook(RunArgs args, CallbackInfo ci) {
-//        Wgpu.initRenderer((MinecraftClient) (Object) this);
-//    }
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public boolean shouldRenderAsync() {
+        return true;
+    }
+
+    @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/resource/ResourceReloadLogger;reload(Lnet/minecraft/client/resource/ResourceReloadLogger$ReloadReason;Ljava/util/List;)V", shift = At.Shift.AFTER))
+    public void injectWindowHook(RunArgs args, CallbackInfo ci) {
+        Wgpu.MAY_INITIALIZE = true;
+    }
 
 }

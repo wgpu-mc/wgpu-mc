@@ -13,6 +13,8 @@ public class GlWmState {
 
     public static class WmTexture {
         public ByteBuffer buffer;
+        public int width;
+        public int height;
 
         public WmTexture() {
             this(null);

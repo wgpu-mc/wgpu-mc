@@ -1,6 +1,5 @@
 package dev.birb.wgpu.render;
 
-import dev.birb.wgpu.game.MainGameThread;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.block.Block;
@@ -13,6 +12,8 @@ import java.util.HashMap;
 public class Wgpu {
     private static final WgpuTextureManager textureManager = new WgpuTextureManager();
     public static boolean INITIALIZED = false;
+    public static boolean MAY_INITIALIZE = false;
+
     public static HashMap<String, Integer> blocks;
 
     public static WgpuTextureManager getTextureManager() {
@@ -30,10 +31,11 @@ public class Wgpu {
         WgpuNative.initialize(windowTitle);
     }
 
-    public static void initRenderer(MinecraftClient client) {
+    public static void initRenderer() {
         if (!INITIALIZED) {
             System.loadLibrary("renderdoc");
 
+            System.out.println("Initializing wgpu-mc renderer");
             WgpuNative.initRenderer();
             INITIALIZED = true;
 
@@ -44,8 +46,6 @@ public class Wgpu {
 
             blocks = WgpuNative.bakeBlockModels();
 
-            client.updateWindowTitle();
-            MainGameThread.createNewThread(client);
             WgpuNative.doEventLoop();
         }
     }

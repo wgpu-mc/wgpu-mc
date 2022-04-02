@@ -255,21 +255,7 @@ pub struct TextureUnit {
 }
 
 #[derive(Debug)]
-pub struct GlPipelineState {
-    pub matrix_stacks: [([Matrix4<f32>; 32], usize); 3],
-    pub matrix_mode: usize,
-    pub active_texture_unit: i32,
-    pub texture_units: HashMap<i32, TextureUnit>,
-    // pub slots: RefCell<HashMap<i32, i32>>,
-    // pub vertex_attributes: RefCell<HashMap<GlAttributeType, SubmittedVertexAttrPointer>>,
-    pub vertex_array: Option<i32>,
-    pub client_states: Vec<u32>,
-    pub active_pipeline: usize,
-}
-
-#[derive(Debug)]
 pub struct GlPipeline {
-    pub state: RefCell<GlPipelineState>,
     pub commands: ArcSwap<Vec<GLCommand>>
 }
 
@@ -645,15 +631,12 @@ impl WmPipeline for GlPipeline {
     fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, wm: &'b WmRenderer, render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
         let pipeline_manager = wm.render_pipeline_manager.load();
         let gl_alloc = unsafe { &GL_ALLOC }.get().unwrap();
-        let mut gl = self.state.borrow_mut();
 
         let commands = self.commands.load();
 
         commands.iter().for_each(|command| {
             match command {
                 GLCommand::UsePipeline(pipeline) => {
-                    gl.active_pipeline = *pipeline;
-
                     render_pass.set_pipeline(
                         arena.alloc(match pipeline {
                             0 => pipeline_manager.render_pipelines.load().get("pos_col_uint").unwrap().clone(),
@@ -721,7 +704,6 @@ impl WmPipeline for GlPipeline {
                     render_pass.draw(0..6, 0..1);
                 },
                 GLCommand::AttachTexture(texture) => {
-                    let gl_alloc = unsafe { &GL_ALLOC }.get().unwrap();
                     let resource = gl_alloc.get(texture).unwrap();
                     let texture = match resource {
                         GlResource::Texture(tex, _) => {
@@ -757,7 +739,6 @@ impl WmPipeline for GlPipeline {
 
                     render_pass.set_bind_group(0, bg, &[]);
                 }
-                // GLCommand::Ortho()
                 _ => {}
             };
         });
