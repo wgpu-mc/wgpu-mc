@@ -19,8 +19,7 @@ use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::PipelineLayout;
 
-use crate::gl::{GlAttributeFormat, GlAttributeType, GlResource};
-use crate::{gl, GL_ALLOC};
+use crate::gl;
 use crate::wgpu::{BindGroup, BlendComponent, BlendState, Label};
 
 // #[rustfmt::skip]
@@ -41,211 +40,14 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 
 #[derive(Clone, Debug)]
 pub enum GLCommand {
-    BindTexture(i32, i32),
-    BindBuffer(i32, i32),
-    ActiveTexture(i32),
-    DrawArray(i32, i32, i32),
-    PushMatrix,
-    PopMatrix,
-    VertexPointer(i32, i32, i32, *const u8),
-    ColorPointer(i32, i32, i32, *const u8),
-    TexCoordPointer(i32, i32, i32, *const u8),
-    BindVertexArray(i32),
-    EnableClientState(u32),
-    DisableClientState(u32),
-    MultMatrix(Matrix4<f32>),
     SetMatrix(Matrix4<f32>),
-    MatrixMode(usize),
-    DrawElements(i32, i32, i32, *const u8),
     ClearColor(f32, f32, f32),
-    BufferData(RefCell<Option<Vec<u8>>>, i32, i32),
     UsePipeline(usize),
-    BindMat(usize, Matrix4<f32>),
     SetVertexBuffer(Vec<u8>),
     SetIndexBuffer(Vec<u32>),
     DrawIndexed(u32),
     Draw(u32),
     AttachTexture(i32)
-}
-
-fn create_wgpu_pipeline(
-    wm: &WmRenderer,
-    attributes: &[SubmittedVertexAttrPointer],
-    layout: &wgpu::PipelineLayout,
-    shader: &dyn WmShader) -> wgpu::RenderPipeline {
-
-    let mut shader_loc = 0;
-    let layout_attrs: Vec<[wgpu::VertexAttribute; 1]> = attributes.iter().map(|attr| {
-        shader_loc += 1;
-        [wgpu::VertexAttribute {
-            format: attr.format.as_wgpu(attr.size),
-            offset: 0,
-            shader_location: shader_loc - 1
-        }; 1]
-    }).collect();
-
-    let mut index = 0;
-
-    let buffers: Vec<wgpu::VertexBufferLayout> = attributes.iter().map(|attr| {
-        index += 1;
-        wgpu::VertexBufferLayout {
-            array_stride: attr.stride as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &layout_attrs[index - 1]
-        }
-    }).collect();
-
-    println!("Buffer layouts: {:?}\nLayout attrs: {:?}\n\n", buffers, layout_attrs);
-
-    wm.wgpu_state.device.create_render_pipeline(
-        &wgpu::RenderPipelineDescriptor {
-            label: Some(&format!("OpenGL pipeline ({:?}) with layout ({:?})", layout_attrs, layout)),
-            layout: Some(layout),
-            vertex: wgpu::VertexState {
-                module: &shader.get_vert().0,
-                entry_point: &shader.get_vert().1,
-                buffers: &buffers
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default()
-            }),
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader.get_frag().0,
-                entry_point: shader.get_frag().1,
-                targets: &[
-                    wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8Unorm,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::OVER,
-                            alpha: wgpu::BlendComponent::OVER
-                        }),
-                        write_mask: Default::default()
-                    }
-                ]
-            }),
-            multiview: None
-        }
-    )
-}
-
-fn tex_image_2d(wm: &WmRenderer, width: u32, height: u32, format: wgpu::TextureFormat, data: &[u8]) -> BindableTexture {
-    let size = wgpu::Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1
-    };
-
-    let texture = wm.wgpu_state.device.create_texture(
-        &wgpu::TextureDescriptor {
-            label: None,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING
-        }
-    );
-
-    wm.wgpu_state.queue.write_texture(
-        texture.as_image_copy(),
-        data,
-        wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: NonZeroU32::new(width as u32 * 4),
-            rows_per_image: NonZeroU32::new(height as u32)
-        },
-        size
-    );
-
-    let view = texture.create_view(
-        &wgpu::TextureViewDescriptor::default()
-    );
-
-    let sampler = wm.wgpu_state.device.create_sampler(
-        &wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        }
-    );
-
-    let bind_group = wm.wgpu_state.device.create_bind_group(
-        &BindGroupDescriptor {
-            label: None,
-            layout: &wm.render_pipeline_manager.load().bind_group_layouts.read().get("texture").unwrap(),
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view)
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler)
-                }
-            ]
-        }
-    );
-
-    BindableTexture {
-        tsv: TextureSamplerView {
-            texture,
-            view,
-            sampler
-        },
-        bind_group
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct SubmittedVertexAttrPointer {
-    usage: GlAttributeType,
-    format: GlAttributeFormat,
-    size: u8,
-    ptr: *const u8,
-    stride: u32
-}
-
-fn quads_to_tris_transformer(vertex_data: &[u8], vertex_count: usize, stride: usize) -> Vec<u8> {
-    let mut out = Vec::with_capacity(vertex_count * stride);
-    for x in 0..vertex_count / 4 {
-        let beginning_offset = (x * 4 * stride);
-        let a = &vertex_data[beginning_offset..beginning_offset + stride];
-        let b = &vertex_data[beginning_offset + stride..beginning_offset + (stride * 2)];
-        let c = &vertex_data[beginning_offset + (stride * 2)..beginning_offset + (stride * 3)];
-        let d = &vertex_data[beginning_offset + (stride * 3)..beginning_offset + (stride * 4)];
-        // out.extend(a);
-        // out.extend(b);
-        // out.extend(c);
-        // out.extend(a);
-        // out.extend(c);
-        // out.extend(d);
-        out.extend(a);
-        out.extend(c);
-        out.extend(b);
-        out.extend(a);
-        out.extend(d);
-        out.extend(c);
-    }
-    out
 }
 
 #[derive(Debug)]
@@ -630,7 +432,7 @@ impl WmPipeline for GlPipeline {
 
     fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, wm: &'b WmRenderer, render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
         let pipeline_manager = wm.render_pipeline_manager.load();
-        let gl_alloc = unsafe { &GL_ALLOC }.get().unwrap();
+        let gl_alloc = gl::GL_ALLOC.get().unwrap().read();
 
         let commands = self.commands.load();
 
@@ -704,13 +506,7 @@ impl WmPipeline for GlPipeline {
                     render_pass.draw(0..6, 0..1);
                 },
                 GLCommand::AttachTexture(texture) => {
-                    let resource = gl_alloc.get(texture).unwrap();
-                    let texture = match resource {
-                        GlResource::Texture(tex, _) => {
-                            tex.bindable_texture.as_ref().unwrap().clone()
-                        }
-                        GlResource::Buffer(_) => panic!("Invalid GL resource binding. Not a texture")
-                    };
+                    let texture = gl_alloc.get(texture).unwrap().bindable_texture.as_ref().unwrap().clone();
                     render_pass.set_bind_group(1, &arena.alloc(texture).bind_group, &[]);
                 },
                 GLCommand::SetMatrix(mat) => {

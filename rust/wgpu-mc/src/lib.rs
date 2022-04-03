@@ -49,12 +49,13 @@ pub struct WgpuState {
 
 ///Data specific to wgpu and rendering goes here, everything specific to Minecraft
 /// goes in `MinecraftState`
+#[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
 
-    pub depth_texture: ArcSwap<texture::TextureSamplerView>,
+    pub depth_texture: Arc<ArcSwap<texture::TextureSamplerView>>,
 
-    pub render_pipeline_manager: ArcSwap<RenderPipelineManager>,
+    pub render_pipeline_manager: Arc<ArcSwap<RenderPipelineManager>>,
 
     pub mc: Arc<mc::MinecraftState>
 }
@@ -133,8 +134,8 @@ impl WmRenderer {
         Self {
             wgpu_state: Arc::new(wgpu_state),
 
-            depth_texture: ArcSwap::new(Arc::new(depth_texture)),
-            render_pipeline_manager: ArcSwap::new(Arc::new(pipelines)),
+            depth_texture: Arc::new(ArcSwap::new(Arc::new(depth_texture))),
+            render_pipeline_manager: Arc::new(ArcSwap::new(Arc::new(pipelines))),
             mc: Arc::new(mc),
         }
     }
@@ -189,7 +190,7 @@ impl WmRenderer {
         self.depth_texture.store(Arc::new(texture::TextureSamplerView::create_depth_texture(&self.wgpu_state.device, &surface_config, "depth_texture")));
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&self) {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();

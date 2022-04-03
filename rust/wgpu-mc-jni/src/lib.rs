@@ -48,7 +48,7 @@ use std::cell::{RefCell, Cell};
 use std::cmp::min;
 use std::io::Cursor;
 use wgpu::{RenderPipelineDescriptor, PipelineLayoutDescriptor, TextureDescriptor, Extent3d, ImageDataLayout, BindGroupDescriptor, BindGroupEntry, BindingResource, TextureViewDescriptor};
-use crate::gl::{GL_ALLOC, GL_COMMANDS, GlResource, GlTexture};
+use crate::gl::{GlTexture};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use std::num::NonZeroU32;
 use std::rc::Rc;
@@ -67,7 +67,7 @@ mod palette;
 
 enum RenderMessage {
     SetTitle(String),
-    Task(Box<dyn FnOnce() -> ()>)
+    Task(Box<dyn FnOnce() -> () + Send + Sync>)
 }
 
 struct MinecraftRenderState {
@@ -75,15 +75,10 @@ struct MinecraftRenderState {
     render_world: bool
 }
 
-static mut RENDERER: OnceCell<WmRenderer> = OnceCell::new();
-
-static mut EVENT_LOOP: OnceCell<EventLoop<()>> = OnceCell::new();
-static mut WINDOW: OnceCell<Window> = OnceCell::new();
-
-static mut CHANNELS: OnceCell<(Mutex<mpsc::Sender<RenderMessage>>, Mutex<mpsc::Receiver<RenderMessage>>)> = OnceCell::new();
-
-static mut MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
-static mut GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
+static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
+static CHANNELS: OnceCell<(Mutex<mpsc::Sender<RenderMessage>>, Mutex<mpsc::Receiver<RenderMessage>>)> = OnceCell::new();
+static MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
+static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -164,7 +159,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     env: JNIEnv,
     class: JClass) -> jstring {
 
-    let renderer = unsafe { RENDERER.get().unwrap() };
+    let renderer = RENDERER.get().unwrap();
     let backend = renderer.get_backend_description();
 
     env.new_string(backend)
@@ -221,7 +216,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
 
     let rname: String = env.get_string(name).unwrap().into();
 
-    let renderer = unsafe { RENDERER.get_mut().unwrap() };
+    let renderer = RENDERER.get().unwrap();
 
     let mut block_manager = renderer.mc.block_manager.write();
 
@@ -250,7 +245,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     env: JNIEnv,
     class: JClass,
     string: JString
@@ -262,53 +257,53 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initialize(
 
     let event_loop = EventLoop::new();
 
-    let window = winit::window::WindowBuilder::new()
-        .with_title(&format!("{}", title))
-        .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
-            width: 1280,
-            height: 720
-        }))
-        .build(&event_loop)
-        .unwrap();
+    let window = Arc::new(
+        winit::window::WindowBuilder::new()
+            .with_title(&format!("{}", title))
+            .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
+                width: 1280,
+                height: 720
+            }))
+            .build(&event_loop)
+            .unwrap()
+    );
 
-    unsafe {
-        gl::init();
-        GL_PIPELINE.set(GlPipeline {
-            commands: ArcSwap::new(Arc::new(Vec::new()))
-        });
-        CHANNELS.get_or_init(|| {
-            let (tx, rx) = mpsc::channel::<RenderMessage>();
-            (Mutex::new(tx), Mutex::new(rx))
-        });
-        EVENT_LOOP.set(event_loop);
-        WINDOW.set(window);
-        MC_STATE.set(RwLock::new(MinecraftRenderState {
-            render_world: false
-        }));
-    }
-}
+    MC_STATE.set(RwLock::new(MinecraftRenderState {
+        render_world: false
+    }));
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
-    env: JNIEnv,
-    class: JClass) {
+    let wrapper = &WinitWindowWrapper {
+        window: &window
+    };
 
-    let renderer = unsafe { RENDERER.get_mut().unwrap() };
-    let event_loop = unsafe { EVENT_LOOP.take().unwrap() };
+    let wgpu_state = block_on(
+        WmRenderer::init_wgpu(wrapper)
+    );
 
-    let (_, rx) = unsafe { CHANNELS.get().unwrap() };
+    let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
+        jvm: env.get_java_vm().unwrap()
+    });
+
+    let mut wm = WmRenderer::new(
+        wgpu_state,
+        resource_provider
+    );
+
+    wm.init(
+        &[
+            &TerrainPipeline,
+            GL_PIPELINE.get().unwrap()
+        ]
+    );
+
+    RENDERER.set(wm.clone());
+
+    let (_, rx) = CHANNELS.get().unwrap();
     let rx = rx.lock();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
-        let mc_state = unsafe { MC_STATE.get().unwrap() }.read();
-
-        let (mut state, window) = unsafe {
-            (
-                RENDERER.get_mut().unwrap(),
-                WINDOW.get().unwrap()
-            )
-        };
+        let mc_state = MC_STATE.get().unwrap().read();
 
         let mut msg_r = rx.try_recv();
         while msg_r.is_ok() {
@@ -331,13 +326,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
                 match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::Resized(physical_size) => {
-                        &state.resize(WindowSize {
+                        &wm.resize(WindowSize {
                             width: physical_size.width,
                             height: physical_size.height
                         });
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        &state.resize(WindowSize {
+                        &wm.resize(WindowSize {
                             width: new_inner_size.width,
                             height: new_inner_size.height
                         });
@@ -346,16 +341,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
                 }
             }
             Event::RedrawRequested(_) => {
-                state.update();
+                wm.update();
 
-                state.render(&[
-                    unsafe { GL_PIPELINE.get().unwrap() }
+                wm.render(&[
+                    GL_PIPELINE.get().unwrap()
                 ]);
-
-                // let delta = Instant::now().duration_since(frame_begin).as_millis()+1; //+1 so we don't divide by zero
-                // frame_begin = Instant::now();
-
-                // println!("Frametime {}, FPS {}", delta, 1000/delta);
             }
             _ => {}
         }
@@ -364,37 +354,18 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_doEventLoop(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_initRenderer(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
     env: JNIEnv,
     class: JClass
 ) {
-    let wrapper = &WinitWindowWrapper {
-        window: unsafe { WINDOW.get().unwrap() }
-    };
-
-    let wgpu_state = block_on(
-        WmRenderer::init_wgpu(wrapper)
-    );
-
-    let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
-        jvm: env.get_java_vm().unwrap()
+    gl::init();
+    GL_PIPELINE.set(GlPipeline {
+        commands: ArcSwap::new(Arc::new(Vec::new()))
     });
-
-    let mut state = WmRenderer::new(
-        wgpu_state,
-        resource_provider
-    );
-
-    state.init(
-        &[
-            &TerrainPipeline,
-            unsafe { &GL_PIPELINE }.get().unwrap()
-        ]
-    );
-
-    unsafe {
-        RENDERER.set(state);
-    }
+    CHANNELS.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<RenderMessage>();
+        (Mutex::new(tx), Mutex::new(rx))
+    });
 }
 
 #[no_mangle]
@@ -448,7 +419,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     class: JClass,
     jtitle: JString) {
 
-    let (tx, _) = unsafe { CHANNELS.get().unwrap() };
+    let (tx, _) = CHANNELS.get().unwrap();
     let tx = tx.lock();
 
     let title: String = env.get_string(jtitle).unwrap().into();
@@ -461,7 +432,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     env: JNIEnv,
     class: JClass) -> jobject {
 
-    let renderer = unsafe { RENDERER.get().unwrap() };
+    let renderer = RENDERER.get().unwrap();
 
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
         .unwrap();
@@ -488,7 +459,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
     class: JClass,
     boolean: jboolean) {
 
-    let render_state = unsafe { MC_STATE.get().unwrap() };
+    let render_state = MC_STATE.get().unwrap();
     render_state.write().render_world = boolean != 0;
 }
 
@@ -497,11 +468,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     env: JNIEnv,
     class: JClass
 ) {
-    let commands = unsafe { GL_COMMANDS.get_mut().unwrap() };
+    let mut commands = gl::GL_COMMANDS.get().unwrap().clone().write();
 
     // println!("{:?}", commands);
 
-    unsafe { GL_PIPELINE.get_mut().unwrap() }.commands.store(
+    GL_PIPELINE.get().unwrap().commands.store(
         Arc::new(
             commands.clone()
         )
@@ -547,7 +518,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
             vec![0; size]
         };
 
-        let wm = unsafe { &RENDERER }.get().unwrap();
+        let wm = RENDERER.get().unwrap();
 
         let tsv = TextureSamplerView::from_rgb_bytes(
             &wm.wgpu_state,
@@ -571,17 +542,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
             tsv,
         );
 
-        unsafe { GL_ALLOC.get_mut() }.unwrap().insert(texture_id, GlResource::Texture(
-            GlTexture {
-                width: width as u16,
-                height: height as u16,
-                bindable_texture: Some(Rc::new(bindable))
-            },
-            data
-        ));
+        {
+            gl::GL_ALLOC.get().unwrap().write().insert(
+                texture_id,
+                GlTexture {
+                    width: width as u16,
+                    height: height as u16,
+                    bindable_texture: Some(Arc::new(bindable)),
+                    pixels: data
+                },
+            );
+        }
     };
 
-    let (tx, _) = unsafe { &CHANNELS }.get_or_init(|| {
+    let (tx, _) = CHANNELS.get_or_init(|| {
         let (tx, rx) = channel();
         (Mutex::new( tx), Mutex::new(rx))
     });
@@ -627,68 +601,68 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
             vec![0; size]
         };
 
-        let wm = unsafe { &RENDERER }.get().unwrap();
+        let wm = RENDERER.get().unwrap();
 
-        match unsafe { GL_ALLOC.get_mut() }.unwrap().get_mut(&texture_id).unwrap() {
-            GlResource::Texture(gl_texture, texture_data) => {
-                let src_row_byte_width = (width * pixel_size as i32);
-                let dest_row_byte_width = gl_texture.width as i32 * pixel_size as i32;
+        let gl_alloc = gl::GL_ALLOC.get().unwrap();
+        let mut alloc_write = gl_alloc.write();
 
-                assert!(width <= gl_texture.width as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
-                assert!(height <= gl_texture.height as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
+        let gl_texture = alloc_write.get_mut(&texture_id).unwrap();
 
-                if width + offsetX > gl_texture.width as i32 {
-                    return;
-                }
+        let src_row_byte_width = (width * pixel_size as i32);
+        let dest_row_byte_width = gl_texture.width as i32 * pixel_size as i32;
 
-                if height + offsetY > gl_texture.height as i32 {
-                    return;
-                }
+        assert!(width <= gl_texture.width as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
+        assert!(height <= gl_texture.height as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
 
-                for y in 0..height {
-                    let src_begin = src_row_byte_width * y;
-                    let src_end = src_row_byte_width * (y + 1);
-                    assert!(src_end <= source_tex_data.len() as i32, "{} > {}\nofx {} ofy {} size {} width {} height {}\n", src_end, source_tex_data.len(), offsetX, offsetY, size, width, height);
-                    let src_slice = &source_tex_data[src_begin as usize..src_end as usize];
-
-                    let dest_begin = (dest_row_byte_width * (y + offsetY)) + (offsetX * pixel_size as i32);
-                    let dest_end = dest_begin + (width * pixel_size as i32);
-
-                    // assert_eq!(dest_end - dest_begin, src_end - src_begin);
-                    assert!(dest_end <= texture_data.len() as i32, "{} > {}\nofx {} ofy {} size {} width {} height {}\n", dest_end, texture_data.len(), offsetX, offsetY, size, width, height);
-                    let dest_slice = &mut texture_data[dest_begin as usize..dest_end as usize];
-                    dest_slice.copy_from_slice(src_slice);
-                }
-
-                let tsv = TextureSamplerView::from_rgb_bytes(
-                    &wm.wgpu_state,
-                    &texture_data,
-                    Extent3d {
-                        width: gl_texture.width as u32,
-                        height: gl_texture.height as u32,
-                        depth_or_array_layers: 1
-                    },
-                    None,
-                    match format {
-                        0x1908 => wgpu::TextureFormat::Rgba8Unorm,
-                        0x80E1 => wgpu::TextureFormat::Bgra8Unorm,
-                        _ => unimplemented!()
-                    }
-                ).unwrap();
-
-                let bindable_texture = BindableTexture::from_tsv(
-                    &wm.wgpu_state,
-                    &wm.render_pipeline_manager.load(),
-                    tsv
-                );
-
-                gl_texture.bindable_texture = Some(Rc::new(bindable_texture));
-            }
-            GlResource::Buffer(_) => panic!("Invalid texture")
+        if width + offsetX > gl_texture.width as i32 {
+            return;
         }
+
+        if height + offsetY > gl_texture.height as i32 {
+            return;
+        }
+
+        for y in 0..height {
+            let src_begin = src_row_byte_width * y;
+            let src_end = src_row_byte_width * (y + 1);
+            assert!(src_end <= source_tex_data.len() as i32);
+            let src_slice = &source_tex_data[src_begin as usize..src_end as usize];
+
+            let dest_begin = (dest_row_byte_width * (y + offsetY)) + (offsetX * pixel_size as i32);
+            let dest_end = dest_begin + (width * pixel_size as i32);
+
+            assert_eq!(dest_end - dest_begin, src_end - src_begin);
+            assert!(dest_end <= gl_texture.pixels.len() as i32);
+            let dest_slice = &mut gl_texture.pixels[dest_begin as usize..dest_end as usize];
+            dest_slice.copy_from_slice(src_slice);
+        }
+
+        let tsv = TextureSamplerView::from_rgb_bytes(
+            &wm.wgpu_state,
+            &gl_texture.pixels,
+            Extent3d {
+                width: gl_texture.width as u32,
+                height: gl_texture.height as u32,
+                depth_or_array_layers: 1
+            },
+            None,
+            match format {
+                0x1908 => wgpu::TextureFormat::Rgba8Unorm,
+                0x80E1 => wgpu::TextureFormat::Bgra8Unorm,
+                _ => unimplemented!()
+            }
+        ).unwrap();
+
+        let bindable_texture = BindableTexture::from_tsv(
+            &wm.wgpu_state,
+            &wm.render_pipeline_manager.load(),
+            tsv
+        );
+
+        gl_texture.bindable_texture = Some(Arc::new(bindable_texture));
     };
 
-    let (tx, _) = unsafe { &CHANNELS }.get_or_init(|| {
+    let (tx, _) = CHANNELS.get_or_init(|| {
         let (tx, rx) = channel();
         (Mutex::new( tx), Mutex::new(rx))
     });
@@ -702,7 +676,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getMaxTextureSize(
     env: JNIEnv,
     class: JClass,
 ) -> jint {
-    let wm = unsafe { RENDERER.get().unwrap() };
+    let wm = RENDERER.get().unwrap();
     wm.wgpu_state.adapter.limits().max_texture_dimension_2d as i32
 }
 
@@ -711,7 +685,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
     env: JNIEnv,
     class: JClass,
 ) -> jint {
-    unsafe { WINDOW.get().unwrap().inner_size().width as i32 }
+    RENDERER.get().unwrap().wgpu_state.surface_config.load().width as i32
 }
 
 #[no_mangle]
@@ -719,7 +693,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
     env: JNIEnv,
     class: JClass,
 ) -> jint {
-    unsafe { WINDOW.get().unwrap().inner_size().height as i32 }
+    RENDERER.get().unwrap().wgpu_state.surface_config.load().height as i32
 }
 
 #[no_mangle]
@@ -730,8 +704,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
     g: jfloat,
     b: jfloat
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::ClearColor(r, g, b));
+    gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::ClearColor(r, g, b));
 }
 
 #[no_mangle]
@@ -740,8 +713,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_attachTextureBindGroup
     class: JClass,
     id: i32
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::AttachTexture(id));
+    gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::AttachTexture(id));
 }
 
 #[no_mangle]
@@ -750,8 +722,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
     class: JClass,
     pipeline: jint,
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-    commands.push(GLCommand::UsePipeline(pipeline as usize));
+    gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::UsePipeline(pipeline as usize));
 }
 
 #[no_mangle]
@@ -768,7 +739,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
     class: JClass,
     float_array: jfloatArray
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     let elements = env.get_float_array_elements(float_array, ReleaseMode::NoCopyBack)
         .unwrap();
 
@@ -792,7 +762,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
         Vector3::new(0.0, 0.0, 2.1)
     ) * Matrix4::from(slice_4x4);
 
-    commands.push(
+    gl::GL_COMMANDS.get().unwrap().write().push(
         GLCommand::SetMatrix(matrix)
     );
 }
@@ -803,9 +773,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawIndexed(
     class: JClass,
     count: jint
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-
-    commands.push(
+    gl::GL_COMMANDS.get().unwrap().write().push(
         GLCommand::DrawIndexed(count as u32)
     );
 }
@@ -816,8 +784,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setVertexBuffer(
     class: JClass,
     byte_array: jbyteArray
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
-
     let mut bytes = vec![0; env.get_array_length(byte_array).unwrap() as usize];
     env.get_byte_array_region(byte_array, 0, &mut bytes[..])
         .unwrap();
@@ -833,7 +799,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setVertexBuffer(
         converted.push(cursor.read_f32::<LittleEndian>().unwrap());
     }
 
-    commands.push(
+    gl::GL_COMMANDS.get().unwrap().write().push(
         GLCommand::SetVertexBuffer(Vec::from(bytemuck::cast_slice(&converted)))
     );
 }
@@ -844,7 +810,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
     class: JClass,
     int_array: jintArray
 ) {
-    let commands = unsafe { gl::GL_COMMANDS.get_mut().unwrap() };
     let elements = env.get_int_array_elements(int_array, ReleaseMode::NoCopyBack)
         .unwrap();
 
@@ -852,7 +817,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
         slice::from_raw_parts(elements.as_ptr() as *mut u32, elements.size().unwrap() as usize)
     };
 
-    commands.push(
+    gl::GL_COMMANDS.get().unwrap().write().push(
         GLCommand::SetIndexBuffer(Vec::from(slice))
     );
 }

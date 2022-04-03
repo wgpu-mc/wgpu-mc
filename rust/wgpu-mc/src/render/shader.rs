@@ -4,7 +4,7 @@ use crate::mc::datapack::NamespacedResource;
 use crate::mc::resource::ResourceProvider;
 use crate::wgpu::{ShaderModule, ShaderModuleDescriptor};
 
-pub trait WmShader {
+pub trait WmShader: Send + Sync {
 
     fn get_frag(&self) -> (&wgpu::ShaderModule, &str);
 

@@ -11,6 +11,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     paths_to_copy.push("./res/");
     fs_extra::copy_items(&paths_to_copy, out_dir, &copy_options)?;
 
+    let path = std::path::PathBuf::from("./res/assets");
+
+    if !path.is_dir() {
+        std::fs::create_dir("./res/assets")?;
+    }
+
     fs_extra::dir::copy("./res/wgpu_mc", "./res/assets", &copy_options);
 
     let resources_root: std::path::PathBuf = "./res/assets".into();

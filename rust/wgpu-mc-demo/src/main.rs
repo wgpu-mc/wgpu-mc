@@ -109,18 +109,6 @@ fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
 fn main() {
     let anvil_chunks = load_anvil_chunks();
 
-    {
-        println!("Allocating 100k strings");
-        let mut arena = WmArena::new(1024);
-        let time = Instant::now();
-        for _ in 0..100_000 {
-            arena.alloc(String::from("test"));
-        }
-        println!("Allocated in {}ms", Instant::now().duration_since(time).as_millis());
-        drop(arena);
-        println!("Drop works")
-    }
-
     let event_loop = EventLoop::new();
     let title = "wgpu-mc test";
     let window = winit::window::WindowBuilder::new()
