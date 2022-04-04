@@ -7,6 +7,7 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use cgmath::{Matrix4, SquareMatrix};
 use futures::StreamExt;
+use once_cell::sync::OnceCell;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, RenderPass, RenderPipeline, VertexState};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
@@ -19,7 +20,7 @@ use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::PipelineLayout;
 
-use crate::gl;
+use crate::{Extent3d, gl, GlTexture};
 use crate::wgpu::{BindGroup, BlendComponent, BlendState, Label};
 
 // #[rustfmt::skip]
@@ -58,7 +59,8 @@ pub struct TextureUnit {
 
 #[derive(Debug)]
 pub struct GlPipeline {
-    pub commands: ArcSwap<Vec<GLCommand>>
+    pub commands: ArcSwap<Vec<GLCommand>>,
+    pub black_texture: OnceCell<Arc<BindableTexture>>
 }
 
 fn byte_buffer_to_short(bytes: &[u8]) -> Vec<u16> {
@@ -166,6 +168,22 @@ impl WmPipeline for GlPipeline {
         let pipeline_manager = wm.render_pipeline_manager.load();
         let layouts = pipeline_manager.pipeline_layouts.load();
         let shaders = pipeline_manager.shader_map.read();
+
+        let black_tsv = TextureSamplerView::from_rgb_bytes(
+            &wm.wgpu_state,
+            &[0u8; 4],
+            Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1
+            },
+            Some("Black Texture"),
+            wgpu::TextureFormat::Bgra8Unorm
+        ).unwrap();
+
+        self.black_texture.set(
+            Arc::new(BindableTexture::from_tsv(&wm.wgpu_state, &*pipeline_manager, black_tsv))
+        );
 
         let pos_col_float3_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_float3").unwrap();
         let pos_col_uint_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_uint").unwrap();
@@ -506,7 +524,11 @@ impl WmPipeline for GlPipeline {
                     render_pass.draw(0..6, 0..1);
                 },
                 GLCommand::AttachTexture(texture) => {
-                    let texture = gl_alloc.get(texture).unwrap().bindable_texture.as_ref().unwrap().clone();
+                    let texture = match gl_alloc.get(texture) {
+                        None => self.black_texture.get().unwrap().clone(),
+                        Some(tx) => tx.bindable_texture.as_ref().unwrap().clone()
+                    };
+
                     render_pass.set_bind_group(1, &arena.alloc(texture).bind_group, &[]);
                 },
                 GLCommand::SetMatrix(mat) => {

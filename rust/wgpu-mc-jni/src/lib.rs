@@ -20,8 +20,8 @@ use dashmap::DashMap;
 use futures::executor::block_on;
 use jni::{JavaVM, JNIEnv};
 use jni::errors::Error;
-use jni::objects::{JByteBuffer, JClass, JObject, JString, JValue, ReleaseMode};
-use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jobjectArray, jstring, jlong, jfloat, jfloatArray, jbyte};
+use jni::objects::{JByteBuffer, JClass, JObject, JStaticFieldID, JString, JValue, ReleaseMode};
+use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jobjectArray, jstring, jlong, jfloat, jfloatArray, jbyte, jdouble};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
@@ -75,9 +75,15 @@ struct MinecraftRenderState {
     render_world: bool
 }
 
+struct MouseState {
+    pub x: f64,
+    pub y: f64
+}
+
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
 static CHANNELS: OnceCell<(Mutex<mpsc::Sender<RenderMessage>>, Mutex<mpsc::Receiver<RenderMessage>>)> = OnceCell::new();
 static MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
+static MOUSE_STATE: OnceCell<Arc<ArcSwap<MouseState>>> = OnceCell::new();
 static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
 
 struct WinitWindowWrapper<'a> {
@@ -276,6 +282,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
         window: &window
     };
 
+    println!("[wgpu-mc] initializing wgpu");
+
     let wgpu_state = block_on(
         WmRenderer::init_wgpu(wrapper)
     );
@@ -283,6 +291,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap()
     });
+
+    println!("[wgpu-mc] initializing");
 
     let mut wm = WmRenderer::new(
         wgpu_state,
@@ -298,24 +308,34 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 
     RENDERER.set(wm.clone());
 
-    let (_, rx) = CHANNELS.get().unwrap();
-    let rx = rx.lock();
+    println!("[wgpu-mc] done initializing");
+
+    env.set_static_field(
+        "dev/birb/wgpu/render/Wgpu",
+        (
+            "dev/birb/wgpu/render/Wgpu",
+            "INITIALIZED",
+            "Z"
+        ),
+        JValue::Bool(true.into())
+    );
+
+    let window_clone = window.clone();
+    thread::spawn(move || {
+        let (_, rx) = CHANNELS.get().unwrap();
+        let rx = rx.lock();
+
+        for render_message in rx.iter() {
+            match render_message {
+                RenderMessage::SetTitle(title) => window_clone.set_title(&title),
+                RenderMessage::Task(func) => func()
+            };
+        }
+    });
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         let mc_state = MC_STATE.get().unwrap().read();
-
-        let mut msg_r = rx.try_recv();
-        while msg_r.is_ok() {
-            let msg = msg_r.unwrap();
-
-            match msg {
-                RenderMessage::SetTitle(title) => window.set_title(&title),
-                RenderMessage::Task(func) => func()
-            };
-
-            msg_r = rx.try_recv();
-        }
 
         match event {
             Event::MainEventsCleared => window.request_redraw(),
@@ -337,6 +357,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                             height: new_inner_size.height
                         });
                     }
+                    WindowEvent::CursorMoved {
+                        device_id, position, modifiers
+                    } => {
+                        MOUSE_STATE.get().unwrap().store(Arc::new(MouseState {
+                            x: position.x,
+                            y: position.y
+                        }))
+                    },
                     _ => {}
                 }
             }
@@ -359,8 +387,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
     class: JClass
 ) {
     gl::init();
+
+    MOUSE_STATE.set(Arc::new(ArcSwap::new(
+        Arc::new(MouseState {
+            x: 0.0,
+            y: 0.0
+        })
+    )));
     GL_PIPELINE.set(GlPipeline {
-        commands: ArcSwap::new(Arc::new(Vec::new()))
+        commands: ArcSwap::new(Arc::new(Vec::new())),
+        black_texture: OnceCell::new()
     });
     CHANNELS.get_or_init(|| {
         let (tx, rx) = mpsc::channel::<RenderMessage>();
@@ -469,6 +505,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     class: JClass
 ) {
     let mut commands = gl::GL_COMMANDS.get().unwrap().clone().write();
+
+    println!("{:?}", commands);
 
     // println!("{:?}", commands);
 
@@ -758,9 +796,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
         bytemuck::cast_slice(&converted)
     );
 
-    let matrix = Matrix4::from_translation(
-        Vector3::new(0.0, 0.0, 2.1)
-    ) * Matrix4::from(slice_4x4);
+    let matrix = Matrix4::from(slice_4x4) * Matrix4::from_translation(
+        Vector3::new(0.0, 0.0, 2000.0)
+    );
 
     gl::GL_COMMANDS.get().unwrap().write().push(
         GLCommand::SetMatrix(matrix)
@@ -822,3 +860,18 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
     );
 }
 
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getMouseX(
+    env: JNIEnv,
+    class: JClass,
+) -> jdouble {
+    MOUSE_STATE.get().unwrap().load().x
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getMouseY(
+    env: JNIEnv,
+    class: JClass,
+) -> jdouble {
+    MOUSE_STATE.get().unwrap().load().y
+}

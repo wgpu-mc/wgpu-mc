@@ -111,6 +111,8 @@ impl TextureSamplerView {
             usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING
         });
 
+        println!("making texture");
+
         wgpu_state.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
