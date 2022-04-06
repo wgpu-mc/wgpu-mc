@@ -378,6 +378,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
         let (tx, rx) = mpsc::channel::<RenderMessage>();
         (Mutex::new(tx), Mutex::new(rx))
     });
+
+    println!("wgpu-mc pre initialized");
 }
 
 #[no_mangle]
