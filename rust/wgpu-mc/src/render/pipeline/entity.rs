@@ -49,10 +49,10 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("Entity Pipeline Layout"),
                 bind_group_layouts: &[
-                    &layouts.get("ssbo").unwrap(),
-                    &layouts.get("ssbo").unwrap(),
-                    &layouts.get("texture").unwrap(),
-                    &layouts.get("matrix4").unwrap()
+                    layouts.get("ssbo").unwrap(),
+                    layouts.get("ssbo").unwrap(),
+                    layouts.get("texture").unwrap(),
+                    layouts.get("matrix4").unwrap()
                 ],
                 push_constant_ranges: &[]
             }
@@ -71,7 +71,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
 
         map.insert("wgpu_mc:pipelines/entity".into(), wm.wgpu_state.device.create_render_pipeline(&RenderPipelineDescriptor {
             label: None,
-            layout: Some(&layouts.get("wgpu_mc:layouts/entity").unwrap()),
+            layout: Some(layouts.get("wgpu_mc:layouts/entity").unwrap()),
             vertex: wgpu::VertexState {
                 module: shader.get_vert().0,
                 entry_point: shader.get_vert().1,

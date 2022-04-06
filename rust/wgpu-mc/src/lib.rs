@@ -21,8 +21,8 @@ use raw_window_handle::HasRawWindowHandle;
 
 use wgpu::{TextureViewDescriptor, RenderPassDescriptor, TextureFormat};
 use std::collections::{HashMap};
-use std::num::NonZeroU32;
-use crate::render::shader::{WmShader};
+
+
 use crate::texture::TextureSamplerView;
 
 use std::sync::Arc;
@@ -33,7 +33,7 @@ use crate::mc::resource::ResourceProvider;
 
 use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
 use arc_swap::ArcSwap;
-use crate::mc::datapack::NamespacedResource;
+
 use crate::render::atlas::Atlas;
 
 use crate::util::WmArena;
@@ -167,11 +167,11 @@ impl WmRenderer {
 
     fn init_pipeline_manager(&self, pipelines: &[&dyn WmPipeline]) {
         self.render_pipeline_manager.load()
-            .init(&self, pipelines);
+            .init(self, pipelines);
     }
 
     fn init_mc(&self) {
-        self.mc.init_camera(&self);
+        self.mc.init_camera(self);
     }
 
     pub fn resize(&self, new_size: WindowSize) {

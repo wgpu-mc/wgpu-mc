@@ -1,20 +1,20 @@
 use guillotiere::AtlasAllocator;
 use image::{Rgba, GenericImageView, ImageBuffer};
 use crate::model::BindableTexture;
-use crate::mc::datapack::{TextureVariableOrResource, NamespacedResource};
+use crate::mc::datapack::{NamespacedResource};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use crate::texture::{TextureSamplerView, UV};
 use guillotiere::euclid::Size2D;
 use image::imageops::overlay;
 
-use dashmap::DashMap;
+
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use wgpu::Extent3d;
-use crate::wgpu::TextureDimension;
+
 use crate::{WgpuState, WmRenderer};
 use crate::render::pipeline::RenderPipelineManager;
 

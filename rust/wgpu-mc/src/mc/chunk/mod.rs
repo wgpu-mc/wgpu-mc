@@ -27,9 +27,7 @@ pub struct ChunkSection {
     pub offset_y: usize
 }
 
-type RawChunkSectionPaletted = [u8; 256];
-
-struct RenderLayers {
+pub struct RenderLayers {
     terrain: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
     transparent: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
     grass: Box<[ChunkSection; CHUNK_SECTIONS_PER]>

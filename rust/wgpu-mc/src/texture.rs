@@ -1,5 +1,5 @@
 use image::GenericImageView;
-use std::path::Path;
+
 use wgpu::Extent3d;
 use std::num::NonZeroU32;
 use crate::WgpuState;

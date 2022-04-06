@@ -11,7 +11,7 @@ use arc_swap::ArcSwap;
 
 
 use parking_lot::RwLock;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, Extent3d};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::block::{Block, PackedBlockstateKey, BlockstateVariantKey};
@@ -19,10 +19,10 @@ use crate::mc::chunk::ChunkManager;
 use crate::mc::datapack::{BlockModel, TextureVariableOrResource, NamespacedResource};
 use crate::mc::entity::EntityModel;
 use crate::mc::resource::ResourceProvider;
-use crate::model::BindableTexture;
-use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS, TextureManager};
+
+use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::RenderPipelineManager;
-use crate::texture::{TextureSamplerView};
+
 
 use self::block::model::BlockstateVariantMesh;
 use indexmap::map::IndexMap;
@@ -104,8 +104,8 @@ pub struct MinecraftState {
 impl MinecraftState {
     #[must_use]
     pub fn new(
-        wgpu_state: &WgpuState,
-        pipelines: &RenderPipelineManager,
+        _wgpu_state: &WgpuState,
+        _pipelines: &RenderPipelineManager,
         resource_provider: Arc<dyn ResourceProvider>) -> Self {
 
         MinecraftState {
@@ -201,7 +201,7 @@ impl MinecraftState {
 
         let block_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
         //TODO: this goes somewhere else, and do we even need it?
-        let gui_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
+        let _gui_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
 
         block_atlas.allocate(
             &textures.iter().map(|resource| {
@@ -247,14 +247,14 @@ impl MinecraftState {
                     &mut block_manager.models,
                     &state.model,
                     &*self.resource_provider
-                ).expect(&format!("{:?}", state.model));
+                ).unwrap_or_else(|| panic!("{:?}", state.model));
 
                 let mesh = BlockstateVariantMesh::bake_block_model(
                     block_model,
                     &*self.resource_provider,
                     &self.texture_manager,
                     &state.rotations
-                ).expect(&format!("{}", name));
+                ).unwrap_or_else(|| panic!("{}", name));
 
                 let variant_resource = name.append(&format!("#{}", &key));
 

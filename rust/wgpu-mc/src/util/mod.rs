@@ -2,7 +2,7 @@
 use std::alloc::{Layout, alloc_zeroed, dealloc};
 use std::cmp::min;
 
-use std::mem::{align_of, ManuallyDrop, size_of};
+use std::mem::{align_of, size_of};
 use std::ptr::drop_in_place;
 use std::marker::PhantomData;
 

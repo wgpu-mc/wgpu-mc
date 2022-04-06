@@ -48,7 +48,7 @@ impl WmPipeline for TerrainPipeline {
                 label: Some("Terrain Pipeline Layout"),
                 bind_group_layouts: &[
                     //&layouts.texture, &layouts.matrix4, &layouts.cubemap
-                    &layouts.get("texture").unwrap(), &layouts.get("matrix4").unwrap()
+                    layouts.get("texture").unwrap(), layouts.get("matrix4").unwrap()
                 ],
                 push_constant_ranges: &[]
             }
@@ -67,7 +67,7 @@ impl WmPipeline for TerrainPipeline {
 
         map.insert("wgpu_mc:pipelines/terrain".into(), wm.wgpu_state.device.create_render_pipeline(&RenderPipelineDescriptor {
             label: None,
-            layout: Some(&layouts.get("wgpu_mc:layouts/terrain").unwrap()),
+            layout: Some(layouts.get("wgpu_mc:layouts/terrain").unwrap()),
             vertex: wgpu::VertexState {
                 module: shader.get_vert().0,
                 entry_point: shader.get_vert().1,

@@ -2,7 +2,7 @@ use jni::objects::{JObject, JString, JClass};
 use wgpu_mc::mc::chunk::Chunk;
 use jni::JNIEnv;
 
-use jni::errors::Result;
+
 use jni::sys::jarray;
 
 pub fn xyz_to_index(x: i32, y: i32, z: i32) -> i32 {
@@ -18,8 +18,8 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
         .l()
         .unwrap();
 
-    let x = env.get_field(chunk_pos, "x", "I").unwrap().i().unwrap() * 16;
-    let z = env.get_field(chunk_pos, "z", "I").unwrap().i().unwrap() * 16;
+    let _x = env.get_field(chunk_pos, "x", "I").unwrap().i().unwrap() * 16;
+    let _z = env.get_field(chunk_pos, "z", "I").unwrap().i().unwrap() * 16;
 
     let sections = env.get_field(
         *world_chunk,
@@ -37,7 +37,7 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
     }).filter(|section| !section.is_null()).collect();
 
     sections.iter().for_each(|section| {
-        let section_y_offset = env.get_field(
+        let _section_y_offset = env.get_field(
             *section,
             "yOffset",
             "I")
@@ -53,7 +53,7 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
             .l()
             .unwrap();
 
-        let data = env.get_field(
+        let _data = env.get_field(
             *container,
             "data",
             "Lnet/minecraft/util/collection/PackedIntegerArray;")
@@ -74,7 +74,7 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
 
         assert!(!palette.is_null());
 
-        let palette_arr = env.get_field(
+        let _palette_arr = env.get_field(
             palette,
             "array",
             "[Ljava/lang/Object;")
@@ -87,10 +87,10 @@ pub fn chunk_from_java_world_chunk(env: &JNIEnv, world_chunk: &JObject) {
 }
 
 pub fn register_sprite(
-    env: JNIEnv,
-    class: JClass,
-    identifier: JString,
-    array: jarray) {
+    _env: JNIEnv,
+    _class: JClass,
+    _identifier: JString,
+    _array: jarray) {
 
 }
 

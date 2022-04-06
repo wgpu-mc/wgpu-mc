@@ -54,15 +54,11 @@ impl BlockstateVariantMesh {
 
         let atlas_uv = atlas_map.get(
             face_resource
-        ).expect(
-            &format!(
-                "{:?}\n{:?} {} {}",
+        ).unwrap_or_else(|| panic!("{:?}\n{:?} {} {}",
                 block_atlas,
                 face_resource,
                 face_resource.0.len(),
-                face_resource.1.len()
-            )
-        );
+                face_resource.1.len()));
 
         let _face_uv = &face.uv;
 

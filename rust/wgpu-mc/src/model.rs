@@ -1,8 +1,8 @@
-use crate::{texture, WgpuState, WmRenderer};
+use crate::{texture, WgpuState};
 use crate::texture::TextureSamplerView;
 
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindingResource};
-use std::sync::Arc;
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BindingResource};
+
 use crate::render::pipeline::RenderPipelineManager;
 
 #[repr(C)]
@@ -62,7 +62,7 @@ impl BindableTexture {
     ) -> Self {
         let bind_group = wgpu_state.device.create_bind_group(&BindGroupDescriptor {
             label: None,
-            layout: &pipelines.bind_group_layouts.read().get("texture").unwrap(),
+            layout: pipelines.bind_group_layouts.read().get("texture").unwrap(),
             entries: &[
                 BindGroupEntry {
                     binding: 0,

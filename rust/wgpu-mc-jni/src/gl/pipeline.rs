@@ -1,27 +1,27 @@
-use std::cell::RefCell;
+
 use std::collections::HashMap;
-use std::num::NonZeroU32;
-use std::rc::Rc;
+
+
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use cgmath::{Matrix4, SquareMatrix};
+use cgmath::{Matrix4};
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, RenderPass, RenderPipeline, VertexState};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, RenderPass, RenderPipeline, VertexState};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use wgpu_mc::{wgpu, WmRenderer};
 use wgpu_mc::camera::UniformMatrixHelper;
 use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::pipeline::WmPipeline;
-use wgpu_mc::render::shader::{GlslShader, WgslShader, WmShader};
+use wgpu_mc::render::shader::{WgslShader, WmShader};
 use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::PipelineLayout;
 
-use crate::{Extent3d, gl, GlTexture};
-use crate::wgpu::{BindGroup, BlendComponent, BlendState, Label};
+use crate::{Extent3d, gl};
+use crate::wgpu::{BlendComponent, BlendState};
 
 // #[rustfmt::skip]
 // pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -132,7 +132,7 @@ impl WmPipeline for GlPipeline {
                     &wgpu::PipelineLayoutDescriptor {
                         label: Some("pos_col"),
                         bind_group_layouts: &[
-                            &layouts.get("matrix4").unwrap()
+                            layouts.get("matrix4").unwrap()
                         ],
                         push_constant_ranges: &[]
                     }
@@ -196,10 +196,10 @@ impl WmPipeline for GlPipeline {
                 wm.wgpu_state.device.create_render_pipeline(
                     &wgpu::RenderPipelineDescriptor {
                         label: None,
-                        layout: Some(&layouts.get("wgpu_mc_ogl:layouts/pos_col").unwrap()),
+                        layout: Some(layouts.get("wgpu_mc_ogl:layouts/pos_col").unwrap()),
                         vertex: VertexState {
-                            module: &pos_col_float3_shader.get_vert().0,
-                            entry_point: &pos_col_float3_shader.get_vert().1,
+                            module: pos_col_float3_shader.get_vert().0,
+                            entry_point: pos_col_float3_shader.get_vert().1,
                             buffers: &[
                                 wgpu::VertexBufferLayout {
                                     array_stride: 24,
@@ -239,8 +239,8 @@ impl WmPipeline for GlPipeline {
                         ),
                         multisample: Default::default(),
                         fragment: Some(wgpu::FragmentState {
-                            module: &pos_col_float3_shader.get_frag().0,
-                            entry_point: &pos_col_float3_shader.get_frag().1,
+                            module: pos_col_float3_shader.get_frag().0,
+                            entry_point: pos_col_float3_shader.get_frag().1,
                             targets: &[
                                 wgpu::ColorTargetState {
                                     format: wgpu::TextureFormat::Bgra8Unorm,
@@ -258,10 +258,10 @@ impl WmPipeline for GlPipeline {
                 wm.wgpu_state.device.create_render_pipeline(
                     &wgpu::RenderPipelineDescriptor {
                         label: None,
-                        layout: Some(&layouts.get("wgpu_mc_ogl:layouts/pos_tex").unwrap()),
+                        layout: Some(layouts.get("wgpu_mc_ogl:layouts/pos_tex").unwrap()),
                         vertex: VertexState {
-                            module: &pos_tex_shader.get_vert().0,
-                            entry_point: &pos_tex_shader.get_vert().1,
+                            module: pos_tex_shader.get_vert().0,
+                            entry_point: pos_tex_shader.get_vert().1,
                             buffers: &[
                                 wgpu::VertexBufferLayout {
                                     array_stride: 20,
@@ -301,8 +301,8 @@ impl WmPipeline for GlPipeline {
                         ),
                         multisample: Default::default(),
                         fragment: Some(wgpu::FragmentState {
-                            module: &pos_tex_shader.get_frag().0,
-                            entry_point: &pos_tex_shader.get_frag().1,
+                            module: pos_tex_shader.get_frag().0,
+                            entry_point: pos_tex_shader.get_frag().1,
                             targets: &[
                                 wgpu::ColorTargetState {
                                     format: wgpu::TextureFormat::Bgra8Unorm,
@@ -323,10 +323,10 @@ impl WmPipeline for GlPipeline {
                 wm.wgpu_state.device.create_render_pipeline(
                     &wgpu::RenderPipelineDescriptor {
                         label: None,
-                        layout: Some(&layouts.get("wgpu_mc_ogl:layouts/pos_col").unwrap()),
+                        layout: Some(layouts.get("wgpu_mc_ogl:layouts/pos_col").unwrap()),
                         vertex: VertexState {
-                            module: &pos_col_uint_shader.get_vert().0,
-                            entry_point: &pos_col_uint_shader.get_vert().1,
+                            module: pos_col_uint_shader.get_vert().0,
+                            entry_point: pos_col_uint_shader.get_vert().1,
                             buffers: &[
                                 wgpu::VertexBufferLayout {
                                     array_stride: 16,
@@ -366,8 +366,8 @@ impl WmPipeline for GlPipeline {
                         ),
                         multisample: Default::default(),
                         fragment: Some(wgpu::FragmentState {
-                            module: &pos_col_uint_shader.get_frag().0,
-                            entry_point: &pos_col_uint_shader.get_frag().1,
+                            module: pos_col_uint_shader.get_frag().0,
+                            entry_point: pos_col_uint_shader.get_frag().1,
                             targets: &[
                                 wgpu::ColorTargetState {
                                     format: wgpu::TextureFormat::Bgra8Unorm,
@@ -388,10 +388,10 @@ impl WmPipeline for GlPipeline {
                 wm.wgpu_state.device.create_render_pipeline(
                     &wgpu::RenderPipelineDescriptor {
                         label: None,
-                        layout: Some(&layouts.get("wgpu_mc_ogl:layouts/clearcolor").unwrap()),
+                        layout: Some(layouts.get("wgpu_mc_ogl:layouts/clearcolor").unwrap()),
                         vertex: VertexState {
-                            module: &clearcolor_shader.get_vert().0,
-                            entry_point: &clearcolor_shader.get_vert().1,
+                            module: clearcolor_shader.get_vert().0,
+                            entry_point: clearcolor_shader.get_vert().1,
                             buffers: &[
                                 wgpu::VertexBufferLayout {
                                     array_stride: 20,
@@ -431,8 +431,8 @@ impl WmPipeline for GlPipeline {
                         ),
                         multisample: Default::default(),
                         fragment: Some(wgpu::FragmentState {
-                            module: &clearcolor_shader.get_frag().0,
-                            entry_point: &clearcolor_shader.get_frag().1,
+                            module: clearcolor_shader.get_frag().0,
+                            entry_point: clearcolor_shader.get_frag().1,
                             targets: &[
                                 wgpu::ColorTargetState {
                                     format: wgpu::TextureFormat::Bgra8Unorm,
@@ -470,7 +470,7 @@ impl WmPipeline for GlPipeline {
                     let buffer = wm.wgpu_state.device.create_buffer_init(
                         &BufferInitDescriptor {
                             label: None,
-                            contents: bytemuck::cast_slice(&buf),
+                            contents: bytemuck::cast_slice(buf),
                             usage: wgpu::BufferUsages::VERTEX
                         }
                     );
@@ -481,7 +481,7 @@ impl WmPipeline for GlPipeline {
                     let buffer = wm.wgpu_state.device.create_buffer_init(
                         &BufferInitDescriptor {
                             label: None,
-                            contents: bytemuck::cast_slice(&buf),
+                            contents: bytemuck::cast_slice(buf),
                             usage: wgpu::BufferUsages::INDEX
                         }
                     );
@@ -545,7 +545,7 @@ impl WmPipeline for GlPipeline {
                     let bg = arena.alloc(wm.wgpu_state.device.create_bind_group(
                         &BindGroupDescriptor {
                             label: None,
-                            layout: &pipeline_manager.bind_group_layouts.read().get("matrix4").unwrap(),
+                            layout: pipeline_manager.bind_group_layouts.read().get("matrix4").unwrap(),
                             entries: &[
                                 BindGroupEntry {
                                     binding: 0,

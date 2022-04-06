@@ -5,7 +5,7 @@ pub mod sky;
 pub mod terrain;
 pub mod debug_lines;
 
-use wgpu::{RenderPipelineDescriptor, BindGroupLayout, SamplerBindingType, PipelineLayout};
+use wgpu::{BindGroupLayout, SamplerBindingType, PipelineLayout};
 use crate::render::shader::WmShader;
 
 use std::collections::HashMap;
@@ -14,17 +14,17 @@ use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 
 
-use crate::{WgpuState, WmRenderer};
-use crate::mc::datapack::NamespacedResource;
+use crate::{WmRenderer};
+
 
 
 use crate::mc::resource::ResourceProvider;
-use crate::render::entity::{EntityRenderInstance, EntityVertex};
-use crate::render::world::chunk::ChunkVertex;
+
+
 use crate::util::WmArena;
 
 
-use crate::render::world::sky::SkyVertex;
+
 use crate::wgpu::RenderPipeline;
 
 pub trait WmPipeline {
@@ -213,7 +213,7 @@ impl RenderPipelineManager {
 
     }
 
-    #[must_use]
+    
     pub fn init(&self, wm: &WmRenderer, wm_pipelines: &[&dyn WmPipeline]) {
         {
             self.bind_group_layouts.write().extend(

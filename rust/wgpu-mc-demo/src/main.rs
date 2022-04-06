@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use std::time::Instant;
 use wgpu_mc::mc::datapack::{NamespacedResource};
-use wgpu_mc::mc::block::{Block};
+
 
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, DeviceEvent};
@@ -23,12 +23,12 @@ use std::collections::HashMap;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use fastanvil::{RegionBuffer};
 use std::io::Cursor;
-use std::rc::Rc;
+
 use fastanvil::pre18::JavaChunk;
 use rayon::iter::{IntoParallelIterator};
 use fastnbt::de::from_bytes;
 use wgpu_mc::mc::entity::{EntityPart, PartTransform, Cuboid, CuboidUV, EntityManager, EntityModel, EntityInstance, DescribedEntityInstances};
-use wgpu_mc::model::BindableTexture;
+
 use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::render::entity::EntityRenderInstance;
 use wgpu_mc::render::entity::pipeline::{EntityGroupInstancingFrame};
@@ -37,8 +37,8 @@ use wgpu_mc::render::pipeline::entity::EntityPipeline;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
-use wgpu_mc::texture::TextureSamplerView;
-use wgpu_mc::util::WmArena;
+
+
 use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 
@@ -50,7 +50,7 @@ impl ResourceProvider for FsResourceProvider {
 
     fn get_resource(&self, id: &NamespacedResource) -> Vec<u8> {
         let real_path = self.asset_root.join(&id.0).join(&id.1);
-        fs::read(&real_path).expect(&format!("{}", real_path.to_str().unwrap().to_string()))
+        fs::read(&real_path).unwrap_or_else(|_| { panic!("{}", real_path.to_str().unwrap().to_string()) })
     }
 
 }
@@ -124,7 +124,7 @@ fn main() {
         asset_root: crate_root::root().unwrap().join("wgpu-mc-demo").join("res").join("assets"),
     });
 
-    let mc_root = crate_root::root()
+    let _mc_root = crate_root::root()
         .unwrap()
         .join("wgpu-mc-demo")
         .join("res")
@@ -197,12 +197,12 @@ fn main() {
     begin_rendering(event_loop, window, wm, anvil_chunks);
 }
 
-fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer, chunks: Vec<(usize, usize, JavaChunk)>) {
+fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _chunks: Vec<(usize, usize, JavaChunk)>) {
 
-    let atlas_1px = 1.0 / (ATLAS_DIMENSIONS as f32);
+    let _atlas_1px = 1.0 / (ATLAS_DIMENSIONS as f32);
     let atlas_16px = 16.0 / (ATLAS_DIMENSIONS as f32);
 
-    let one = 1.0 / 16.0;
+    let _one = 1.0 / 16.0;
 
     let _player_root = {
         EntityPart {
@@ -400,10 +400,10 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
     }));
 
     let egif = Arc::new(EntityGroupInstancingFrame {
-        vertex_buffer: entity_vertex_buffer.clone(),
-        entity_instance_vb: instance_buffer.clone(),
-        part_transform_matrices: entity_instance_bind_group.clone(),
-        texture_offsets: texture_offsets_bind_group.clone(),
+        vertex_buffer: entity_vertex_buffer,
+        entity_instance_vb: instance_buffer,
+        part_transform_matrices: entity_instance_bind_group,
+        texture_offsets: texture_offsets_bind_group,
         texture: entity_manager.player_texture_atlas.read().bindable_texture.load_full(),
         instance_count: 1,
         vertex_count: entity_mesh_vertices.len() as u32
@@ -542,7 +542,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, mut wm: WmRenderer
                 let _ = wm.render(&[
                     // &WorldPipeline {}
                     &EntityPipeline {
-                        frames: &vec![ &*egif.clone() ]
+                        frames: &[&*egif.clone()]
                     },
                     &DebugLinesPipeline
                 ]);

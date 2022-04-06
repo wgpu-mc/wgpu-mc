@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use wgpu::util::BufferInitDescriptor;
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
-use crate::render::world::chunk::ChunkVertex;
+
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::wgpu::util::DeviceExt;
 use crate::WmRenderer;
 use bytemuck::{Zeroable, Pod};
-use cgmath::{Deg, Matrix4, Rad};
+use cgmath::{Rad};
 use wgpu::{BindGroupDescriptor, BindGroupEntry};
 use crate::camera::UniformMatrixHelper;
 
@@ -76,7 +76,7 @@ impl WmPipeline for DebugLinesPipeline {
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("Debug Lines Pipeline Layout"),
                 bind_group_layouts: &[
-                    &layouts.get("matrix4").unwrap()
+                    layouts.get("matrix4").unwrap()
                 ],
                 push_constant_ranges: &[]
             }
@@ -95,7 +95,7 @@ impl WmPipeline for DebugLinesPipeline {
 
         map.insert("wgpu_mc:pipelines/debug_lines".into(), wm.wgpu_state.device.create_render_pipeline(&RenderPipelineDescriptor {
             label: None,
-            layout: Some(&layouts.get("wgpu_mc:layouts/debug_lines").unwrap()),
+            layout: Some(layouts.get("wgpu_mc:layouts/debug_lines").unwrap()),
             vertex: wgpu::VertexState {
                 module: shader.get_vert().0,
                 entry_point: shader.get_vert().1,
@@ -167,7 +167,7 @@ impl WmPipeline for DebugLinesPipeline {
             0.0, 0.0, -0.2, 0.0, 0.0, 1.0
         ];
 
-        let camera = (*wm.mc.camera.load_full()).clone();
+        let camera = *wm.mc.camera.load_full();
 
         let rotation_matrix = cgmath::Matrix4::<f32>::from_angle_x(Rad(-camera.pitch))
             * cgmath::Matrix4::<f32>::from_angle_y(Rad(camera.yaw));
@@ -187,7 +187,7 @@ impl WmPipeline for DebugLinesPipeline {
         let rotation_matrix_bind_group = arena.alloc(wm.wgpu_state.device.create_bind_group(
             &BindGroupDescriptor {
                 label: None,
-                layout: &wm.render_pipeline_manager.load_full().bind_group_layouts
+                layout: wm.render_pipeline_manager.load_full().bind_group_layouts
                     .read().get("matrix4").unwrap(),
                 entries: &[
                     BindGroupEntry {

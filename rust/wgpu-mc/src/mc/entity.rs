@@ -1,10 +1,10 @@
 use std::sync::Arc;
-use crate::mc::datapack::{NamespacedResource};
+
 use crate::texture::UV;
 use crate::render::atlas::Atlas;
-use indexmap::map::IndexMap;
+
 use std::collections::HashMap;
-use cgmath::{Matrix, Matrix4, SquareMatrix, Vector4};
+use cgmath::{Matrix4, SquareMatrix, Vector4};
 use crate::render::entity::EntityVertex;
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
