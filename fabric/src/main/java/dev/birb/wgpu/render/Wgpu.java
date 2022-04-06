@@ -25,28 +25,23 @@ public class Wgpu {
             WgpuNative.load("wgpu_mc_jni", true);
         } catch (Throwable e) {
             e.printStackTrace();
-            throw new RuntimeException(e);
+            System.exit(1);
         }
 
-        WgpuNative.initialize(windowTitle);
+        WgpuNative.preInit();
     }
 
-    public static void initRenderer() {
+    public static void startRendering() {
         if (!INITIALIZED) {
-            System.loadLibrary("renderdoc");
-
-            System.out.println("Initializing wgpu-mc renderer");
-            WgpuNative.initRenderer();
-            INITIALIZED = true;
-
-            for (Block block : Registry.BLOCK) {
-                Identifier blockId = Registry.BLOCK.getId(block);
-                WgpuNative.registerEntry(0, "minecraft:" + blockId.getPath());
+            try {
+                System.loadLibrary("renderdoc");
+            } catch(UnsatisfiedLinkError e) {
+                e.printStackTrace();
             }
 
-            blocks = WgpuNative.bakeBlockModels();
-
-            WgpuNative.doEventLoop();
+            WgpuNative.startRendering("Minecraft");
+        } else {
+            throw new RuntimeException("wgpu-mc has already been initialized");
         }
     }
 

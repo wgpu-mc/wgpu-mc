@@ -1,5 +1,6 @@
 package dev.birb.wgpu.mixin.render;
 
+import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.render.Tessellator;
 import net.minecraft.client.util.Window;
@@ -75,7 +76,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getWidth() {
-        return WgpuNative.getWindowWidth();
+        return Wgpu.INITIALIZED ? WgpuNative.getWindowWidth() : 0;
     }
 
     /**
@@ -83,7 +84,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getHeight() {
-        return WgpuNative.getWindowHeight();
+        return Wgpu.INITIALIZED ? WgpuNative.getWindowHeight() : 0;
     }
 
     /**

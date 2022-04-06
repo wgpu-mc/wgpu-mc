@@ -48,12 +48,6 @@ public abstract class MinecraftClientCoreMixin {
         cir.setReturnValue(title);
     }
 
-    @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/thread/ReentrantThreadExecutor;<init>(Ljava/lang/String;)V", shift = At.Shift.AFTER))
-    private void injectPreInit(RunArgs args, CallbackInfo ci) {
-        System.out.println("wgpu-mc pre-init");
-        Wgpu.preInit("Minecraft");
-    }
-
     /**
      * @author wgpu-mc
      */

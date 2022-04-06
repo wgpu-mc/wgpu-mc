@@ -41,9 +41,9 @@ public class WgpuNative {
 
     public static native int getTextureId(String identifier);
 
-    public static native void initialize(String title);
+    public static native void startRendering(String title);
 
-    public static native void initRenderer();
+    public static native void preInit();
 
     public static native void updateWindowTitle(String title);
 
