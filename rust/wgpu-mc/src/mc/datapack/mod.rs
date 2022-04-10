@@ -9,6 +9,15 @@ use std::convert::{TryFrom, TryInto};
 use crate::mc::resource::{ResourceProvider};
 use std::fmt::{Display, Formatter};
 
+#[macro_export]
+macro_rules! nsr (
+    ($ns:literal) => {
+        {
+            use wgpu_mc::mc::datapack::NamespacedResource;
+            NamespacedResource::try_from($ns).unwrap()
+        }
+    }
+);
 
 #[derive(Debug, Hash, Clone, std::cmp::Eq)]
 pub struct NamespacedResource (pub String, pub String);

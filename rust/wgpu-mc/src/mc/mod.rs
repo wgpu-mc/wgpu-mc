@@ -47,7 +47,8 @@ pub struct BlockEntry {
 pub struct BlockManager {
     pub blocks: IndexMap<NamespacedResource, Block>,
     pub models: IndexMap<NamespacedResource, BlockModel>,
-    pub baked_block_variants: MultiMap<NamespacedResource, PackedBlockstateKey, BlockstateVariantMesh>
+    pub block_state_variants: Vec<BlockstateVariantMesh>,
+    pub variant_indices: HashMap<NamespacedResource, usize>
 }
 
 impl BlockManager {
@@ -118,7 +119,8 @@ impl MinecraftState {
             block_manager: RwLock::new(BlockManager {
                 blocks: IndexMap::new(),
                 models: IndexMap::new(),
-                baked_block_variants: MultiMap::new()
+                block_state_variants: Vec::new(),
+                variant_indices: HashMap::new()
             }),
 
             camera: ArcSwap::new(Arc::new(Camera::new(1.0))),
@@ -224,22 +226,8 @@ impl MinecraftState {
     }
 
     fn bake_blockstate_meshes(&self, block_manager: &mut BlockManager) {
-        let mut variants = MultiMap::new();
-
-        // let mut models: HashSet<&NamespacedResource> = HashSet::new();
-        //
-        // block_manager.blocks.iter().for_each(|(name, block)| {
-        //     block.states.iter().for_each(|(_, state)| {
-        //         models.insert(&state.model);
-        //     });
-        // });
-        //
-        // let models: HashMap<&NamespacedResource, &BlockModel> = models.iter().map(|&model| {
-        //     (
-        //         model.clone(),
-        //         block_manager.get_model_or_deserialize(model, &*self.resource_provider).unwrap()
-        //     )
-        // }).collect();
+        let mut meshes = Vec::new();
+        let mut indices = HashMap::new();
 
         block_manager.blocks.iter().for_each(|(name, block)| {
             block.states.iter().for_each(|(key, state)| {
@@ -258,16 +246,14 @@ impl MinecraftState {
 
                 let variant_resource = name.append(&format!("#{}", &key));
 
-                let u32_variant_key: u32 = (
-                    (block_manager.blocks.get_index_of(name).unwrap() as u32 & 0x3FFFFF) << 10) |
-                    (block.states.get_index_of(key).unwrap() as u32 & 0x3FF);
-
-                variants.insert(variant_resource, u32_variant_key, mesh);
+                meshes.push(mesh);
+                indices.insert(variant_resource, meshes.len() - 1);
             });
         });
 
         // println!("{:?}", variants);
 
-        block_manager.baked_block_variants = variants;
+        block_manager.block_state_variants = meshes;
+        block_manager.variant_indices = indices;
     }
 }

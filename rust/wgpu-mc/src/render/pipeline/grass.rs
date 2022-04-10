@@ -1,10 +1,60 @@
 use std::collections::HashMap;
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
-use crate::render::world::chunk::ChunkVertex;
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GrassVertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
+    pub lightmap_coords: [f32; 2],
+    pub normal: [f32; 3],
+    pub biome_color_coords: [f32; 2]
+}
+
+impl GrassVertex {
+    #[must_use]
+    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<GrassVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                //Position
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                //Texcoords
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                //Lightmap
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 10]>() as wgpu::BufferAddress,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x2
+                },
+            ],
+        }
+    }
+}
 
 pub struct GrassPipeline;
 
@@ -45,8 +95,8 @@ impl WmPipeline for GrassPipeline {
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("Grass Pipeline Layout"),
                 bind_group_layouts: &[
-                    //&layouts.texture, &layouts.matrix4, &layouts.cubemap
-                    layouts.get("texture").unwrap(), layouts.get("matrix4").unwrap()
+                    //Block atlas, projection matrix, biome atlas
+                    layouts.get("texture").unwrap(), layouts.get("matrix4").unwrap(), layouts.get("texture").unwrap()
                 ],
                 push_constant_ranges: &[]
             }
@@ -69,7 +119,7 @@ impl WmPipeline for GrassPipeline {
             vertex: wgpu::VertexState {
                 module: shader.get_vert().0,
                 entry_point: shader.get_vert().1,
-                buffers: &[ChunkVertex::desc()]
+                buffers: &[GrassVertex::desc()]
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -99,7 +149,7 @@ impl WmPipeline for GrassPipeline {
                     format: wgpu::TextureFormat::Bgra8Unorm,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent::REPLACE,
-                        alpha: wgpu::BlendComponent::REPLACE
+                        alpha: wgpu::BlendComponent::OVER
                     }),
                     write_mask: Default::default()
                 }]

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
-use crate::render::world::chunk::ChunkVertex;
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
@@ -9,6 +8,51 @@ use crate::WmRenderer;
 pub struct TerrainPipeline;
 
 pub const BLOCK_ATLAS_NAME: &str = "wgpu_mc:atlases/block";
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct TerrainVertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
+    pub lightmap_coords: [f32; 2],
+    pub normal: [f32; 3]
+}
+
+impl TerrainVertex {
+    #[must_use]
+    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<TerrainVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                //Position
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                //Texcoords
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                //Lightmap
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
+    }
+}
 
 impl WmPipeline for TerrainPipeline {
 
@@ -71,7 +115,7 @@ impl WmPipeline for TerrainPipeline {
             vertex: wgpu::VertexState {
                 module: shader.get_vert().0,
                 entry_point: shader.get_vert().1,
-                buffers: &[ChunkVertex::desc()]
+                buffers: &[TerrainVertex::desc()]
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -138,33 +182,21 @@ impl WmPipeline for TerrainPipeline {
         render_pass.set_bind_group(0, &bindable_texture.bind_group, &[]);
         render_pass.set_bind_group(1, (**arena.alloc(wm.mc.camera_bind_group.load_full())).as_ref().unwrap(), &[]);
 
-        wm.mc.chunks.loaded_chunks.iter().for_each(|chunk_swap| {
-            let chunk = arena.alloc(chunk_swap.load());
+        let buffers = arena.alloc(wm.mc.chunks.section_buffers.load_full());
+        let terrain = buffers.get("terrain").unwrap();
 
-            let baked_chunk = match &chunk.baked {
-                None => return,
-                Some(baked_chunk) => baked_chunk
-            };
-
-            baked_chunk.sections.iter().for_each(|section| {
-                let parts = &[
-                    &section.nonstandard,
-                    &section.top,
-                    &section.bottom,
-                    &section.north,
-                    &section.east,
-                    &section.south,
-                    &section.west
-                ];
-
-                //TODO: culling
-                parts.iter().for_each(|&part| {
-                    // println!("{}", part.vertices.len());
-                    render_pass.set_vertex_buffer(0, part.buffer.slice(..));
-                    render_pass.draw(0..part.vertices.len() as u32, 0..1);
-                });
-            });
-        });
+        [
+            &terrain.north,
+            &terrain.south,
+            &terrain.top,
+            &terrain.bottom,
+            &terrain.west,
+            &terrain.east,
+            &terrain.other
+        ].iter().for_each(|&(buffer, verts)| {
+            render_pass.set_vertex_buffer(0, buffer.slice(..));
+            render_pass.draw(0..*verts as u32, 0..1);
+        })
     }
 
 }

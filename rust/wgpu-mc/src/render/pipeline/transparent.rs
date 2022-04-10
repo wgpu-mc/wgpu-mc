@@ -1,7 +1,7 @@
 use std::collections::HashMap;
+use crate::render::pipeline::terrain::TerrainVertex;
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
-use crate::render::world::chunk::ChunkVertex;
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
@@ -67,7 +67,7 @@ impl WmPipeline for TransparentPipeline {
             vertex: wgpu::VertexState {
                 module: shader.get_vert().0,
                 entry_point: shader.get_vert().1,
-                buffers: &[ChunkVertex::desc()]
+                buffers: &[TerrainVertex::desc()]
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,

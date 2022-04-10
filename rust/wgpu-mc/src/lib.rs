@@ -175,6 +175,8 @@ impl WmRenderer {
     }
 
     pub fn resize(&self, new_size: WindowSize) {
+        if new_size.width <= 0 || new_size.height <= 0 { return; }
+
         let mut surface_config = (*self.wgpu_state.surface_config.load_full()).clone();
 
         surface_config.width = new_size.width;

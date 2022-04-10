@@ -10,40 +10,41 @@ https://matrix.to/#/#wgpu-mc:matrix.org
 
 #### Intro
 
-WebGPU is a new web specification designed to provide modern graphics and compute capabilities in an API.
+`wgpu` is a crate implementing the WebGPU specification in Rust. It's primary backends are Vulkan, DirectX 12, and Metal.
 
-`wgpu` is the name of a crate which implements this specification, and it is written in Rust, allowing safe and fast
-usage of the WebGPU standard, which makes it a great platform to build a cross-platform renderer on.
 
 #### Goals
 
-wgpu-mc is eventually meant to be a full replacement to the standard, official renderer "Blaze3D".
-It will be used as a Fabric mod, which will disable the original OpenGL code and interface with wgpu-mc, using the native
-Java interface.
+wgpu-mc is a standalone rendering engine for Minecraft-compatible projects. It's also a
+replacement to Blaze3D using Fabric and the JNI to interface the two. 
 
 #### Current status
 
-The project is currently under active development (I'm solo at the moment though) and it's close
-to getting a proper proof-of-concept working. The demo renderer works independently of the game, but does showcase
-that the engine works. The main task is getting it to work with the game.
+The project is currently under active development. Quite a few important features have been implemented,
+but not all of them. Feature parity with Blaze3D is the main goal at the moment, along with getting world rendering working
+with Java Edition.
 
-#### Roadmap
+#### WIP and Completed Features
 
 Engine
 
-- [x] Load blockmodels
-- [x] Generate a texture atlas of the textures 
-- [x] Convert the block models into a mesh
-- [x] Generate chunk meshes
-- [x] Sky
-- [x] Instanced Entity Rendering
+- [x] Block models from standard datapacks
+- [x] Terrain rendering
+- [x] Skybox support
+- [x] Instanced Entity Rendering (supported but no entities are implemented yet)
+- [ ] GPU Based Chunk Meshing
+- [ ] Particles
+- [ ] Lighting
+- [ ] Item rendering
 
 Minecraft
 
 - [x] Disable Blaze3d
-- [x] Open a window
-- [ ] Upload basic chunk data to wgpu-mc
+- [x] Basic GUI rendering
+- [ ] Full GUI integration
 - [ ] Integrate entities
+- [ ] World rendering
+- [ ] Particles
 
 Pie in the sky
 

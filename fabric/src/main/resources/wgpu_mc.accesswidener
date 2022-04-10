@@ -1,4 +1,9 @@
 accessWidener v1 named
 accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)V
+extendable class net/minecraft/world/chunk/PalettedContainer$DataProvider
+extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
+accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
+accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
+
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;

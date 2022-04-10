@@ -19,9 +19,11 @@
     "render.WindowFramebufferMixin",
 
     "core.MinecraftClientCoreMixin",
+    "core.MainMixin",
     "core.GlStateManagerMixin",
 
     "world.ClientChunkMapMixin",
+    "world.PaletteProviderMixin",
 
     "accessors.ThreadExecutorAccessor",
     "accessors.DefaultClientResourcePackAccessor",

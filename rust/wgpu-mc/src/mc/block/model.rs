@@ -9,7 +9,7 @@ use crate::model::MeshVertex;
 use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
 use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
-use cgmath::{Vector3, Matrix3, SquareMatrix};
+use cgmath::{Vector3, Matrix3, SquareMatrix, Matrix4};
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 
 #[derive(Debug)]
@@ -63,17 +63,6 @@ impl BlockstateVariantMesh {
         let _face_uv = &face.uv;
 
         const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
-
-        // let adjusted_uv = (
-        //     (
-        //         (atlas_uv.0.0 + face_uv.0.0) / ATLAS,
-        //         (atlas_uv.0.1 + face_uv.0.1) / ATLAS
-        //     ),
-        //     (
-        //         (atlas_uv.1.0 + face_uv.1.0) / ATLAS,
-        //         (atlas_uv.1.1 + face_uv.1.1) / ATLAS
-        //     )
-        // );
 
         let adjusted_uv = (
             (

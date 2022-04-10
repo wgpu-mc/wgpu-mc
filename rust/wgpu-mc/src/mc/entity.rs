@@ -167,6 +167,7 @@ impl Cuboid {
 
 #[derive(Clone, Debug)]
 pub struct EntityPart {
+    pub name: Arc<String>,
     pub transform: PartTransform,
     pub cuboids: Vec<Cuboid>,
     pub children: Vec<EntityPart>
@@ -193,9 +194,26 @@ fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id
     });
 }
 
+fn recurse_get_names(part: &EntityPart, mut index: &mut usize, names: &mut HashMap<String, usize>) {
+    names.insert((*part.name).clone(), *index);
+    *index += 1;
+    part.children.iter().for_each(|part| recurse_get_names(part, index, names));
+}
+
 impl EntityModel {
 
-    pub fn get_mesh(&self) -> Vec<EntityVertex> {
+    pub fn new(root: EntityPart) -> Self {
+        let mut parts = HashMap::new();
+
+        recurse_get_names(&root, &mut 0, &mut parts);
+
+        Self {
+            root,
+            parts
+        }
+    }
+
+    pub fn generate_mesh(&self) -> Vec<EntityVertex> {
         let mut out = Vec::new();
 
         let mut part_id = 0;
@@ -211,9 +229,11 @@ pub struct DescribedEntityInstances {
     pub matrices: Vec<Vec<[[f32; 4]; 4]>>
 }
 
+pub type UploadedEntityInstanceBuffer = (wgpu::Buffer, wgpu::BindGroup);
+
 impl DescribedEntityInstances {
 
-    pub fn upload(&self, wm: &WmRenderer) -> (wgpu::Buffer, wgpu::BindGroup) {
+    pub fn upload(&self, wm: &WmRenderer) -> UploadedEntityInstanceBuffer {
         let cast_matrices = self.matrices.iter().flat_map(|vec1| {
             vec1.iter().flatten().flatten()
         }).copied().collect::<Vec<f32>>();
