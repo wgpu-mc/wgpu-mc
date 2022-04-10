@@ -123,12 +123,12 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
     #[must_use]
     pub fn bake(block_manager: &BlockManager, chunk: &Chunk, mapper: fn (&MeshVertex, f32, f32, f32) -> T, filter: Box<dyn Fn(BlockState) -> bool>) -> Self {
         //Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
-        let mut north_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
-        let mut east_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
-        let mut south_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
-        let mut west_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
-        let mut up_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 24);
-        let mut down_vertices = Vec::with_capacity(CHUNK_AREA * CHUNK_SECTION_HEIGHT * 10);
+        let mut north_vertices = Vec::new();
+        let mut east_vertices = Vec::new();
+        let mut south_vertices = Vec::new();
+        let mut west_vertices = Vec::new();
+        let mut up_vertices = Vec::new();
+        let mut down_vertices = Vec::new();
         let mut other_vertices = Vec::new();
 
         for mut block_index in 0..CHUNK_VOLUME {
@@ -157,10 +157,24 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         );
 
                         match north_block_mesh {
-                            Some(block_mesh) => block_mesh.transparent_or_complex,
+                            Some(block_mesh) => !block_mesh.transparent_or_complex,
                             None => false,
                         }
                     });
+
+                    // let render_south = if z < 15 {
+                    //     let south_block_mesh = get_block_mesh(
+                    //         block_manager,
+                    //         &section.blocks[((z + 1) * CHUNK_WIDTH) + x]
+                    //     );
+                    //
+                    //     match south_block_mesh {
+                    //         Some(block_mesh) => block_mesh.transparent_or_complex,
+                    //         None => false,
+                    //     }
+                    // } else {
+                    //     true
+                    // };
 
                     let render_south = !(z < 15 && {
                         let south_block_mesh = get_block_mesh(
@@ -169,7 +183,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         );
 
                         match south_block_mesh {
-                            Some(block_mesh) => block_mesh.transparent_or_complex,
+                            Some(block_mesh) => !block_mesh.transparent_or_complex,
                             None => false,
                         }
                     });
@@ -181,7 +195,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         );
 
                         match up_block_mesh {
-                            Some(block_mesh) => block_mesh.transparent_or_complex,
+                            Some(block_mesh) => !block_mesh.transparent_or_complex,
                             None => false,
                         }
                     });
@@ -193,7 +207,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         );
 
                         match down_block_mesh {
-                            Some(block_mesh) => block_mesh.transparent_or_complex,
+                            Some(block_mesh) => !block_mesh.transparent_or_complex,
                             None => false,
                         }
                     });
@@ -205,7 +219,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         );
 
                         match west_block_mesh {
-                            Some(block_mesh) => block_mesh.transparent_or_complex,
+                            Some(block_mesh) => !block_mesh.transparent_or_complex,
                             None => false,
                         }
                     });
@@ -217,7 +231,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         );
 
                         match east_block_mesh {
-                            Some(block_mesh) => block_mesh.transparent_or_complex,
+                            Some(block_mesh) => !block_mesh.transparent_or_complex,
                             None => false,
                         }
                     });
@@ -245,7 +259,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         };
                     }
                     if render_west {
-                        match &model.north {
+                        match &model.west {
                             None => {}
                             Some(west) =>
                                 west_vertices.extend(west.iter().map(|v| mapper(v, (x as i32 + chunk.pos.0) as f32, y as f32, (z as i32 + chunk.pos.1) as f32)))
@@ -259,7 +273,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         };
                     }
                     if render_down {
-                        match &model.north {
+                        match &model.down {
                             None => {}
                             Some(down) =>
                                 down_vertices.extend(down.iter().map(|v| mapper(v, (x as i32 + chunk.pos.0) as f32, y as f32, (z as i32 + chunk.pos.1) as f32)))

@@ -41,14 +41,16 @@ use wgpu_mc::render::entity::EntityRenderInstance;
 use wgpu_mc::render::entity::pipeline::{EntityGroupInstancingFrame};
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
+use wgpu_mc::render::pipeline::grass::GrassPipeline;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
+use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
 
 
 use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use crate::chunk::make_chunk;
+use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
 
 struct FsResourceProvider {
@@ -152,6 +154,7 @@ fn main() {
         &[
             &EntityPipeline { frames: &[] },
             &TerrainPipeline,
+            &TransparentPipeline,
             &DebugLinesPipeline
         ]
     );
@@ -191,10 +194,14 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
     
     let entity_rendering = describe_entity(&wm);
 
-    let chunk = make_chunk(&wm);
+    let chunks = make_chunks(&wm);
 
     {
-        wm.mc.chunks.loaded_chunks.write().insert((0, 0), ArcSwap::new(Arc::new(chunk)));
+        let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
+
+        chunks.into_iter().for_each(|chunk| {
+            loaded_chunks.insert(chunk.pos, ArcSwap::new(Arc::new(chunk)));
+        });
     }
 
     {
@@ -282,39 +289,11 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
                 }
             }
             Event::RedrawRequested(_) => {
-                let _ = wm.update();
+                wm.update();
 
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
                 spin += 0.5;
-
-                // let entity_instance = EntityInstance {
-                //     entity_model: 0,
-                //     position: (0.0, 0.0, 0.0),
-                //     looking_yaw: 0.0,
-                //     uv_offset: (0.0, 0.0),
-                //     hurt: false,
-                //     part_transforms: vec![
-                //         PartTransform {
-                //             pivot_x: 0.0,
-                //             pivot_y: 0.0,
-                //             pivot_z: 0.0,
-                //             yaw: spin,
-                //             pitch: 0.0,
-                //             roll: 0.0
-                //         }
-                //     ]
-                // };
-
-                // let described_instance = entity_instance.describe_instance(
-                //     &entity_manager
-                // );
-
-                // wm.wgpu_state.queue.write_buffer(
-                //     &*entity_rendering.0.0,
-                //     0,
-                //     bytemuck::cast_slice(&described_instance)
-                // );
 
                 let mut camera = **wm.mc.camera.load();
 
@@ -325,6 +304,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
 
                 let _ = wm.render(&[
                     &TerrainPipeline,
+                    // &GrassPipeline,
+                    &TransparentPipeline,
                     &DebugLinesPipeline
                 ]);
 

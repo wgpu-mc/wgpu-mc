@@ -32,7 +32,6 @@ Engine
 - [x] Terrain rendering
 - [x] Skybox support
 - [x] Instanced Entity Rendering (supported but no entities are implemented yet)
-- [ ] GPU Based Chunk Meshing
 - [ ] Particles
 - [ ] Lighting
 - [ ] Item rendering

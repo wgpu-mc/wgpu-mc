@@ -206,16 +206,10 @@ impl ChunkManager {
 
         let mut map = HashMap::new();
 
-        map.insert("glass".into(), glass.upload(wm));
+        map.insert("transparent".into(), glass.upload(wm));
         map.insert("grass".into(), grass.upload(wm));
         map.insert("terrain".into(), terrain.upload(wm));
 
         self.section_buffers.store(Arc::new(map));
-    }
-}
-
-impl Default for ChunkManager {
-    fn default() -> Self {
-        Self::new()
     }
 }

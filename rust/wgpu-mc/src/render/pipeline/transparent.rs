@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::render::pipeline::terrain::TerrainVertex;
+use crate::render::pipeline::terrain::{BLOCK_ATLAS_NAME, TerrainVertex};
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
@@ -108,8 +108,47 @@ impl WmPipeline for TransparentPipeline {
         map
     }
 
-    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, _wm: &'b WmRenderer, _render_pass: &'c mut RenderPass<'d>, _arena: &'c mut WmArena<'e>) {
-        todo!()
+    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(&'a self, wm: &'b WmRenderer, render_pass: &'c mut RenderPass<'d>, arena: &'c mut WmArena<'e>) {
+        let pipeline_manager = wm.render_pipeline_manager.load();
+        let render_pipelines = pipeline_manager.render_pipelines.load();
+
+        render_pass.set_pipeline(
+            arena.alloc(
+                render_pipelines
+                    .get("wgpu_mc:pipelines/transparent")
+                    .unwrap()
+                    .clone()
+            )
+        );
+
+        let block_atlas = arena.alloc(
+            wm.mc.texture_manager.atlases
+                .load()
+                .get(BLOCK_ATLAS_NAME)
+                .unwrap()
+                .load()
+        );
+
+        let bindable_texture = arena.alloc(block_atlas.bindable_texture.load_full());
+
+        render_pass.set_bind_group(0, &bindable_texture.bind_group, &[]);
+        render_pass.set_bind_group(1, (**arena.alloc(wm.mc.camera_bind_group.load_full())).as_ref().unwrap(), &[]);
+
+        let buffers = arena.alloc(wm.mc.chunks.section_buffers.load_full());
+        let transparent = buffers.get("transparent").unwrap();
+
+        [
+            &transparent.north,
+            &transparent.south,
+            &transparent.top,
+            &transparent.bottom,
+            &transparent.west,
+            &transparent.east,
+            &transparent.other
+        ].iter().for_each(|&(buffer, verts)| {
+            render_pass.set_vertex_buffer(0, buffer.slice(..));
+            render_pass.draw(0..*verts as u32, 0..1);
+        })
     }
 
 }
