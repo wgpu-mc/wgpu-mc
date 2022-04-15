@@ -6,12 +6,15 @@ import net.minecraft.client.render.Tessellator;
 import net.minecraft.client.util.Window;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.Shadow;
 
 import java.io.InputStream;
 
 @Mixin(Window.class)
 public class WindowMixin {
 
+
+    @Shadow private double scaleFactor;
 
     /**
      * @author wgpu-mc
@@ -76,7 +79,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getWidth() {
-        return Wgpu.INITIALIZED ? WgpuNative.getWindowWidth() : 0;
+        return Wgpu.INITIALIZED ? WgpuNative.getWindowWidth() : 1280;
     }
 
     /**
@@ -84,7 +87,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getHeight() {
-        return Wgpu.INITIALIZED ? WgpuNative.getWindowHeight() : 0;
+        return Wgpu.INITIALIZED ? WgpuNative.getWindowHeight() : 720;
     }
 
     /**
@@ -109,7 +112,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getScaledWidth() {
-        return this.getWidth();
+        return (int) ((double)this.getWidth() / this.scaleFactor);
     }
 
     /**
@@ -117,7 +120,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getScaledHeight() {
-        return this.getHeight();
+        return (int) ((double)this.getHeight() / this.scaleFactor);
     }
 
     /**

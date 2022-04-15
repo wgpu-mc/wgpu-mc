@@ -18,7 +18,7 @@ use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jstring, jlong, j
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
-use winit::event::{Event, WindowEvent};
+use winit::event::{ElementState, Event, MouseButton, WindowEvent};
 use winit::event_loop::{ControlFlow};
 use winit::window::Window;
 use gl::pipeline::{GLCommand, GlPipeline};
@@ -45,7 +45,10 @@ mod palette;
 
 enum RenderMessage {
     SetTitle(String),
-    Task(Box<dyn FnOnce() + Send + Sync>)
+    Task(Box<dyn FnOnce() + Send + Sync>),
+    KeyPressed(u32),
+    MouseState(ElementState, MouseButton),
+    MouseMove(f64, f64)
 }
 
 struct MinecraftRenderState {
@@ -101,18 +104,14 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
         let ident_ns = env.new_string(&id.0).unwrap();
         let ident_path = env.new_string(&id.1).unwrap();
 
-        //Could just simplify this to a formatted string
-        let bytes = match env.call_static_method(
+        let bytes = env.call_static_method(
             "dev/birb/wgpu/rust/WgpuResourceProvider",
             "getResource",
             "(Ljava/lang/String;Ljava/lang/String;)[B",
             &[
                 JValue::Object(ident_ns.into()),
                 JValue::Object(ident_path.into())
-            ]) {
-            Ok(jvalue) => jvalue.l().unwrap(),
-            Err(e) => panic!("{:?}\nID {}", e, id)
-        };
+            ]).unwrap().l().unwrap();
 
         let elements = env.get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack)
             .unwrap();
@@ -299,14 +298,30 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     );
 
     let window_clone = window.clone();
+    let jvm = env.get_java_vm().unwrap();
+
     thread::spawn(move || {
         let (_, rx) = CHANNELS.get().unwrap();
         let rx = rx.lock();
+        let env = jvm.attach_current_thread_permanently().unwrap();
 
         for render_message in rx.iter() {
             match render_message {
                 RenderMessage::SetTitle(title) => window_clone.set_title(&title),
-                RenderMessage::Task(func) => func()
+                RenderMessage::Task(func) => func(),
+                RenderMessage::KeyPressed(_) => {}
+                RenderMessage::MouseMove(x, y) => {
+                    env.call_static_method(
+                        "dev/birb/wgpu/render/Wgpu",
+                        "mouseMove",
+                        "(DD)V",
+                        &[
+                            JValue::Double(x),
+                            JValue::Double(y)
+                        ]
+                    ).unwrap();
+                }
+                RenderMessage::MouseState(_, _) => {}
             };
         }
     });
@@ -338,10 +353,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                     WindowEvent::CursorMoved {
                         device_id: _, position, modifiers: _
                     } => {
-                        MOUSE_STATE.get().unwrap().store(Arc::new(MouseState {
-                            x: position.x,
-                            y: position.y
-                        }))
+                        CHANNELS.get().unwrap().0.lock().send(RenderMessage::MouseMove(
+                            position.x,
+                            position.y
+                        )).unwrap();
+                    },
+                    WindowEvent::MouseInput { device_id, state, button, modifiers } => {
+                        CHANNELS.get().unwrap().0.lock().send(RenderMessage::MouseState(
+                            *state, *button
+                        )).unwrap();
                     },
                     _ => {}
                 }

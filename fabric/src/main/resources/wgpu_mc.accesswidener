@@ -5,5 +5,8 @@ extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
 accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
 accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
 
+accessible field net/minecraft/client/Mouse x D
+accessible field net/minecraft/client/Mouse y D
+
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;

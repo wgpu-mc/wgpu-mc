@@ -23,6 +23,8 @@ public class MainMixin {
         //Block until the game is initialized enough for wgpu-mc to kick in
         while(!Wgpu.MAY_INITIALIZE) {}
 
+        Wgpu.client.set(instance);
+        System.out.println(Wgpu.client.get());
         Wgpu.startRendering();
 
         //Never actually reached
