@@ -91,7 +91,7 @@ impl WmRenderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::default(),
+                    features: wgpu::Features::default() | wgpu::Features::DEPTH_CLIP_CONTROL,
                     limits: wgpu::Limits::default()
                 },
                 None, // Trace path

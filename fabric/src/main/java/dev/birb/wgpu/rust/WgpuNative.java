@@ -85,4 +85,8 @@ public class WgpuNative {
 
     public static native void attachTextureBindGroup(int texture);
 
+    public static native double getMouseX();
+
+    public static native double getMouseY();
+
 }

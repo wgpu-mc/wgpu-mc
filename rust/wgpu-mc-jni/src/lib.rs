@@ -31,11 +31,13 @@ use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::wgpu;
 use std::io::Cursor;
+use std::num::NonZeroU32;
 use wgpu::{Extent3d};
 use crate::gl::{GlTexture};
 use byteorder::{LittleEndian, ReadBytesExt};
 use once_cell::sync::OnceCell;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
+use wgpu_mc::wgpu::ImageDataLayout;
 
 mod mc_interface;
 mod gl;
@@ -451,18 +453,18 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
         .unwrap();
 
-    let instant = Instant::now();
-    renderer.mc.block_manager.read().baked_block_variants.iter().for_each(|(identifier, (key, _))| {
-        let _integer = env.new_object("java/lang/Integer", "(I)V", &[
-            JValue::Int(*key as i32)
-        ]).unwrap();
-
-        env.call_method(block_hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", &[
-            JValue::Object(env.new_string(identifier.to_string()).unwrap().into()),
-            JValue::Object(_integer)
-        ]).unwrap();
-    });
-    println!("Uploaded blocks to java HashMap in {}ms", Instant::now().duration_since(instant).as_millis());
+    // let instant = Instant::now();
+    // renderer.mc.block_manager.read().baked_block_variants.iter().for_each(|(identifier, (key, _))| {
+    //     let _integer = env.new_object("java/lang/Integer", "(I)V", &[
+    //         JValue::Int(*key as i32)
+    //     ]).unwrap();
+    //
+    //     env.call_method(block_hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", &[
+    //         JValue::Object(env.new_string(identifier.to_string()).unwrap().into()),
+    //         JValue::Object(_integer)
+    //     ]).unwrap();
+    // });
+    // println!("Uploaded blocks to java HashMap in {}ms", Instant::now().duration_since(instant).as_millis());
 
     block_hashmap.into_inner()
 }
@@ -483,10 +485,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     _class: JClass
 ) {
     let mut commands = gl::GL_COMMANDS.get().unwrap().clone().write();
-
-    println!("{:?}", commands);
-
-    // println!("{:?}", commands);
 
     GL_PIPELINE.get().unwrap().commands.store(
         Arc::new(
@@ -557,6 +555,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
             &wm.render_pipeline_manager.load(),
             tsv,
         );
+
+        {
+            println!("GL ALLOC {}", gl::GL_ALLOC.get().unwrap().read().len());
+        }
 
         {
             gl::GL_ALLOC.get().unwrap().write().insert(
@@ -653,29 +655,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
             dest_slice.copy_from_slice(src_slice);
         }
 
-        let tsv = TextureSamplerView::from_rgb_bytes(
-            &wm.wgpu_state,
+        wm.wgpu_state.queue.write_texture(
+            gl_texture.bindable_texture.as_ref().unwrap().tsv.texture.as_image_copy(),
             &gl_texture.pixels,
+            ImageDataLayout {
+                offset: 0,
+                bytes_per_row: NonZeroU32::new(gl_texture.width as u32 * 4),
+                rows_per_image: NonZeroU32::new(gl_texture.height as u32)
+            },
             Extent3d {
                 width: gl_texture.width as u32,
                 height: gl_texture.height as u32,
                 depth_or_array_layers: 1
-            },
-            None,
-            match format {
-                0x1908 => wgpu::TextureFormat::Rgba8Unorm,
-                0x80E1 => wgpu::TextureFormat::Bgra8Unorm,
-                _ => unimplemented!()
             }
-        ).unwrap();
-
-        let bindable_texture = BindableTexture::from_tsv(
-            &wm.wgpu_state,
-            &wm.render_pipeline_manager.load(),
-            tsv
         );
-
-        gl_texture.bindable_texture = Some(Arc::new(bindable_texture));
     };
 
     let (tx, _) = CHANNELS.get_or_init(|| {
@@ -774,9 +767,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
         bytemuck::cast_slice(&converted)
     );
 
-    let matrix = Matrix4::from(slice_4x4) * Matrix4::from_translation(
-        Vector3::new(0.0, 0.0, 2000.0)
-    );
+    let matrix = Matrix4::from(slice_4x4) * Matrix4::from_nonuniform_scale(1.0, 1.0, 0.0);
 
     gl::GL_COMMANDS.get().unwrap().write().push(
         GLCommand::SetMatrix(matrix)

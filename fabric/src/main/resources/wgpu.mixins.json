@@ -4,7 +4,33 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
-    "world.PaletteProviderMixin"
+    "core.RegistryMixin",
+    "core.MouseMixin",
+    "core.KeyboardMixin",
+    "render.FramebufferMixin",
+
+    "render.RenderSystemMixin",
+    "render.MinecraftClientRenderMixin",
+    "render.GLXMixin",
+    "render.WindowMixin",
+    "render.WorldRendererMixin",
+    "render.GameRendererMixin",
+    "render.BufferRendererMixin",
+    "render.WindowFramebufferMixin",
+
+    "core.MinecraftClientCoreMixin",
+    "core.MainMixin",
+    "core.GlStateManagerMixin",
+
+    "world.ClientChunkMapMixin",
+    "world.PaletteProviderMixin",
+
+    "accessors.ThreadExecutorAccessor",
+    "accessors.DefaultClientResourcePackAccessor",
+    "accessors.ReloadableResourceManagerImplAccessor",
+    "accessors.NamespaceResourceManagerAccessor",
+    "accessors.WindowAccessor",
+    "accessors.VertexFormatElementAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

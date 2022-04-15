@@ -113,7 +113,17 @@ impl WmPipeline for GlPipeline {
                     "fs_main".into(),
                     "vs_main".into()
                 )) as Box<dyn WmShader>
-            )
+            ),
+            (
+                "wgpu_mc_ogl:shaders/pos_color_uv_light".into(),
+                Box::new(WgslShader::init(
+                    &("wgpu_mc", "shaders/gui_pos_color_uv_light.wgsl").into(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into()
+                )) as Box<dyn WmShader>
+            ),
         ].into_iter().collect()
     }
 
@@ -160,6 +170,19 @@ impl WmPipeline for GlPipeline {
                         push_constant_ranges: &[]
                     }
                 )
+            ),
+            (
+                "wgpu_mc_ogl:layouts/pos_color_uv_light".into(),
+                wm.wgpu_state.device.create_pipeline_layout(
+                    &wgpu::PipelineLayoutDescriptor {
+                        label: Some("pos_color_uv_light"),
+                        bind_group_layouts: &[
+                            layouts.get("matrix4").unwrap(),
+                            layouts.get("texture").unwrap()
+                        ],
+                        push_constant_ranges: &[]
+                    }
+                )
             )
         ].into_iter().collect()
     }
@@ -187,6 +210,7 @@ impl WmPipeline for GlPipeline {
 
         let pos_col_float3_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_float3").unwrap();
         let pos_col_uint_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_uint").unwrap();
+        let pos_color_uv_light_shader = shaders.get("wgpu_mc_ogl:shaders/pos_color_uv_light").unwrap();
         let pos_tex_shader = shaders.get("wgpu_mc_ogl:shaders/pos_tex").unwrap();
         let clearcolor_shader = shaders.get("wgpu_mc_ogl:shaders/clearcolor").unwrap();
 
@@ -286,7 +310,7 @@ impl WmPipeline for GlPipeline {
                             strip_index_format: None,
                             front_face: wgpu::FrontFace::Ccw,
                             cull_mode: None,
-                            unclipped_depth: false,
+                            unclipped_depth: true,
                             polygon_mode: wgpu::PolygonMode::Fill,
                             conservative: false
                         },
@@ -444,6 +468,79 @@ impl WmPipeline for GlPipeline {
                         multiview: None
                     }
                 )
+            ),
+            (
+                "wgpu_mc_ogl:pipelines/pos_color_uv_light".into(),
+                wm.wgpu_state.device.create_render_pipeline(
+                    &wgpu::RenderPipelineDescriptor {
+                        label: None,
+                        layout: Some(layouts.get("wgpu_mc_ogl:layouts/pos_color_uv_light").unwrap()),
+                        vertex: VertexState {
+                            module: pos_color_uv_light_shader.get_vert().0,
+                            entry_point: pos_color_uv_light_shader.get_vert().1,
+                            buffers: &[
+                                wgpu::VertexBufferLayout {
+                                    array_stride: 28,
+                                    step_mode: wgpu::VertexStepMode::Vertex,
+                                    attributes: &[
+
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Float32x3,
+                                            offset: 0,
+                                            shader_location: 0
+                                        },
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Uint32,
+                                            offset: 12,
+                                            shader_location: 1
+                                        },
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Float32x2,
+                                            offset: 16,
+                                            shader_location: 2
+                                        },
+                                        wgpu::VertexAttribute {
+                                            format: wgpu::VertexFormat::Uint32,
+                                            offset: 24,
+                                            shader_location: 3
+                                        },
+                                    ]
+                                }
+                            ]
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: None,
+                            unclipped_depth: false,
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            conservative: false
+                        },
+                        depth_stencil: Some(
+                            wgpu::DepthStencilState {
+                                format: wgpu::TextureFormat::Depth32Float,
+                                depth_write_enabled: false,
+                                depth_compare: wgpu::CompareFunction::Always,
+                                stencil: Default::default(),
+                                bias: Default::default()
+                            }
+                        ),
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: pos_color_uv_light_shader.get_frag().0,
+                            entry_point: pos_color_uv_light_shader.get_frag().1,
+                            targets: &[
+                                wgpu::ColorTargetState {
+                                    format: wgpu::TextureFormat::Bgra8Unorm,
+                                    blend: None,
+                                    write_mask: Default::default()
+                                }
+                            ]
+                        }),
+                        multiview: None
+                    }
+                )
             )
         ].into()
     }
@@ -462,6 +559,7 @@ impl WmPipeline for GlPipeline {
                             0 => pipeline_manager.render_pipelines.load().get("pos_col_uint").unwrap().clone(),
                             1 => pipeline_manager.render_pipelines.load().get("pos_tex").unwrap().clone(),
                             2 => pipeline_manager.render_pipelines.load().get("wgpu_mc_ogl:pipelines/pos_col_float3").unwrap().clone(),
+                            3 => pipeline_manager.render_pipelines.load().get("wgpu_mc_ogl:pipelines/pos_color_uv_light").unwrap().clone(),
                             _ => unimplemented!()
                         })
                     )

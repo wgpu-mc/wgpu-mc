@@ -38,12 +38,20 @@ public class BufferRendererMixin {
             else return;
         } else if(vertexFormat == VertexFormats.POSITION_TEXTURE) {
             WgpuNative.wmUsePipeline(1);
-            WgpuNative.attachTextureBindGroup(GlWmState.textureSlots.get(GlWmState.activeTexture));
+            WgpuNative.attachTextureBindGroup(RenderSystem.getShaderTexture(0));
+        } else if(vertexFormat == VertexFormats.POSITION_COLOR_TEXTURE_LIGHT) {
+            //Text rendering
+            WgpuNative.wmUsePipeline(3);
+            WgpuNative.attachTextureBindGroup(RenderSystem.getShaderTexture(0));
         } else {
             return;
         }
 
         Matrix4f mat = RenderSystem.getProjectionMatrix();
+        Matrix4f mat1 = RenderSystem.getModelViewMatrix();
+
+        mat.multiply(mat1);
+
         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
         float[] out = new float[16];
         mat.writeColumnMajor(floatBuffer);
@@ -56,9 +64,20 @@ public class BufferRendererMixin {
         WgpuNative.setVertexBuffer(bytes);
 
         if(drawMode == VertexFormat.DrawMode.QUADS) {
-            int[] quadIndices = new int[] {0, 1, 3, 1, 2, 3};
+//            int[] quadIndices = new int[] {0, 1, 3, 1, 2, 3};
+            int[] quadIndices = new int[count * 6];
+
+            for(int i=0;i<count;i++) {
+                quadIndices[(i * 6)] = i * 4;
+                quadIndices[(i * 6) + 1] = (i * 4) + 1;
+                quadIndices[(i * 6) + 2] = (i * 4) + 3;
+                quadIndices[(i * 6) + 3] = (i * 4) + 1;
+                quadIndices[(i * 6) + 4] = (i * 4) + 2;
+                quadIndices[(i * 6) + 5] = (i * 4) + 3;
+            }
+
             WgpuNative.setIndexBuffer(quadIndices);
-            WgpuNative.drawIndexed(6);
+            WgpuNative.drawIndexed(count + (count / 2));
         } else if(drawMode == VertexFormat.DrawMode.TRIANGLES) {
             WgpuNative.draw(vertexCount);
         }

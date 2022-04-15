@@ -90,4 +90,12 @@ public class RenderSystemMixin {
 //        return WgpuNative.getMaxTextureSize();
     }
 
+//    /**
+//     * @author wgpu-mc
+//     */
+//    @Overwrite(remap = false)
+//    public static void _setShaderTexture(int bind_slot, int texId) {
+//        WgpuNative.attachTextureBindGroup(texId);
+//    }
+
 }
