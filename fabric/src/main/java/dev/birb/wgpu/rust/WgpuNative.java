@@ -83,12 +83,14 @@ public class WgpuNative {
 
     public static native void draw(int count);
 
-    public static native void attachTextureBindGroup(int texture);
+    public static native void attachTextureBindGroup(int slot, int texture);
 
     public static native double getMouseX();
 
     public static native double getMouseY();
 
     public static native void runHelperThread();
+
+    public static native String getVideoMode();
 
 }

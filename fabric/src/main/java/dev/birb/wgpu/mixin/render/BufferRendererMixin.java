@@ -38,11 +38,14 @@ public class BufferRendererMixin {
             else return;
         } else if(vertexFormat == VertexFormats.POSITION_TEXTURE) {
             WgpuNative.wmUsePipeline(1);
-            WgpuNative.attachTextureBindGroup(RenderSystem.getShaderTexture(0));
+            WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
         } else if(vertexFormat == VertexFormats.POSITION_COLOR_TEXTURE_LIGHT) {
             //Text rendering
             WgpuNative.wmUsePipeline(3);
-            WgpuNative.attachTextureBindGroup(RenderSystem.getShaderTexture(0));
+            WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
+        } else if(vertexFormat == VertexFormats.POSITION_TEXTURE_COLOR) {
+            WgpuNative.wmUsePipeline(4);
+            WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
         } else {
             return;
         }

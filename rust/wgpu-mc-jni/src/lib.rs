@@ -779,9 +779,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_attachTextureBindGroup(
     _env: JNIEnv,
     _class: JClass,
-    id: i32
+    slot: jint,
+    id: jint
 ) {
-    gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::AttachTexture(id));
+    gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::AttachTexture(slot, id));
 }
 
 #[no_mangle]
@@ -791,6 +792,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
     pipeline: jint,
 ) {
     gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::UsePipeline(pipeline as usize));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
+    env: JNIEnv,
+    class: JClass
+) -> jstring {
+    let video_mode = WINDOW.get().unwrap().current_monitor().unwrap().video_modes().find(|_| true).unwrap();
+    env.new_string(format!("{}x{}@{}:{}", video_mode.size().width, video_mode.size().height, video_mode.refresh_rate(), video_mode.bit_depth())).unwrap().into_inner()
 }
 
 #[no_mangle]

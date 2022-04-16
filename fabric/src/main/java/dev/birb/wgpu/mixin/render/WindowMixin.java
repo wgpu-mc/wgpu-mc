@@ -3,12 +3,14 @@ package dev.birb.wgpu.mixin.render;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.util.VideoMode;
 import net.minecraft.client.util.Window;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 
 import java.io.InputStream;
+import java.util.Optional;
 
 @Mixin(Window.class)
 public class WindowMixin {
@@ -130,6 +132,14 @@ public class WindowMixin {
     public void setWindowedSize(int width, int height) {
         //TODO
         //WgpuNative.setWindowedSize(width, height);
+    }
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public Optional<VideoMode> getVideoMode() {
+        return VideoMode.fromString(WgpuNative.getVideoMode());
     }
 
 }
