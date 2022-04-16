@@ -86,7 +86,7 @@ public abstract class MinecraftClientRenderMixin {
         return window;
     }
 
-    @Inject(method = "render", at = @At(value = "RETURN"))
+    @Inject(method = "render", at = @At("RETURN"))
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
         RenderSystem.replayQueue();
 

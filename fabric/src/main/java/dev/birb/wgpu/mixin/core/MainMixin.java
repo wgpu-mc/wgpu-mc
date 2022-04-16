@@ -1,6 +1,8 @@
 package dev.birb.wgpu.mixin.core;
 
 import dev.birb.wgpu.render.Wgpu;
+import dev.birb.wgpu.rust.WgpuNative;
+import net.fabricmc.loader.impl.launch.knot.KnotClient;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.main.Main;
 import org.checkerframework.checker.units.qual.A;
@@ -23,8 +25,11 @@ public class MainMixin {
         //Block until the game is initialized enough for wgpu-mc to kick in
         while(!Wgpu.MAY_INITIALIZE) {}
 
-        Wgpu.client.set(instance);
-        System.out.println(Wgpu.client.get());
+        Thread helperThread = new Thread(WgpuNative::runHelperThread);
+
+        helperThread.setContextClassLoader(Thread.currentThread().getContextClassLoader());
+        helperThread.start();
+
         Wgpu.startRendering();
 
         //Never actually reached

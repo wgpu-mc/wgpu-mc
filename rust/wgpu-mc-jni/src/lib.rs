@@ -14,7 +14,7 @@ use cgmath::{Matrix4, Vector3};
 use futures::executor::block_on;
 use jni::{JavaVM, JNIEnv};
 use jni::objects::{JClass, JObject, JString, JValue, ReleaseMode};
-use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jstring, jlong, jfloat, jfloatArray, jdouble};
+use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jstring, jlong, jfloat, jfloatArray, jdouble, _jobject};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
@@ -48,7 +48,8 @@ enum RenderMessage {
     Task(Box<dyn FnOnce() + Send + Sync>),
     KeyPressed(u32),
     MouseState(ElementState, MouseButton),
-    MouseMove(f64, f64)
+    MouseMove(f64, f64),
+    Resized
 }
 
 struct MinecraftRenderState {
@@ -62,10 +63,11 @@ struct MouseState {
 }
 
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
-static CHANNELS: OnceCell<(Mutex<mpsc::Sender<RenderMessage>>, Mutex<mpsc::Receiver<RenderMessage>>)> = OnceCell::new();
+static CHANNELS: OnceCell<(mpsc::SyncSender<RenderMessage>, Mutex<mpsc::Receiver<RenderMessage>>)> = OnceCell::new();
 static MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
 static MOUSE_STATE: OnceCell<Arc<ArcSwap<MouseState>>> = OnceCell::new();
 static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
+static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -251,6 +253,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
             .unwrap()
     );
 
+    WINDOW.set(window.clone());
+
     MC_STATE.set(RwLock::new(MinecraftRenderState {
         render_world: false
     }));
@@ -297,35 +301,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
         JValue::Bool(true.into())
     );
 
-    let window_clone = window.clone();
-    let jvm = env.get_java_vm().unwrap();
-
-    thread::spawn(move || {
-        let (_, rx) = CHANNELS.get().unwrap();
-        let rx = rx.lock();
-        let env = jvm.attach_current_thread_permanently().unwrap();
-
-        for render_message in rx.iter() {
-            match render_message {
-                RenderMessage::SetTitle(title) => window_clone.set_title(&title),
-                RenderMessage::Task(func) => func(),
-                RenderMessage::KeyPressed(_) => {}
-                RenderMessage::MouseMove(x, y) => {
-                    env.call_static_method(
-                        "dev/birb/wgpu/render/Wgpu",
-                        "mouseMove",
-                        "(DD)V",
-                        &[
-                            JValue::Double(x),
-                            JValue::Double(y)
-                        ]
-                    ).unwrap();
-                }
-                RenderMessage::MouseState(_, _) => {}
-            };
-        }
-    });
-
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         let _mc_state = MC_STATE.get().unwrap().read();
@@ -339,10 +314,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                 match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::Resized(physical_size) => {
-                        let _ = wm.resize(WindowSize {
+                        wm.resize(WindowSize {
                             width: physical_size.width,
                             height: physical_size.height
                         });
+                        CHANNELS.get().unwrap().0.send(RenderMessage::Resized).unwrap();
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         let _ = wm.resize(WindowSize {
@@ -353,13 +329,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                     WindowEvent::CursorMoved {
                         device_id: _, position, modifiers: _
                     } => {
-                        CHANNELS.get().unwrap().0.lock().send(RenderMessage::MouseMove(
+                        CHANNELS.get().unwrap().0.send(RenderMessage::MouseMove(
                             position.x,
                             position.y
                         )).unwrap();
                     },
                     WindowEvent::MouseInput { device_id, state, button, modifiers } => {
-                        CHANNELS.get().unwrap().0.lock().send(RenderMessage::MouseState(
+                        CHANNELS.get().unwrap().0.send(RenderMessage::MouseState(
                             *state, *button
                         )).unwrap();
                     },
@@ -380,6 +356,72 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
+    env: JNIEnv,
+    class: JClass
+) {
+    let (_, rx) = CHANNELS.get_or_init(|| {
+        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
+        (tx, Mutex::new(rx))
+    });
+    let rx = rx.lock();
+
+    //Wait until wgpu-mc is initialized
+    while RENDERER.get().is_none() {};
+
+    for render_message in rx.iter() {
+        match render_message {
+            // RenderMessage::SetTitle(title) => WINDOW.get().unwrap().set_title(&title),
+            RenderMessage::Task(func) => func(),
+            RenderMessage::KeyPressed(_) => {}
+            RenderMessage::MouseMove(x, y) => {
+                env.call_static_method(
+                    "dev/birb/wgpu/render/Wgpu",
+                    "mouseMove",
+                    "(DD)V",
+                    &[
+                        JValue::Double(x),
+                        JValue::Double(y)
+                    ]
+                ).unwrap();
+            }
+            RenderMessage::MouseState(element_state, mouse_button) => {
+                let button = match mouse_button {
+                    MouseButton::Left => 0,
+                    MouseButton::Right => 1,
+                    MouseButton::Middle => 2,
+                    MouseButton::Other(_) => 0
+                };
+
+                let action = match element_state {
+                    ElementState::Pressed => 1,
+                    ElementState::Released => 0
+                };
+
+                env.call_static_method(
+                    "dev/birb/wgpu/render/Wgpu",
+                    "mouseAction",
+                    "(II)V",
+                    &[
+                        JValue::Int(button),
+                        JValue::Int(action)
+                    ]
+                ).unwrap();
+            },
+            RenderMessage::Resized => {
+                env.call_static_method(
+                    "dev/birb/wgpu/render/Wgpu",
+                    "onResize",
+                    "()V",
+                    &[]
+                ).unwrap();
+            },
+            _ => {}
+        };
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
     _env: JNIEnv,
     _class: JClass
@@ -397,8 +439,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
         black_texture: OnceCell::new()
     });
     CHANNELS.get_or_init(|| {
-        let (tx, rx) = mpsc::channel::<RenderMessage>();
-        (Mutex::new(tx), Mutex::new(rx))
+        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
+        (tx, Mutex::new(rx))
     });
 
     println!("wgpu-mc pre initialized");
@@ -456,7 +498,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     jtitle: JString) {
 
     let (tx, _) = CHANNELS.get().unwrap();
-    let tx = tx.lock();
 
     let title: String = env.get_string(jtitle).unwrap().into();
 
@@ -594,11 +635,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     };
 
     let (tx, _) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = channel();
-        (Mutex::new( tx), Mutex::new(rx))
+        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
+        (tx, Mutex::new(rx))
     });
 
-    let tx = tx.lock();
     tx.send(RenderMessage::Task(Box::new(task)));
 }
 
@@ -692,11 +732,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     };
 
     let (tx, _) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = channel();
-        (Mutex::new( tx), Mutex::new(rx))
+        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
+        ( tx, Mutex::new(rx))
     });
 
-    let tx = tx.lock();
     tx.send(RenderMessage::Task(Box::new(task)));
 }
 

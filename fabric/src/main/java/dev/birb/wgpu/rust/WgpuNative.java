@@ -89,4 +89,6 @@ public class WgpuNative {
 
     public static native double getMouseY();
 
+    public static native void runHelperThread();
+
 }
