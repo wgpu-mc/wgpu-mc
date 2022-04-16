@@ -56,9 +56,6 @@ public class Wgpu {
             client.mouse.x = x;
             client.mouse.y = y;
         });
-
-        client.mouse.x = x;
-        client.mouse.y = y;
     }
 
     public static void mouseAction(int button, int action) {
