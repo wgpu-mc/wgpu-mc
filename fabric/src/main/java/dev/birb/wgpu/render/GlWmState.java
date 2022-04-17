@@ -9,6 +9,8 @@ public class GlWmState {
 
     public static List<WmTexture> generatedTextures = new ArrayList<>();
     public static HashMap<Integer, Integer> textureSlots = new HashMap<>();
+    public static HashMap<Integer, Integer> pixelStore = new HashMap<>();
+
     public static int activeTexture = 0;
 
     public static class WmTexture {

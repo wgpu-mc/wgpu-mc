@@ -240,7 +240,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 
     let title: String = env.get_string(string).unwrap().into();
 
-    let event_loop = EventLoop::new();
+    // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
+    #[cfg(target_os = "linux")]
+    let event_loop: EventLoop<()> = winit::platform::unix::EventLoopExtUnix::new_any_thread();
+    #[cfg(not(target_os = "linux"))]
+    let event_loop: EventLoop<()> = EventLoop::new();
 
     let window = Arc::new(
         winit::window::WindowBuilder::new()
@@ -655,30 +659,22 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     height: jint,
     format: jint,
     _type: jint,
-    pixels: jlong
+    pixels: jlong,
+    unpack_row_length: jint,
+    unpack_skip_pixels: jint,
+    unpack_skip_rows: jint,
+    unpack_alignment: jint
 ) {
-    let pixel_size = match format {
-        0x1908 | 0x80E1 => 4,
-        _ => panic!("Unknown format {:x}", format)
-    };
+    let mut pixels = pixels as usize;
+    let unpack_row_length = unpack_row_length as usize;
+    let unpack_skip_pixels = unpack_skip_pixels as usize;
+    let unpack_skip_rows = unpack_skip_rows as usize;
+    let unpack_alignment = unpack_alignment as usize;
+    let width = width as usize;
+    let height = height as usize;
 
     //For when the renderer is initialized
     let task = move || {
-        let area = width * height;
-        //In bytes
-        assert_eq!(_type, 0x1401);
-        let size = area as usize * pixel_size;
-
-        let source_tex_data = if pixels != 0 {
-            Vec::from(
-                unsafe {
-                    std::slice::from_raw_parts(pixels as *const u8, size)
-                }
-            )
-        } else {
-            vec![0; size]
-        };
-
         let wm = RENDERER.get().unwrap();
 
         let gl_alloc = gl::GL_ALLOC.get().unwrap();
@@ -686,33 +682,46 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
 
         let gl_texture = alloc_write.get_mut(&texture_id).unwrap();
 
-        let src_row_byte_width = width * pixel_size as i32;
-        let dest_row_byte_width = gl_texture.width as i32 * pixel_size as i32;
+        let pixel_size = match format {
+            0x1908 | 0x80E1 => 4,
+            _ => panic!("Unknown format {:x}", format)
+        };
 
-        assert!(width <= gl_texture.width as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
-        assert!(height <= gl_texture.height as i32, "ofx {} ofy {} size {} width {} height {} glw {} glh {}\n", offsetX, offsetY, size, width, height, gl_texture.width, gl_texture.height);
+        //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
+        let row_width = if unpack_row_length > 0 {
+            unpack_row_length as i64
+        } else {
+            width as i64
+        };
 
-        if width + offsetX > gl_texture.width as i32 {
-            return;
-        }
+        let src_row_size = row_width as usize * pixel_size as usize;
+        let dest_row_size = gl_texture.width as usize * pixel_size as usize;
 
-        if height + offsetY > gl_texture.height as i32 {
-            return;
-        }
+        //GL_UNPACK_SKIP_PIXELS
+        pixels += pixel_size * unpack_skip_pixels;
+        //GL_UNPACK_SKIP_ROWS
+        pixels += src_row_size * unpack_skip_rows;
 
+        let next_row_byte_offset = if pixel_size >= unpack_alignment {
+            src_row_size
+        } else {
+            unimplemented!()
+        };
+
+        //In bytes
+        assert_eq!(_type, 0x1401);
+
+        let mut pixel_offset = 0usize;
         for y in 0..height {
-            let src_begin = src_row_byte_width * y;
-            let src_end = src_row_byte_width * (y + 1);
-            assert!(src_end <= source_tex_data.len() as i32);
-            let src_slice = &source_tex_data[src_begin as usize..src_end as usize];
+            let src_row_start_ptr = unsafe { (pixels + pixel_offset) as *const u8 };
+            let src_row_slice = unsafe { std::slice::from_raw_parts(src_row_start_ptr, src_row_size) };
+            pixel_offset += next_row_byte_offset;
 
-            let dest_begin = (dest_row_byte_width * (y + offsetY)) + (offsetX * pixel_size as i32);
-            let dest_end = dest_begin + (width * pixel_size as i32);
+            let dest_begin = (dest_row_size * (y + offsetY as usize)) + (offsetX as usize * pixel_size);
+            let dest_end = dest_begin + src_row_size;
 
-            assert_eq!(dest_end - dest_begin, src_end - src_begin);
-            assert!(dest_end <= gl_texture.pixels.len() as i32);
-            let dest_slice = &mut gl_texture.pixels[dest_begin as usize..dest_end as usize];
-            dest_slice.copy_from_slice(src_slice);
+            let dest_row_slice = &mut gl_texture.pixels[dest_begin as usize..dest_end as usize];
+            dest_row_slice.copy_from_slice(src_row_slice);
         }
 
         wm.wgpu_state.queue.write_texture(

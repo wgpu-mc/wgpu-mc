@@ -7,6 +7,7 @@ import net.minecraft.util.math.Matrix4f;
 import net.minecraft.util.math.Vec3f;
 import net.minecraft.util.math.Vector4f;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -510,6 +511,11 @@ public class GlStateManagerMixin {
         int texId = GlWmState.textureSlots.get(GlWmState.activeTexture);
         GlWmState.WmTexture texture = GlWmState.generatedTextures.get(texId);
 
+        int unpack_row_length = GlWmState.pixelStore.getOrDefault(GL30.GL_UNPACK_ROW_LENGTH, 0);
+        int unpack_skip_pixels = GlWmState.pixelStore.getOrDefault(GL30.GL_UNPACK_SKIP_PIXELS, 0);
+        int unpack_skip_rows = GlWmState.pixelStore.getOrDefault(GL30.GL_UNPACK_SKIP_ROWS, 0);
+        int unpack_alignment = GlWmState.pixelStore.getOrDefault(GL30.GL_UNPACK_ALIGNMENT, 4);
+
         if(width + offsetX <= texture.width && height + offsetY <= texture.height) {
             WgpuNative.subImage2D(
                 texId,
@@ -521,10 +527,14 @@ public class GlStateManagerMixin {
                 height,
                 format,
                 type,
-                pixels
+                pixels,
+                unpack_row_length,
+                unpack_skip_pixels,
+                unpack_skip_rows,
+                unpack_alignment
             );
         } else {
-            System.out.println("uhh");
+            throw new RuntimeException("Attempted to map a texture that was too large onto a smaller texture");
         }
     }
 
@@ -606,6 +616,7 @@ public class GlStateManagerMixin {
 
     @Overwrite(remap = false)
     public static void _pixelStore(int pname, int param) {
+        GlWmState.pixelStore.put(pname, param);
     }
 
     @Overwrite(remap = false)

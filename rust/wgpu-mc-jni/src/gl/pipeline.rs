@@ -511,7 +511,7 @@ impl WmPipeline for GlPipeline {
                             strip_index_format: None,
                             front_face: wgpu::FrontFace::Ccw,
                             cull_mode: None,
-                            unclipped_depth: false,
+                            unclipped_depth: true,
                             polygon_mode: wgpu::PolygonMode::Fill,
                             conservative: false
                         },
@@ -531,7 +531,7 @@ impl WmPipeline for GlPipeline {
                             targets: &[
                                 wgpu::ColorTargetState {
                                     format: wgpu::TextureFormat::Bgra8Unorm,
-                                    blend: None,
+                                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                     write_mask: Default::default()
                                 }
                             ]
