@@ -1,16 +1,6 @@
 package dev.birb.wgpu.mixin.world;
 
-import dev.birb.wgpu.WebGPUMod;
-import dev.birb.wgpu.rust.WgpuNative;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.render.block.BlockModels;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(targets = { "net.minecraft.client.world.ClientChunkManager$ClientChunkMap" })
 public class ClientChunkMapMixin {

@@ -20,7 +20,7 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "dev.birb.wgpu.WebGPUMod"
+      "dev.birb.wgpu.WgpuMcMod"
     ]
   },
   "mixins": [

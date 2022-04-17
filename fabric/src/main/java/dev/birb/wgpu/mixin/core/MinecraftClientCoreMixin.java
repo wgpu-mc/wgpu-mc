@@ -20,17 +20,6 @@ public abstract class MinecraftClientCoreMixin {
     @Shadow
     protected abstract String getWindowTitle();
 
-    @Shadow @Nullable
-    public Screen currentScreen;
-
-//    @Inject(method = "openScreen", at = @At("HEAD"), cancellable = true)
-//    public void openScreen(Screen screen, CallbackInfo ci) {
-//        screen.init((MinecraftClient) (Object) this, 1280, 720);
-//        this.currentScreen = screen;
-//        ci.cancel();
-//    }
-
-    //
     @Inject(method = "updateWindowTitle", at = @At("HEAD"), cancellable = true)
     public void modifyUpdateWindowTitle(CallbackInfo ci) {
         WgpuNative.updateWindowTitle(this.getWindowTitle());

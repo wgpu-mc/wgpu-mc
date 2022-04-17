@@ -6,6 +6,7 @@ import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.Mouse;
 import net.minecraft.client.gui.screen.world.SelectWorldScreen;
+import net.minecraft.entity.vehicle.MinecartEntity;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.registry.Registry;
 
@@ -13,8 +14,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static dev.birb.wgpu.WgpuMcMod.LOGGER;
+
 public class Wgpu {
     private static final WgpuTextureManager textureManager = new WgpuTextureManager();
+
     public volatile static boolean INITIALIZED = false;
     public volatile static boolean MAY_INITIALIZE = false;
 
@@ -28,8 +32,7 @@ public class Wgpu {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
         } catch (Throwable e) {
-            e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException(e);
         }
 
         WgpuNative.preInit();

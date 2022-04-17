@@ -6,8 +6,7 @@ extern crate core;
 use core::slice;
 use std::{thread};
 use std::convert::{TryFrom};
-use std::sync::{Arc, mpsc};
-use std::sync::mpsc::{channel};
+use std::sync::Arc;
 use std::time::Instant;
 use arc_swap::{ArcSwap};
 use cgmath::{Matrix4, Vector3};
@@ -35,6 +34,7 @@ use std::num::NonZeroU32;
 use wgpu::{Extent3d};
 use crate::gl::{GlTexture};
 use byteorder::{LittleEndian, ReadBytesExt};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 use once_cell::sync::OnceCell;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::wgpu::ImageDataLayout;
@@ -63,7 +63,7 @@ struct MouseState {
 }
 
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
-static CHANNELS: OnceCell<(mpsc::SyncSender<RenderMessage>, Mutex<mpsc::Receiver<RenderMessage>>)> = OnceCell::new();
+static CHANNELS: OnceCell<(Sender<RenderMessage>, Receiver<RenderMessage>)> = OnceCell::new();
 static MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
 static MOUSE_STATE: OnceCell<Arc<ArcSwap<MouseState>>> = OnceCell::new();
 static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
@@ -267,8 +267,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
         window: &window
     };
 
-    println!("[wgpu-mc] initializing wgpu");
-
     let wgpu_state = block_on(
         WmRenderer::init_wgpu(wrapper)
     );
@@ -276,8 +274,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap()
     });
-
-    println!("[wgpu-mc] initializing");
 
     let wm = WmRenderer::new(
         wgpu_state,
@@ -292,8 +288,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     );
 
     RENDERER.set(wm.clone());
-
-    println!("[wgpu-mc] done initializing");
 
     env.set_static_field(
         "dev/birb/wgpu/render/Wgpu",
@@ -365,17 +359,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
     class: JClass
 ) {
     let (_, rx) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
-        (tx, Mutex::new(rx))
+        let (tx, rx) = unbounded();
+        (tx, rx)
     });
-    let rx = rx.lock();
 
     //Wait until wgpu-mc is initialized
     while RENDERER.get().is_none() {};
 
     for render_message in rx.iter() {
         match render_message {
-            // RenderMessage::SetTitle(title) => WINDOW.get().unwrap().set_title(&title),
+            RenderMessage::SetTitle(title) => WINDOW.get().unwrap().set_title(&title),
             RenderMessage::Task(func) => func(),
             RenderMessage::KeyPressed(_) => {}
             RenderMessage::MouseMove(x, y) => {
@@ -443,11 +436,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
         black_texture: OnceCell::new()
     });
     CHANNELS.get_or_init(|| {
-        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
-        (tx, Mutex::new(rx))
+        let (tx, rx) = unbounded();
+        (tx, rx)
     });
-
-    println!("wgpu-mc pre initialized");
 }
 
 #[no_mangle]
@@ -639,8 +630,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     };
 
     let (tx, _) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
-        (tx, Mutex::new(rx))
+        let (tx, rx) = unbounded();
+        (tx, rx)
     });
 
     tx.send(RenderMessage::Task(Box::new(task)));
@@ -741,8 +732,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     };
 
     let (tx, _) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = mpsc::sync_channel::<RenderMessage>(1024);
-        ( tx, Mutex::new(rx))
+        let (tx, rx) = unbounded();
+        (tx, rx)
     });
 
     tx.send(RenderMessage::Task(Box::new(task)));
