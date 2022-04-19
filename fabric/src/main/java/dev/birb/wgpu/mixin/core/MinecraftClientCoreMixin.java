@@ -14,6 +14,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import static dev.birb.wgpu.render.Wgpu.wmIdentity;
+
 @Mixin(MinecraftClient.class)
 public abstract class MinecraftClientCoreMixin {
 
@@ -32,7 +34,10 @@ public abstract class MinecraftClientCoreMixin {
         if(!Wgpu.INITIALIZED) {
             title += " + Wgpu";
         } else {
-            title += " + " + WgpuNative.getBackend();
+            if (wmIdentity == null) {
+                wmIdentity = WgpuNative.getBackend();
+            }
+            title += " + " + wmIdentity;
         }
         cir.setReturnValue(title);
     }

@@ -17,7 +17,7 @@ use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jstring, jlong, j
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, Event, MouseButton, WindowEvent};
+use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow};
 use winit::window::Window;
 use gl::pipeline::{GLCommand, GlPipeline};
@@ -48,6 +48,7 @@ enum RenderMessage {
     Task(Box<dyn FnOnce() + Send + Sync>),
     KeyPressed(u32),
     MouseState(ElementState, MouseButton),
+    KeyState(u32, u32, u32, u32),
     MouseMove(f64, f64),
     Resized
 }
@@ -337,6 +338,18 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                             *state, *button
                         )).unwrap();
                     },
+                    WindowEvent::KeyboardInput { device_id, input, is_synthetic } => {
+                        match input.virtual_keycode {
+                            None => {}
+                            Some(keycode) => CHANNELS.get().unwrap().0.send(RenderMessage::KeyState(
+                                keycode as u32, input.scancode, match input.state {
+                                    ElementState::Pressed => 0,
+                                    ElementState::Released => 1
+                                },
+                                input.modifiers.bits()
+                            )).unwrap()
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -413,7 +426,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
                     &[]
                 ).unwrap();
             },
-            _ => {}
+            RenderMessage::KeyState(key, scancode, action, modifiers) => {
+                env.call_static_method(
+                    "dev/birb/wgpu/render/Wgpu",
+                    "keyState",
+                    "(IIII)V",
+                    &[
+                        JValue::Int(key as i32),
+                        JValue::Int(scancode as i32),
+                        JValue::Int(action as i32),
+                        JValue::Int(modifiers as i32)
+                    ]
+                ).unwrap();
+            }
         };
     }
 }
@@ -433,7 +458,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
     )));
     GL_PIPELINE.set(GlPipeline {
         commands: ArcSwap::new(Arc::new(Vec::new())),
-        black_texture: OnceCell::new()
+        blank_texture: OnceCell::new()
     });
     CHANNELS.get_or_init(|| {
         let (tx, rx) = unbounded();

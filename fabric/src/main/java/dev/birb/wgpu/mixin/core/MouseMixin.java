@@ -40,11 +40,7 @@ public class MouseMixin {
 
     @Redirect(method = "onMouseButton", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/GlfwUtil;getTime()D"))
     public double getTime() {
-        long timeMs = System.currentTimeMillis();
-        long timeSeconds = timeMs / 1000;
-
-        double onlyMs = (double) ((int) (timeMs - (timeSeconds * 1000)));
-        return ((double) timeSeconds) + (onlyMs / 1000.0);
+        return ((double) System.currentTimeMillis()) / 1000.0D;
     }
 
     @Redirect(method = "onMouseButton", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;getHandle()J"))

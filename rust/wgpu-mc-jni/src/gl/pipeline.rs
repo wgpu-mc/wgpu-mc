@@ -60,7 +60,7 @@ pub struct TextureUnit {
 #[derive(Debug)]
 pub struct GlPipeline {
     pub commands: ArcSwap<Vec<GLCommand>>,
-    pub black_texture: OnceCell<Arc<BindableTexture>>
+    pub blank_texture: OnceCell<Arc<BindableTexture>>
 }
 
 fn byte_buffer_to_short(bytes: &[u8]) -> Vec<u16> {
@@ -189,7 +189,7 @@ impl WmPipeline for GlPipeline {
         let layouts = pipeline_manager.pipeline_layouts.load();
         let shaders = pipeline_manager.shader_map.read();
 
-        let black_tsv = TextureSamplerView::from_rgb_bytes(
+        let blank_tsv = TextureSamplerView::from_rgb_bytes(
             &wm.wgpu_state,
             &[0u8; 4],
             Extent3d {
@@ -197,12 +197,12 @@ impl WmPipeline for GlPipeline {
                 height: 1,
                 depth_or_array_layers: 1
             },
-            Some("Black Texture"),
+            Some("Blank Texture"),
             wgpu::TextureFormat::Bgra8Unorm
         ).unwrap();
 
-        self.black_texture.set(
-            Arc::new(BindableTexture::from_tsv(&wm.wgpu_state, &*pipeline_manager, black_tsv))
+        self.blank_texture.set(
+            Arc::new(BindableTexture::from_tsv(&wm.wgpu_state, &*pipeline_manager, blank_tsv))
         );
 
         let pos_col_float3_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_float3").unwrap();
@@ -246,7 +246,7 @@ impl WmPipeline for GlPipeline {
                             strip_index_format: None,
                             front_face: wgpu::FrontFace::Ccw,
                             cull_mode: None,
-                            unclipped_depth: false,
+                            unclipped_depth: true,
                             polygon_mode: wgpu::PolygonMode::Fill,
                             conservative: false
                         },
@@ -373,7 +373,7 @@ impl WmPipeline for GlPipeline {
                             strip_index_format: None,
                             front_face: wgpu::FrontFace::Ccw,
                             cull_mode: None,
-                            unclipped_depth: false,
+                            unclipped_depth: true,
                             polygon_mode: wgpu::PolygonMode::Fill,
                             conservative: false
                         },
@@ -438,7 +438,7 @@ impl WmPipeline for GlPipeline {
                             strip_index_format: None,
                             front_face: wgpu::FrontFace::Ccw,
                             cull_mode: None,
-                            unclipped_depth: false,
+                            unclipped_depth: true,
                             polygon_mode: wgpu::PolygonMode::Fill,
                             conservative: false
                         },
@@ -578,7 +578,7 @@ impl WmPipeline for GlPipeline {
                             strip_index_format: None,
                             front_face: wgpu::FrontFace::Ccw,
                             cull_mode: None,
-                            unclipped_depth: false,
+                            unclipped_depth: true,
                             polygon_mode: wgpu::PolygonMode::Fill,
                             conservative: false
                         },
@@ -693,7 +693,7 @@ impl WmPipeline for GlPipeline {
                 },
                 GLCommand::AttachTexture(slot, texture) => {
                     let texture = match gl_alloc.get(texture) {
-                        None => self.black_texture.get().unwrap().clone(),
+                        None => self.blank_texture.get().unwrap().clone(),
                         Some(tx) => tx.bindable_texture.as_ref().unwrap().clone()
                     };
 

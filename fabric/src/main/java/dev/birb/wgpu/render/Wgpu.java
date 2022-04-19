@@ -23,6 +23,7 @@ public class Wgpu {
     public volatile static boolean MAY_INITIALIZE = false;
 
     public static HashMap<String, Integer> blocks;
+    public static String wmIdentity;
 
     public static WgpuTextureManager getTextureManager() {
         return textureManager;
@@ -56,8 +57,7 @@ public class Wgpu {
         MinecraftClient client = MinecraftClient.getInstance();
 
         client.execute(() -> {
-            client.mouse.x = x;
-            client.mouse.y = y;
+            client.mouse.onCursorPos(0, x, y);
         });
     }
 
@@ -65,6 +65,12 @@ public class Wgpu {
         MinecraftClient client = MinecraftClient.getInstance();
 
         client.execute(() -> client.mouse.onMouseButton(-1, button, action, 0));
+    }
+
+    public static void keyState(int key, int scancode, int state, int modifiers) {
+        MinecraftClient client = MinecraftClient.getInstance();
+
+        client.execute(() -> client.keyboard.onKey(0, key, scancode, state, modifiers));
     }
 
     public static void onResize() {
