@@ -1,18 +1,12 @@
 package dev.birb.wgpu.render;
 
+import dev.birb.wgpu.mixin.core.KeyboardMixin;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
-import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.Mouse;
-import net.minecraft.client.gui.screen.world.SelectWorldScreen;
-import net.minecraft.entity.vehicle.MinecartEntity;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.registry.Registry;
+import org.lwjgl.glfw.GLFW;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 
@@ -28,7 +22,7 @@ public class Wgpu {
     public static WgpuTextureManager getTextureManager() {
         return textureManager;
     }
-
+    public static HashMap<Integer, Integer> keyStates = new HashMap<>();
     public static void preInit(String windowTitle) {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
@@ -66,11 +60,22 @@ public class Wgpu {
 
         client.execute(() -> client.mouse.onMouseButton(-1, button, action, 0));
     }
+    public static void onChar(int codepoint) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        //TODO: Pull real modifiers
+        int modifiers = 0;
+        client.execute(() -> client.keyboard.onChar(0,codepoint,modifiers));
+
+    }
 
     public static void keyState(int key, int scancode, int state, int modifiers) {
         MinecraftClient client = MinecraftClient.getInstance();
+        int converted = Wgpu.convertKeyCode(key);
+        keyStates.put(converted, state);
+        /// Old debugging stuff, might be useful to keep around
+        // System.out.println(String.format("Put Key %s (scan %s conv %s) to state %s", key, scancode, converted, state));
 
-        client.execute(() -> client.keyboard.onKey(0, key, scancode, state, modifiers));
+        client.execute(() -> client.keyboard.onKey(0, converted, scancode, state, modifiers));
     }
 
     public static void onResize() {
@@ -82,4 +87,24 @@ public class Wgpu {
     public static void render(MinecraftClient client) {
         WgpuNative.setWorldRenderState(client.world != null);
     }
+    public static int convertKeyCode(int code) {
+        int converted = -1;
+
+        if (code >= 10 && code <= 35) {
+            // winit lowercase alphabet starts at 10
+            // GLFW  uppercase alphabet starts at 65 (+55 from 10), lowercase 32 chars later.
+            return code + 55 + 32;
+        }
+        switch (code) {
+            case 118 -> converted = GLFW.GLFW_KEY_LEFT_SHIFT;
+            case 139 -> converted = GLFW.GLFW_KEY_RIGHT_SHIFT;
+            case 117 -> converted = GLFW.GLFW_KEY_LEFT_CONTROL;
+            case 138 -> converted = GLFW.GLFW_KEY_RIGHT_CONTROL;
+            case 39 -> converted = GLFW.GLFW_KEY_F3;
+            case 74 -> converted = GLFW.GLFW_KEY_BACKSPACE;
+        }
+        System.out.printf("Couldn't convert %s\n", code);
+        return converted;
+    }
+
 }

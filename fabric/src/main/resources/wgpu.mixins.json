@@ -8,6 +8,7 @@
     "core.RegistryMixin",
     "core.MouseMixin",
     "core.KeyboardMixin",
+    "core.InputUtilMixin",
     "render.FramebufferMixin",
 
     "render.RenderSystemMixin",
