@@ -919,17 +919,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getMouseX(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jdouble {
-    MOUSE_STATE.get().unwrap().load().x
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getMouseY(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jdouble {
-    MOUSE_STATE.get().unwrap().load().y
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_scheduleChunkRebuild(
+    env: JNIEnv,
+    class: JClass,
+    x: jint,
+    z: jint
+) {
+    //TODO
 }

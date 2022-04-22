@@ -19,6 +19,8 @@ public class Wgpu {
     public static HashMap<String, Integer> blocks;
     public static String wmIdentity;
 
+    public static HashMap<Integer, Integer> keyState = new HashMap<>();
+
     public static WgpuTextureManager getTextureManager() {
         return textureManager;
     }
@@ -75,7 +77,10 @@ public class Wgpu {
         /// Old debugging stuff, might be useful to keep around
         // System.out.println(String.format("Put Key %s (scan %s conv %s) to state %s", key, scancode, converted, state));
 
-        client.execute(() -> client.keyboard.onKey(0, converted, scancode, state, modifiers));
+        client.execute(() -> {
+            Wgpu.keyState.put(key, state);
+            client.keyboard.onKey(0, key, scancode, state, modifiers);
+        });
     }
 
     public static void onResize() {

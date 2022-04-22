@@ -39,11 +39,12 @@ Engine
 Minecraft
 
 - [x] Disable Blaze3d
-- [x] Basic GUI rendering
-- [ ] Full GUI integration
+- [x] GUI rendering (text rendering is mangled but otherwise its like 99% there)
 - [ ] Integrate entities
+- [ ] Implement Indigo
 - [ ] World rendering
 - [ ] Particles
+- [ ] Lighting
 
 Pie in the sky
 
