@@ -1,6 +1,7 @@
 package dev.birb.wgpu.mixin.render;
 
 import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.resource.ResourceFactory;
 import net.minecraft.resource.ResourceManager;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,6 +25,15 @@ public class GameRendererMixin {
      */
     @Overwrite
     public void reload(ResourceManager manager) {
+    }
+
+    /**
+     * @author wgpu-mc
+     * @reason don't
+     */
+    @Overwrite
+    public void renderWorld(float tickDelta, long limitTime, MatrixStack matrices) {
+
     }
 
 }

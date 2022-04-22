@@ -5,36 +5,30 @@
   "compatibilityLevel": "JAVA_8",
   "client": [
     "TitleScreenMixin",
-    "core.RegistryMixin",
-    "core.MouseMixin",
+    "accessors.DefaultClientResourcePackAccessor",
+    "accessors.NamespaceResourceManagerAccessor",
+    "accessors.ReloadableResourceManagerImplAccessor",
+    "accessors.ThreadExecutorAccessor",
+    "accessors.VertexFormatElementAccessor",
+    "accessors.WindowAccessor",
+    "core.GlStateManagerMixin",
     "core.KeyboardMixin",
+    "core.MainMixin",
+    "core.MinecraftClientCoreMixin",
+    "core.MouseMixin",
+    "core.RegistryMixin",
+    "render.BufferRendererMixin",
     "render.FramebufferMixin",
-
-    "render.RenderSystemMixin",
-    "render.MinecraftClientRenderMixin",
+    "render.GameRendererMixin",
     "render.GLXMixin",
+    "render.MinecraftClientRenderMixin",
+    "render.RenderSystemMixin",
+    "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
-    "render.GameRendererMixin",
-    "render.BufferRendererMixin",
-    "render.WindowFramebufferMixin",
-
-    "core.MinecraftClientCoreMixin",
-    "core.MainMixin",
-    "core.GlStateManagerMixin",
-
-    "world.ClientChunkMapMixin",
-    "world.PaletteProviderMixin",
-
-    "accessors.ThreadExecutorAccessor",
-    "accessors.DefaultClientResourcePackAccessor",
-    "accessors.ReloadableResourceManagerImplAccessor",
-    "accessors.NamespaceResourceManagerAccessor",
-    "accessors.WindowAccessor",
-    "accessors.VertexFormatElementAccessor"
+    "core.ClientPlayNetworkHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
-  },
-  "mixins": []
+  }
 }

@@ -93,4 +93,5 @@ public class WgpuNative {
 
     public static native String getVideoMode();
 
+    public static native void scheduleChunkRebuild(int x, int z);
 }

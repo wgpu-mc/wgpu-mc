@@ -25,6 +25,8 @@ public class Wgpu {
     public static HashMap<String, Integer> blocks;
     public static String wmIdentity;
 
+    public static HashMap<Integer, Integer> keyState = new HashMap<>();
+
     public static WgpuTextureManager getTextureManager() {
         return textureManager;
     }
@@ -70,7 +72,10 @@ public class Wgpu {
     public static void keyState(int key, int scancode, int state, int modifiers) {
         MinecraftClient client = MinecraftClient.getInstance();
 
-        client.execute(() -> client.keyboard.onKey(0, key, scancode, state, modifiers));
+        client.execute(() -> {
+            Wgpu.keyState.put(key, state);
+            client.keyboard.onKey(0, key, scancode, state, modifiers);
+        });
     }
 
     public static void onResize() {
