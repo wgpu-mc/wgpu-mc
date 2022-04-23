@@ -11,14 +11,28 @@ public class WgpuKeys {
     public static final int WGPU_BACKSPACE = 74;
     public static final int WGPU_TAB = 146;
     public static final int WGPU_ESCAPE = 36;
+    public static final int WGPU_LEFT = 70;
+    public static final int WGPU_UP = 71;
+    public static final int WGPU_RIGHT = 72;
+    public static final int WGPU_DOWN = 73;
+    public static final int WGPU_HOME = 65;
+    public static final int WGPU_END = 67;
+
+    // https://www.glfw.org/docs/3.3/group__keys.html
+
     public static int convertKeyCode(int code) {
         int converted = -1;
-
-        if (code >= 10 && code <= 35) {
-            // winit lowercase alphabet starts at 10
-            // GLFW  uppercase alphabet starts at 65 (+55 from 10), lowercase 32 chars later.
-            return code + 55 + 32;
+        // Numbers
+        if(code >= 0 && code <= 9) {
+            return code + 48;
         }
+        if (code >= 10 && code <= 35) {
+            // winit loercase a is 10
+            // GLFW  uppercase A is 65, 55 differnce
+            // This method is used in Wgpu.keyState(..)
+            return code + 55;
+        }
+
         switch (code) {
             case WGPU_LSHIFT -> converted = GLFW.GLFW_KEY_LEFT_SHIFT;
             case WGPU_RSHIFT -> converted = GLFW.GLFW_KEY_RIGHT_SHIFT;
@@ -28,6 +42,12 @@ public class WgpuKeys {
             case WGPU_BACKSPACE -> converted = GLFW.GLFW_KEY_BACKSPACE;
             case WGPU_TAB ->  converted = GLFW.GLFW_KEY_TAB;
             case WGPU_ESCAPE ->  converted = GLFW.GLFW_KEY_ESCAPE;
+            case WGPU_LEFT ->  converted = GLFW.GLFW_KEY_LEFT;
+            case WGPU_UP ->  converted = GLFW.GLFW_KEY_UP;
+            case WGPU_RIGHT ->  converted = GLFW.GLFW_KEY_RIGHT;
+            case WGPU_DOWN ->  converted = GLFW.GLFW_KEY_DOWN;
+            case WGPU_HOME ->  converted = GLFW.GLFW_KEY_HOME;
+            case WGPU_END ->  converted = GLFW.GLFW_KEY_END;
 
         }
         if(converted == -1) {

@@ -19,9 +19,6 @@ public class Wgpu {
 
     public static HashMap<String, Integer> blocks;
     public static String wmIdentity;
-
-    public static HashMap<Integer, Integer> keyState = new HashMap<>();
-
     public static WgpuTextureManager getTextureManager() {
         return textureManager;
     }
@@ -67,24 +64,27 @@ public class Wgpu {
         MinecraftClient client = MinecraftClient.getInstance();
         int mappedModifier = convertModifiers(modifiers);
        System.out.printf("onChar(%s, %s)\n", codepoint, modifiers);
-       System.out.printf("Unmapped Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", modifiers & GLFW.GLFW_MOD_SHIFT, modifiers & GLFW.GLFW_MOD_CONTROL, modifiers & GLFW.GLFW_MOD_ALT, modifiers & GLFW.GLFW_MOD_SUPER);
-       System.out.printf("Mapped   Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", mappedModifier & GLFW.GLFW_MOD_SHIFT, mappedModifier & GLFW.GLFW_MOD_CONTROL, mappedModifier & GLFW.GLFW_MOD_ALT, mappedModifier & GLFW.GLFW_MOD_SUPER);
-
+//       System.out.printf("Unmapped Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", modifiers & GLFW.GLFW_MOD_SHIFT, modifiers & GLFW.GLFW_MOD_CONTROL, modifiers & GLFW.GLFW_MOD_ALT, modifiers & GLFW.GLFW_MOD_SUPER);
+//       System.out.printf("Mapped   Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", mappedModifier & GLFW.GLFW_MOD_SHIFT, mappedModifier & GLFW.GLFW_MOD_CONTROL, mappedModifier & GLFW.GLFW_MOD_ALT, mappedModifier & GLFW.GLFW_MOD_SUPER);
+       
         client.execute(() -> client.keyboard.onChar(0,codepoint,mappedModifier));
 
     }
 
     public static void keyState(int key, int scancode, int state, int modifiers) {
+
         MinecraftClient client = MinecraftClient.getInstance();
         int convertedKey = convertKeyCode(key);
         int convertedModifier = convertModifiers(modifiers);
-//        keyStates.put(convertedKey, state);
-        /// Old debugging stuff, might be useful to keep around
-        // System.out.println(String.format("Put Key %s (scan %s conv %s) to state %s", key, scancode, converted, state));
-        Wgpu.keyState.put(convertedKey, state);
+        int convertedState = state == 0 ? GLFW.GLFW_PRESS : GLFW.GLFW_RELEASE;
+//        System.out.printf("keyState(%s:%s, %s, %s, %s)\n", key, convertedKey, scancode, state, modifiers);
+//        System.out.printf("Unmapped Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", modifiers & GLFW.GLFW_MOD_SHIFT, modifiers & GLFW.GLFW_MOD_CONTROL, modifiers & GLFW.GLFW_MOD_ALT, modifiers & GLFW.GLFW_MOD_SUPER);
+//        System.out.printf("Mapped   Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", convertedModifier & GLFW.GLFW_MOD_SHIFT, convertedModifier & GLFW.GLFW_MOD_CONTROL, convertedModifier & GLFW.GLFW_MOD_ALT, convertedModifier & GLFW.GLFW_MOD_SUPER);
+        Wgpu.keyStates.put(convertedKey, state);
+//        System.out.printf("set keystates[%s]=%s\n", convertedKey, Wgpu.keyStates);
 
         client.execute(() -> {
-            client.keyboard.onKey(0, convertedKey, scancode, state, convertedModifier);
+            client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier);
         });
     }
 
