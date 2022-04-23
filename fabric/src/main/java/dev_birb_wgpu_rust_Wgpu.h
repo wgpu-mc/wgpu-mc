@@ -46,6 +46,8 @@ JNIEXPORT void JNICALL Java_dev_birb_wgpu_rust_Wgpu_doEventLoop
  */
 JNIEXPORT void JNICALL Java_dev_birb_wgpu_rust_Wgpu_uploadChunk
   (JNIEnv *, jclass, jobjectArray);
+JNIEXPORT void JNICALL Java_dev_birb_wgpu_rust_Wgpu_setCursorPosition(JNIEnv *, jclass, jdouble, jdouble);
+JNIEXPORT void JNICALL Java_dev_birb_wgpu_rust_Wgpu_setCursorMode(JNIEnv *, jclass, jint);
 
 #ifdef __cplusplus
 }
