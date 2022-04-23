@@ -18,7 +18,7 @@ use crate::render::pipeline::terrain::TerrainVertex;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
-pub const CHUNK_HEIGHT: usize = 256;
+pub const CHUNK_HEIGHT: usize = 384;
 pub const CHUNK_VOLUME: usize = CHUNK_AREA * CHUNK_HEIGHT;
 pub const CHUNK_SECTION_HEIGHT: usize = 1;
 pub const CHUNK_SECTIONS_PER: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
@@ -49,44 +49,34 @@ pub struct ChunkLayers {
     terrain: BakedChunkLayer<TerrainVertex>
 }
 
+pub trait BlockStateProvider: Send + Sync {
+
+    fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState;
+
+}
+
 #[derive(Debug)]
 pub struct Chunk {
     pub pos: ChunkPos,
-    pub sections: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
+    pub state_provider: Box<dyn BlockStateProvider>,
     pub baked: ArcSwap<Option<ChunkLayers>>
 }
 
 impl Chunk {
-    #[must_use]
-    pub fn new(pos: ChunkPos, blocks: Box<[BlockState; CHUNK_AREA * CHUNK_HEIGHT]>) -> Self {
-        let sections: Box<[ChunkSection; CHUNK_SECTIONS_PER]> = (0..CHUNK_SECTIONS_PER).map(|section| {
-            let start_index = section * SECTION_VOLUME;
-            let end_index = (section + 1) * SECTION_VOLUME;
-            let block_section: Box<[BlockState; SECTION_VOLUME]> = (start_index..end_index).map(|index| {
-                blocks[index]
-            }).collect::<Box<[BlockState]>>().try_into().unwrap();
-
-            ChunkSection {
-                empty: !blocks.iter().any(|state| state.packed_key.is_some()),
-                blocks: block_section,
-                offset_y: section * CHUNK_SECTION_HEIGHT
-            }
-        }).collect::<Box<[ChunkSection]>>().try_into().unwrap();
-
+    pub fn new(pos: ChunkPos, state_provider: Box<dyn BlockStateProvider>) -> Self {
         Self {
             pos,
-            sections,
+            state_provider,
             baked: ArcSwap::new(Arc::new(None))
         }
     }
 
-    #[must_use]
     pub fn blockstate_at_pos(&self, pos: BlockPos) -> BlockState {
-        let x = (pos.0 % 16) as usize;
-        let y = (pos.1) as usize;
-        let z = (pos.2 % 16) as usize;
+        let x = (pos.0 % 16);
+        let y = pos.1 as i16;
+        let z = (pos.2 % 16);
 
-        self.sections[y].blocks[(z * CHUNK_WIDTH) + x]
+        self.state_provider.get_state(x, y, z)
     }
 
     pub fn bake(&self, block_manager: &BlockManager) {
@@ -111,7 +101,7 @@ impl Chunk {
                 None => false,
                 Some(key) => key == grass_index
             }
-        }));
+        }), &*self.state_provider);
 
         let glass = BakedChunkLayer::bake(block_manager, self, |v, x, y, z| {
             TerrainVertex {
@@ -125,7 +115,7 @@ impl Chunk {
                 None => false,
                 Some(key) => key == glass_index
             }
-        }));
+        }), &*self.state_provider);
 
         let terrain = BakedChunkLayer::bake(block_manager, self, |v, x, y, z| {
             TerrainVertex {
@@ -139,7 +129,7 @@ impl Chunk {
                 None => false,
                 Some(key) => key != grass_index && key != glass_index
             }
-        }));
+        }), &*self.state_provider);
 
         self.baked.store(Arc::new(Some(ChunkLayers {
             grass,

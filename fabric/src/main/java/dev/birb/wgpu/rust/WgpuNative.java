@@ -4,6 +4,8 @@ package dev.birb.wgpu.rust;
 
 //import net.minecraft.world.chunk.ChunkSection;
 
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
 import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.util.collection.IndexedIterable;
 
@@ -49,7 +51,7 @@ public class WgpuNative {
 
     public static native void updateWindowTitle(String title);
 
-    public static native void registerEntry(int type, String name);
+    public static native void registerBlockState(BlockState state, String key);
 
     public static native void doEventLoop();
 
@@ -137,4 +139,7 @@ public class WgpuNative {
     public static native void setCursorMode(int mode);
 
     public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition);
+
+    public static native void registerBlock(String name);
+
 }

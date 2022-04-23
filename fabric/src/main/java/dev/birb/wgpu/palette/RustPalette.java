@@ -1,22 +1,16 @@
 package dev.birb.wgpu.palette;
 
-import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
-import io.netty.buffer.ByteBuf;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.collection.IndexedIterable;
-import net.minecraft.world.chunk.IdListPalette;
 import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PaletteResizeListener;
 
 import java.lang.ref.Cleaner;
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
-
-import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 
 public class RustPalette<T> implements Palette<T> {
 

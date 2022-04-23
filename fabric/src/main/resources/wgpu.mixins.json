@@ -28,6 +28,7 @@
     "render.WindowMixin",
     "render.WorldRendererMixin",
     "core.ClientPlayNetworkHandlerMixin"
+    "world.ChunkMixin"
   ],
   "injectors": {
     "defaultRequire": 1

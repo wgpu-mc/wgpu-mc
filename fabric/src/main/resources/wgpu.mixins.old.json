@@ -4,6 +4,7 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
+    "world.PaletteProviderMixin",
     "TitleScreenMixin",
     "accessors.DefaultClientResourcePackAccessor",
     "accessors.NamespaceResourceManagerAccessor",

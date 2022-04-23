@@ -5,6 +5,7 @@ extern crate core;
 
 use core::slice;
 use std::{mem, thread};
+use std::collections::HashMap;
 use std::convert::{TryFrom};
 use std::env::var;
 use std::sync::Arc;
@@ -23,7 +24,7 @@ use winit::event_loop::{ControlFlow};
 use winit::window::Window;
 use gl::pipeline::{GLCommand, GlPipeline};
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
-use wgpu_mc::mc::block::{Block};
+use wgpu_mc::mc::block::{Block, BlockState, PackedBlockstateKey};
 use wgpu_mc::mc::datapack::{NamespacedResource};
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::BindableTexture;
@@ -39,6 +40,7 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use mc_varint::VarIntRead;
 use once_cell::sync::OnceCell;
+use wgpu_mc::mc::chunk::BlockStateProvider;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::wgpu::ImageDataLayout;
 use crate::palette::{IdList, JavaPalette};
@@ -70,10 +72,11 @@ struct MouseState {
 
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
 static CHANNELS: OnceCell<(Sender<RenderMessage>, Receiver<RenderMessage>)> = OnceCell::new();
-static MC_STATE: OnceCell<RwLock<MinecraftRenderState>> = OnceCell::new();
+static MC_STATE: OnceCell<ArcSwap<MinecraftRenderState>> = OnceCell::new();
 static MOUSE_STATE: OnceCell<Arc<ArcSwap<MouseState>>> = OnceCell::new();
 static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
 static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
+static BLOCK_STATES: OnceCell<RwLock<HashMap<jobject, String>>> = OnceCell::new();
 
 struct WinitWindowWrapper<'a> {
     window: &'a Window
@@ -195,38 +198,76 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
 // }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
     env: JNIEnv,
     _class: JClass,
-    entry_type: jint,
-    name: JString) {
-    let rname: String = env.get_string(name).unwrap().into();
+    block_state: JObject,
+    name: JString
+) {
+    let block_state_key: String = env.get_string(name).unwrap().into();
 
-    let renderer = RENDERER.get().unwrap();
+    BLOCK_STATES.get_or_init(|| {
+        RwLock::new(HashMap::new())
+    }).write().insert(block_state.into_inner(), block_state_key);
+}
 
-    let mut block_manager = renderer.mc.block_manager.write();
+//This is per chunk
+struct JavaBlockStateProvider {
+    pub java_blockstate_to_wm: Arc<HashMap<jobject, usize>>,
+    pub sections: [JavaPalette; 24]
+}
 
-    match entry_type {
-        0 => {
-            let identifier = NamespacedResource::try_from(&rname[..]).unwrap();
+impl BlockStateProvider for JavaBlockStateProvider {
 
-            let resource = renderer.mc.resource_provider.get_resource(
-                &identifier.prepend("blockstates/").append(".json")
-            );
-            let json_str = std::str::from_utf8(&resource).unwrap();
-            let model = Block::from_json(
-                &identifier.to_string(),
-                json_str,
-            ).or_else(|| {
-                Block::from_json(
-                    &identifier.to_string(),
-                    "{\"variants\":{\"\": {\"model\": \"minecraft:block/bedrock\"}}}",
+    //Technically this should be able to provide a blockstate for anywhere in the world but I won't implement that yet
+    fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState {
+        let x = x & 0xf;
+        let y = y & 0xf;
+        let z = z & 0xf;
+
+        BlockState {
+            packed_key: self.java_blockstate_to_wm.get(
+                &self.sections[(y as usize) / 24].get(
+                    ((y as usize) << 4 | (z as usize)) << 4 | (x as usize)
                 )
-            }).unwrap();
-            block_manager.blocks.insert(identifier, model);
+            ).copied().map(|key| key as PackedBlockstateKey)
         }
-        _ => unimplemented!()
+    }
+
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlock(
+    env: JNIEnv,
+    _class: JClass,
+    identifier: JString
+) {
+    let task = move || {
+        let identifier: String = env.get_string(identifier).unwrap().into();
+        let identifier = NamespacedResource::try_from(&identifier[..])
+            .unwrap();
+
+        let renderer = RENDERER.get().unwrap();
+
+        let mut block_manager = renderer.mc.block_manager.write();
+
+        let json_bytes = renderer.mc.resource_provider.get_resource(
+            &identifier
+        );
+
+        let json = std::str::from_utf8(&json_bytes).unwrap();
+
+        let block = Block::from_json(&identifier.to_string(), json).unwrap();
+
+        block_manager.blocks.insert(identifier, block);
     };
+
+    let (tx, _) = CHANNELS.get_or_init(|| {
+        let (tx, rx) = unbounded();
+        (tx, rx)
+    });
+
+    tx.send(RenderMessage::Task(Box::new(task)));
 }
 
 #[no_mangle]
@@ -257,10 +298,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     );
 
     WINDOW.set(window.clone());
-
-    MC_STATE.set(RwLock::new(MinecraftRenderState {
+    
+    MC_STATE.set(ArcSwap::new(Arc::new(MinecraftRenderState {
         render_world: false
-    }));
+    })));
 
     let wrapper = &WinitWindowWrapper {
         window: &window
@@ -301,7 +342,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
-        let _mc_state = MC_STATE.get().unwrap().read();
         match event {
             Event::MainEventsCleared => window.request_redraw(),
             Event::WindowEvent {
@@ -361,9 +401,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
             Event::RedrawRequested(_) => {
                 wm.update();
 
-                wm.render(&[
-                    GL_PIPELINE.get().unwrap()
-                ]);
+                let mc_state = MC_STATE.get().unwrap().load();
+
+                let mut pipelines = Vec::new();
+                if mc_state.render_world {
+                    pipelines.push(&TerrainPipeline as &dyn WmPipeline);
+                }
+
+                pipelines.push(GL_PIPELINE.get().unwrap());
+
+                wm.render(&pipelines);
             }
             _ => {}
         }
@@ -558,8 +605,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
     _env: JNIEnv,
     _class: JClass,
     boolean: jboolean) {
-    let render_state = MC_STATE.get().unwrap();
-    render_state.write().render_world = boolean != 0;
+    MC_STATE.get().unwrap().store(Arc::new(MinecraftRenderState { render_world: boolean != 0 }));
 }
 
 #[no_mangle]

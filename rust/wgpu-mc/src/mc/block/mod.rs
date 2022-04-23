@@ -78,7 +78,7 @@ impl From<&str> for BlockDirection {
     }
 }
 
-pub type BlockPos = (i32, u8, i32);
+pub type BlockPos = (i32, u16, i32);
 
 pub type BlockstateVariantKey = String;
 

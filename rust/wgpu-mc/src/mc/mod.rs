@@ -244,7 +244,7 @@ impl MinecraftState {
                     &state.rotations
                 ).unwrap_or_else(|| panic!("{}", name));
 
-                let variant_resource = name.append(&format!("#{}", &key));
+                let variant_resource = name.prepend("Block{").append("}[").append(&key).append("]");
 
                 meshes.push(mesh);
                 indices.insert(variant_resource, meshes.len() - 1);

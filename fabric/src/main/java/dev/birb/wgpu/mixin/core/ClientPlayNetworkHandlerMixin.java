@@ -11,7 +11,7 @@ public class ClientPlayNetworkHandlerMixin {
 
     /**
      * @author wgpu-mc
-     * @reason to tell the rust backend to rebuild the chunk mesh
+     * @reason tell the rust backend to rebuild the chunk mesh
      */
     @Overwrite
     public void scheduleRenderChunk(WorldChunk chunk, int x, int z) {

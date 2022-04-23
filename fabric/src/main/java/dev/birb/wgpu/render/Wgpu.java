@@ -1,8 +1,11 @@
 package dev.birb.wgpu.render;
 
 import dev.birb.wgpu.mixin.core.KeyboardMixin;
+import dev.birb.wgpu.mixin.core.RegistryMixin;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import org.lwjgl.glfw.GLFW;
 
