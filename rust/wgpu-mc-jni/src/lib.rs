@@ -691,6 +691,41 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     let width = width as usize;
     let height = height as usize;
 
+    let pixel_size = match format {
+        0x1908 | 0x80E1 => 4,
+        _ => panic!("Unknown format {:x}", format)
+    };
+
+    //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
+    let row_width = if unpack_row_length > 0 {
+        unpack_row_length as i64
+    } else {
+        width as i64
+    };
+
+    let src_row_size = row_width as usize * pixel_size as usize;
+
+    //GL_UNPACK_SKIP_PIXELS
+    pixels += pixel_size * unpack_skip_pixels;
+    //GL_UNPACK_SKIP_ROWS
+    pixels += src_row_size * unpack_skip_rows;
+
+    let next_row_byte_offset = if pixel_size >= unpack_alignment {
+        src_row_size
+    } else {
+        unimplemented!()
+    };
+
+    //In bytes
+    assert_eq!(_type, 0x1401);
+
+    let vec = unsafe {
+        Vec::from(std::slice::from_raw_parts(
+            pixels as *mut u8,
+            next_row_byte_offset * height
+        ))
+    };
+
     //For when the renderer is initialized
     let task = move || {
         let wm = RENDERER.get().unwrap();
@@ -700,39 +735,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
 
         let gl_texture = alloc_write.get_mut(&texture_id).unwrap();
 
-        let pixel_size = match format {
-            0x1908 | 0x80E1 => 4,
-            _ => panic!("Unknown format {:x}", format)
-        };
-
-        //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
-        let row_width = if unpack_row_length > 0 {
-            unpack_row_length as i64
-        } else {
-            width as i64
-        };
-
-        let src_row_size = row_width as usize * pixel_size as usize;
         let dest_row_size = gl_texture.width as usize * pixel_size as usize;
-
-        //GL_UNPACK_SKIP_PIXELS
-        pixels += pixel_size * unpack_skip_pixels;
-        //GL_UNPACK_SKIP_ROWS
-        pixels += src_row_size * unpack_skip_rows;
-
-        let next_row_byte_offset = if pixel_size >= unpack_alignment {
-            src_row_size
-        } else {
-            unimplemented!()
-        };
-
-        //In bytes
-        assert_eq!(_type, 0x1401);
 
         let mut pixel_offset = 0usize;
         for y in 0..height {
-            let src_row_start_ptr = unsafe { (pixels + pixel_offset) as *const u8 };
-            let src_row_slice = unsafe { std::slice::from_raw_parts(src_row_start_ptr, src_row_size) };
+            let src_row_slice = &vec[pixel_offset..pixel_offset + src_row_size];
             pixel_offset += next_row_byte_offset;
 
             let dest_begin = (dest_row_size * (y + offsetY as usize)) + (offsetX as usize * pixel_size);
