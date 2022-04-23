@@ -78,13 +78,13 @@ public class Wgpu {
         MinecraftClient client = MinecraftClient.getInstance();
         int convertedKey = convertKeyCode(key);
         int convertedModifier = convertModifiers(modifiers);
-        keyStates.put(convertedKey, state);
+//        keyStates.put(convertedKey, state);
         /// Old debugging stuff, might be useful to keep around
         // System.out.println(String.format("Put Key %s (scan %s conv %s) to state %s", key, scancode, converted, state));
+        Wgpu.keyState.put(convertedKey, state);
 
         client.execute(() -> {
-            Wgpu.keyState.put(key, state);
-            client.keyboard.onKey(0, key, scancode, state, convertedModifier);
+            client.keyboard.onKey(0, convertedKey, scancode, state, convertedModifier);
         });
     }
 

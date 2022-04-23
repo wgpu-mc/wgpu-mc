@@ -9,6 +9,8 @@ public class WgpuKeys {
     public static final int WGPU_RCONTROL = 138;
     public static final int WGPU_F3 = 39;
     public static final int WGPU_BACKSPACE = 74;
+    public static final int WGPU_TAB = 146;
+    public static final int WGPU_ESCAPE = 36;
     public static int convertKeyCode(int code) {
         int converted = -1;
 
@@ -24,6 +26,9 @@ public class WgpuKeys {
             case WGPU_RCONTROL -> converted = GLFW.GLFW_KEY_RIGHT_CONTROL;
             case WGPU_F3 -> converted = GLFW.GLFW_KEY_F3;
             case WGPU_BACKSPACE -> converted = GLFW.GLFW_KEY_BACKSPACE;
+            case WGPU_TAB ->  converted = GLFW.GLFW_KEY_TAB;
+            case WGPU_ESCAPE ->  converted = GLFW.GLFW_KEY_ESCAPE;
+
         }
         if(converted == -1) {
             System.out.printf("Couldn't convert %s\n", code);

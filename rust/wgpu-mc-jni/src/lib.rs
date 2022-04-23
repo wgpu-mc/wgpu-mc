@@ -344,7 +344,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                                     ElementState::Pressed => 0,
                                     ElementState::Released => 1
                                 },
-                                input.modifiers.bits(),
+                                current_modifiers.bits(),
                             )).unwrap()
                         }
                     }
