@@ -13,6 +13,7 @@
     "accessors.WindowAccessor",
     "core.GlStateManagerMixin",
     "core.KeyboardMixin",
+    "core.InputUtilMixin",
     "core.MainMixin",
     "core.MinecraftClientCoreMixin",
     "core.MouseMixin",

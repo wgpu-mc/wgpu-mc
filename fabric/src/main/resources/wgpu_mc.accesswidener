@@ -6,6 +6,7 @@ accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <i
 accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
 accessible method net/minecraft/client/Mouse onMouseButton (JIII)V
 accessible method net/minecraft/client/Mouse onCursorPos (JDD)V
+accessible method net/minecraft/client/Keyboard onChar (JII)V
 
 accessible field net/minecraft/client/Mouse x D
 accessible field net/minecraft/client/Mouse y D
