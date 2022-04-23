@@ -13,13 +13,14 @@ import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 
 public class RustPalette<T> implements Palette<T> {
 
-    private long rustPalettePointer;
+    private AtomicLong rustPalettePointer;
     private final long rustIdList;
 
     private static final Cleaner cleaner = Cleaner.create();
@@ -29,38 +30,40 @@ public class RustPalette<T> implements Palette<T> {
     }
 
     public RustPalette(long rustPalettePointer, long rustIdList) {
-        this.rustPalettePointer = rustPalettePointer;
+        AtomicLong atomic = new AtomicLong(rustPalettePointer);
+
+        this.rustPalettePointer = atomic;
         this.rustIdList = rustIdList;
 
         cleaner.register(this, () -> {
-            WgpuNative.destroyPalette(this.rustPalettePointer);
+            WgpuNative.destroyPalette(atomic.get());
         });
     }
 
     @Override
     public int index(T object) {
-        return WgpuNative.paletteIndex(this.rustPalettePointer, object);
+        return WgpuNative.paletteIndex(this.rustPalettePointer.get(), object);
     }
 
     @Override
     public boolean hasAny(Predicate<T> predicate) {
-        return WgpuNative.paletteHasAny(this.rustPalettePointer, predicate);
+        return WgpuNative.paletteHasAny(this.rustPalettePointer.get(), predicate);
     }
 
     @Override
     public T get(int id) {
-        return (T) WgpuNative.paletteGet(this.rustPalettePointer, id);
+        return (T) WgpuNative.paletteGet(this.rustPalettePointer.get(), id);
     }
 
     @Override
     public void readPacket(PacketByteBuf buf) {
         assert buf.nioBuffer().order() == ByteOrder.LITTLE_ENDIAN;
 
-        WgpuNative.destroyPalette(this.rustPalettePointer);
-        this.rustPalettePointer = WgpuNative.createPalette(this.rustIdList);
+        WgpuNative.destroyPalette(this.rustPalettePointer.get());
+        this.rustPalettePointer.set(WgpuNative.createPalette(this.rustIdList));
 
         int index = buf.readerIndex();
-        buf.readerIndex(index + WgpuNative.paletteReadPacket(this.rustPalettePointer, buf.array(), index));
+        buf.readerIndex(index + WgpuNative.paletteReadPacket(this.rustPalettePointer.get(), buf.array(), index));
     }
 
     @Override
@@ -75,12 +78,12 @@ public class RustPalette<T> implements Palette<T> {
 
     @Override
     public int getSize() {
-        return WgpuNative.paletteSize(this.rustPalettePointer);
+        return WgpuNative.paletteSize(this.rustPalettePointer.get());
     }
 
     @Override
     public Palette<T> copy() {
-        return new RustPalette<T>(WgpuNative.copyPalette(this.rustPalettePointer), this.rustIdList);
+        return new RustPalette<T>(WgpuNative.copyPalette(this.rustPalettePointer.get()), this.rustIdList);
     }
 
     public static <A> Palette<A> create(int bits, IndexedIterable<A> idList, PaletteResizeListener<A> listener, List<A> list) {

@@ -28,7 +28,7 @@ impl JavaPalette {
     
     pub fn new(id_list: jlong) -> Self {
         Self {
-            store: Vec::new(),
+            store: Vec::with_capacity(256),
             indices: HashMap::new(),
             id_list: id_list as usize as *mut IdList
         }
