@@ -16,7 +16,7 @@ use jni::objects::{JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jstring, jlong, jfloat, jfloatArray, jdouble, _jobject};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
-use winit::dpi::PhysicalSize;
+use winit::dpi::{PhysicalSize, PhysicalPosition};
 use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent, ModifiersState};
 use winit::event_loop::{ControlFlow};
 use winit::window::Window;
@@ -929,4 +929,34 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_scheduleChunkRebuild(
     z: jint
 ) {
     //TODO
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorPosition(env: JNIEnv, class: JClass, x: f64, y: f64) {
+    WINDOW.get().unwrap().set_cursor_position(PhysicalPosition{x, y});
+}
+const GLFW_CURSOR_NORMAL: i32 = 212993;
+const GLFW_CURSOR_HIDDEN: i32 = 212994;
+const GLFW_CURSOR_DISABLED: i32 = 212995;
+/// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(env: JNIEnv, class: JClass, mode: i32) {
+
+    match mode {
+        GLFW_CURSOR_NORMAL => {
+            WINDOW.get().unwrap().set_cursor_grab(false).unwrap();
+            WINDOW.get().unwrap().set_cursor_visible(true);
+        },
+        GLFW_CURSOR_HIDDEN => {
+            WINDOW.get().unwrap().set_cursor_grab(false).unwrap();
+            WINDOW.get().unwrap().set_cursor_visible(false);
+        },
+        GLFW_CURSOR_DISABLED => {
+            WINDOW.get().unwrap().set_cursor_grab(true).unwrap();
+            WINDOW.get().unwrap().set_cursor_visible(false);
+        },
+        _ => {
+            println!("Set cursor mode had an invalid mode.")
+        }
+    }
 }

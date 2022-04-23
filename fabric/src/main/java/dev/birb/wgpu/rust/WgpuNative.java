@@ -94,4 +94,8 @@ public class WgpuNative {
     public static native String getVideoMode();
 
     public static native void scheduleChunkRebuild(int x, int z);
+
+    public static native void setCursorPosition(double x, double y);
+
+    public static native void setCursorMode(int mode);
 }
