@@ -5,6 +5,7 @@ package dev.birb.wgpu.rust;
 //import net.minecraft.world.chunk.ChunkSection;
 
 import net.minecraft.resource.ResourceNotFoundException;
+import net.minecraft.util.collection.IndexedIterable;
 import net.minecraft.world.chunk.WorldChunk;
 
 import java.io.File;
@@ -14,6 +15,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
+import java.util.function.Predicate;
 
 public class WgpuNative {
 
@@ -94,4 +96,21 @@ public class WgpuNative {
     public static native String getVideoMode();
 
     public static native void scheduleChunkRebuild(int x, int z);
+
+    public static native long createPalette();
+
+    public static native void destroyPalette(long rustPalettePointer);
+
+    public static native int paletteIndex(long ptr, Object object);
+
+    public static native boolean paletteHasAny(long ptr, Predicate<?> predicate);
+
+    public static native Object paletteGet(long ptr, int id);
+
+    public static native long copyPalette(long rustPalettePointer);
+
+    public static native int paletteSize(long rustPalettePointer);
+
+    public static native long uploadIdList(Object idList);
+
 }

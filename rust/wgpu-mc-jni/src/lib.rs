@@ -4,7 +4,7 @@
 extern crate core;
 
 use core::slice;
-use std::{thread};
+use std::{mem, thread};
 use std::convert::{TryFrom};
 use std::sync::Arc;
 use std::time::Instant;
@@ -31,6 +31,7 @@ use wgpu_mc::texture::TextureSamplerView;
 use wgpu_mc::wgpu;
 use std::io::Cursor;
 use std::num::NonZeroU32;
+use std::ptr::drop_in_place;
 use wgpu::{Extent3d};
 use crate::gl::{GlTexture};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -38,6 +39,7 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use once_cell::sync::OnceCell;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::wgpu::ImageDataLayout;
+use crate::palette::JavaPalette;
 
 mod mc_interface;
 mod gl;
@@ -931,4 +933,101 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_scheduleChunkRebuild(
     z: jint
 ) {
     //TODO
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_makePalette(
+    env: JNIEnv,
+    class: JClass
+) -> jlong {
+    let mut palette = Box::new(JavaPalette::new());
+
+    let ptr = ((&mut *palette as *mut JavaPalette) as usize) as jlong;
+    mem::forget(palette);
+
+    ptr
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPalette(
+    env: JNIEnv,
+    class: JClass,
+    palette_long: jlong
+) {
+    let palette = (palette_long as usize) as *mut JavaPalette;
+
+    unsafe {
+        drop_in_place(palette)
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
+    env: JNIEnv,
+    class: JClass,
+    palette_long: jlong,
+    object: JObject
+) -> jint {
+    let mut palette = (palette_long as usize) as *mut JavaPalette;
+
+    (unsafe { palette.as_mut().unwrap().index(object) }) as jint
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteHasAny(
+    env: JNIEnv,
+    class: JClass,
+    palette_long: jlong,
+    predicate: JObject
+) -> jint {
+    let palette = (palette_long as usize) as *mut JavaPalette;
+
+    //horribly slow. how nice
+    (unsafe { palette.as_ref().unwrap().has_any(&*Box::new(|object: &*mut u8| {
+        env.call_method(
+            predicate,
+            "test",
+            "(Ljava/lang/Object;)Z",
+            &[
+                JValue::Object(JObject::from((*object) as jobject))
+            ]
+        ).unwrap().z().unwrap()
+    })) }) as jint
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteSize(
+    env: JNIEnv,
+    class: JClass,
+    palette_long: jlong
+) -> jint {
+    let palette = (palette_long as usize) as *mut JavaPalette;
+
+    (unsafe { palette.as_ref().unwrap().size() }) as jint
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPalette(
+    env: JNIEnv,
+    class: JClass,
+    palette_long: jlong
+) -> jlong {
+    let palette = (palette_long as usize) as *mut JavaPalette;
+    let mut new_palette = Box::new(unsafe { palette.as_ref().unwrap().clone() });
+    let new_palette_ptr = &mut *new_palette as *mut JavaPalette;
+    std::mem::forget(new_palette);
+
+    new_palette_ptr as usize as jlong
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
+    env: JNIEnv,
+    class: JClass,
+    palette_long: jlong,
+    index: i32
+) -> jobject {
+    let palette = (palette_long as usize) as *mut JavaPalette;
+
+    (unsafe { palette.as_ref().unwrap().get(index as usize) }) as jobject
 }
