@@ -63,7 +63,7 @@ public class Wgpu {
     public static void onChar(int codepoint, int modifiers) {
         MinecraftClient client = MinecraftClient.getInstance();
         int mappedModifier = convertModifiers(modifiers);
-       System.out.printf("onChar(%s, %s)\n", codepoint, modifiers);
+//       System.out.printf("onChar(%s, %s)\n", codepoint, modifiers);
 //       System.out.printf("Unmapped Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", modifiers & GLFW.GLFW_MOD_SHIFT, modifiers & GLFW.GLFW_MOD_CONTROL, modifiers & GLFW.GLFW_MOD_ALT, modifiers & GLFW.GLFW_MOD_SUPER);
 //       System.out.printf("Mapped   Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", mappedModifier & GLFW.GLFW_MOD_SHIFT, mappedModifier & GLFW.GLFW_MOD_CONTROL, mappedModifier & GLFW.GLFW_MOD_ALT, mappedModifier & GLFW.GLFW_MOD_SUPER);
        

@@ -16,6 +16,7 @@ public class WgpuKeys {
     public static final int WGPU_RIGHT = 72;
     public static final int WGPU_DOWN = 73;
     public static final int WGPU_HOME = 65;
+    public static final int WGPU_DELETE = 66;
     public static final int WGPU_END = 67;
 
     // https://www.glfw.org/docs/3.3/group__keys.html
@@ -48,6 +49,7 @@ public class WgpuKeys {
             case WGPU_DOWN ->  converted = GLFW.GLFW_KEY_DOWN;
             case WGPU_HOME ->  converted = GLFW.GLFW_KEY_HOME;
             case WGPU_END ->  converted = GLFW.GLFW_KEY_END;
+            case WGPU_DELETE -> converted = GLFW.GLFW_KEY_DELETE;
 
         }
         if(converted == -1) {
