@@ -1,20 +1,15 @@
 package dev.birb.wgpu.render;
 
+import dev.birb.wgpu.mixin.core.KeyboardMixin;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
-import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.Mouse;
-import net.minecraft.client.gui.screen.world.SelectWorldScreen;
-import net.minecraft.entity.vehicle.MinecartEntity;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.registry.Registry;
+import org.lwjgl.glfw.GLFW;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
+import static dev.birb.wgpu.input.WgpuKeys.*;
 
 public class Wgpu {
     private static final WgpuTextureManager textureManager = new WgpuTextureManager();
@@ -24,13 +19,10 @@ public class Wgpu {
 
     public static HashMap<String, Integer> blocks;
     public static String wmIdentity;
-
-    public static HashMap<Integer, Integer> keyState = new HashMap<>();
-
     public static WgpuTextureManager getTextureManager() {
         return textureManager;
     }
-
+    public static HashMap<Integer, Integer> keyStates = new HashMap<>();
     public static void preInit(String windowTitle) {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
@@ -68,13 +60,31 @@ public class Wgpu {
 
         client.execute(() -> client.mouse.onMouseButton(-1, button, action, 0));
     }
+    public static void onChar(int codepoint, int modifiers) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        int mappedModifier = convertModifiers(modifiers);
+//       System.out.printf("onChar(%s, %s)\n", codepoint, modifiers);
+//       System.out.printf("Unmapped Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", modifiers & GLFW.GLFW_MOD_SHIFT, modifiers & GLFW.GLFW_MOD_CONTROL, modifiers & GLFW.GLFW_MOD_ALT, modifiers & GLFW.GLFW_MOD_SUPER);
+//       System.out.printf("Mapped   Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", mappedModifier & GLFW.GLFW_MOD_SHIFT, mappedModifier & GLFW.GLFW_MOD_CONTROL, mappedModifier & GLFW.GLFW_MOD_ALT, mappedModifier & GLFW.GLFW_MOD_SUPER);
+       
+        client.execute(() -> client.keyboard.onChar(0,codepoint,mappedModifier));
+
+    }
 
     public static void keyState(int key, int scancode, int state, int modifiers) {
+
         MinecraftClient client = MinecraftClient.getInstance();
+        int convertedKey = convertKeyCode(key);
+        int convertedModifier = convertModifiers(modifiers);
+        int convertedState = state == 0 ? GLFW.GLFW_PRESS : GLFW.GLFW_RELEASE;
+//        System.out.printf("keyState(%s:%s, %s, %s, %s)\n", key, convertedKey, scancode, state, modifiers);
+//        System.out.printf("Unmapped Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", modifiers & GLFW.GLFW_MOD_SHIFT, modifiers & GLFW.GLFW_MOD_CONTROL, modifiers & GLFW.GLFW_MOD_ALT, modifiers & GLFW.GLFW_MOD_SUPER);
+//        System.out.printf("Mapped   Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", convertedModifier & GLFW.GLFW_MOD_SHIFT, convertedModifier & GLFW.GLFW_MOD_CONTROL, convertedModifier & GLFW.GLFW_MOD_ALT, convertedModifier & GLFW.GLFW_MOD_SUPER);
+        Wgpu.keyStates.put(convertedKey, state);
+//        System.out.printf("set keystates[%s]=%s\n", convertedKey, Wgpu.keyStates);
 
         client.execute(() -> {
-            Wgpu.keyState.put(key, state);
-            client.keyboard.onKey(0, key, scancode, state, modifiers);
+            client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier);
         });
     }
 
@@ -87,4 +97,6 @@ public class Wgpu {
     public static void render(MinecraftClient client) {
         WgpuNative.setWorldRenderState(client.world != null);
     }
+
+
 }

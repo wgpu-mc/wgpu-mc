@@ -113,4 +113,8 @@ public class WgpuNative {
 
     public static native long uploadIdList(Object idList);
 
+    public static native void setCursorPosition(double x, double y);
+
+    public static native void setCursorMode(int mode);
+
 }

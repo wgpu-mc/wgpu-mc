@@ -16,8 +16,8 @@ use jni::objects::{JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jstring, jlong, jfloat, jfloatArray, jdouble, _jobject};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
-use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent};
+use winit::dpi::{PhysicalSize, PhysicalPosition};
+use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent, ModifiersState};
 use winit::event_loop::{ControlFlow};
 use winit::window::Window;
 use gl::pipeline::{GLCommand, GlPipeline};
@@ -51,13 +51,14 @@ enum RenderMessage {
     KeyPressed(u32),
     MouseState(ElementState, MouseButton),
     KeyState(u32, u32, u32, u32),
+    CharTyped(char, u32),
     MouseMove(f64, f64),
     Resized
 }
 
 struct MinecraftRenderState {
     //draw_queue: Vec<>,
-    render_world: bool
+    render_world: bool,
 }
 
 struct MouseState {
@@ -137,23 +138,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunk(
     env: JNIEnv,
     _class: JClass,
     world_chunk: JObject) {
-
     mc_interface::chunk_from_java_world_chunk(&env, &world_chunk);
-
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     env: JNIEnv,
     _class: JClass) -> jstring {
-
     let renderer = RENDERER.get().unwrap();
     let backend = renderer.get_backend_description();
 
     env.new_string(backend)
-         .unwrap()
+        .unwrap()
         .into_inner()
-
 }
 
 // #[no_mangle]
@@ -201,7 +198,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
     _class: JClass,
     entry_type: jint,
     name: JString) {
-
     let rname: String = env.get_string(name).unwrap().into();
 
     let renderer = RENDERER.get().unwrap();
@@ -218,43 +214,41 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntry(
             let json_str = std::str::from_utf8(&resource).unwrap();
             let model = Block::from_json(
                 &identifier.to_string(),
-                json_str
+                json_str,
             ).or_else(|| {
                 Block::from_json(
                     &identifier.to_string(),
-                    "{\"variants\":{\"\": {\"model\": \"minecraft:block/bedrock\"}}}"
+                    "{\"variants\":{\"\": {\"model\": \"minecraft:block/bedrock\"}}}",
                 )
             }).unwrap();
             block_manager.blocks.insert(identifier, model);
-        },
+        }
         _ => unimplemented!()
     };
-
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     env: JNIEnv,
     _class: JClass,
-    string: JString
+    string: JString,
 ) {
-
     use winit::event_loop::EventLoop;
 
     let title: String = env.get_string(string).unwrap().into();
 
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
     #[cfg(target_os = "linux")]
-    let event_loop: EventLoop<()> = winit::platform::unix::EventLoopExtUnix::new_any_thread();
+        let event_loop: EventLoop<()> = winit::platform::unix::EventLoopExtUnix::new_any_thread();
     #[cfg(not(target_os = "linux"))]
-    let event_loop: EventLoop<()> = EventLoop::new();
+        let event_loop: EventLoop<()> = EventLoop::new();
 
     let window = Arc::new(
         winit::window::WindowBuilder::new()
             .with_title(&title)
             .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
                 width: 1280,
-                height: 720
+                height: 720,
             }))
             .build(&event_loop)
             .unwrap()
@@ -280,7 +274,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 
     let wm = WmRenderer::new(
         wgpu_state,
-        resource_provider
+        resource_provider,
     );
 
     wm.init(
@@ -299,13 +293,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
             "INITIALIZED",
             "Z"
         ),
-        JValue::Bool(true.into())
+        JValue::Bool(true.into()),
     );
+    let mut current_modifiers = ModifiersState::empty();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         let _mc_state = MC_STATE.get().unwrap().read();
-
         match event {
             Event::MainEventsCleared => window.request_redraw(),
             Event::WindowEvent {
@@ -317,14 +311,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                     WindowEvent::Resized(physical_size) => {
                         wm.resize(WindowSize {
                             width: physical_size.width,
-                            height: physical_size.height
+                            height: physical_size.height,
                         });
                         CHANNELS.get().unwrap().0.send(RenderMessage::Resized).unwrap();
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         let _ = wm.resize(WindowSize {
                             width: new_inner_size.width,
-                            height: new_inner_size.height
+                            height: new_inner_size.height,
                         });
                     }
                     WindowEvent::CursorMoved {
@@ -332,15 +326,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                     } => {
                         CHANNELS.get().unwrap().0.send(RenderMessage::MouseMove(
                             position.x,
-                            position.y
+                            position.y,
                         )).unwrap();
-                    },
+                    }
                     WindowEvent::MouseInput { device_id, state, button, modifiers } => {
                         CHANNELS.get().unwrap().0.send(RenderMessage::MouseState(
-                            *state, *button
+                            *state, *button,
                         )).unwrap();
-                    },
+                    }
+                    WindowEvent::ReceivedCharacter(c) => {
+                        CHANNELS.get().unwrap().0.send(RenderMessage::CharTyped(*c, current_modifiers.bits())).unwrap();
+                    }
                     WindowEvent::KeyboardInput { device_id, input, is_synthetic } => {
+                        // input.scancode
                         match input.virtual_keycode {
                             None => {}
                             Some(keycode) => CHANNELS.get().unwrap().0.send(RenderMessage::KeyState(
@@ -348,9 +346,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                                     ElementState::Pressed => 0,
                                     ElementState::Released => 1
                                 },
-                                input.modifiers.bits()
+                                current_modifiers.bits(),
                             )).unwrap()
                         }
+                    }
+                    WindowEvent::ModifiersChanged(new_modifiers) => {
+                        current_modifiers = *new_modifiers;
                     }
                     _ => {}
                 }
@@ -365,13 +366,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
             _ => {}
         }
     });
-
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
     env: JNIEnv,
-    class: JClass
+    class: JClass,
 ) {
     let (_, rx) = CHANNELS.get_or_init(|| {
         let (tx, rx) = unbounded();
@@ -394,7 +394,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
                     &[
                         JValue::Double(x),
                         JValue::Double(y)
-                    ]
+                    ],
                 ).unwrap();
             }
             RenderMessage::MouseState(element_state, mouse_button) => {
@@ -417,17 +417,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
                     &[
                         JValue::Int(button),
                         JValue::Int(action)
-                    ]
+                    ],
                 ).unwrap();
-            },
+            }
             RenderMessage::Resized => {
                 env.call_static_method(
                     "dev/birb/wgpu/render/Wgpu",
                     "onResize",
                     "()V",
-                    &[]
+                    &[],
                 ).unwrap();
-            },
+            }
             RenderMessage::KeyState(key, scancode, action, modifiers) => {
                 env.call_static_method(
                     "dev/birb/wgpu/render/Wgpu",
@@ -438,8 +438,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
                         JValue::Int(scancode as i32),
                         JValue::Int(action as i32),
                         JValue::Int(modifiers as i32)
-                    ]
+                    ],
                 ).unwrap();
+            }
+            RenderMessage::CharTyped(ch, modifiers) => {
+                env.call_static_method("dev/birb/wgpu/render/Wgpu", "onChar", "(II)V", &[JValue::Int(ch as i32), JValue::Int(modifiers as i32)]).unwrap();
             }
         };
     }
@@ -448,19 +451,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(
     _env: JNIEnv,
-    _class: JClass
+    _class: JClass,
 ) {
     gl::init();
 
     MOUSE_STATE.set(Arc::new(ArcSwap::new(
         Arc::new(MouseState {
             x: 0.0,
-            y: 0.0
+            y: 0.0,
         })
     )));
     GL_PIPELINE.set(GlPipeline {
         commands: ArcSwap::new(Arc::new(Vec::new())),
-        blank_texture: OnceCell::new()
+        blank_texture: OnceCell::new(),
     });
     CHANNELS.get_or_init(|| {
         let (tx, rx) = unbounded();
@@ -473,7 +476,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
     env: JNIEnv,
     _class: JClass,
     input_stream: JObject) -> jbyteArray {
-
     let mut vec = Vec::with_capacity(1024);
     let array = env.new_byte_array(1024).unwrap();
 
@@ -510,7 +512,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
     }
 
     bytes
-
 }
 
 #[no_mangle]
@@ -518,7 +519,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     env: JNIEnv,
     _class: JClass,
     jtitle: JString) {
-
     let (tx, _) = CHANNELS.get().unwrap();
 
     let title: String = env.get_string(jtitle).unwrap().into();
@@ -530,7 +530,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     env: JNIEnv,
     _class: JClass) -> jobject {
-
     let renderer = RENDERER.get().unwrap();
 
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[])
@@ -557,7 +556,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
     _env: JNIEnv,
     _class: JClass,
     boolean: jboolean) {
-
     let render_state = MC_STATE.get().unwrap();
     render_state.write().render_world = boolean != 0;
 }
@@ -565,7 +563,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     _env: JNIEnv,
-    _class: JClass
+    _class: JClass,
 ) {
     let mut commands = gl::GL_COMMANDS.get().unwrap().clone().write();
 
@@ -591,7 +589,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     _border: jint,
     format: jint,
     _type: jint,
-    pixels_ptr: jlong
+    pixels_ptr: jlong,
 ) {
     let _pixel_size = match format {
         0x1908 | 0x80E1 => 4,
@@ -623,14 +621,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
             wgpu::Extent3d {
                 width: width as u32,
                 height: height as u32,
-                depth_or_array_layers: 1
+                depth_or_array_layers: 1,
             },
             None,
             match format {
                 0x1908 => wgpu::TextureFormat::Rgba8Unorm,
                 0x80E1 => wgpu::TextureFormat::Bgra8Unorm,
                 _ => unimplemented!()
-            }
+            },
         ).unwrap();
 
         let bindable = BindableTexture::from_tsv(
@@ -650,7 +648,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
                     width: width as u16,
                     height: height as u16,
                     bindable_texture: Some(Arc::new(bindable)),
-                    pixels: data
+                    pixels: data,
                 },
             );
         }
@@ -681,7 +679,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     unpack_row_length: jint,
     unpack_skip_pixels: jint,
     unpack_skip_rows: jint,
-    unpack_alignment: jint
+    unpack_alignment: jint,
 ) {
     let mut pixels = pixels as usize;
     let unpack_row_length = unpack_row_length as usize;
@@ -748,13 +746,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
             ImageDataLayout {
                 offset: 0,
                 bytes_per_row: NonZeroU32::new(gl_texture.width as u32 * 4),
-                rows_per_image: NonZeroU32::new(gl_texture.height as u32)
+                rows_per_image: NonZeroU32::new(gl_texture.height as u32),
             },
             Extent3d {
                 width: gl_texture.width as u32,
                 height: gl_texture.height as u32,
-                depth_or_array_layers: 1
-            }
+                depth_or_array_layers: 1,
+            },
         );
     };
 
@@ -797,7 +795,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
     _class: JClass,
     r: jfloat,
     g: jfloat,
-    b: jfloat
+    b: jfloat,
 ) {
     gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::ClearColor(r, g, b));
 }
@@ -807,7 +805,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_attachTextureBindGroup
     _env: JNIEnv,
     _class: JClass,
     slot: jint,
-    id: jint
+    id: jint,
 ) {
     gl::GL_COMMANDS.get().unwrap().write().push(GLCommand::AttachTexture(slot, id));
 }
@@ -824,7 +822,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
     env: JNIEnv,
-    class: JClass
+    class: JClass,
 ) -> jstring {
     let video_mode = WINDOW.get().unwrap().current_monitor().unwrap().video_modes().find(|_| true).unwrap();
     env.new_string(format!("{}x{}@{}:{}", video_mode.size().width, video_mode.size().height, video_mode.refresh_rate(), video_mode.bit_depth())).unwrap().into_inner()
@@ -833,7 +831,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createArrayPaletteStore(
     _env: JNIEnv,
-    _class: JClass
+    _class: JClass,
 ) -> jlong {
     0
 }
@@ -842,7 +840,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createArrayPaletteStor
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
     env: JNIEnv,
     _class: JClass,
-    float_array: jfloatArray
+    float_array: jfloatArray,
 ) {
     let elements = env.get_float_array_elements(float_array, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -874,7 +872,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawIndexed(
     _env: JNIEnv,
     _class: JClass,
-    count: jint
+    count: jint,
 ) {
     gl::GL_COMMANDS.get().unwrap().write().push(
         GLCommand::DrawIndexed(count as u32)
@@ -885,7 +883,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawIndexed(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setVertexBuffer(
     env: JNIEnv,
     _class: JClass,
-    byte_array: jbyteArray
+    byte_array: jbyteArray,
 ) {
     let mut bytes = vec![0; env.get_array_length(byte_array).unwrap() as usize];
     env.get_byte_array_region(byte_array, 0, &mut bytes[..])
@@ -911,7 +909,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setVertexBuffer(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
     env: JNIEnv,
     _class: JClass,
-    int_array: jintArray
+    int_array: jintArray,
 ) {
     let elements = env.get_int_array_elements(int_array, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -1030,4 +1028,35 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
     let palette = (palette_long as usize) as *mut JavaPalette;
 
     (unsafe { palette.as_ref().unwrap().get(index as usize) }) as jobject
+}
+
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorPosition(env: JNIEnv, class: JClass, x: f64, y: f64) {
+    WINDOW.get().unwrap().set_cursor_position(PhysicalPosition{x, y});
+}
+
+const GLFW_CURSOR_NORMAL: i32 = 212993;
+const GLFW_CURSOR_HIDDEN: i32 = 212994;
+const GLFW_CURSOR_DISABLED: i32 = 212995;
+/// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(env: JNIEnv, class: JClass, mode: i32) {
+
+    match mode {
+        GLFW_CURSOR_NORMAL => {
+            WINDOW.get().unwrap().set_cursor_grab(false).unwrap();
+            WINDOW.get().unwrap().set_cursor_visible(true);
+        },
+        GLFW_CURSOR_HIDDEN => {
+            WINDOW.get().unwrap().set_cursor_grab(false).unwrap();
+            WINDOW.get().unwrap().set_cursor_visible(false);
+        },
+        GLFW_CURSOR_DISABLED => {
+            WINDOW.get().unwrap().set_cursor_grab(true).unwrap();
+            WINDOW.get().unwrap().set_cursor_visible(false);
+        },
+        _ => {
+            println!("Set cursor mode had an invalid mode.")
+        }
+    }
+
 }
