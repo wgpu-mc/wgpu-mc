@@ -15,6 +15,8 @@ import java.nio.ByteOrder;
 import java.util.List;
 import java.util.function.Predicate;
 
+import static dev.birb.wgpu.WgpuMcMod.LOGGER;
+
 public class RustPalette<T> implements Palette<T> {
 
     private long rustPalettePointer;
@@ -30,7 +32,9 @@ public class RustPalette<T> implements Palette<T> {
         this.rustPalettePointer = rustPalettePointer;
         this.rustIdList = rustIdList;
 
-        cleaner.register(this, () -> WgpuNative.destroyPalette(rustPalettePointer));
+        cleaner.register(this, () -> {
+            WgpuNative.destroyPalette(this.rustPalettePointer);
+        });
     }
 
     @Override
