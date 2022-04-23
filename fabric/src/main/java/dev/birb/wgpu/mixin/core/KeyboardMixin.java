@@ -18,9 +18,9 @@ public class KeyboardMixin {
 
     }
 
-    @Redirect(method = "onKey", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/InputUtil;isKeyPressed(JI)Z"))
-    public boolean redirectIsKeyPressed(long handle, int code) {
-        return Wgpu.keyState.get(code) == 1;
-    }
+//    @Redirect(method = "onKey", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/InputUtil;isKeyPressed(JI)Z"))
+//    public boolean redirectIsKeyPressed(long handle, int code) {
+//        return Wgpu.keyState.get(code) == 1;
+//    }
 
 }

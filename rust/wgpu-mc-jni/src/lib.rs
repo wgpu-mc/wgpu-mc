@@ -17,7 +17,7 @@ use jni::sys::{jboolean, jbyteArray, jint, jintArray, jobject, jstring, jlong, j
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent};
+use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent, ModifiersState};
 use winit::event_loop::{ControlFlow};
 use winit::window::Window;
 use gl::pipeline::{GLCommand, GlPipeline};
@@ -49,7 +49,7 @@ enum RenderMessage {
     KeyPressed(u32),
     MouseState(ElementState, MouseButton),
     KeyState(u32, u32, u32, u32),
-    CharTyped(char),
+    CharTyped(char, u32),
     MouseMove(f64, f64),
     Resized
 }
@@ -293,11 +293,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
         ),
         JValue::Bool(true.into()),
     );
+    let mut current_modifiers = ModifiersState::empty();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         let _mc_state = MC_STATE.get().unwrap().read();
-
         match event {
             Event::MainEventsCleared => window.request_redraw(),
             Event::WindowEvent {
@@ -333,7 +333,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                         )).unwrap();
                     }
                     WindowEvent::ReceivedCharacter(c) => {
-                        CHANNELS.get().unwrap().0.send(RenderMessage::CharTyped(*c)).unwrap();
+                        CHANNELS.get().unwrap().0.send(RenderMessage::CharTyped(*c, current_modifiers.bits())).unwrap();
                     }
                     WindowEvent::KeyboardInput { device_id, input, is_synthetic } => {
                         // input.scancode
@@ -347,6 +347,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                                 input.modifiers.bits(),
                             )).unwrap()
                         }
+                    }
+                    WindowEvent::ModifiersChanged(new_modifiers) => {
+                        current_modifiers = *new_modifiers;
                     }
                     _ => {}
                 }
@@ -436,8 +439,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
                     ],
                 ).unwrap();
             }
-            RenderMessage::CharTyped(c) => {
-                env.call_static_method("dev/birb/wgpu/render/Wgpu", "onChar", "(I)V", &[JValue::Int(c as i32)]).unwrap();
+            RenderMessage::CharTyped(ch, modifiers) => {
+                env.call_static_method("dev/birb/wgpu/render/Wgpu", "onChar", "(II)V", &[JValue::Int(ch as i32), JValue::Int(modifiers as i32)]).unwrap();
             }
         };
     }
