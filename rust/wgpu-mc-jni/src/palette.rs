@@ -1,42 +1,65 @@
 use std::collections::HashMap;
-use jni::objects::JObject;
+use jni::objects::{GlobalRef, JObject};
+use jni::sys::{jlong, jobject};
 use wgpu_mc::mc::block::PackedBlockstateKey;
+
+pub struct IdList {
+    pub map: HashMap<i32, GlobalRef>,
+}
+
+impl IdList {
+
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new()
+        }
+    }
+
+}
 
 #[derive(Clone)]
 pub struct JavaPalette {
-    store: Vec<*mut u8>,
-    indices: HashMap<*mut u8, usize>
+    store: Vec<GlobalRef>,
+    indices: HashMap<jobject, usize>,
+    pub id_list: *mut IdList
 }
 
 impl JavaPalette {
     
-    pub fn new() -> Self {
+    pub fn new(id_list: jlong) -> Self {
         Self {
             store: Vec::new(),
-            indices: HashMap::new()
+            indices: HashMap::new(),
+            id_list: id_list as usize as *mut IdList
         }
     }
 
-    pub fn index(&mut self, object: JObject) -> usize {
-        match self.indices.get(&(object.into_inner() as *mut u8)) {
+    pub fn index(&mut self, object: GlobalRef) -> usize {
+        match self.indices.get(&object.as_obj().into_inner()) {
             None => {
-                self.store.push(object.into_inner() as *mut u8);
+                self.indices.insert(object.as_obj().into_inner(), self.store.len());
+                self.store.push(object);
                 self.store.len() - 1
             }
             Some(&index) => index
         }
     }
 
-    pub fn has_any(&self, predicate: &dyn Fn(&*mut u8) -> bool) -> bool {
-        self.store.iter().any(predicate)
+    pub fn add(&mut self, object: GlobalRef) {
+        self.indices.insert(object.as_obj().into_inner(), self.store.len());
+        self.store.push(object);
+    }
+
+    pub fn has_any(&self, predicate: &dyn Fn(jobject) -> bool) -> bool {
+        self.store.iter().any(|global_ref| predicate(global_ref.as_obj().into_inner()))
     }
 
     pub fn size(&self) -> usize {
         self.store.len()
     }
 
-    pub fn get(&self, index: usize) -> *mut u8 {
-        self.store[index]
+    pub fn get(&self, index: usize) -> jobject {
+        self.store[index].as_obj().into_inner()
     }
 
 }

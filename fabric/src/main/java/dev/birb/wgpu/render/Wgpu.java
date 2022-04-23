@@ -23,6 +23,7 @@ public class Wgpu {
         return textureManager;
     }
     public static HashMap<Integer, Integer> keyStates = new HashMap<>();
+
     public static void preInit(String windowTitle) {
         try {
             WgpuNative.load("wgpu_mc_jni", true);

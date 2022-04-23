@@ -6,18 +6,18 @@ package dev.birb.wgpu.rust;
 
 import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.util.collection.IndexedIterable;
-import net.minecraft.world.chunk.WorldChunk;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.function.Predicate;
 
 public class WgpuNative {
+
+    private static HashMap<Object, Long> idLists = new HashMap<>();
 
     /**
      * Loads a native library from the resources of this Jar
@@ -97,7 +97,7 @@ public class WgpuNative {
 
     public static native void scheduleChunkRebuild(int x, int z);
 
-    public static native long createPalette();
+    public static native long createPalette(long idList);
 
     public static native void destroyPalette(long rustPalettePointer);
 
@@ -111,10 +111,30 @@ public class WgpuNative {
 
     public static native int paletteSize(long rustPalettePointer);
 
-    public static native long uploadIdList(Object idList);
+    public static long uploadIdList(IndexedIterable<Object> idList) {
+        if(!idLists.containsKey(idList)) {
+            long rustIdList = createIdList();
+
+            idLists.put(idList, rustIdList);
+
+            for(Object entry : idList) {
+                int id = idList.getRawId(entry);
+                addIdListEntry(rustIdList, id, entry);
+            }
+
+            return rustIdList;
+        } else {
+            return idLists.get(idList);
+        }
+    }
+
+    private static native long createIdList();
+
+    private static native void addIdListEntry(long idList, int id, Object object);
 
     public static native void setCursorPosition(double x, double y);
 
     public static native void setCursorMode(int mode);
 
+    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition);
 }

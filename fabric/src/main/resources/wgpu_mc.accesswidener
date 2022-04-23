@@ -2,6 +2,7 @@ accessWidener v1 named
 accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)V
 extendable class net/minecraft/world/chunk/PalettedContainer$DataProvider
 extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
+accessible class net/minecraft/world/chunk/PaletteResizeListener
 accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
 accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
 accessible method net/minecraft/client/Mouse onMouseButton (JIII)V
