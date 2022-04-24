@@ -8,7 +8,9 @@ import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import org.lwjgl.glfw.GLFW;
+import sun.misc.Unsafe;
 
+import java.lang.reflect.Field;
 import java.util.HashMap;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
@@ -26,6 +28,19 @@ public class Wgpu {
         return textureManager;
     }
     public static HashMap<Integer, Integer> keyStates = new HashMap<>();
+
+    public static Unsafe UNSAFE;
+
+    static {
+        Field f = null; //Internal reference
+        try {
+            f = Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            UNSAFE = (Unsafe) f.get(null);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     public static void preInit(String windowTitle) {
         try {
@@ -96,10 +111,6 @@ public class Wgpu {
         MinecraftClient client = MinecraftClient.getInstance();
 
         client.execute(() -> MinecraftClient.getInstance().onResolutionChanged());
-    }
-
-    public static void render(MinecraftClient client) {
-        WgpuNative.setWorldRenderState(client.world != null);
     }
 
 

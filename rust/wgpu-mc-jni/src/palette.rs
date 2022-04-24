@@ -62,4 +62,10 @@ impl JavaPalette {
         self.store[index].as_obj().into_inner()
     }
 
+    pub fn clear(&mut self) {
+        self.store.clear();
+        self.indices.clear();
+    }
+
+
 }

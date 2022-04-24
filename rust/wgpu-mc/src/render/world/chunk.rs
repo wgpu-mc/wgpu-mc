@@ -136,8 +136,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
             let y = (block_index / CHUNK_AREA) as i16;
             let z  = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
 
-            let section_index = y / CHUNK_SECTION_HEIGHT;
-            let section = &chunk.sections[section_index];
+            let section_index = y / (CHUNK_SECTION_HEIGHT as i16);
 
             let block_state: BlockState = state_provider.get_state(x, y, z);
 

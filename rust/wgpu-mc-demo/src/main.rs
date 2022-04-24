@@ -50,7 +50,7 @@ use wgpu_mc::render::shader::{WgslShader, WmShader};
 
 use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use crate::chunk::make_chunks;
+// use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
 
 struct FsResourceProvider {
@@ -194,18 +194,18 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
     
     let entity_rendering = describe_entity(&wm);
 
-    let chunks = make_chunks(&wm);
+    // let chunks = make_chunks(&wm);
+    //
+    // {
+    //     let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
+    //
+    //     chunks.into_iter().for_each(|chunk| {
+    //         loaded_chunks.insert(chunk.pos, ArcSwap::new(Arc::new(chunk)));
+    //     });
+    // }
 
     {
-        let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
-
-        chunks.into_iter().for_each(|chunk| {
-            loaded_chunks.insert(chunk.pos, ArcSwap::new(Arc::new(chunk)));
-        });
-    }
-
-    {
-        wm.mc.chunks.bake_meshes(&wm);
+        wm.mc.chunks.assemble_world_meshes(&wm);
     }
 
     let mut frame_start = Instant::now();

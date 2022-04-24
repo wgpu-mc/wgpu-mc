@@ -4,7 +4,6 @@ package dev.birb.wgpu.rust;
 
 //import net.minecraft.world.chunk.ChunkSection;
 
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.util.collection.IndexedIterable;
@@ -113,6 +112,8 @@ public class WgpuNative {
 
     public static native int paletteSize(long rustPalettePointer);
 
+    public static native long createPaletteStorage(long[] data, int elementsPerLong, int elementBits, long maxValue, int indexScale, int indexOffset, int indexShift);
+
     public static long uploadIdList(IndexedIterable<Object> idList) {
         if(!idLists.containsKey(idList)) {
             long rustIdList = createIdList();
@@ -141,5 +142,11 @@ public class WgpuNative {
     public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition);
 
     public static native void registerBlock(String name);
+
+    public static native void clearPalette(long l);
+
+    public static native void createChunk(int x, int z, long[] pointers, long[] storagePointers);
+
+    public static native void destroyPaletteStorage(long paletteStorage);
 
 }

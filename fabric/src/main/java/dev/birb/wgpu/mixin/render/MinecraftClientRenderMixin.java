@@ -32,6 +32,8 @@ import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.util.Queue;
+
+import static dev.birb.wgpu.render.Wgpu.UNSAFE;
 //import jdk.internal.misc.Unsafe;
 
 @Mixin(MinecraftClient.class)
@@ -49,19 +51,6 @@ public abstract class MinecraftClientRenderMixin {
     @Shadow private boolean paused;
 
     @Shadow public abstract ResourceManager getResourceManager();
-
-    private static Unsafe UNSAFE;
-
-    static {
-        Field f = null; //Internal reference
-        try {
-            f = Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            UNSAFE = (Unsafe) f.get(null);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
     @Redirect(method = "<init>", at = @At(value = "NEW", target = "net/minecraft/client/util/WindowProvider"))
     private WindowProvider redirectWindowProvider(MinecraftClient client) throws InstantiationException {
@@ -90,16 +79,10 @@ public abstract class MinecraftClientRenderMixin {
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
         RenderSystem.replayQueue();
 
-        if(Wgpu.INITIALIZED) WgpuNative.submitCommands();
+        if(Wgpu.INITIALIZED) {
+            WgpuNative.submitCommands();
+            WgpuNative.setWorldRenderState(MinecraftClient.getInstance().world != null);
+        }
     }
-
-//    /**
-//     * @author wgpu-mc
-//     * @reason debugging
-//     */
-//    @Overwrite
-//    public void render(boolean tick) {
-//        GlStateManager.enable
-//    }
 
 }

@@ -11,7 +11,14 @@ accessible method net/minecraft/client/Keyboard onChar (JII)V
 
 accessible field net/minecraft/client/Mouse x D
 accessible field net/minecraft/client/Mouse y D
-accessible field Lnet/minecraft/world/chunk/PalettedContainer$Data data Ljava/lang/Object;
+accessible field net/minecraft/world/chunk/PalettedContainer data Lnet/minecraft/world/chunk/PalettedContainer$Data;
+accessible field net/minecraft/util/collection/PackedIntegerArray elementsPerLong I
+accessible field net/minecraft/util/collection/PackedIntegerArray maxValue J
+accessible field net/minecraft/util/collection/PackedIntegerArray indexScale I
+accessible field net/minecraft/util/collection/PackedIntegerArray indexOffset I
+accessible field net/minecraft/util/collection/PackedIntegerArray indexShift I
+accessible field net/minecraft/world/chunk/PalettedContainer$Data storage Lnet/minecraft/util/collection/PaletteStorage;
+accessible field net/minecraft/world/chunk/PalettedContainer$Data palette Lnet/minecraft/world/chunk/Palette;
 
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;

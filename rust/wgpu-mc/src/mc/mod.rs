@@ -48,7 +48,7 @@ pub struct BlockManager {
     pub blocks: IndexMap<NamespacedResource, Block>,
     pub models: IndexMap<NamespacedResource, BlockModel>,
     pub block_state_variants: Vec<BlockstateVariantMesh>,
-    pub variant_indices: HashMap<NamespacedResource, usize>
+    pub variant_indices: HashMap<String, usize>
 }
 
 impl BlockManager {
@@ -244,7 +244,11 @@ impl MinecraftState {
                     &state.rotations
                 ).unwrap_or_else(|| panic!("{}", name));
 
-                let variant_resource = name.prepend("Block{").append("}[").append(&key).append("]");
+                let mut variant_resource = format!("Block{{{}}}", name.to_string());
+
+                if key != "" {
+                    variant_resource.push_str(&format!("[{}]", key));
+                }
 
                 meshes.push(mesh);
                 indices.insert(variant_resource, meshes.len() - 1);

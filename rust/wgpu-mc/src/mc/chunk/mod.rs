@@ -6,6 +6,7 @@ use crate::render::world::chunk::BakedChunkLayer;
 
 use std::sync::Arc;
 use std::convert::TryInto;
+use std::fmt::Debug;
 use std::time::Instant;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
@@ -49,7 +50,7 @@ pub struct ChunkLayers {
     terrain: BakedChunkLayer<TerrainVertex>
 }
 
-pub trait BlockStateProvider: Send + Sync {
+pub trait BlockStateProvider: Send + Sync + Debug {
 
     fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState;
 
@@ -81,11 +82,11 @@ impl Chunk {
 
     pub fn bake(&self, block_manager: &BlockManager) {
         let grass_index = *block_manager.variant_indices.get(
-            &"minecraft:blockstates/grass.json#".try_into().unwrap()
+            "Block{minecraft:grass}"
         ).unwrap() as u32;
 
         let glass_index = *block_manager.variant_indices.get(
-            &"minecraft:blockstates/glass.json#".try_into().unwrap()
+            "Block{minecraft:glass}".try_into().unwrap()
         ).unwrap() as u32;
 
         let grass = BakedChunkLayer::bake(block_manager, self, |v, x, y, z| {
@@ -170,16 +171,14 @@ impl ChunkManager {
     pub fn bake_meshes(&self, wm: &WmRenderer) {
         let block_manager = wm.mc.block_manager.read();
 
-        let chunks = {
-            self.loaded_chunks.read().iter().map(|(pos, chunk)| {
-                chunk.load_full()
-            }).collect::<Vec<_>>()
-        };
-
         use rayon::iter::ParallelIterator;
-        let time = Instant::now();
-        chunks.par_iter().for_each(|chunk| chunk.bake(&block_manager));
-        println!("Baked chunk in {}ms", Instant::now().duration_since(time).as_millis());
+        self.loaded_chunks.read().iter().map(|(pos, chunk)| {
+            chunk.load().bake(&block_manager);
+        }).collect::<Vec<_>>();
+    }
+
+    pub fn assemble_world_meshes(&self, wm: &WmRenderer) {
+        let chunks = self.loaded_chunks.read().iter().map(|chunk| chunk.1.load_full()).collect::<Vec<_>>();
 
         let mut glass = BakedChunkLayer::new();
         let mut grass = BakedChunkLayer::new();

@@ -27,7 +27,7 @@
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
-    "core.ClientPlayNetworkHandlerMixin"
+    "core.ClientPlayNetworkHandlerMixin",
     "world.ChunkMixin"
   ],
   "injectors": {
