@@ -1,11 +1,8 @@
 package dev.birb.wgpu.render;
 
-import dev.birb.wgpu.mixin.core.KeyboardMixin;
-import dev.birb.wgpu.mixin.core.RegistryMixin;
+import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
@@ -13,7 +10,6 @@ import sun.misc.Unsafe;
 import java.lang.reflect.Field;
 import java.util.HashMap;
 
-import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 import static dev.birb.wgpu.input.WgpuKeys.*;
 
 public class Wgpu {
@@ -102,15 +98,17 @@ public class Wgpu {
         Wgpu.keyStates.put(convertedKey, state);
 //        System.out.printf("set keystates[%s]=%s\n", convertedKey, Wgpu.keyStates);
 
-        client.execute(() -> {
-            client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier);
-        });
+        client.execute(() -> client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier));
     }
 
     public static void onResize() {
         MinecraftClient client = MinecraftClient.getInstance();
 
         client.execute(() -> MinecraftClient.getInstance().onResolutionChanged());
+    }
+
+    public static void helperSetBlockStateIndex(Object o, long usize) {
+        ((RustBlockStateAccessor) o).setRustBlockStateIndex(usize);
     }
 
 

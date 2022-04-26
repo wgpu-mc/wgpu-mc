@@ -4,7 +4,6 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
-    "world.PaletteProviderMixin",
     "TitleScreenMixin",
     "accessors.DefaultClientResourcePackAccessor",
     "accessors.NamespaceResourceManagerAccessor",
@@ -12,6 +11,7 @@
     "accessors.ThreadExecutorAccessor",
     "accessors.VertexFormatElementAccessor",
     "accessors.WindowAccessor",
+    "core.ClientPlayNetworkHandlerMixin",
     "core.GlStateManagerMixin",
     "core.KeyboardMixin",
     "core.MainMixin",
@@ -27,8 +27,9 @@
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
-    "core.ClientPlayNetworkHandlerMixin",
-    "world.ChunkMixin"
+    "world.PaletteProviderMixin",
+    "world.WorldChunkMixin",
+    "world.BlockStateMixin"
   ],
   "injectors": {
     "defaultRequire": 1

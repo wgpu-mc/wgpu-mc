@@ -2,6 +2,7 @@ package dev.birb.wgpu.mixin.core;
 
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.RunArgs;
 import net.minecraft.client.gui.screen.Screen;
@@ -52,6 +53,7 @@ public abstract class MinecraftClientCoreMixin {
 
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/resource/ResourceReloadLogger;reload(Lnet/minecraft/client/resource/ResourceReloadLogger$ReloadReason;Ljava/util/List;)V", shift = At.Shift.AFTER))
     public void injectWindowHook(RunArgs args, CallbackInfo ci) {
+        //Register blocks
         Wgpu.MAY_INITIALIZE = true;
     }
 

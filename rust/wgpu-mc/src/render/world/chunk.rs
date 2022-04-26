@@ -14,7 +14,7 @@ use crate::render::pipeline::terrain::TerrainVertex;
 use crate::WmRenderer;
 
 fn get_block_mesh<'a>(block_manager: &'a BlockManager, state: &BlockState) -> Option<&'a BlockstateVariantMesh> {
-    (&block_manager.block_state_variants).get((*state).packed_key.unwrap() as usize)
+    (&block_manager.block_state_variants).get((*state).packed_key? as usize)
 }
 
 #[derive(Debug)]
