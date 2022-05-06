@@ -25,7 +25,7 @@ pub struct BlockModelFaces {
 #[derive(Debug)]
 ///Makes chunk mesh baking a bit faster
 pub enum CubeOrComplexMesh {
-    Cube(BlockModelFaces),
+    Cube(Box<BlockModelFaces>),
     Custom(Vec<BlockModelFaces>),
 }
 
@@ -230,7 +230,7 @@ impl BlockstateVariantMesh {
         Some(Self {
             name: model.id.clone(),
             shape: if is_cube {
-                CubeOrComplexMesh::Cube(results.pop().unwrap())
+                CubeOrComplexMesh::Cube(Box::new(results.pop().unwrap()))
             } else {
                 CubeOrComplexMesh::Custom(results)
             },
