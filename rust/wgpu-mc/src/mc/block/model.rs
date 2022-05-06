@@ -9,7 +9,7 @@ use crate::model::MeshVertex;
 use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
 use crate::texture::UV;
 use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
-use cgmath::{Vector3, Matrix3, SquareMatrix, Matrix4};
+use cgmath::{Vector3, Matrix3, SquareMatrix};
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 
 #[derive(Debug)]

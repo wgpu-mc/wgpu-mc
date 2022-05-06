@@ -19,7 +19,7 @@ macro_rules! nsr (
     }
 );
 
-#[derive(Debug, Hash, Clone, std::cmp::Eq)]
+#[derive(Debug, Hash, Clone,PartialEq, Eq)]
 pub struct NamespacedResource (pub String, pub String);
 
 impl NamespacedResource {
@@ -65,13 +65,7 @@ impl From<(&str, &str)> for NamespacedResource {
 
 }
 
-impl PartialEq for NamespacedResource {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
-    }
-}
-
-#[derive(Debug, Clone, Eq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TextureVariableOrResource {
     Tag(String),
     Resource(NamespacedResource)
@@ -113,27 +107,6 @@ impl Display for TextureVariableOrResource {
         match self {
             TextureVariableOrResource::Tag(tag) => f.write_str(&format!("#{}", tag)),
             TextureVariableOrResource::Resource(res) => f.write_str(&format!("{}:{}", res.0, res.1))
-        }
-    }
-}
-
-impl PartialEq for TextureVariableOrResource {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            TextureVariableOrResource::Tag(tag) => {
-                if let TextureVariableOrResource::Tag(o) = other {
-                    o == tag
-                } else {
-                    false
-                }
-            }
-            TextureVariableOrResource::Resource(nsa) => {
-                if let TextureVariableOrResource::Resource(nsb) = other {
-                    nsa == nsb
-                } else {
-                    false
-                }
-            }
         }
     }
 }

@@ -5,13 +5,9 @@ use crate::mc::block::{BlockPos, BlockState};
 use crate::render::world::chunk::BakedChunkLayer;
 
 use std::sync::Arc;
-use std::convert::TryInto;
 use std::fmt::Debug;
-use std::time::Instant;
 use arc_swap::ArcSwap;
-use dashmap::DashMap;
 use parking_lot::RwLock;
-use rayon::iter::IntoParallelRefIterator;
 
 use crate::mc::BlockManager;
 use crate::render::pipeline::terrain::TerrainVertex;
@@ -24,8 +20,7 @@ pub const CHUNK_SECTION_HEIGHT: usize = 1;
 pub const CHUNK_SECTIONS_PER: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
-use crate::{nsr, WmRenderer};
-use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use crate::{WmRenderer};
 
 pub type ChunkPos = (i32, i32);
 
@@ -152,7 +147,7 @@ impl ChunkManager {
         let block_manager = wm.mc.block_manager.read();
 
         use rayon::iter::ParallelIterator;
-        self.loaded_chunks.read().iter().map(|(pos, chunk)| {
+        self.loaded_chunks.read().iter().map(|(_pos, chunk)| {
             chunk.load().bake(&block_manager);
         }).collect::<Vec<_>>();
     }

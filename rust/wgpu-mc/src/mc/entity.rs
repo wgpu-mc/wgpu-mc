@@ -194,7 +194,7 @@ fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id
     });
 }
 
-fn recurse_get_names(part: &EntityPart, mut index: &mut usize, names: &mut HashMap<String, usize>) {
+fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<String, usize>) {
     names.insert((*part.name).clone(), *index);
     *index += 1;
     part.children.iter().for_each(|part| recurse_get_names(part, index, names));

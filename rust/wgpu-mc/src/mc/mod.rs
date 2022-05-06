@@ -26,7 +26,6 @@ use crate::render::pipeline::RenderPipelineManager;
 
 use self::block::model::BlockstateVariantMesh;
 use indexmap::map::IndexMap;
-use multi_map::MultiMap;
 use crate::mc::block::blockstate::BlockstateVariantDefinitionModel;
 use crate::{WgpuState, WmRenderer};
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;

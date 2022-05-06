@@ -1,7 +1,6 @@
 use crate::model::MeshVertex;
-use crate::mc::chunk::{ChunkSection, CHUNK_AREA, CHUNK_WIDTH, CHUNK_SECTION_HEIGHT, Chunk, CHUNK_VOLUME, WorldBuffers, BlockStateProvider};
+use crate::mc::chunk::{CHUNK_AREA, CHUNK_WIDTH, CHUNK_SECTION_HEIGHT, Chunk, CHUNK_VOLUME, WorldBuffers, BlockStateProvider};
 
-use std::sync::Arc;
 use bytemuck::Pod;
 use crate::mc::block::{BlockState};
 
@@ -10,7 +9,6 @@ use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use crate::mc::block::model::{CubeOrComplexMesh, BlockstateVariantMesh};
 
 use crate::mc::BlockManager;
-use crate::render::pipeline::terrain::TerrainVertex;
 use crate::WmRenderer;
 
 fn get_block_mesh<'a>(block_manager: &'a BlockManager, state: &BlockState) -> Option<&'a BlockstateVariantMesh> {
@@ -131,7 +129,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
         let mut down_vertices = Vec::new();
         let mut other_vertices = Vec::new();
 
-        for mut block_index in 0..CHUNK_VOLUME {
+        for block_index in 0..CHUNK_VOLUME {
             let x = (block_index % CHUNK_WIDTH) as i32;
             let y = (block_index / CHUNK_AREA) as i16;
             let z  = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
