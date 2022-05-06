@@ -8,13 +8,14 @@ use std::marker::PhantomData;
 
 const ALIGN: usize = 8;
 
+type WmArenaObject = (*mut u8, fn (*mut u8));
 ///Untyped arena for render passes
 pub struct WmArena<'a> {
     heap: *mut u8,
     capacity: usize,
     total_capacity: usize,
     length: usize,
-    objects: Vec<(*mut u8, fn (*mut u8))>,
+    objects: Vec<WmArenaObject>,
     heaps: Vec<(*mut u8, usize)>,
     phantom: PhantomData<&'a ()>
 }

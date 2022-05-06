@@ -246,7 +246,7 @@ impl MinecraftState {
 
                 let mut variant_resource = format!("Block{{{}}}", name.to_string());
 
-                if key != "" {
+                if !key.is_empty() {
                     variant_resource.push_str(&format!("[{}]", key));
                 }
 
