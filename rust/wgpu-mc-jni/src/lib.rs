@@ -507,6 +507,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
             "Block{minecraft:bedrock}"
         ).unwrap();
 
+        println!("{:?}", block_manager.variant_indices);
+
         JAVA_BLOCK_STATES.get().unwrap().read().iter().for_each(|(key, global_ref)| {
             let offset = *block_manager.variant_indices.get(key).unwrap_or(&bedrock_key);
             env.call_static_method(

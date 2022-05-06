@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::render::entity::{EntityRenderInstance, EntityVertex};
-use crate::render::entity::pipeline::EntityGroupInstancingFrame;
+use crate::render::entity::EntityGroupInstancingFrame;
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;

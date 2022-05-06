@@ -11,5 +11,5 @@ rust {
 
     outputDirectory = "META-INF/natives"
 
-    profile = "release"
+    profile = "debug"
 }

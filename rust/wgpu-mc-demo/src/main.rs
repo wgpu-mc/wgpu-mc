@@ -3,42 +3,41 @@
 mod entity;
 mod chunk;
 
-use std::{fs};
+use std::fs;
 
 use std::path::PathBuf;
 
 use std::time::Instant;
-use wgpu_mc::mc::datapack::{NamespacedResource};
+use wgpu_mc::mc::datapack::NamespacedResource;
 
 
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, DeviceEvent};
-use wgpu_mc::{WmRenderer, HasWindowSize, WindowSize};
+use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use futures::executor::block_on;
 use winit::window::Window;
 
 use std::sync::Arc;
-use wgpu_mc::mc::resource::{ResourceProvider};
-use std::convert::{TryFrom};
+use wgpu_mc::mc::resource::ResourceProvider;
+use std::convert::TryFrom;
 
 use futures::StreamExt;
 use std::collections::HashMap;
 
 
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
-use fastanvil::{RegionBuffer};
+use fastanvil::RegionBuffer;
 use std::io::Cursor;
 use arc_swap::ArcSwap;
 
 use fastanvil::pre18::JavaChunk;
-use rayon::iter::{IntoParallelIterator};
+use rayon::iter::IntoParallelIterator;
 use fastnbt::de::from_bytes;
 use wgpu_mc::mc::block::Block;
-use wgpu_mc::mc::entity::{EntityPart, PartTransform, Cuboid, CuboidUV, EntityManager, EntityModel, EntityInstance, DescribedEntityInstances};
+use wgpu_mc::mc::entity::{Cuboid, CuboidUV, DescribedEntityInstances, EntityInstance, EntityManager, EntityModel, EntityPart, PartTransform};
 
 use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
-use wgpu_mc::render::entity::EntityRenderInstance;
-use wgpu_mc::render::entity::pipeline::{EntityGroupInstancingFrame};
+use wgpu_mc::render::entity::{EntityGroupInstancingFrame, EntityRenderInstance};
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
 use wgpu_mc::render::pipeline::grass::GrassPipeline;
