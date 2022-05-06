@@ -1,11 +1,11 @@
 use image::GenericImageView;
 
-use wgpu::Extent3d;
-use std::num::NonZeroU32;
 use crate::WgpuState;
+use std::num::NonZeroU32;
+use wgpu::Extent3d;
 
 pub type TextureId = u32;
-pub type UV = ( (f32, f32), (f32, f32) );
+pub type UV = ((f32, f32), (f32, f32));
 
 ///Representation of a texture that has been uploaded to wgpu along with the corresponding view
 /// and sampler
@@ -37,7 +37,7 @@ impl TextureSamplerView {
         let size = wgpu::Extent3d {
             width: surface_config.width,
             height: surface_config.height,
-            depth_or_array_layers: 1
+            depth_or_array_layers: 1,
         };
         let desc = wgpu::TextureDescriptor {
             label: Some(label),
@@ -46,7 +46,7 @@ impl TextureSamplerView {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         };
         let texture = device.create_texture(&desc);
 
@@ -90,7 +90,7 @@ impl TextureSamplerView {
                 depth_or_array_layers: 1,
             },
             label,
-            wgpu::TextureFormat::Rgba8Unorm
+            wgpu::TextureFormat::Rgba8Unorm,
         )
     }
 
@@ -99,7 +99,7 @@ impl TextureSamplerView {
         bytes: &[u8],
         size: wgpu::Extent3d,
         label: Option<&str>,
-        format: wgpu::TextureFormat
+        format: wgpu::TextureFormat,
     ) -> Result<Self, anyhow::Error> {
         let texture = wgpu_state.device.create_texture(&wgpu::TextureDescriptor {
             label,
@@ -108,7 +108,9 @@ impl TextureSamplerView {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING
+            usage: wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         });
 
         wgpu_state.queue.write_texture(
@@ -116,7 +118,7 @@ impl TextureSamplerView {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All
+                aspect: wgpu::TextureAspect::All,
             },
             bytes,
             wgpu::ImageDataLayout {
@@ -144,5 +146,4 @@ impl TextureSamplerView {
             sampler,
         })
     }
-
 }

@@ -1,7 +1,7 @@
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SkyVertex {
-    pub position: [f32; 3]
+    pub position: [f32; 3],
 }
 
 impl SkyVertex {
@@ -17,7 +17,7 @@ impl SkyVertex {
                     offset: 0,
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x3,
-                }
+                },
             ],
         }
     }

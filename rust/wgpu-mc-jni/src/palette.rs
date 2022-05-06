@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use jni::objects::{GlobalRef, JObject};
 use jni::sys::{jlong, jobject};
+use std::collections::HashMap;
 use wgpu_mc::mc::block::PackedBlockstateKey;
 
 pub struct IdList {
@@ -8,13 +8,11 @@ pub struct IdList {
 }
 
 impl IdList {
-
     pub fn new() -> Self {
         Self {
-            map: HashMap::new()
+            map: HashMap::new(),
         }
     }
-
 }
 
 #[derive(Clone)]
@@ -22,16 +20,15 @@ pub struct JavaPalette {
     //GlobalRef is a ref to the java BlockState, the usize is an index into the wgpu-mc blockstate Vec
     store: Vec<(GlobalRef, usize)>,
     indices: HashMap<usize, usize>,
-    pub id_list: *mut IdList
+    pub id_list: *mut IdList,
 }
 
 impl JavaPalette {
-    
     pub fn new(id_list: jlong) -> Self {
         Self {
             store: Vec::with_capacity(256),
             indices: HashMap::new(),
-            id_list: id_list as usize as *mut IdList
+            id_list: id_list as usize as *mut IdList,
         }
     }
 
@@ -42,7 +39,7 @@ impl JavaPalette {
                 self.store.push(element);
                 self.store.len() - 1
             }
-            Some(&index) => index
+            Some(&index) => index,
         }
     }
 
@@ -52,7 +49,9 @@ impl JavaPalette {
     }
 
     pub fn has_any(&self, predicate: &dyn Fn(jobject) -> bool) -> bool {
-        self.store.iter().any(|(global_ref, _)| predicate(global_ref.as_obj().into_inner()))
+        self.store
+            .iter()
+            .any(|(global_ref, _)| predicate(global_ref.as_obj().into_inner()))
     }
 
     pub fn size(&self) -> usize {
@@ -67,5 +66,4 @@ impl JavaPalette {
         self.store.clear();
         self.indices.clear();
     }
-
 }

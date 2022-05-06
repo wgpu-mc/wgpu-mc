@@ -1,16 +1,14 @@
-
 use std::collections::HashMap;
 
-
-use crate::mc::datapack::{FaceTexture, TextureVariableOrResource, NamespacedResource};
+use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
 use crate::mc::datapack;
+use crate::mc::datapack::{FaceTexture, NamespacedResource, TextureVariableOrResource};
 use crate::mc::resource::ResourceProvider;
 use crate::model::MeshVertex;
-use crate::render::atlas::{ATLAS_DIMENSIONS, TextureManager};
-use crate::texture::UV;
-use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
-use cgmath::{Vector3, Matrix3, SquareMatrix};
+use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS};
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
+use crate::texture::UV;
+use cgmath::{Matrix3, SquareMatrix, Vector3};
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
@@ -33,17 +31,18 @@ pub enum CubeOrComplexMesh {
 pub struct BlockstateVariantMesh {
     pub name: NamespacedResource,
     pub shape: CubeOrComplexMesh,
-    pub transparent_or_complex: bool
+    pub transparent_or_complex: bool,
 }
 
 impl BlockstateVariantMesh {
-
     pub fn absolute_atlas_uv(
         face: &FaceTexture,
         tex_manager: &TextureManager,
-        textures: &HashMap<String, TextureVariableOrResource>
+        textures: &HashMap<String, TextureVariableOrResource>,
     ) -> Option<UV> {
-        let block_atlas = tex_manager.atlases.load()
+        let block_atlas = tex_manager
+            .atlases
+            .load()
             .get(BLOCK_ATLAS_NAME)
             .unwrap()
             .load_full();
@@ -52,27 +51,23 @@ impl BlockstateVariantMesh {
 
         let face_resource = face.texture.recurse_resolve_as_resource(textures)?;
 
-        let atlas_uv = atlas_map.get(
-            face_resource
-        ).unwrap_or_else(|| panic!("{:?}\n{:?} {} {}",
+        let atlas_uv = atlas_map.get(face_resource).unwrap_or_else(|| {
+            panic!(
+                "{:?}\n{:?} {} {}",
                 block_atlas,
                 face_resource,
                 face_resource.0.len(),
-                face_resource.1.len()));
+                face_resource.1.len()
+            )
+        });
 
         let _face_uv = &face.uv;
 
         const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
         let adjusted_uv = (
-            (
-                (atlas_uv.0.0) / ATLAS,
-                (atlas_uv.0.1) / ATLAS
-            ),
-            (
-                (atlas_uv.1.0) / ATLAS,
-                (atlas_uv.1.1) / ATLAS
-            )
+            ((atlas_uv.0 .0) / ATLAS, (atlas_uv.0 .1) / ATLAS),
+            ((atlas_uv.1 .0) / ATLAS, (atlas_uv.1 .1) / ATLAS),
         );
 
         Some(adjusted_uv)
@@ -82,7 +77,7 @@ impl BlockstateVariantMesh {
         model: &datapack::BlockModel,
         _rp: &dyn ResourceProvider,
         tex_manager: &TextureManager,
-        _transform: &BlockstateVariantModelDefinitionRotations
+        _transform: &BlockstateVariantModelDefinitionRotations,
     ) -> Option<Self> {
         let _texture_ids = &model.textures;
 
@@ -234,7 +229,7 @@ impl BlockstateVariantMesh {
             } else {
                 CubeOrComplexMesh::Custom(results)
             },
-            transparent_or_complex: !is_cube || has_transparency
+            transparent_or_complex: !is_cube || has_transparency,
         })
     }
 }
