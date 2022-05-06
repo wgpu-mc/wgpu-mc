@@ -14,7 +14,7 @@ impl BlockStateProvider for SimpleBlockstateProvider {
                 Some(self.0)
             } else {
                 None
-            }
+            },
         }
     }
 }
@@ -22,9 +22,10 @@ impl BlockStateProvider for SimpleBlockstateProvider {
 pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
     let bm = wm.mc.block_manager.read();
 
-    let variant_key = *bm.variant_indices.get(
-        "Block{minecraft:blockstates/stone.json}"
-    ).unwrap();
+    let variant_key = *bm
+        .variant_indices
+        .get("Block{minecraft:blockstates/stone.json}")
+        .unwrap();
 
     let provider = SimpleBlockstateProvider(variant_key as PackedBlockstateKey);
 
@@ -33,7 +34,10 @@ pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
 
     chunk.bake(&bm);
 
-    println!("Built 1 chunk in {} microseconds", Instant::now().duration_since(time).as_micros());
+    println!(
+        "Built 1 chunk in {} microseconds",
+        Instant::now().duration_since(time).as_micros()
+    );
 
     vec![chunk]
 }
