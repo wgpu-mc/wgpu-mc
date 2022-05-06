@@ -15,8 +15,9 @@ pub struct TerrainVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub lightmap_coords: [f32; 2],
-    pub normal: [f32; 3],
-    pub color: [f32; 3]
+    pub normal: [f32; 4],
+    pub color: [f32; 4],
+    pub tangent: [f32; 4]
 }
 
 impl TerrainVertex {

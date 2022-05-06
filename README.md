@@ -12,7 +12,6 @@ https://matrix.to/#/#wgpu-mc:matrix.org
 
 `wgpu` is a crate implementing the WebGPU specification in Rust. It's primary backends are Vulkan, DirectX 12, and Metal.
 
-
 #### Goals
 
 wgpu-mc is a standalone rendering engine for Minecraft-compatible projects. It's also a
@@ -31,7 +30,8 @@ Engine
 - [x] Block models from standard datapacks
 - [x] Terrain rendering
 - [x] Skybox support
-- [x] Instanced Entity Rendering (supported but no entities are implemented yet)
+- [x] Instanced Entity Rendering
+- [ ] Animated textures
 - [ ] Particles
 - [ ] Lighting
 - [ ] Item rendering
@@ -39,12 +39,13 @@ Engine
 Minecraft
 
 - [x] Disable Blaze3d
-- [x] GUI rendering (text rendering is mangled but otherwise its like 99% there)
-- [ ] Integrate entities
-- [ ] Implement Indigo
+- [x] GUI rendering (text rendering is mangled but otherwise it works)
 - [ ] World rendering
+- [ ] Integrate entities
+- [ ] Implement the Fabric Render API (Electrum)
 - [ ] Particles
 - [ ] Lighting
+- [ ] Integrate Iris for more expansive/complex shader support
 
 Pie in the sky
 

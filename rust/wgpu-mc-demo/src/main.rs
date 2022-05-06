@@ -45,7 +45,6 @@ use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
 
-
 use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::chunk::make_chunks;

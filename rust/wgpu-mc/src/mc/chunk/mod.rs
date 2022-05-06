@@ -79,12 +79,8 @@ impl Chunk {
     }
 
     pub fn bake(&self, block_manager: &BlockManager) {
-        let grass_index = *block_manager.variant_indices.get(
-            "Block{minecraft:grass}"
-        ).unwrap() as u32;
-
         let glass_index = *block_manager.variant_indices.get(
-            "Block{minecraft:glass}".try_into().unwrap()
+            "Block{minecraft:blockstates/glass.json}".try_into().unwrap()
         ).unwrap() as u32;
 
         let glass = BakedChunkLayer::bake(block_manager, self, |v, x, y, z| {
@@ -113,7 +109,7 @@ impl Chunk {
         }, Box::new(move |state| {
             match state.packed_key {
                 None => false,
-                Some(key) => key != grass_index && key != glass_index
+                Some(key) => key != glass_index
             }
         }), &*self.state_provider);
 
