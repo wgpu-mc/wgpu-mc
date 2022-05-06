@@ -15,7 +15,8 @@ pub struct TerrainVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub lightmap_coords: [f32; 2],
-    pub normal: [f32; 3]
+    pub normal: [f32; 3],
+    pub color: [f32; 3]
 }
 
 impl TerrainVertex {
@@ -47,6 +48,11 @@ impl TerrainVertex {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
                     shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 10]>() as wgpu::BufferAddress,
+                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
@@ -144,8 +150,8 @@ impl WmPipeline for TerrainPipeline {
                 targets: &[wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Bgra8Unorm,
                     blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent::REPLACE,
-                        alpha: wgpu::BlendComponent::REPLACE
+                        color: wgpu::BlendComponent::OVER,
+                        alpha: wgpu::BlendComponent::OVER
                     }),
                     write_mask: Default::default()
                 }]

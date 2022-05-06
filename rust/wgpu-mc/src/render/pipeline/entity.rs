@@ -158,12 +158,12 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
 
             render_pass.set_vertex_buffer(
                 0,
-                arena.alloc(instance_type.vertex_buffer.clone()).slice(..)
+                arena.alloc(instance_type.vbo.clone()).slice(..)
             );
 
             render_pass.set_vertex_buffer(
                 1,
-                arena.alloc(instance_type.entity_instance_vb.clone()).slice(..)
+                arena.alloc(instance_type.instance_vbo.clone()).slice(..)
             );
 
             render_pass.draw(0..instance_type.vertex_count, 0..instance_type.instance_count);

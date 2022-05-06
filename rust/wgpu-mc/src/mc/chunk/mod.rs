@@ -14,7 +14,6 @@ use parking_lot::RwLock;
 use rayon::iter::IntoParallelRefIterator;
 
 use crate::mc::BlockManager;
-use crate::render::pipeline::grass::GrassVertex;
 use crate::render::pipeline::terrain::TerrainVertex;
 
 pub const CHUNK_WIDTH: usize = 16;
@@ -45,7 +44,6 @@ pub struct RenderLayers {
 
 #[derive(Debug)]
 pub struct ChunkLayers {
-    grass: BakedChunkLayer<GrassVertex>,
     glass: BakedChunkLayer<TerrainVertex>,
     terrain: BakedChunkLayer<TerrainVertex>
 }
@@ -89,27 +87,13 @@ impl Chunk {
             "Block{minecraft:glass}".try_into().unwrap()
         ).unwrap() as u32;
 
-        let grass = BakedChunkLayer::bake(block_manager, self, |v, x, y, z| {
-            GrassVertex {
-                position: [v.position[0] + x, v.position[1] + y, v.position[2] + z],
-                tex_coords: v.tex_coords,
-                lightmap_coords: [0.0, 0.0],
-                normal: v.normal,
-                biome_color_coords: [0.0, 0.0]
-            }
-        }, Box::new(move |state| {
-            match state.packed_key {
-                None => false,
-                Some(key) => key == grass_index
-            }
-        }), &*self.state_provider);
-
         let glass = BakedChunkLayer::bake(block_manager, self, |v, x, y, z| {
             TerrainVertex {
                 position: [v.position[0] + x, v.position[1] + y, v.position[2] + z],
                 tex_coords: v.tex_coords,
                 lightmap_coords: [0.0, 0.0],
-                normal: v.normal
+                normal: v.normal,
+                color: [1.0, 1.0, 1.0]
             }
         }, Box::new(move |state| {
             match state.packed_key {
@@ -123,7 +107,8 @@ impl Chunk {
                 position: [v.position[0] + x, v.position[1] + y, v.position[2] + z],
                 tex_coords: v.tex_coords,
                 lightmap_coords: [0.0, 0.0],
-                normal: v.normal
+                normal: v.normal,
+                color: [1.0, 1.0, 1.0]
             }
         }, Box::new(move |state| {
             match state.packed_key {
@@ -133,7 +118,6 @@ impl Chunk {
         }), &*self.state_provider);
 
         self.baked.store(Arc::new(Some(ChunkLayers {
-            grass,
             glass,
             terrain
         })));
@@ -181,7 +165,6 @@ impl ChunkManager {
         let chunks = self.loaded_chunks.read().iter().map(|chunk| chunk.1.load_full()).collect::<Vec<_>>();
 
         let mut glass = BakedChunkLayer::new();
-        let mut grass = BakedChunkLayer::new();
         let mut terrain = BakedChunkLayer::new();
 
         chunks.iter().for_each(|chunk| {
@@ -189,14 +172,12 @@ impl ChunkManager {
             let layers = ((**baked).as_ref().unwrap());
 
             glass.extend(&layers.glass);
-            grass.extend(&layers.grass);
             terrain.extend(&layers.terrain);
         });
 
         let mut map = HashMap::new();
 
         map.insert("transparent".into(), glass.upload(wm));
-        map.insert("grass".into(), grass.upload(wm));
         map.insert("terrain".into(), terrain.upload(wm));
 
         self.section_buffers.store(Arc::new(map));

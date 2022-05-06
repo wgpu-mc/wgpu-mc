@@ -40,7 +40,6 @@ use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::render::entity::{EntityGroupInstancingFrame, EntityRenderInstance};
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
-use wgpu_mc::render::pipeline::grass::GrassPipeline;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
@@ -49,6 +48,7 @@ use wgpu_mc::render::shader::{WgslShader, WmShader};
 
 use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use crate::chunk::make_chunks;
 // use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
 
@@ -191,17 +191,17 @@ fn main() {
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _chunks: Vec<(usize, usize, JavaChunk)>) {
     
-    let entity_rendering = describe_entity(&wm);
+    // let entity_rendering = describe_entity(&wm);
 
-    // let chunks = make_chunks(&wm);
-    //
-    // {
-    //     let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
-    //
-    //     chunks.into_iter().for_each(|chunk| {
-    //         loaded_chunks.insert(chunk.pos, ArcSwap::new(Arc::new(chunk)));
-    //     });
-    // }
+    let chunks = make_chunks(&wm);
+
+    {
+        let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
+
+        chunks.into_iter().for_each(|chunk| {
+            loaded_chunks.insert(chunk.pos, ArcSwap::new(Arc::new(chunk)));
+        });
+    }
 
     {
         wm.mc.chunks.assemble_world_meshes(&wm);

@@ -1,5 +1,4 @@
 pub mod transparent;
-pub mod grass;
 pub mod entity;
 pub mod sky;
 pub mod terrain;

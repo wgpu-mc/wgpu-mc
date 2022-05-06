@@ -90,7 +90,7 @@ pub struct MinecraftState {
     pub block_manager: RwLock<BlockManager>,
 
     pub chunks: ChunkManager,
-    pub entities: RwLock<Vec<EntityModel>>,
+    pub entity_models: RwLock<Vec<EntityModel>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
 
@@ -112,7 +112,7 @@ impl MinecraftState {
         MinecraftState {
             sun_position: ArcSwap::new(Arc::new(0.0)),
             chunks: ChunkManager::new(),
-            entities: RwLock::new(Vec::new()),
+            entity_models: RwLock::new(Vec::new()),
 
             texture_manager: TextureManager::new(),
 
