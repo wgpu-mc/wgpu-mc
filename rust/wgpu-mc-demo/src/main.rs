@@ -306,18 +306,16 @@ fn begin_rendering(
 
                 frame_start = Instant::now();
             }
-            Event::DeviceEvent { ref event, .. } => {
-                match event {
-                    // DeviceEvent::Added => {}
-                    // DeviceEvent::Removed => {}
-                    DeviceEvent::MouseMotion { delta } => {
-                        let mut camera = **wm.mc.camera.load();
-                        camera.yaw += (delta.0 / 100.0) as f32;
-                        camera.pitch -= (delta.1 / 100.0) as f32;
-                        wm.mc.camera.store(Arc::new(camera));
-                    }
-                    _ => {}
-                }
+            // Event::DeviceEvent { event: DeviceEvent::Added {..}, ..} => {}
+            // Event::DeviceEvent { event: DeviceEvent::Removed {..}, ..} => {}
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta },
+                ..
+            } => {
+                let mut camera = **wm.mc.camera.load();
+                camera.yaw += (delta.0 / 100.0) as f32;
+                camera.pitch -= (delta.1 / 100.0) as f32;
+                wm.mc.camera.store(Arc::new(camera));
             }
             _ => {}
         }
