@@ -1,21 +1,14 @@
-
 use std::vec::Vec;
 
-
-
 use parking_lot::RwLock;
-
 
 use pipeline::GLCommand;
 use wgpu_mc::model::BindableTexture;
 
-
 use std::sync::Arc;
 
-
-
-use std::collections::HashMap;
 use once_cell::sync::OnceCell;
+use std::collections::HashMap;
 
 pub mod pipeline;
 
@@ -32,5 +25,5 @@ pub struct GlTexture {
     pub width: u16,
     pub height: u16,
     pub bindable_texture: Option<Arc<BindableTexture>>,
-    pub pixels: Vec<u8>
+    pub pixels: Vec<u8>,
 }

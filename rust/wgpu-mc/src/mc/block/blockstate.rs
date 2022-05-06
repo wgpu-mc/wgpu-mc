@@ -3,7 +3,7 @@ use crate::mc::datapack::NamespacedResource;
 pub struct BlockstateVariantModelDefinitionRotations {
     pub x: u16,
     pub y: u16,
-    pub z: u16
+    pub z: u16,
 }
 
 //Blocks are defined in-game like minecraft:cobblestone
@@ -14,5 +14,5 @@ pub struct BlockstateVariantModelDefinitionRotations {
 pub struct BlockstateVariantDefinitionModel {
     pub id: NamespacedResource,
     pub rotations: BlockstateVariantModelDefinitionRotations,
-    pub model: NamespacedResource
+    pub model: NamespacedResource,
 }

@@ -1,7 +1,3 @@
-pub struct GuiRenderer {
+pub struct GuiRenderer {}
 
-}
-
-impl GuiRenderer {
-
-}
+impl GuiRenderer {}

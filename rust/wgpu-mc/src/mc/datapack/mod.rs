@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-
 use crate::texture::UV;
 
-use cgmath::{Matrix4};
+use crate::mc::resource::ResourceProvider;
+use cgmath::Matrix4;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
-use crate::mc::resource::{ResourceProvider};
 use std::fmt::{Display, Formatter};
 
 #[macro_export]
@@ -19,25 +18,23 @@ macro_rules! nsr (
     }
 );
 
-#[derive(Debug, Hash, Clone, std::cmp::Eq)]
-pub struct NamespacedResource (pub String, pub String);
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+pub struct NamespacedResource(pub String, pub String);
 
 impl NamespacedResource {
-
     pub fn append(&self, a: &str) -> Self {
-        Self (self.0.clone(), format!("{}{}", self.1, a))
+        Self(self.0.clone(), format!("{}{}", self.1, a))
     }
 
     pub fn prepend(&self, a: &str) -> Self {
-        Self (self.0.clone(), format!("{}{}", a, self.1))
+        Self(self.0.clone(), format!("{}{}", a, self.1))
     }
-
 }
 
 impl Display for NamespacedResource {
-
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0).and(f.write_str(":").and(f.write_str(&self.1)))
+        f.write_str(&self.0)
+            .and(f.write_str(":").and(f.write_str(&self.1)))
     }
 }
 
@@ -49,32 +46,23 @@ impl TryFrom<&str> for NamespacedResource {
         let mut split = string.split(':').take(2);
 
         Ok(match (split.next(), split.next()) {
-                (Some(ns), Some(id)) => Self (ns.into(), id.into()),
-                (Some(id), None) => Self ("minecraft".into(), id.into()),
-                _ => return Err(())
-            }
-        )
+            (Some(ns), Some(id)) => Self(ns.into(), id.into()),
+            (Some(id), None) => Self("minecraft".into(), id.into()),
+            _ => return Err(()),
+        })
     }
 }
 
 impl From<(&str, &str)> for NamespacedResource {
-
     fn from(strings: (&str, &str)) -> Self {
-        Self (strings.0.into(), strings.1.into())
-    }
-
-}
-
-impl PartialEq for NamespacedResource {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
+        Self(strings.0.into(), strings.1.into())
     }
 }
 
-#[derive(Debug, Clone, Eq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TextureVariableOrResource {
     Tag(String),
-    Resource(NamespacedResource)
+    Resource(NamespacedResource),
 }
 
 impl TextureVariableOrResource {
@@ -83,56 +71,37 @@ impl TextureVariableOrResource {
         matches!(self, TextureVariableOrResource::Tag(_))
     }
 
-    pub fn recurse_resolve_as_resource<'a, 'b: 'a>(&'a self, map: &'b HashMap<String, TextureVariableOrResource>) -> Option<&'a NamespacedResource> {
+    pub fn recurse_resolve_as_resource<'a, 'b: 'a>(
+        &'a self,
+        map: &'b HashMap<String, TextureVariableOrResource>,
+    ) -> Option<&'a NamespacedResource> {
         match &self {
-            TextureVariableOrResource::Tag(tag) => {
-                map.get(tag)?.recurse_resolve_as_resource(map)
-            }
-            TextureVariableOrResource::Resource(resource) => Some(resource)
+            TextureVariableOrResource::Tag(tag) => map.get(tag)?.recurse_resolve_as_resource(map),
+            TextureVariableOrResource::Resource(resource) => Some(resource),
         }
     }
 
     pub fn as_resource(&self) -> Option<&NamespacedResource> {
         match self {
             TextureVariableOrResource::Tag(_) => None,
-            TextureVariableOrResource::Resource(ref res) => Some(res)
+            TextureVariableOrResource::Resource(ref res) => Some(res),
         }
     }
 
     pub fn as_tag(&self) -> Option<&str> {
         match self {
             TextureVariableOrResource::Tag(string) => Some(string),
-            TextureVariableOrResource::Resource(ref _res) => None
+            TextureVariableOrResource::Resource(ref _res) => None,
         }
     }
-
 }
 
 impl Display for TextureVariableOrResource {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             TextureVariableOrResource::Tag(tag) => f.write_str(&format!("#{}", tag)),
-            TextureVariableOrResource::Resource(res) => f.write_str(&format!("{}:{}", res.0, res.1))
-        }
-    }
-}
-
-impl PartialEq for TextureVariableOrResource {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            TextureVariableOrResource::Tag(tag) => {
-                if let TextureVariableOrResource::Tag(o) = other {
-                    o == tag
-                } else {
-                    false
-                }
-            }
-            TextureVariableOrResource::Resource(nsa) => {
-                if let TextureVariableOrResource::Resource(nsb) = other {
-                    nsa == nsb
-                } else {
-                    false
-                }
+            TextureVariableOrResource::Resource(res) => {
+                f.write_str(&format!("{}:{}", res.0, res.1))
             }
         }
     }
@@ -151,9 +120,14 @@ impl TryFrom<&str> for TextureVariableOrResource {
 
         Ok(if !is_tag {
             match (split.next(), split.next()) {
-                (Some(ns), Some(id)) => TextureVariableOrResource::Resource(NamespacedResource (ns.into(), id.into())),
-                (Some(id), None) => TextureVariableOrResource::Resource(NamespacedResource ("minecraft".into(), id.into())),
-                _ => return Err(())
+                (Some(ns), Some(id)) => {
+                    TextureVariableOrResource::Resource(NamespacedResource(ns.into(), id.into()))
+                }
+                (Some(id), None) => TextureVariableOrResource::Resource(NamespacedResource(
+                    "minecraft".into(),
+                    id.into(),
+                )),
+                _ => return Err(()),
             }
         } else {
             TextureVariableOrResource::Tag(string.into())
@@ -174,7 +148,7 @@ pub struct ElementFaces {
     pub north: Option<FaceTexture>,
     pub east: Option<FaceTexture>,
     pub south: Option<FaceTexture>,
-    pub west: Option<FaceTexture>
+    pub west: Option<FaceTexture>,
 }
 
 type ElementCorner = (f32, f32, f32);
@@ -200,44 +174,35 @@ pub struct BlockModel {
 
 impl BlockModel {
     fn triplet_from_array(vec: &[Value]) -> Option<ElementCorner> {
-
-        Some(
-            (
-                vec[0].as_f64()? as f32,
-                vec[1].as_f64()? as f32,
-                vec[2].as_f64()? as f32
-            )
-        )
+        Some((
+            vec[0].as_f64()? as f32,
+            vec[1].as_f64()? as f32,
+            vec[2].as_f64()? as f32,
+        ))
     }
 
     fn parse_face(
         face: Option<&Value>,
-        _textures: &HashMap<String, TextureVariableOrResource>
+        _textures: &HashMap<String, TextureVariableOrResource>,
     ) -> Option<FaceTexture> {
         let face = face?.as_object()?;
-        let uv = face.get("uv").map_or(
-            ((0.0, 0.0), (16.0, 16.0)),
-            |uv| {
-                let arr = uv.as_array().unwrap();
+        let uv = face.get("uv").map_or(((0.0, 0.0), (16.0, 16.0)), |uv| {
+            let arr = uv.as_array().unwrap();
+            (
                 (
-                    (
-                        arr[0].as_f64().unwrap() as f32,
-                        arr[1].as_f64().unwrap() as f32
-                    ),
-                    (
-                        arr[2].as_f64().unwrap() as f32,
-                        arr[3].as_f64().unwrap() as f32
-                    )
-                )
-            }
-        );
+                    arr[0].as_f64().unwrap() as f32,
+                    arr[1].as_f64().unwrap() as f32,
+                ),
+                (
+                    arr[2].as_f64().unwrap() as f32,
+                    arr[3].as_f64().unwrap() as f32,
+                ),
+            )
+        });
 
         let texture: TextureVariableOrResource = face.get("texture")?.as_str()?.try_into().ok()?;
 
-        Some(FaceTexture {
-            uv,
-            texture
-        })
+        Some(FaceTexture { uv, texture })
     }
 
     fn parse_elements(
@@ -246,10 +211,8 @@ impl BlockModel {
         parent: Option<&BlockModel>,
         textures: &HashMap<String, TextureVariableOrResource>,
     ) -> Option<Vec<Element>> {
-        let _cobble = NamespacedResource(
-            "minecraft".into(),
-            "models/block/cobblestone.json".into()
-        );
+        let _cobble =
+            NamespacedResource("minecraft".into(), "models/block/cobblestone.json".into());
 
         match val {
             //No elements, default to parent's elements
@@ -285,7 +248,8 @@ impl BlockModel {
                                 }
                             },
                         })
-                    }).collect::<Option<Vec<Element>>>()
+                    })
+                    .collect::<Option<Vec<Element>>>()
             }
         }
     }
@@ -295,7 +259,6 @@ impl BlockModel {
         resource_provider: &dyn ResourceProvider,
         model_map: &'a mut HashMap<NamespacedResource, BlockModel>,
     ) -> Option<&'a Self> {
-
         if model_map.contains_key(identifier) {
             return model_map.get(identifier);
         }
@@ -308,42 +271,45 @@ impl BlockModel {
         //Get information about the parent model, if this model has one
         let parent = obj.get("parent").and_then(|v| {
             let parent_identifier_string = v.as_str().unwrap();
-            let parent_identifier =
-                NamespacedResource::try_from(parent_identifier_string)
-                    .unwrap();
+            let parent_identifier = NamespacedResource::try_from(parent_identifier_string).unwrap();
 
-            BlockModel::deserialize(&parent_identifier, resource_provider, model_map)
-                .unwrap();
+            BlockModel::deserialize(&parent_identifier, resource_provider, model_map).unwrap();
 
             model_map.get(&parent_identifier)
         });
 
-        let this_textures: HashMap<String, TextureVariableOrResource> = json.get("textures").map(|texture_val: &Value| {
-            let val = texture_val.as_object().unwrap();
-            val.iter().map(|(key, value)| {
-                (
-                    key.clone(),
-                    TextureVariableOrResource::try_from(value.as_str().unwrap()).unwrap()
-                )
-            }).collect()
-        }).unwrap_or_default();
+        let this_textures: HashMap<String, TextureVariableOrResource> = json
+            .get("textures")
+            .map(|texture_val: &Value| {
+                let val = texture_val.as_object().unwrap();
+                val.iter()
+                    .map(|(key, value)| {
+                        (
+                            key.clone(),
+                            TextureVariableOrResource::try_from(value.as_str().unwrap()).unwrap(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
-        let mut resolved_parent_textures: HashMap<String, TextureVariableOrResource> = match parent {
+        let mut resolved_parent_textures: HashMap<String, TextureVariableOrResource> = match parent
+        {
             None => HashMap::new(),
             Some(parent_model) => {
                 let mut textures = parent_model.textures.clone();
 
-                textures.iter_mut().for_each(|(_key, value)| {
-                    match value.clone() {
+                textures
+                    .iter_mut()
+                    .for_each(|(_key, value)| match value.clone() {
                         TextureVariableOrResource::Tag(tag_key) => {
                             match this_textures.get(&tag_key) {
                                 None => {}
-                                Some(resolved) => *value = resolved.clone()
+                                Some(resolved) => *value = resolved.clone(),
                             }
                         }
                         TextureVariableOrResource::Resource(_) => {}
-                    }
-                });
+                    });
 
                 textures
             }
@@ -353,11 +319,14 @@ impl BlockModel {
 
         let model = BlockModel {
             id: identifier.clone(),
-            parent: parent.map(|some| {
-                some.id.clone()
-            }),
+            parent: parent.map(|some| some.id.clone()),
             elements: {
-                Self::parse_elements(identifier, obj.get("elements"), parent, &resolved_parent_textures)?
+                Self::parse_elements(
+                    identifier,
+                    obj.get("elements"),
+                    parent,
+                    &resolved_parent_textures,
+                )?
             },
             textures: resolved_parent_textures,
             display_transforms: HashMap::new(), //TODO

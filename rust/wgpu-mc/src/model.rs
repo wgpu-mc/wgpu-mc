@@ -1,5 +1,5 @@
-use crate::{texture, WgpuState};
 use crate::texture::TextureSamplerView;
+use crate::{texture, WgpuState};
 
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BindingResource};
 
@@ -9,7 +9,7 @@ use crate::render::pipeline::RenderPipelineManager;
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GuiVertex {
     pub position: [f32; 3],
-    pub tex_coords: [f32; 2]
+    pub tex_coords: [f32; 2],
 }
 
 impl GuiVertex {
@@ -31,7 +31,7 @@ impl GuiVertex {
                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2,
-                }
+                },
             ],
         }
     }
@@ -48,17 +48,16 @@ pub struct MeshVertex {
 #[derive(Debug)]
 pub struct BindableTexture {
     pub tsv: texture::TextureSamplerView,
-    pub bind_group: wgpu::BindGroup
+    pub bind_group: wgpu::BindGroup,
 }
 
 impl BindableTexture {
-
     #[must_use]
     pub fn from_tsv(
         wgpu_state: &WgpuState,
         pipelines: &RenderPipelineManager,
 
-        texture: TextureSamplerView
+        texture: TextureSamplerView,
     ) -> Self {
         let bind_group = wgpu_state.device.create_bind_group(&BindGroupDescriptor {
             label: None,

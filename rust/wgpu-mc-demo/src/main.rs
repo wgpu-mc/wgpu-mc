@@ -17,14 +17,11 @@ use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCo
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 
-use std::convert::TryFrom;
 use std::sync::Arc;
 use wgpu_mc::mc::resource::ResourceProvider;
 
 use futures::StreamExt;
-use std::collections::HashMap;
 
-use arc_swap::ArcSwap;
 use fastanvil::RegionBuffer;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use std::io::Cursor;
@@ -33,19 +30,12 @@ use fastanvil::pre18::JavaChunk;
 use fastnbt::de::from_bytes;
 use rayon::iter::IntoParallelIterator;
 use wgpu_mc::mc::block::Block;
-use wgpu_mc::mc::entity::{
-    Cuboid, CuboidUV, DescribedEntityInstances, EntityInstance, EntityManager, EntityModel,
-    EntityPart, PartTransform,
-};
 
-use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
-use wgpu_mc::render::entity::{EntityGroupInstancingFrame, EntityRenderInstance};
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
-use wgpu_mc::render::shader::{WgslShader, WmShader};
 
 use crate::chunk::make_chunks;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -316,18 +306,16 @@ fn begin_rendering(
 
                 frame_start = Instant::now();
             }
-            Event::DeviceEvent { ref event, .. } => {
-                match event {
-                    // DeviceEvent::Added => {}
-                    // DeviceEvent::Removed => {}
-                    DeviceEvent::MouseMotion { delta } => {
-                        let mut camera = **wm.mc.camera.load();
-                        camera.yaw += (delta.0 / 100.0) as f32;
-                        camera.pitch -= (delta.1 / 100.0) as f32;
-                        wm.mc.camera.store(Arc::new(camera));
-                    }
-                    _ => {}
-                }
+            // Event::DeviceEvent { event: DeviceEvent::Added {..}, ..} => {}
+            // Event::DeviceEvent { event: DeviceEvent::Removed {..}, ..} => {}
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta },
+                ..
+            } => {
+                let mut camera = **wm.mc.camera.load();
+                camera.yaw += (delta.0 / 100.0) as f32;
+                camera.pitch -= (delta.1 / 100.0) as f32;
+                wm.mc.camera.store(Arc::new(camera));
             }
             _ => {}
         }
