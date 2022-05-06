@@ -1,7 +1,8 @@
-#[macro_use] extern crate wgpu_mc;
+#[macro_use]
+extern crate wgpu_mc;
 
-mod entity;
 mod chunk;
+mod entity;
 
 use std::fs;
 
@@ -10,31 +11,32 @@ use std::path::PathBuf;
 use std::time::Instant;
 use wgpu_mc::mc::datapack::NamespacedResource;
 
-
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
-use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use futures::executor::block_on;
+use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
+use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 
+use std::convert::TryFrom;
 use std::sync::Arc;
 use wgpu_mc::mc::resource::ResourceProvider;
-use std::convert::TryFrom;
 
 use futures::StreamExt;
 use std::collections::HashMap;
 
-
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
-use fastanvil::RegionBuffer;
-use std::io::Cursor;
 use arc_swap::ArcSwap;
+use fastanvil::RegionBuffer;
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use std::io::Cursor;
 
 use fastanvil::pre18::JavaChunk;
-use rayon::iter::IntoParallelIterator;
 use fastnbt::de::from_bytes;
+use rayon::iter::IntoParallelIterator;
 use wgpu_mc::mc::block::Block;
-use wgpu_mc::mc::entity::{Cuboid, CuboidUV, DescribedEntityInstances, EntityInstance, EntityManager, EntityModel, EntityPart, PartTransform};
+use wgpu_mc::mc::entity::{
+    Cuboid, CuboidUV, DescribedEntityInstances, EntityInstance, EntityManager, EntityModel,
+    EntityPart, PartTransform,
+};
 
 use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::render::entity::{EntityGroupInstancingFrame, EntityRenderInstance};
@@ -45,28 +47,29 @@ use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
 
-use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry};
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::chunk::make_chunks;
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu_mc::wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+};
 // use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
 
 struct FsResourceProvider {
-    pub asset_root: PathBuf
+    pub asset_root: PathBuf,
 }
 
 //ResourceProvider is what wm uses to fetch resources. This is a basic implementation that's just backed by the filesystem
 impl ResourceProvider for FsResourceProvider {
-
     fn get_resource(&self, id: &NamespacedResource) -> Vec<u8> {
         let real_path = self.asset_root.join(&id.0).join(&id.1);
-        fs::read(&real_path).unwrap_or_else(|_| { panic!("{}", real_path.to_str().unwrap().to_string()) })
+        fs::read(&real_path)
+            .unwrap_or_else(|_| panic!("{}", real_path.to_str().unwrap().to_string()))
     }
-
 }
 
 struct WinitWindowWrapper {
-    window: Window
+    window: Window,
 }
 
 impl HasWindowSize for WinitWindowWrapper {
@@ -79,27 +82,25 @@ impl HasWindowSize for WinitWindowWrapper {
 }
 
 unsafe impl HasRawWindowHandle for WinitWindowWrapper {
-
     fn raw_window_handle(&self) -> RawWindowHandle {
         self.window.raw_window_handle()
     }
-
 }
 
 fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
     let root = crate_root::root().unwrap().join("wgpu-mc-demo").join("res");
     let demo_root = root.join("demo_world");
-    let region_dir = std::fs::read_dir(
-        demo_root.join("region")
-    ).unwrap();
+    let region_dir = std::fs::read_dir(demo_root.join("region")).unwrap();
     // let mut model_map = HashMap::new();
 
     let _begin = Instant::now();
 
-    let regions: Vec<Vec<u8>> = region_dir.map(|region| {
-        let region = region.unwrap();
-        fs::read(region.path()).unwrap()
-    }).collect();
+    let regions: Vec<Vec<u8>> = region_dir
+        .map(|region| {
+            let region = region.unwrap();
+            fs::read(region.path()).unwrap()
+        })
+        .collect();
 
     use rayon::iter::ParallelIterator;
     regions
@@ -113,7 +114,8 @@ fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
                 chunks.push((x, z, chunk));
             });
             chunks
-        }).collect()
+        })
+        .collect()
 }
 
 fn main() {
@@ -126,12 +128,14 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    let wrapper = WinitWindowWrapper {
-        window
-    };
+    let wrapper = WinitWindowWrapper { window };
 
     let rsp = Arc::new(FsResourceProvider {
-        asset_root: crate_root::root().unwrap().join("wgpu-mc-demo").join("res").join("assets"),
+        asset_root: crate_root::root()
+            .unwrap()
+            .join("wgpu-mc-demo")
+            .join("res")
+            .join("assets"),
     });
 
     let _mc_root = crate_root::root()
@@ -143,19 +147,14 @@ fn main() {
 
     let wgpu_state = block_on(WmRenderer::init_wgpu(&wrapper));
 
-    let wm = WmRenderer::new(
-        wgpu_state,
-        rsp
-    );
+    let wm = WmRenderer::new(wgpu_state, rsp);
 
-    wm.init(
-        &[
-            &EntityPipeline { frames: &[] },
-            &TerrainPipeline,
-            &TransparentPipeline,
-            &DebugLinesPipeline
-        ]
-    );
+    wm.init(&[
+        &EntityPipeline { frames: &[] },
+        &TerrainPipeline,
+        &TransparentPipeline,
+        &DebugLinesPipeline,
+    ]);
 
     let blockstates_path = _mc_root.join("blockstates");
 
@@ -167,14 +166,19 @@ fn main() {
         blockstate_dir.for_each(|m| {
             let model = m.unwrap();
 
-            let resource_name = NamespacedResource (
+            let resource_name = NamespacedResource(
                 String::from("minecraft"),
-                format!("blockstates/{}", model.file_name().to_str().unwrap())
+                format!("blockstates/{}", model.file_name().to_str().unwrap()),
             );
 
-            match Block::from_json(model.file_name().to_str().unwrap(), std::str::from_utf8(&fs::read(model.path()).unwrap()).unwrap()) {
-                None => {},
-                Some(block) => { bm.blocks.insert(resource_name, block); }
+            match Block::from_json(
+                model.file_name().to_str().unwrap(),
+                std::str::from_utf8(&fs::read(model.path()).unwrap()).unwrap(),
+            ) {
+                None => {}
+                Some(block) => {
+                    bm.blocks.insert(resource_name, block);
+                }
             };
         });
     }
@@ -188,8 +192,12 @@ fn main() {
     begin_rendering(event_loop, window, wm, anvil_chunks);
 }
 
-fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _chunks: Vec<(usize, usize, JavaChunk)>) {
-    
+fn begin_rendering(
+    event_loop: EventLoop<()>,
+    window: Window,
+    wm: WmRenderer,
+    _chunks: Vec<(usize, usize, JavaChunk)>,
+) {
     // let entity_rendering = describe_entity(&wm);
 
     let chunks = make_chunks(&wm);
@@ -214,7 +222,6 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
     let mut spin = 0.0;
 
     event_loop.run(move |event, _, control_flow| {
-
         *control_flow = ControlFlow::Poll;
         match event {
             Event::MainEventsCleared => window.request_redraw(),
@@ -233,35 +240,35 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
                             //Update a block and re-generate the chunk mesh for testing
 
                             //removed atm
-                        },
+                        }
                         KeyboardInput {
                             state: ElementState::Pressed,
                             virtual_keycode: Some(VirtualKeyCode::Escape),
                             ..
                         } => {
                             *control_flow = ControlFlow::Exit;
-                        },
+                        }
                         KeyboardInput {
                             state: ElementState::Pressed,
                             virtual_keycode: Some(VirtualKeyCode::W),
                             ..
                         } => {
                             forward = 1.0;
-                        },
+                        }
                         KeyboardInput {
                             state: ElementState::Released,
                             virtual_keycode: Some(VirtualKeyCode::W),
                             ..
                         } => {
                             forward = 0.0;
-                        },
+                        }
                         KeyboardInput {
                             state: ElementState::Pressed,
                             virtual_keycode: Some(VirtualKeyCode::S),
                             ..
                         } => {
                             forward = -1.0;
-                        },
+                        }
                         KeyboardInput {
                             state: ElementState::Released,
                             virtual_keycode: Some(VirtualKeyCode::S),
@@ -274,15 +281,15 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
                     WindowEvent::Resized(physical_size) => {
                         let _ = wm.resize(WindowSize {
                             width: physical_size.width,
-                            height: physical_size.height
+                            height: physical_size.height,
                         });
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         let _ = wm.resize(WindowSize {
                             width: new_inner_size.width,
-                            height: new_inner_size.height
+                            height: new_inner_size.height,
                         });
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -304,15 +311,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
                     &TerrainPipeline,
                     // &GrassPipeline,
                     &TransparentPipeline,
-                    &DebugLinesPipeline
+                    &DebugLinesPipeline,
                 ]);
 
                 frame_start = Instant::now();
-            },
-            Event::DeviceEvent {
-                ref event,
-                ..
-            } => {
+            }
+            Event::DeviceEvent { ref event, .. } => {
                 match event {
                     // DeviceEvent::Added => {}
                     // DeviceEvent::Removed => {}
@@ -321,10 +325,10 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer, _c
                         camera.yaw += (delta.0 / 100.0) as f32;
                         camera.pitch -= (delta.1 / 100.0) as f32;
                         wm.mc.camera.store(Arc::new(camera));
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
-            },
+            }
             _ => {}
         }
     });
