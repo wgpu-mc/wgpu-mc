@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu_mc::mc::datapack::NamespacedResource;
 use wgpu_mc::mc::entity::{
@@ -57,7 +56,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
     player_atlas.allocate(&[(&alex_skin_ns, &alex_skin_resource)]);
 
     //Uploads the atlas texture to the GPU
-    player_atlas.upload(&wm);
+    player_atlas.upload(wm);
 
     let entity_manager =
         EntityManager::new(&*wm.wgpu_state, &wm.render_pipeline_manager.load_full());
@@ -94,7 +93,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
     let (entity_instance_buffer, entity_instance_bind_group) = DescribedEntityInstances {
         matrices: vec![described_instance],
     }
-    .upload(&wm);
+    .upload(wm);
 
     (
         (entity_instance_buffer, entity_instance_bind_group),
