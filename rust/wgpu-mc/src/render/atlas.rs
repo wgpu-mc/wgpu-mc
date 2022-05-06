@@ -167,3 +167,9 @@ impl TextureManager {
     }
 
 }
+
+impl Default for TextureManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}

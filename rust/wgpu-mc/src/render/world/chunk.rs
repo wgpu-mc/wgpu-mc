@@ -295,3 +295,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
         }
     }
 }
+
+impl<T: Copy + Pod> Default for BakedChunkLayer<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
