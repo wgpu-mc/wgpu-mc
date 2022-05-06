@@ -1,5 +1,5 @@
 use crate::model::MeshVertex;
-use crate::mc::chunk::{ChunkSection, CHUNK_AREA, CHUNK_WIDTH, CHUNK_SECTION_HEIGHT, Chunk, CHUNK_VOLUME, WorldBuffers};
+use crate::mc::chunk::{ChunkSection, CHUNK_AREA, CHUNK_WIDTH, CHUNK_SECTION_HEIGHT, Chunk, CHUNK_VOLUME, WorldBuffers, BlockStateProvider};
 
 use std::sync::Arc;
 use bytemuck::Pod;
@@ -14,7 +14,7 @@ use crate::render::pipeline::terrain::TerrainVertex;
 use crate::WmRenderer;
 
 fn get_block_mesh<'a>(block_manager: &'a BlockManager, state: &BlockState) -> Option<&'a BlockstateVariantMesh> {
-    (&block_manager.block_state_variants).get((*state).packed_key.unwrap() as usize)
+    (&block_manager.block_state_variants).get((*state).packed_key? as usize)
 }
 
 #[derive(Debug)]
@@ -121,7 +121,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
     }
 
     #[must_use]
-    pub fn bake(block_manager: &BlockManager, chunk: &Chunk, mapper: fn (&MeshVertex, f32, f32, f32) -> T, filter: Box<dyn Fn(BlockState) -> bool>) -> Self {
+    pub fn bake(block_manager: &BlockManager, chunk: &Chunk, mapper: fn (&MeshVertex, f32, f32, f32) -> T, filter: Box<dyn Fn(BlockState) -> bool>, state_provider: &dyn BlockStateProvider) -> Self {
         //Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
         let mut north_vertices = Vec::new();
         let mut east_vertices = Vec::new();
@@ -132,14 +132,13 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
         let mut other_vertices = Vec::new();
 
         for mut block_index in 0..CHUNK_VOLUME {
-            let x = block_index % CHUNK_WIDTH;
-            let y = block_index / CHUNK_AREA;
-            let z  = (block_index % CHUNK_AREA) / CHUNK_WIDTH;
+            let x = (block_index % CHUNK_WIDTH) as i32;
+            let y = (block_index / CHUNK_AREA) as i16;
+            let z  = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
 
-            let section_index = y / CHUNK_SECTION_HEIGHT;
-            let section = &chunk.sections[section_index];
+            let section_index = y / (CHUNK_SECTION_HEIGHT as i16);
 
-            let block_state: BlockState = section.blocks[block_index % (CHUNK_AREA * CHUNK_SECTION_HEIGHT)];
+            let block_state: BlockState = state_provider.get_state(x, y, z);
 
             if !filter(block_state) { continue; }
 
@@ -150,91 +149,77 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
             match &baked_mesh.shape {
                 CubeOrComplexMesh::Cube(model) => {
-                    let render_north = !(z > 0 && {
-                        let north_block_mesh = get_block_mesh(
+                    let render_north = {
+                        let block_mesh = get_block_mesh(
                             block_manager,
-                            &section.blocks[((z - 1) * CHUNK_WIDTH) + x]
+                            &state_provider.get_state(x, y, z - 1)
                         );
 
-                        match north_block_mesh {
-                            Some(block_mesh) => !block_mesh.transparent_or_complex,
-                            None => false,
+                        match block_mesh {
+                            Some(mesh) => mesh.transparent_or_complex,
+                            None => true,
                         }
-                    });
+                    };
 
-                    // let render_south = if z < 15 {
-                    //     let south_block_mesh = get_block_mesh(
-                    //         block_manager,
-                    //         &section.blocks[((z + 1) * CHUNK_WIDTH) + x]
-                    //     );
-                    //
-                    //     match south_block_mesh {
-                    //         Some(block_mesh) => block_mesh.transparent_or_complex,
-                    //         None => false,
-                    //     }
-                    // } else {
-                    //     true
-                    // };
-
-                    let render_south = !(z < 15 && {
-                        let south_block_mesh = get_block_mesh(
+                    let render_south = {
+                        let block_mesh = get_block_mesh(
                             block_manager,
-                            &section.blocks[((z + 1) * CHUNK_WIDTH) + x]
+                            &state_provider.get_state(x, y, z + 1)
                         );
 
-                        match south_block_mesh {
-                            Some(block_mesh) => !block_mesh.transparent_or_complex,
-                            None => false,
+                        match block_mesh {
+                            Some(mesh) => mesh.transparent_or_complex,
+                            None => true,
                         }
-                    });
+                    };
 
-                    let render_up = !(y < 255 && {
-                        let up_block_mesh = get_block_mesh(
+                    let render_up = {
+                        let block_mesh = get_block_mesh(
                             block_manager,
-                            &chunk.sections[(y + 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)]
+                            &state_provider.get_state(x, y + 1, z)
                         );
 
-                        match up_block_mesh {
-                            Some(block_mesh) => !block_mesh.transparent_or_complex,
-                            None => false,
+                        match block_mesh {
+                            Some(mesh) => mesh.transparent_or_complex,
+                            None => true,
                         }
-                    });
+                    };
 
-                    let render_down = !(y > 0 && {
-                        let down_block_mesh = get_block_mesh(
+                    let render_down = {
+                        let block_mesh = get_block_mesh(
                             block_manager,
-                            &chunk.sections[(y - 1) / CHUNK_SECTION_HEIGHT].blocks[((z * CHUNK_WIDTH) + x) + ((y % CHUNK_SECTION_HEIGHT) * CHUNK_AREA)]
+                            &state_provider.get_state(x, y - 1, z)
                         );
 
-                        match down_block_mesh {
-                            Some(block_mesh) => !block_mesh.transparent_or_complex,
-                            None => false,
+                        match block_mesh {
+                            Some(mesh) => mesh.transparent_or_complex,
+                            None => true,
                         }
-                    });
+                    };
 
-                    let render_west = !(x > 0 && {
-                        let west_block_mesh = get_block_mesh(
+                    let render_west = {
+                        let block_mesh = get_block_mesh(
                             block_manager,
-                            &section.blocks[(z * CHUNK_WIDTH) + (x - 1)]
+                            &state_provider.get_state(x - 1, y, z)
                         );
 
-                        match west_block_mesh {
-                            Some(block_mesh) => !block_mesh.transparent_or_complex,
-                            None => false,
+                        match block_mesh {
+                            Some(mesh) => mesh.transparent_or_complex,
+                            None => true,
                         }
-                    });
+                    };
 
-                    let render_east = !(x < 15 && {
-                        let east_block_mesh = get_block_mesh(
+                    let render_east = {
+                        let block_mesh = get_block_mesh(
                             block_manager,
-                            &section.blocks[(z * CHUNK_WIDTH) + (x + 1)]
+                            &state_provider.get_state(x + 1, y, z)
                         );
 
-                        match east_block_mesh {
-                            Some(block_mesh) => !block_mesh.transparent_or_complex,
-                            None => false,
+                        match block_mesh {
+                            Some(mesh) => mesh.transparent_or_complex,
+                            None => true,
                         }
-                    });
+                    };
 
                     if render_north {
                         match &model.north {
@@ -243,7 +228,6 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                 north_vertices.extend(north.iter().map(|v| mapper(v, (x as i32 + chunk.pos.0) as f32, y as f32, (z as i32 + chunk.pos.1) as f32)))
                         };
                     }
-
                     if render_east {
                         match &model.east {
                             None => {}

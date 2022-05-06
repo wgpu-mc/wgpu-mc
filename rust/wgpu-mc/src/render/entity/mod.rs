@@ -1,9 +1,6 @@
-
-
-
-use bytemuck::{Zeroable, Pod};
-
-pub mod pipeline;
+use bytemuck::{Pod, Zeroable};
+use std::sync::Arc;
+use crate::model::BindableTexture;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -55,7 +52,7 @@ impl EntityVertex {
 #[repr(C)]
 /// Data to describe an instance of an entity type on the GPU
 pub struct EntityRenderInstance {
-    /// Index into mat4[][]
+    /// Index into mat4[]
     pub entity_index: u32,
     /// Index into the float2[] to describe the offset of this entities texture
     pub entity_texture_index: u32,
@@ -80,4 +77,22 @@ impl EntityRenderInstance {
         }
     }
 
+}
+
+pub struct EntityGroupInstancingFrame {
+    ///The model for the entity
+    pub vertex_buffer: Arc<wgpu::Buffer>,
+    ///`EntityRenderInstance`s
+    pub entity_instance_vb: Arc<wgpu::Buffer>,
+
+    ///mat4[][] for part transforms per instance
+    pub part_transform_matrices: Arc<wgpu::BindGroup>,
+    ///vec2[] for offsets for mob variant textures
+    pub texture_offsets: Arc<wgpu::BindGroup>,
+    ///the texture
+    pub texture: Arc<BindableTexture>,
+    ///how many entities to draw
+    pub instance_count: u32,
+    ///how many vertices per entity
+    pub vertex_count: u32
 }

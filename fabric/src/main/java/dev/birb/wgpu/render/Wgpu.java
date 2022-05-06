@@ -1,14 +1,15 @@
 package dev.birb.wgpu.render;
 
-import dev.birb.wgpu.mixin.core.KeyboardMixin;
+import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.client.MinecraftClient;
 import org.lwjgl.glfw.GLFW;
+import sun.misc.Unsafe;
 
+import java.lang.reflect.Field;
 import java.util.HashMap;
 
-import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 import static dev.birb.wgpu.input.WgpuKeys.*;
 
 public class Wgpu {
@@ -23,6 +24,20 @@ public class Wgpu {
         return textureManager;
     }
     public static HashMap<Integer, Integer> keyStates = new HashMap<>();
+
+    public static Unsafe UNSAFE;
+
+    static {
+        Field f = null; //Internal reference
+        try {
+            f = Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            UNSAFE = (Unsafe) f.get(null);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public static void preInit(String windowTitle) {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
@@ -83,9 +98,7 @@ public class Wgpu {
         Wgpu.keyStates.put(convertedKey, state);
 //        System.out.printf("set keystates[%s]=%s\n", convertedKey, Wgpu.keyStates);
 
-        client.execute(() -> {
-            client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier);
-        });
+        client.execute(() -> client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier));
     }
 
     public static void onResize() {
@@ -94,8 +107,8 @@ public class Wgpu {
         client.execute(() -> MinecraftClient.getInstance().onResolutionChanged());
     }
 
-    public static void render(MinecraftClient client) {
-        WgpuNative.setWorldRenderState(client.world != null);
+    public static void helperSetBlockStateIndex(Object o, long usize) {
+        ((RustBlockStateAccessor) o).setRustBlockStateIndex(usize);
     }
 
 

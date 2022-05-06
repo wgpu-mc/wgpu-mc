@@ -2,6 +2,7 @@ accessWidener v1 named
 accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)V
 extendable class net/minecraft/world/chunk/PalettedContainer$DataProvider
 extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
+accessible class net/minecraft/world/chunk/PaletteResizeListener
 accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
 accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
 accessible method net/minecraft/client/Mouse onMouseButton (JIII)V
@@ -10,6 +11,14 @@ accessible method net/minecraft/client/Keyboard onChar (JII)V
 
 accessible field net/minecraft/client/Mouse x D
 accessible field net/minecraft/client/Mouse y D
+accessible field net/minecraft/world/chunk/PalettedContainer data Lnet/minecraft/world/chunk/PalettedContainer$Data;
+accessible field net/minecraft/util/collection/PackedIntegerArray elementsPerLong I
+accessible field net/minecraft/util/collection/PackedIntegerArray maxValue J
+accessible field net/minecraft/util/collection/PackedIntegerArray indexScale I
+accessible field net/minecraft/util/collection/PackedIntegerArray indexOffset I
+accessible field net/minecraft/util/collection/PackedIntegerArray indexShift I
+accessible field net/minecraft/world/chunk/PalettedContainer$Data storage Lnet/minecraft/util/collection/PaletteStorage;
+accessible field net/minecraft/world/chunk/PalettedContainer$Data palette Lnet/minecraft/world/chunk/Palette;
 
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;

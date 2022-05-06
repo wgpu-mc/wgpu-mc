@@ -1,6 +1,7 @@
 package dev.birb.wgpu.mixin;
 
 import dev.birb.wgpu.render.Wgpu;
+import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.util.math.MatrixStack;
@@ -21,7 +22,7 @@ public class TitleScreenMixin {
     @Inject(method = "render", at = @At("HEAD"))
     private void render(MatrixStack matrices, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if(!updatedTitle && Wgpu.INITIALIZED) {
-
+            WgpuNative.cacheBlockStates();
             MinecraftClient.getInstance().updateWindowTitle();
             updatedTitle = true;
         }

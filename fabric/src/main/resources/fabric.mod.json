@@ -3,15 +3,15 @@
   "id": "wgpu_mc",
   "version": "0.1",
 
-  "name": "WebGPU",
-  "description": "Replacement of the default Minecraft renderer for one built in native Rust code + WGPU",
+  "name": "wgpu-mc",
+  "description": "A renderer made to replace Blaze3D, written in Rust, using wgpu for cross-platform support.\nSupported backends: Vulkan, D3D12, and Metal",
   "authors": [
     "Birb"
   ],
   "accessWidenerPath": "wgpu_mc.accesswidener",
   "contact": {
-    "homepage": "https://birb.dev/",
-    "sources": "https://github.com/birbe/wgpu-mc-fabric"
+    "homepage": "https://github.com/wgpu-mc/wgpu-mc",
+    "sources": "https://github.com/wgpu-mc/wgpu-mc"
   },
 
   "license": "GPL3",
@@ -19,7 +19,7 @@
 
   "environment": "*",
   "entrypoints": {
-    "main": [
+    "client": [
       "dev.birb.wgpu.WgpuMcMod"
     ]
   },
@@ -34,5 +34,8 @@
   },
   "suggests": {
     "another-mod": "*"
+  },
+  "custom": {
+    "fabric-renderer-api-v1:contains_renderer": "true"
   }
 }

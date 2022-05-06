@@ -4,18 +4,21 @@ package dev.birb.wgpu.rust;
 
 //import net.minecraft.world.chunk.ChunkSection;
 
+import net.minecraft.block.BlockState;
 import net.minecraft.resource.ResourceNotFoundException;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.util.collection.IndexedIterable;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
+import java.util.function.Predicate;
 
 public class WgpuNative {
+
+    private static HashMap<Object, Long> idLists = new HashMap<>();
 
     /**
      * Loads a native library from the resources of this Jar
@@ -47,7 +50,7 @@ public class WgpuNative {
 
     public static native void updateWindowTitle(String title);
 
-    public static native void registerEntry(int type, String name);
+    public static native void registerBlockState(Object state, String key);
 
     public static native void doEventLoop();
 
@@ -95,7 +98,57 @@ public class WgpuNative {
 
     public static native void scheduleChunkRebuild(int x, int z);
 
+    public static native long createPalette(long idList);
+
+    public static native void destroyPalette(long rustPalettePointer);
+
+    public static native int paletteIndex(long ptr, Object object, long index);
+
+    public static native boolean paletteHasAny(long ptr, Predicate<?> predicate);
+
+    public static native Object paletteGet(long ptr, int id);
+
+    public static native long copyPalette(long rustPalettePointer);
+
+    public static native int paletteSize(long rustPalettePointer);
+
+    public static native long createPaletteStorage(long[] data, int elementsPerLong, int elementBits, long maxValue, int indexScale, int indexOffset, int indexShift, int size);
+
+    public static long uploadIdList(IndexedIterable<Object> idList) {
+        if(!idLists.containsKey(idList)) {
+            long rustIdList = createIdList();
+
+            idLists.put(idList, rustIdList);
+
+            for(Object entry : idList) {
+                int id = idList.getRawId(entry);
+                addIdListEntry(rustIdList, id, entry);
+            }
+
+            return rustIdList;
+        } else {
+            return idLists.get(idList);
+        }
+    }
+
+    private static native long createIdList();
+
+    private static native void addIdListEntry(long idList, int id, Object object);
+
     public static native void setCursorPosition(double x, double y);
 
     public static native void setCursorMode(int mode);
+
+    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, long[] blockstateOffsets);
+
+    public static native void registerBlock(String name);
+
+    public static native void clearPalette(long l);
+
+    public static native void createChunk(int x, int z, long[] pointers, long[] storagePointers);
+
+    public static native void destroyPaletteStorage(long paletteStorage);
+
+    public static native void cacheBlockStates();
+
 }

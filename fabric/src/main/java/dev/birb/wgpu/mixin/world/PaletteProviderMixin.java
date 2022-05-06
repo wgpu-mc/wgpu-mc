@@ -1,5 +1,6 @@
 package dev.birb.wgpu.mixin.world;
 
+import dev.birb.wgpu.palette.SubvertedPaletteProvider;
 import net.minecraft.world.chunk.PalettedContainer;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
