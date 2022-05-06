@@ -37,9 +37,9 @@ pub struct ChunkSection {
 }
 
 pub struct RenderLayers {
-    terrain: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
-    transparent: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
-    grass: Box<[ChunkSection; CHUNK_SECTIONS_PER]>
+    pub terrain: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
+    pub transparent: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
+    pub grass: Box<[ChunkSection; CHUNK_SECTIONS_PER]>
 }
 
 #[derive(Debug)]
@@ -71,16 +71,16 @@ impl Chunk {
     }
 
     pub fn blockstate_at_pos(&self, pos: BlockPos) -> BlockState {
-        let x = (pos.0 % 16);
+        let x = pos.0 % 16;
         let y = pos.1 as i16;
-        let z = (pos.2 % 16);
+        let z = pos.2 % 16;
 
         self.state_provider.get_state(x, y, z)
     }
 
     pub fn bake(&self, block_manager: &BlockManager) {
         let glass_index = *block_manager.variant_indices.get(
-            "Block{minecraft:blockstates/glass.json}".try_into().unwrap()
+            "Block{minecraft:blockstates/glass.json}"
         ).unwrap() as u32;
 
         let glass = BakedChunkLayer::bake(block_manager, self, |v, x, y, z| {
@@ -165,7 +165,7 @@ impl ChunkManager {
 
         chunks.iter().for_each(|chunk| {
             let baked = chunk.baked.load();
-            let layers = ((**baked).as_ref().unwrap());
+            let layers = (**baked).as_ref().unwrap();
 
             glass.extend(&layers.glass);
             terrain.extend(&layers.terrain);

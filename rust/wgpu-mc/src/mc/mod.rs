@@ -244,7 +244,7 @@ impl MinecraftState {
                     &state.rotations
                 ).unwrap_or_else(|| panic!("{}", name));
 
-                let mut variant_resource = format!("Block{{{}}}", name.to_string());
+                let mut variant_resource = format!("Block{{{}}}", name);
 
                 if !key.is_empty() {
                     variant_resource.push_str(&format!("[{}]", key));
