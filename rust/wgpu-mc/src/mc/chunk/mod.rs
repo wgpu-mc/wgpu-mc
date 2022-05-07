@@ -83,8 +83,9 @@ impl Chunk {
                 position: [v.position[0] + x, v.position[1] + y, v.position[2] + z],
                 tex_coords: v.tex_coords,
                 lightmap_coords: [0.0, 0.0],
-                normal: v.normal,
-                color: [1.0, 1.0, 1.0],
+                normal: [v.normal[0], v.normal[1], v.normal[2], 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+                tangent: [1.0, 1.0, 1.0, 1.0],
             },
             Box::new(move |state| match state.packed_key {
                 None => false,
@@ -100,8 +101,9 @@ impl Chunk {
                 position: [v.position[0] + x, v.position[1] + y, v.position[2] + z],
                 tex_coords: v.tex_coords,
                 lightmap_coords: [0.0, 0.0],
-                normal: v.normal,
-                color: [1.0, 1.0, 1.0],
+                normal: [v.normal[0], v.normal[1], v.normal[2], 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+                tangent: [1.0, 1.0, 1.0, 1.0],
             },
             Box::new(move |state| match state.packed_key {
                 None => false,

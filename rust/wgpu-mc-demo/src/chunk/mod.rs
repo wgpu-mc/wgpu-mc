@@ -10,7 +10,7 @@ struct SimpleBlockstateProvider(PackedBlockstateKey);
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState {
         BlockState {
-            packed_key: if x >= 0 && x < 16 && z >= 0 && z < 16 && y < 60 {
+            packed_key: if x >= 0 && x < 16 && z >= 0 && z < 16 {
                 Some(self.0)
             } else {
                 None
@@ -24,7 +24,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
 
     let variant_key = *bm
         .variant_indices
-        .get("Block{minecraft:blockstates/stone.json}")
+        .get("Block{minecraft:blockstates/cobblestone.json}")
         .unwrap();
 
     let provider = SimpleBlockstateProvider(variant_key as PackedBlockstateKey);

@@ -25,6 +25,7 @@ use futures::StreamExt;
 use fastanvil::RegionBuffer;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use std::io::Cursor;
+use arc_swap::ArcSwap;
 
 use fastanvil::pre18::JavaChunk;
 use fastnbt::de::from_bytes;
@@ -200,9 +201,7 @@ fn begin_rendering(
         });
     }
 
-    {
-        wm.mc.chunks.assemble_world_meshes(&wm);
-    }
+    wm.mc.chunks.assemble_world_meshes(&wm);
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;
