@@ -283,7 +283,7 @@ fn begin_rendering(
                 }
             }
             Event::RedrawRequested(_) => {
-                wm.update();
+                wm.upload_camera();
 
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 

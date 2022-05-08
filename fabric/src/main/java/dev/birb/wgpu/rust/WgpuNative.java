@@ -155,4 +155,6 @@ public class WgpuNative {
 
     public static native void cacheBlockStates();
 
+    public static native void setCamera(double x, double y, double z, float renderYaw, float renderPitch);
+
 }

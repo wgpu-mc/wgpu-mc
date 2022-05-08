@@ -7,7 +7,7 @@ use crate::gl::GlTexture;
 use crate::palette::{IdList, JavaPalette};
 use arc_swap::ArcSwap;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-use cgmath::{Matrix4, Vector3};
+use cgmath::{Matrix4, Point3, Vector3};
 use core::slice;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use futures::executor::block_on;
@@ -30,7 +30,7 @@ use std::num::NonZeroU32;
 use std::ptr::drop_in_place;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{mem, thread};
+use std::{fs, mem, thread};
 use std::fmt::{Debug, Formatter};
 use std::ops::Shr;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -50,6 +50,7 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, Event, ModifiersState, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
 use winit::window::Window;
+use wgpu_mc::camera::Camera;
 
 mod gl;
 mod mc_interface;
@@ -321,7 +322,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         air: *wm.mc.block_manager.read().variant_indices.get("Block{minecraft:air}").unwrap() as BlockstateKey
     };
 
-    println!("{:?}", jbsp.get_state(10, 10, 10));
+    println!("{:?}", jbsp.get_state(10, 380, 10));
 
     let chunk = Chunk {
         pos: (x, z),
@@ -329,22 +330,35 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         baked: ArcSwap::new(Arc::new(None)),
     };
 
-    THREAD_POOL.get().unwrap().install(move || {
+    THREAD_POOL.get().unwrap().spawn(move || {
         let bm = wm.mc.block_manager.read();
 
         let instant = Instant::now();
         chunk.bake(&bm);
 
-        // println!(
-        //     "Baked chunk (x={}, z={}) in {}ms",
-        //     x,
-        //     z,
-        //     Instant::now().duration_since(instant).as_millis(),
-        // );
+        println!(
+            "Baked chunk (x={}, z={}) in {}ms",
+            x,
+            z,
+            Instant::now().duration_since(instant).as_millis(),
+        );
 
-        wm.mc.chunks.loaded_chunks
-            .write()
-            .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+        if !{
+            let read = wm.mc.chunks.loaded_chunks.read();
+            let bool = read.contains_key(&(x,z));
+            drop(read);
+            bool
+        } {
+            wm.mc.chunks.loaded_chunks
+                .write()
+                .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+        } else {
+            wm.mc.chunks.loaded_chunks
+                .read()
+                .get(&(x, z))
+                .unwrap()
+                .store(Arc::new(chunk));
+        }
 
         wm.mc.chunks.assemble_world_meshes(&wm);
     });
@@ -530,18 +544,25 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                 }
             }
             Event::RedrawRequested(_) => {
-                wm.update();
+                wm.upload_camera();
 
                 let mc_state = MC_STATE.get().unwrap().load();
 
-                let mut pipelines = Vec::new();
-                if mc_state.render_world {
-                    pipelines.push(&TerrainPipeline as &dyn WmPipeline);
-                } else {
-                    pipelines.push(GL_PIPELINE.get().unwrap());
-                }
+                // let mut pipelines = Vec::new();
+                // if mc_state.render_world {
+                //     pipelines.push(&TerrainPipeline as &dyn WmPipeline);
+                // } else {
+                //     pipelines.push(GL_PIPELINE.get().unwrap());
+                // }
 
-                wm.render(&pipelines);
+                // wm.render(&pipelines);
+
+                wm.render(
+                    &[
+                        &TerrainPipeline,
+                        GL_PIPELINE.get().unwrap(),
+                    ]
+                );
             }
             _ => {}
         }
@@ -597,8 +618,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
             .for_each(|(key, global_ref)| {
                 let offset = *block_manager
                     .variant_indices
-                    .get(key)
+                    .get(
+                        &key
+                            .replace(",waterlogged=true", "")
+                            .replace(",waterlogged=false", "")
+                            .replace("waterlogged=true,", "")
+                            .replace("waterlogged=false,", "")
+                            .replace("[waterlogged=true]", "")
+                            .replace("[waterlogged=false]", "")
+                    )
                     .unwrap_or(&bedrock_key);
+
+                if offset != 27 {
+                    println!("{} {}", key, offset);
+                }
 
                 env.call_static_method(
                     "dev/birb/wgpu/render/Wgpu",
@@ -1465,7 +1498,9 @@ pub struct PackedIntegerArray {
 
 impl PackedIntegerArray {
     pub fn get(&self, x: i32, y: u16, z: i32) -> i32 {
+        let x = x & 0xf;
         let y = y & 0xf;
+        let z = z & 0xf;
 
         self.get_by_index(((((y as i32) << 4) | z) << 4) | x)
     }
@@ -1596,4 +1631,28 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
             println!("Set cursor mode had an invalid mode.")
         }
     }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
+    env: JNIEnv,
+    class: JClass,
+    x: jdouble,
+    y: jdouble,
+    z: jdouble,
+    yaw: jfloat,
+    pitch: jfloat
+) {
+    let renderer = RENDERER.get().unwrap();
+    if renderer.mc.camera_bind_group.load().is_none() {
+        renderer.mc.init_camera(renderer);
+    }
+
+    let mut camera = **renderer.mc.camera.load();
+    camera.position = Point3::new(x as f32, y as f32, z as f32);
+    camera.yaw = yaw;
+    camera.pitch = pitch;
+
+    renderer.mc.camera.store(Arc::new(camera));
+    renderer.upload_camera();
 }

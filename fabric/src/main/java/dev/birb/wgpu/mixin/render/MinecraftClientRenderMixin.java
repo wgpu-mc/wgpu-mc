@@ -78,6 +78,11 @@ public abstract class MinecraftClientRenderMixin {
     @Inject(method = "render", at = @At("RETURN"))
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
         RenderSystem.replayQueue();
+//        WgpuNative.setProjectionMatrix(Render);
+        MinecraftClient client = (MinecraftClient) (Object) this;
+        if(client.player != null) {
+            WgpuNative.setCamera(client.player.getX(), client.player.getY(), client.player.getZ(), client.player.renderYaw, client.player.renderPitch);
+        }
 
         if(Wgpu.INITIALIZED) {
             WgpuNative.submitCommands();

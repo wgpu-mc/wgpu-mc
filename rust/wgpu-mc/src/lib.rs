@@ -73,9 +73,9 @@ impl WmRenderer {
 
         //Vulkan works just fine, the issue is that using RenderDoc + Vulkan makes it hang on launch
         //about 90% of the time. DX12 is much more stable
-        #[cfg(target_os = "windows")]
-        let instance = wgpu::Instance::new(wgpu::Backends::DX12);
-        #[cfg(not(target_os = "windows"))]
+        // #[cfg(target_os = "windows")]
+        // let instance = wgpu::Instance::new(wgpu::Backends::DX12);
+        // #[cfg(not(target_os = "windows"))]
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
 
         let surface = unsafe { instance.create_surface(window) };
@@ -201,7 +201,7 @@ impl WmRenderer {
             )));
     }
 
-    pub fn update(&self) {
+    pub fn upload_camera(&self) {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
@@ -222,7 +222,7 @@ impl WmRenderer {
     }
 
     pub fn render(&self, wm_pipelines: &[&dyn WmPipeline]) -> Result<(), wgpu::SurfaceError> {
-        let _span_ = span!(Level::TRACE, "rendering").entered();
+        let _span_ = span!(Level::TRACE, "render").entered();
 
         let output = self.wgpu_state.surface.get_current_texture()?;
         let view = output.texture.create_view(&TextureViewDescriptor {
