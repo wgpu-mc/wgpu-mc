@@ -42,6 +42,8 @@ pub struct ChunkLayers {
     terrain: BakedChunkLayer<TerrainVertex>,
 }
 
+///Return a BlockState within the provided (world) coordinates. If the coordinates are out of bounds,
+/// an `Option<BlockstateKey>` value of None should be returned
 pub trait BlockStateProvider: Send + Sync + Debug {
     fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState;
 }

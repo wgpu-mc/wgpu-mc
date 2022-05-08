@@ -71,7 +71,12 @@ impl WmRenderer {
     pub async fn init_wgpu<W: HasRawWindowHandle + HasWindowSize>(window: &W) -> WgpuState {
         let size = window.get_window_size();
 
+        //Vulkan works just fine, the issue is that using RenderDoc + Vulkan makes it hang on launch
+        //about 90% of the time. DX12 is much more stable
+        #[cfg(target_os = "windows")]
         let instance = wgpu::Instance::new(wgpu::Backends::DX12);
+        #[cfg(not(target_os = "windows"))]
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance

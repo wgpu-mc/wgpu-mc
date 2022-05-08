@@ -36,7 +36,7 @@ use std::ops::Shr;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
 use wgpu_mc::mc::block::{Block, BlockPos, BlockState, BlockstateKey};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
 use wgpu_mc::mc::datapack::NamespacedResource;
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::BindableTexture;
@@ -242,13 +242,13 @@ struct JavaBlockStateProvider {
 impl BlockStateProvider for JavaBlockStateProvider {
     //Technically this should be able to provide a blockstate for anywhere in the world but I won't implement that yet
     fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState {
-        if y > 384 || y < 0 {
+        if y >= CHUNK_HEIGHT as i16 || y < 0 {
             return BlockState { packed_key: None };
         }
 
         let storage_index = y / 24;
 
-        assert!(storage_index < 24 && storage_index >= 0);
+        assert!(storage_index < (CHUNK_HEIGHT as i16 / 16) && storage_index >= 0);
 
         let storage = match unsafe {
             (self.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
