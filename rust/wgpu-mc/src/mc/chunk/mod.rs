@@ -73,7 +73,7 @@ impl Chunk {
     pub fn bake(&self, block_manager: &BlockManager) {
         let glass_index = *block_manager
             .variant_indices
-            .get("Block{minecraft:blockstates/glass.json}")
+            .get("Block{minecraft:glass}")
             .unwrap() as u32;
 
         let glass = BakedChunkLayer::bake(

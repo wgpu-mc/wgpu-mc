@@ -17,7 +17,7 @@ public class RustPalette<T> implements Palette<T> {
     private final long rustIdList;
     private final IndexedIterable<T> idList;
 
-    public static final Cleaner cleaner = Cleaner.create();
+    public static final Cleaner CLEANER = Cleaner.create();
 
     public RustPalette(long rustIdList, IndexedIterable<T> idList) {
         this(WgpuNative.createPalette(rustIdList), rustIdList, idList);
@@ -28,7 +28,7 @@ public class RustPalette<T> implements Palette<T> {
         this.rustIdList = rustIdList;
         this.idList = idList;
 
-        cleaner.register(this, () -> WgpuNative.destroyPalette(rustPalettePointer));
+        CLEANER.register(this, () -> WgpuNative.destroyPalette(rustPalettePointer));
     }
 
     @Override

@@ -86,14 +86,10 @@ pub type BlockPos = (i32, u16, i32);
 
 pub type BlockstateVariantKey = String;
 
-///First 22 bits (left-to-right) are an index into which `Block` this BlockState represents
-/// The last 10 bits are used to describe which variant blockstate this `BlockState` represents
-///
-/// The entire thing is used as an index into `BlockManager.baked_block_variants`
-pub type PackedBlockstateKey = u32;
+pub type BlockstateKey = u32;
 
 ///The state of one block, describing which variant
 #[derive(Clone, Copy, Debug)]
 pub struct BlockState {
-    pub packed_key: Option<PackedBlockstateKey>,
+    pub packed_key: Option<BlockstateKey>,
 }

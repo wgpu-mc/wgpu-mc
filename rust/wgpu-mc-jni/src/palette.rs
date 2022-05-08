@@ -1,7 +1,7 @@
 use jni::objects::{GlobalRef, JObject};
 use jni::sys::{jlong, jobject};
 use std::collections::HashMap;
-use wgpu_mc::mc::block::PackedBlockstateKey;
+use wgpu_mc::mc::block::BlockstateKey;
 
 pub struct IdList {
     pub map: HashMap<i32, GlobalRef>,

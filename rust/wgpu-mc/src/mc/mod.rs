@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
-use crate::mc::block::{Block, BlockstateVariantKey, PackedBlockstateKey};
+use crate::mc::block::{Block, BlockstateVariantKey, BlockstateKey};
 use crate::mc::chunk::ChunkManager;
 use crate::mc::datapack::{BlockModel, NamespacedResource, TextureVariableOrResource};
 use crate::mc::entity::EntityModel;
@@ -49,7 +49,7 @@ impl BlockManager {
         &self,
         block_id: &NamespacedResource,
         variant: &str,
-    ) -> Option<PackedBlockstateKey> {
+    ) -> Option<BlockstateKey> {
         let block: &Block = self.blocks.get(block_id)?;
 
         Some(

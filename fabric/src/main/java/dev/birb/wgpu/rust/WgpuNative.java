@@ -78,6 +78,8 @@ public class WgpuNative {
 
     public static native void setIndexBuffer(int[] buffer);
 
+    public static native void debugPalette(long palette);
+
     public static native void setVertexBuffer(byte[] buffer);
 
     public static native void setProjectionMatrix(float[] mat);
@@ -104,6 +106,8 @@ public class WgpuNative {
 
     public static native int paletteIndex(long ptr, Object object, long index);
 
+    public static native long getRawStoragePointer(long paletteStorage);
+
     public static native boolean paletteHasAny(long ptr, Predicate<?> predicate);
 
     public static native Object paletteGet(long ptr, int id);
@@ -112,7 +116,7 @@ public class WgpuNative {
 
     public static native int paletteSize(long rustPalettePointer);
 
-    public static native long createPaletteStorage(long[] data, int elementsPerLong, int elementBits, long maxValue, int indexScale, int indexOffset, int indexShift, int size);
+    public static native long createPaletteStorage(long[] copy, int elementsPerLong, int elementBits, long maxValue, int indexScale, int indexOffset, int indexShift, int size);
 
     public static long uploadIdList(IndexedIterable<Object> idList) {
         if(!idLists.containsKey(idList)) {

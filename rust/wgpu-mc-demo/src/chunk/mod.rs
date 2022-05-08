@@ -1,11 +1,11 @@
 use std::time::Instant;
-use wgpu_mc::mc::block::{BlockState, PackedBlockstateKey};
+use wgpu_mc::mc::block::{BlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_VOLUME};
 use wgpu_mc::render::world::chunk::BakedChunkLayer;
 use wgpu_mc::WmRenderer;
 
 #[derive(Debug)]
-struct SimpleBlockstateProvider(PackedBlockstateKey);
+struct SimpleBlockstateProvider(BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState {
@@ -27,7 +27,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
         .get("Block{minecraft:blockstates/cobblestone.json}")
         .unwrap();
 
-    let provider = SimpleBlockstateProvider(variant_key as PackedBlockstateKey);
+    let provider = SimpleBlockstateProvider(variant_key as BlockstateKey);
 
     let chunk = Chunk::new((0, 0), Box::new(provider));
     let time = Instant::now();

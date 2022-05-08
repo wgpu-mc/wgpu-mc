@@ -31,8 +31,11 @@ use std::ptr::drop_in_place;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, thread};
+use std::fmt::{Debug, Formatter};
+use std::ops::Shr;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
-use wgpu_mc::mc::block::{Block, BlockState, PackedBlockstateKey};
+use wgpu_mc::mc::block::{Block, BlockPos, BlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk};
 use wgpu_mc::mc::datapack::NamespacedResource;
 use wgpu_mc::mc::resource::ResourceProvider;
@@ -79,6 +82,7 @@ static MC_STATE: OnceCell<ArcSwap<MinecraftRenderState>> = OnceCell::new();
 static MOUSE_STATE: OnceCell<Arc<ArcSwap<MouseState>>> = OnceCell::new();
 static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
 static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
+static THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
 static JAVA_BLOCK_STATES: OnceCell<RwLock<HashMap<String, GlobalRef>>> = OnceCell::new();
 static BLOCKS: OnceCell<Mutex<Vec<String>>> = OnceCell::new();
@@ -232,6 +236,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
 struct JavaBlockStateProvider {
     pub palettes: [usize; 24],
     pub storages: [usize; 24],
+    pub air: BlockstateKey
 }
 
 impl BlockStateProvider for JavaBlockStateProvider {
@@ -241,11 +246,8 @@ impl BlockStateProvider for JavaBlockStateProvider {
             return BlockState { packed_key: None };
         }
 
-        let x = x & 0xf;
-        let y = y & 0xf;
-        let z = z & 0xf;
-
         let storage_index = y / 24;
+
         assert!(storage_index < 24 && storage_index >= 0);
 
         let storage = match unsafe {
@@ -266,7 +268,8 @@ impl BlockStateProvider for JavaBlockStateProvider {
         BlockState {
             packed_key: palette
                 .get(palette_key as usize)
-                .map(|element| element.1 as PackedBlockstateKey),
+                .filter(|element| element.1 != self.air as usize)
+                .map(|element| element.1 as BlockstateKey),
         }
     }
 }
@@ -310,12 +313,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .try_into()
         .unwrap();
 
+    let wm = RENDERER.get().unwrap().clone();
+
     let jbsp = JavaBlockStateProvider {
         storages: *storages,
         palettes: *palettes,
+        air: *wm.mc.block_manager.read().variant_indices.get("Block{minecraft:air}").unwrap() as BlockstateKey
     };
 
-    let state = jbsp.get_state(0, 0, 0);
+    println!("{:?}", jbsp.get_state(10, 10, 10));
 
     let chunk = Chunk {
         pos: (x, z),
@@ -323,15 +329,25 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         baked: ArcSwap::new(Arc::new(None)),
     };
 
-    let wm = RENDERER.get().unwrap();
+    THREAD_POOL.get().unwrap().install(move || {
+        let bm = wm.mc.block_manager.read();
 
-    chunk.bake(&wm.mc.block_manager.read());
+        let instant = Instant::now();
+        chunk.bake(&bm);
 
-    wm.mc
-        .chunks
-        .loaded_chunks
-        .write()
-        .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+        // println!(
+        //     "Baked chunk (x={}, z={}) in {}ms",
+        //     x,
+        //     z,
+        //     Instant::now().duration_since(instant).as_millis(),
+        // );
+
+        wm.mc.chunks.loaded_chunks
+            .write()
+            .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+
+        wm.mc.chunks.assemble_world_meshes(&wm);
+    });
 }
 
 #[no_mangle]
@@ -358,6 +374,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 
     let title: String = env.get_string(string).unwrap().into();
 
+    THREAD_POOL.set(
+        ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+    );
+
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
     #[cfg(target_os = "linux")]
     let event_loop: EventLoop<()> = winit::platform::unix::EventLoopExtUnix::new_any_thread();
@@ -375,6 +398,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
             .unwrap(),
     );
 
+    println!("Opened window");
+
     WINDOW.set(window.clone());
 
     MC_STATE.set(ArcSwap::new(Arc::new(MinecraftRenderState {
@@ -384,6 +409,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     let wrapper = &WinitWindowWrapper { window: &window };
 
     let wgpu_state = block_on(WmRenderer::init_wgpu(wrapper));
+
+    println!("Initialized wgpu");
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap(),
@@ -395,14 +422,21 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 
     wm.init(&[&TerrainPipeline, GL_PIPELINE.get().unwrap()]);
 
+    println!("Initialized wgpu-mc pipelines");
+
     wm.mc.chunks.assemble_world_meshes(&wm);
+
+    println!("Assembled meshes");
 
     env.set_static_field(
         "dev/birb/wgpu/render/Wgpu",
         ("dev/birb/wgpu/render/Wgpu", "INITIALIZED", "Z"),
         JValue::Bool(true.into()),
     );
+
     let mut current_modifiers = ModifiersState::empty();
+
+    println!("Starting event loop");
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -555,8 +589,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
             .get("Block{minecraft:bedrock}")
             .unwrap();
 
-        println!("{:?}", block_manager.variant_indices);
-
         JAVA_BLOCK_STATES
             .get()
             .unwrap()
@@ -567,6 +599,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
                     .variant_indices
                     .get(key)
                     .unwrap_or(&bedrock_key);
+
                 env.call_static_method(
                     "dev/birb/wgpu/render/Wgpu",
                     "helperSetBlockStateIndex",
@@ -1418,39 +1451,40 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_addIdListEntry(
     };
 }
 
+#[derive(Debug)]
 pub struct PackedIntegerArray {
-    data: usize,
-    elements_per_long: u32,
-    element_bits: u32,
-    max_value: u64,
-    index_scale: u32,
-    index_offset: u32,
-    index_shift: u32,
-    size: u32,
+    data: Vec<jlong>,
+    elements_per_long: i32,
+    element_bits: i32,
+    max_value: i64,
+    index_scale: i32,
+    index_offset: i32,
+    index_shift: i32,
+    size: i32,
 }
 
 impl PackedIntegerArray {
-    pub fn get(&self, x: i32, y: u16, z: i32) -> u32 {
-        self.get_by_index(((((y as u32) << 4) | z as u32) << 4) | x as u32)
+    pub fn get(&self, x: i32, y: u16, z: i32) -> i32 {
+        let y = y & 0xf;
+
+        self.get_by_index(((((y as i32) << 4) | z) << 4) | x)
     }
 
-    pub fn get_by_index(&self, index: u32) -> u32 {
-        assert!(index <= self.size - 1);
+    pub fn get_by_index(&self, index: i32) -> i32 {
+        assert!(index < self.size, "index: {}, size: {}", index, self.size);
 
-        let i: u32 = self.get_storage_index(index);
-        let l: u64 = unsafe { *((self.data as *mut u64).offset(i as isize)) };
-        let j: u32 = (index - (i * self.elements_per_long)) * self.element_bits;
-        ((l >> j) & self.max_value) as u32
+        let i: i32 = self.compute_storage_index(index);
+        let l: i64 = self.data[i as usize];
+
+        let j: i32 = (index - (i * self.elements_per_long)) * self.element_bits;
+        ((l >> j) & self.max_value) as i32
     }
 
-    fn get_storage_index(&self, index: u32) -> u32 {
-        let l: u64 = self.index_scale as u64;
-        let m: u64 = self.index_offset as u64;
-        //(int)((long)index * l + m >> 32 >> this.indexShift)
+    fn compute_storage_index(&self, index: i32) -> i32 {
+        let l = self.index_scale as u32 as i64;
+        let m = self.index_offset as u32 as i64;
 
-        ((((index as u64) * l) + m)
-            .overflowing_shr(32 + self.index_shift)
-            .0) as u32
+        (((((index as i64) * l) + m) >> 32) >> self.index_shift) as i32
     }
 }
 
@@ -1467,15 +1501,22 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     index_shift: jint,
     size: jint,
 ) -> jlong {
+    let copy = env.get_long_array_elements(data, ReleaseMode::NoCopyBack)
+        .unwrap();
+
     let packed_arr = Box::new(PackedIntegerArray {
-        data: data as usize,
-        elements_per_long: elements_per_long as u32,
-        element_bits: element_bits as u32,
-        max_value: max_value as u64,
-        index_scale: index_scale as u32,
-        index_offset: index_offset as u32,
-        index_shift: index_shift as u32,
-        size: size as u32,
+        data: Vec::from(
+            unsafe {
+                std::slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
+            }
+        ),
+        elements_per_long,
+        element_bits,
+        max_value,
+        index_scale,
+        index_offset,
+        index_shift,
+        size,
     });
 
     let ptr = (&*packed_arr as *const PackedIntegerArray) as usize;
@@ -1483,6 +1524,25 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     std::mem::forget(packed_arr);
 
     ptr as jlong
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
+    env: JNIEnv,
+    class: JClass,
+    packed_integer_array: jlong
+) {
+    let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
+    // dbg!(array.index_offset, array.index_scale, array.index_shift, array.element_bits, array.size, array.element_bits, array.elements_per_long);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getRawStoragePointer(
+    env: JNIEnv,
+    class: JClass,
+    packed_integer_array: jlong
+) -> jlong {
+    unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap().data.as_ptr() as jlong }
 }
 
 #[no_mangle]

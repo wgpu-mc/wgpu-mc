@@ -71,7 +71,7 @@ impl WmRenderer {
     pub async fn init_wgpu<W: HasRawWindowHandle + HasWindowSize>(window: &W) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::DX12);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance

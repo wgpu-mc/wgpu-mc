@@ -1,21 +1,18 @@
 package dev.birb.wgpu.mixin.world;
 
+import dev.birb.wgpu.palette.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustPalette;
 import dev.birb.wgpu.rust.WgpuNative;
+import net.minecraft.client.world.ClientWorld;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.s2c.play.ChunkData;
 import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.util.collection.PaletteStorage;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.registry.Registry;
-import net.minecraft.world.HeightLimitView;
+import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.EmptyChunk;
-import net.minecraft.world.chunk.UpgradeData;
 import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.gen.chunk.BlendingData;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -27,6 +24,8 @@ import java.util.function.Consumer;
 
 @Mixin(WorldChunk.class)
 public class WorldChunkMixin {
+
+    @Shadow @Final private World world;
 
     @Inject(method = "loadFromPacket", at = @At("RETURN"))
     public void loadFromPacket(PacketByteBuf buf, NbtCompound nbt, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfo ci) {
@@ -44,14 +43,16 @@ public class WorldChunkMixin {
             palettePointers[i] = rustPalette.getRustPointer();
 
             if(paletteStorage instanceof PackedIntegerArray storage) {
-                long rustPaletteStorage = WgpuNative.createPaletteStorage(storage.getData(), storage.elementsPerLong, storage.getElementBits(), storage.maxValue, storage.indexScale, storage.indexOffset, storage.indexShift, storage.getSize());
+                long rustPaletteStorage = ((PackedIntegerArrayAccessor) storage).getStoragePointer();
                 storagePointers[i] = rustPaletteStorage;
-
-                RustPalette.cleaner.register(storage, () -> WgpuNative.destroyPaletteStorage(rustPaletteStorage));
             }
         }
 
-        WgpuNative.createChunk(0, 0, palettePointers, storagePointers);
+        ChunkPos pos = ((Chunk) (Object) this).getPos();
+        int originX = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
+        int originZ = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
+
+        WgpuNative.createChunk(pos.x - originX, pos.z - originZ, palettePointers, storagePointers);
     }
 
 }

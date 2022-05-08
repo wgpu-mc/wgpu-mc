@@ -10,6 +10,7 @@ import sun.misc.Unsafe;
 import java.lang.reflect.Field;
 import java.util.HashMap;
 
+import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 import static dev.birb.wgpu.input.WgpuKeys.*;
 
 public class Wgpu {
@@ -53,6 +54,7 @@ public class Wgpu {
             try {
                 System.loadLibrary("renderdoc");
             } catch(UnsatisfiedLinkError e) {
+                LOGGER.debug("Error while loading RenderDoc:\n" + e.getMessage());
                 e.printStackTrace();
             }
 
