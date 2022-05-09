@@ -1,4 +1,4 @@
-use crate::mc::block::{BlockPos, BlockState};
+use crate::mc::block::{BlockPos, BlockState, BlockstateKey};
 use std::collections::HashMap;
 
 use crate::render::world::chunk::BakedChunkLayer;
@@ -73,10 +73,11 @@ impl Chunk {
     }
 
     pub fn bake(&self, block_manager: &BlockManager) {
-        let glass_index = *block_manager
+        let glass_index: BlockstateKey = (*block_manager
             .variant_indices
             .get("Block{minecraft:glass}")
-            .unwrap() as u32;
+            .unwrap() as u32)
+            .into();
 
         let glass = BakedChunkLayer::bake(
             block_manager,

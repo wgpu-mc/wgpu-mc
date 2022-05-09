@@ -44,21 +44,6 @@ pub struct BlockManager {
     pub variant_indices: HashMap<String, usize>,
 }
 
-impl BlockManager {
-    pub fn get_packed_blockstate_key(
-        &self,
-        block_id: &NamespacedResource,
-        variant: &str,
-    ) -> Option<BlockstateKey> {
-        let block: &Block = self.blocks.get(block_id)?;
-
-        Some(
-            ((self.blocks.get_index_of(block_id)? as u32 & 0x3FFFFF) << 10)
-                | (block.states.get_index_of(variant)? as u32 & 0x3FF),
-        )
-    }
-}
-
 fn get_model_or_deserialize<'a>(
     models: &'a mut IndexMap<NamespacedResource, BlockModel>,
     model_id: &NamespacedResource,

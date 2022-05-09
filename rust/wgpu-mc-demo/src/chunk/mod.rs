@@ -22,12 +22,12 @@ impl BlockStateProvider for SimpleBlockstateProvider {
 pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
     let bm = wm.mc.block_manager.read();
 
-    let variant_key = *bm
+    let variant_key: BlockstateKey = (*bm
         .variant_indices
         .get("Block{minecraft:blockstates/cobblestone.json}")
-        .unwrap();
+        .unwrap() as u32).into();
 
-    let provider = SimpleBlockstateProvider(variant_key as BlockstateKey);
+    let provider = SimpleBlockstateProvider(variant_key);
 
     let chunk = Chunk::new((0, 0), Box::new(provider));
     let time = Instant::now();

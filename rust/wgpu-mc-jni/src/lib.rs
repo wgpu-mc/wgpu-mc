@@ -269,8 +269,8 @@ impl BlockStateProvider for JavaBlockStateProvider {
         BlockState {
             packed_key: palette
                 .get(palette_key as usize)
-                .filter(|element| element.1 != self.air as usize)
-                .map(|element| element.1 as BlockstateKey),
+                .filter(|element| element.1 as u32 != self.air.pack())
+                .map(|element| (element.1 as u32).into()),
         }
     }
 }
@@ -319,8 +319,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
     let jbsp = JavaBlockStateProvider {
         storages: *storages,
         palettes: *palettes,
-        air: *wm.mc.block_manager.read().variant_indices.get("Block{minecraft:air}").unwrap() as BlockstateKey
+        air: (*wm.mc.block_manager.read().variant_indices.get("Block{minecraft:air}").unwrap() as u32).into()
     };
+
 
     println!("{:?}", jbsp.get_state(10, 380, 10));
 

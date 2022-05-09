@@ -18,7 +18,7 @@ fn get_block_mesh<'a>(
     block_manager: &'a BlockManager,
     state: &BlockState,
 ) -> Option<&'a BlockstateVariantMesh> {
-    (&block_manager.block_state_variants).get((*state).packed_key? as usize)
+    (&block_manager.block_state_variants).get((*state).packed_key?.state_index() as usize)
 }
 
 #[derive(Debug)]
