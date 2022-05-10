@@ -9,7 +9,7 @@ use bytemuck::Pod;
 
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
-use crate::mc::block::model::{BlockstateVariantMesh, CubeOrComplexMesh};
+use crate::mc::block::model::{BlockStateDefinition, BlockstateVariantMesh, CubeOrComplexMesh};
 
 use crate::mc::BlockManager;
 use crate::WmRenderer;
@@ -17,8 +17,8 @@ use crate::WmRenderer;
 fn get_block_mesh<'a>(
     block_manager: &'a BlockManager,
     state: &BlockState,
-) -> Option<&'a BlockstateVariantMesh> {
-    (&block_manager.block_state_variants).get((*state).packed_key?.state_index() as usize)
+) -> Option<&'a BlockStateDefinition> {
+    (&block_manager.block_states).get((*state).packed_key?.state_index() as usize)
 }
 
 #[derive(Debug)]

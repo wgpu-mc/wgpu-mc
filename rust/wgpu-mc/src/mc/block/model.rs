@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
 use crate::mc::datapack;
@@ -9,6 +10,7 @@ use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS};
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use crate::texture::UV;
 use cgmath::{Matrix3, SquareMatrix, Vector3};
+use crate::mc::block::Multipart;
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
@@ -25,6 +27,16 @@ pub struct BlockModelFaces {
 pub enum CubeOrComplexMesh {
     Cube(Box<BlockModelFaces>),
     Custom(Vec<BlockModelFaces>),
+}
+
+pub enum BlockStateDefinitionType {
+    Variant(BlockstateVariantMesh),
+    Multipart(Arc<Multipart>, HashMap<String, String>)
+}
+
+pub struct BlockStateDefinition {
+    pub name: NamespacedResource,
+    pub kind: BlockStateDefinitionType
 }
 
 #[derive(Debug)]

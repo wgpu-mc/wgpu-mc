@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::mc::block::blockstate::{
     BlockstateVariantDefinitionModel, BlockstateVariantModelDefinitionRotations,
 };
@@ -28,9 +29,30 @@ pub struct MultipartCase {
     pub apply: Vec<MultipartApply>
 }
 
+pub struct Multipart {
+    pub cases: Vec<MultipartCase>
+}
+
+impl Multipart {
+
+    pub fn generate(&self, keys: &HashMap<String, String>) -> &[&MultipartApply] {
+        &self.cases.iter().filter_map(|case| {
+            if case.predicates.iter().any(|predicate|
+                keys.get(&predicate.key)
+                    .map_or(false, |value| value == &predicate.value)
+            ) {
+                Some(&case.apply)
+            } else {
+                None
+            }
+        }).flatten().collect::<Vec<&MultipartApply>>()
+    }
+
+}
+
 pub enum BlockDefinition {
     Multipart {
-         cases: Vec<MultipartCase>
+         multipart: Multipart
     },
     Variants {
         states: IndexMap<BlockstateVariantKey, BlockstateVariantDefinitionModel>
@@ -43,134 +65,131 @@ pub struct Block {
 }
 
 impl Block {
-    fn parse_multipart(name: &str, json: serde_json::Value) -> Option<Self> {
+    fn parse_multipart(name: &str, json: &serde_json::Value) -> Option<Self> {
         Some(Self {
             id: name.try_into().ok()?,
             definition: BlockDefinition::Multipart {
-                cases: json.as_array()?
-                    .iter()
-                    .map(|case| {
-                        let case = case.as_object()?;
+                multipart: Multipart {
+                    cases: json.as_array()?
+                        .iter()
+                        .map(|case| {
+                            let case = case.as_object()?;
 
-                        let mut multipart_case = MultipartCase {
-                            predicates: Vec::new(),
-                            apply: Vec::new()
-                        };
+                            let mut multipart_case = MultipartCase {
+                                predicates: Vec::new(),
+                                apply: Vec::new()
+                            };
 
-                        match case.get("when") {
-                            None => {}
-                            Some(when) => {
-                                let when = when.as_object()?;
+                            match case.get("when") {
+                                None => {}
+                                Some(when) => {
+                                    let when = when.as_object()?;
 
-                                if when.contains_key("or") {
-                                    multipart_case.predicates = when.get("or")?
-                                        .as_array()?
+                                    if when.contains_key("or") {
+                                        multipart_case.predicates = when.get("or")?
+                                            .as_array()?
+                                            .iter()
+                                            .map(|when_entry| {
+                                                let when = when_entry.as_object()?
+                                                    .iter()
+                                                    .next()?;
+
+                                                Some(
+                                                    MultipartPredicate {
+                                                        key: when.0.clone(),
+                                                        value: when.1.as_str().unwrap().into()
+                                                    }
+                                                )
+                                            })
+                                            .collect::<Option<Vec<MultipartPredicate>>>()?;
+                                    } else {
+                                        let when_entry = when
+                                            .iter()
+                                            .next()?;
+
+                                        multipart_case.predicates.push(
+                                            MultipartPredicate {
+                                                key: when_entry.0.clone(),
+                                                value: when_entry.1.as_str().unwrap().into()
+                                            }
+                                        );
+                                    }
+                                }
+                            };
+
+                            let apply = case.get("apply")?;
+
+                            match apply {
+                                Value::Array(applies) => {
+                                    multipart_case.apply = applies
                                         .iter()
-                                        .map(|when_entry| {
-                                            let when = when_entry.as_object()?
-                                                .iter()
-                                                .next()?;
+                                        .map(|apply| {
+                                            let apply = apply.as_object()?;
 
                                             Some(
-                                                MultipartPredicate {
-                                                    key: when.0.clone(),
-                                                    value: when.1.as_str().unwrap().into()
+                                                MultipartApply {
+                                                    model: apply.get("model")?.as_str()?
+                                                        .try_into().ok()?,
+                                                    x: match apply.get("x") {
+                                                        None => 0,
+                                                        Some(val) => val.as_u64()? as u8
+                                                    },
+                                                    z: match apply.get("z") {
+                                                        None => 0,
+                                                        Some(val) => val.as_u64()? as u8
+                                                    },
+                                                    uvlock: match apply.get("uvlock") {
+                                                        None => false,
+                                                        Some(val) => val.as_bool()?
+                                                    },
+                                                    weight: match apply.get("weight") {
+                                                        None => 1,
+                                                        Some(val) => val.as_u64()? as u16
+                                                    },
                                                 }
                                             )
                                         })
-                                        .collect::<Option<Vec<MultipartPredicate>>>()?;
-                                } else {
-                                    let when_entry = when
-                                        .iter()
-                                        .next()?;
-
-                                    multipart_case.predicates.push(
-                                        MultipartPredicate {
-                                            key: when_entry.0.clone(),
-                                            value: when_entry.1.as_str().unwrap().into()
+                                        .collect::<Option<Vec<MultipartApply>>>()?;
+                                }
+                                Value::Object(apply) => {
+                                    multipart_case.apply.push(
+                                        MultipartApply {
+                                            model: apply.get("model")?.as_str()?
+                                                .try_into().ok()?,
+                                            x: match apply.get("x") {
+                                                None => 0,
+                                                Some(val) => val.as_u64()? as u8
+                                            },
+                                            z: match apply.get("z") {
+                                                None => 0,
+                                                Some(val) => val.as_u64()? as u8
+                                            },
+                                            uvlock: match apply.get("uvlock") {
+                                                None => false,
+                                                Some(val) => val.as_bool()?
+                                            },
+                                            weight: match apply.get("weight") {
+                                                None => 1,
+                                                Some(val) => val.as_u64()? as u16
+                                            },
                                         }
                                     );
-                                }
+                                },
+                                _ => None?
                             }
-                        };
 
-                        let apply = case.get("apply")?;
-
-                        match apply {
-                            Value::Array(applies) => {
-                                multipart_case.apply = applies
-                                    .iter()
-                                    .map(|apply| {
-                                        let apply = apply.as_object()?;
-
-                                        Some(
-                                            MultipartApply {
-                                                model: apply.get("model")?.as_str()?
-                                                    .try_into().ok()?,
-                                                x: match apply.get("x") {
-                                                    None => 0,
-                                                    Some(val) => val.as_u64()? as u8
-                                                },
-                                                z: match apply.get("z") {
-                                                    None => 0,
-                                                    Some(val) => val.as_u64()? as u8
-                                                },
-                                                uvlock: match apply.get("uvlock") {
-                                                    None => false,
-                                                    Some(val) => val.as_bool()?
-                                                },
-                                                weight: match apply.get("weight") {
-                                                    None => 1,
-                                                    Some(val) => val.as_u64()? as u16
-                                                },
-                                            }
-                                        )
-                                    })
-                                    .collect::<Option<Vec<MultipartApply>>>()?;
-                            }
-                            Value::Object(apply) => {
-                                multipart_case.apply.push(
-                                    MultipartApply {
-                                        model: apply.get("model")?.as_str()?
-                                            .try_into().ok()?,
-                                        x: match apply.get("x") {
-                                            None => 0,
-                                            Some(val) => val.as_u64()? as u8
-                                        },
-                                        z: match apply.get("z") {
-                                            None => 0,
-                                            Some(val) => val.as_u64()? as u8
-                                        },
-                                        uvlock: match apply.get("uvlock") {
-                                            None => false,
-                                            Some(val) => val.as_bool()?
-                                        },
-                                        weight: match apply.get("weight") {
-                                            None => 1,
-                                            Some(val) => val.as_u64()? as u16
-                                        },
-                                    }
-                                );
-                            },
-                            _ => None?
-                        }
-
-                        Some(
-                            multipart_case
-                        )
-                    })
-                    .collect::<Option<Vec<MultipartCase>>>()?
+                            Some(
+                                multipart_case
+                            )
+                        })
+                        .collect::<Option<Vec<MultipartCase>>>()?
+                }
             }
         })
     }
 
-    pub fn from_json(name: &str, json: &str) -> Option<Self> {
-        let json_val: serde_json::Value = serde_json::from_str(json).ok()?;
-        let states = json_val
-            .as_object()?
-            .get("variants")?
-            .as_object()?
-            .iter()
+    fn parse_variants(name: &str, json: &serde_json::Map<String, serde_json::Value>) -> Option<Self> {
+        let variants = json.iter()
             .map(|(key, val)| {
                 let obj = val
                     .as_object()
@@ -203,9 +222,21 @@ impl Block {
         Some(Self {
             id: name.try_into().ok()?,
             definition: BlockDefinition::Variants {
-                states
+                states: variants.into()
             }
         })
+    }
+
+    pub fn from_json(name: &str, json: &str) -> Option<Self> {
+        let json_val: serde_json::Value = serde_json::from_str(json).ok()?;
+        let object = json_val
+            .as_object()?;
+
+        if object.contains_key("variants") {
+            Self::parse_variants(name, object.get("variants")?.as_object()?)
+        } else {
+            Self::parse_multipart(name, object.get("multipart")?)
+        }
     }
 }
 

@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
-use crate::mc::block::{Block, BlockstateVariantKey, BlockstateKey};
+use crate::mc::block::{Block, BlockstateVariantKey, BlockstateKey, BlockDefinition};
 use crate::mc::chunk::ChunkManager;
 use crate::mc::datapack::{BlockModel, NamespacedResource, TextureVariableOrResource};
 use crate::mc::entity::EntityModel;
@@ -23,6 +23,7 @@ use crate::mc::block::blockstate::BlockstateVariantDefinitionModel;
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use crate::{WgpuState, WmRenderer};
 use indexmap::map::IndexMap;
+use crate::mc::block::model::BlockStateDefinition;
 
 pub mod block;
 pub mod chunk;
@@ -40,7 +41,7 @@ pub struct BlockEntry {
 pub struct BlockManager {
     pub blocks: IndexMap<NamespacedResource, Block>,
     pub models: IndexMap<NamespacedResource, BlockModel>,
-    pub block_state_variants: Vec<BlockstateVariantMesh>,
+    pub block_states: Vec<BlockStateDefinition>,
     pub variant_indices: HashMap<String, usize>,
 }
 
@@ -101,7 +102,7 @@ impl MinecraftState {
             block_manager: RwLock::new(BlockManager {
                 blocks: IndexMap::new(),
                 models: IndexMap::new(),
-                block_state_variants: Vec::new(),
+                block_states: Vec::new(),
                 variant_indices: HashMap::new(),
             }),
 
@@ -163,20 +164,25 @@ impl MinecraftState {
             .blocks
             .iter()
             .for_each(|(_name, block): (_, &Block)| {
-                block.states.iter().for_each(
-                    |(_variant_key, variant_definition): (
-                        &BlockstateVariantKey,
-                        &BlockstateVariantDefinitionModel,
-                    )| {
-                        let model_resource = &variant_definition.model;
+                match &block.definition {
+                    BlockDefinition::Multipart { .. } => {}
+                    BlockDefinition::Variants { states } => {
+                        states.iter().for_each(
+                            |(_variant_key, variant_definition): (
+                                &BlockstateVariantKey,
+                                &BlockstateVariantDefinitionModel,
+                            )| {
+                                let model_resource = &variant_definition.model;
 
-                        BlockModel::deserialize(
-                            model_resource,
-                            &*self.resource_provider,
-                            &mut model_map,
+                                BlockModel::deserialize(
+                                    model_resource,
+                                    &*self.resource_provider,
+                                    &mut model_map,
+                                );
+                            },
                         );
-                    },
-                );
+                    }
+                }
             });
 
         block_manager.models = model_map.into_iter().collect();
@@ -258,7 +264,7 @@ impl MinecraftState {
 
         // println!("{:?}", variants);
 
-        block_manager.block_state_variants = meshes;
+        block_manager.block_states = meshes;
         block_manager.variant_indices = indices;
     }
 }

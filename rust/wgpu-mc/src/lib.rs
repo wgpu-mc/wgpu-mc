@@ -227,7 +227,7 @@ impl WmRenderer {
         let output = self.wgpu_state.surface.get_current_texture()?;
         let view = output.texture.create_view(&TextureViewDescriptor {
             label: None,
-            format: Some(TextureFormat::Bgra8Unorm),
+            format: Some(TextureFormat::Rgba16),
             dimension: Some(wgpu::TextureViewDimension::D2),
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,

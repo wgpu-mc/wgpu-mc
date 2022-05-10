@@ -7,9 +7,8 @@ pub struct BlockstateVariantModelDefinitionRotations {
 }
 
 //Blocks are defined in-game like minecraft:cobblestone
-//All `Block`s have blockstate variant definitions, (`BlockstateVariantDefinitionModel`)
-//which define how to render the block in various configurations
-//Those various configurations are called variants, which are baked into a BlockstateVariantMesh
+//Blocks can either be multipart or have simple variants defined.
+//If it has variants, those definitions are serialized into this struct
 
 pub struct BlockstateVariantDefinitionModel {
     pub id: NamespacedResource,
