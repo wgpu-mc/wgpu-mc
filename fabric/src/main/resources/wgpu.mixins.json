@@ -18,6 +18,8 @@
     "core.MinecraftClientCoreMixin",
     "core.MouseMixin",
     "core.RegistryMixin",
+    "core.TextRendererMixin",
+    "core.OptionsScreenMixin",
     "render.BufferRendererMixin",
     "render.FramebufferMixin",
     "render.GameRendererMixin",
