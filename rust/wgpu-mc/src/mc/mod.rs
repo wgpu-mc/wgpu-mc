@@ -222,7 +222,7 @@ impl MinecraftState {
                     (
                         *resource,
                         self.resource_provider
-                            .get_resource(&resource.prepend("textures/").append(".png")),
+                            .get_resource(&resource.prepend("textures/").append(".png")).unwrap(),
                     )
                 })
                 .collect::<Vec<(&NamespacedResource, Vec<u8>)>>()[..],

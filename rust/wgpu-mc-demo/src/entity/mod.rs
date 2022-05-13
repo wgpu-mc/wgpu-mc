@@ -47,7 +47,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
     };
 
     let alex_skin_ns: NamespacedResource = "minecraft:textures/entity/alex.png".try_into().unwrap();
-    let alex_skin_resource = wm.mc.resource_provider.get_resource(&alex_skin_ns);
+    let alex_skin_resource = wm.mc.resource_provider.get_resource(&alex_skin_ns).unwrap();
 
     //Create a new texture atlas. It's immediately present on the GPU, but it's just a blank texture
     let player_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());

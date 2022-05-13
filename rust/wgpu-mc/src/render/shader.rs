@@ -25,7 +25,7 @@ impl WgslShader {
         frag_entry: String,
         vert_entry: String,
     ) -> Self {
-        let shader_src = rp.get_resource(resource);
+        let shader_src = rp.get_resource(resource).unwrap();
 
         let shader_src = std::str::from_utf8(&shader_src).unwrap();
 
@@ -65,8 +65,8 @@ impl GlslShader {
         rp: &dyn ResourceProvider,
         device: &wgpu::Device,
     ) -> Self {
-        let frag_src = rp.get_resource(frag);
-        let vert_src = rp.get_resource(vert);
+        let frag_src = rp.get_resource(frag).unwrap();
+        let vert_src = rp.get_resource(vert).unwrap();
 
         let frag_src = std::str::from_utf8(&frag_src).unwrap();
         let vert_src = std::str::from_utf8(&vert_src).unwrap();

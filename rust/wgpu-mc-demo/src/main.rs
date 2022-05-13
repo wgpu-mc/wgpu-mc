@@ -52,10 +52,12 @@ struct FsResourceProvider {
 
 //ResourceProvider is what wm uses to fetch resources. This is a basic implementation that's just backed by the filesystem
 impl ResourceProvider for FsResourceProvider {
-    fn get_resource(&self, id: &NamespacedResource) -> Vec<u8> {
+    fn get_resource(&self, id: &NamespacedResource) -> Option<Vec<u8>> {
         let real_path = self.asset_root.join(&id.0).join(&id.1);
-        fs::read(&real_path)
-            .unwrap_or_else(|_| panic!("{}", real_path.to_str().unwrap().to_string()))
+        if !real_path.exists() { return None; }
+
+        Some(fs::read(&real_path)
+            .unwrap_or_else(|_| panic!("{}", real_path.to_str().unwrap().to_string())))
     }
 }
 
