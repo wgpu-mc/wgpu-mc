@@ -1,13 +1,13 @@
 use std::sync::Arc;
 use wgpu_mc::mc::datapack::NamespacedResource;
 use wgpu_mc::mc::entity::{
-    Cuboid, CuboidUV, DescribedEntityInstances, EntityInstance, EntityManager, EntityModel,
+    Cuboid, CuboidUV, EntityInstancingTransforms, EntityInstance, EntityManager, Entity,
     EntityPart, PartTransform, UploadedEntityInstanceBuffer,
 };
 use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::WmRenderer;
 
-pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<EntityModel>) {
+pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<Entity>) {
     let _atlas_1px = 1.0 / (ATLAS_DIMENSIONS as f32);
     let atlas_16px = 16.0 / (ATLAS_DIMENSIONS as f32);
 
@@ -47,7 +47,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
     };
 
     let alex_skin_ns: NamespacedResource = "minecraft:textures/entity/alex.png".try_into().unwrap();
-    let alex_skin_resource = wm.mc.resource_provider.get_resource(&alex_skin_ns);
+    let alex_skin_resource = wm.mc.resource_provider.get_resource(&alex_skin_ns).unwrap();
 
     //Create a new texture atlas. It's immediately present on the GPU, but it's just a blank texture
     let player_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
@@ -65,7 +65,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
         *entity_manager.player_texture_atlas.write() = player_atlas;
     }
 
-    let player_model = Arc::new(EntityModel::new(player_root));
+    let player_model = Arc::new(Entity::new(player_root, &wm.wgpu_state));
 
     entity_manager
         .entity_types
@@ -73,11 +73,10 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
         .push(player_model.clone());
 
     let entity_instance = EntityInstance {
-        entity_model: 0,
+        entity: player_model.clone(),
         position: (0.0, 0.0, 0.0),
         looking_yaw: 0.0,
         uv_offset: (0.0, 0.0),
-        hurt: false,
         part_transforms: vec![PartTransform {
             pivot_x: 0.0,
             pivot_y: 0.0,
@@ -88,9 +87,9 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
         }],
     };
 
-    let described_instance = entity_instance.describe_instance(&entity_manager);
+    let described_instance = entity_instance.describe_instance();
 
-    let (entity_instance_buffer, entity_instance_bind_group) = DescribedEntityInstances {
+    let (entity_instance_buffer, entity_instance_bind_group) = EntityInstancingTransforms {
         matrices: vec![described_instance],
     }
     .upload(wm);

@@ -1,15 +1,58 @@
 use std::collections::HashMap;
 use crate::mc::block::blockstate::{
-    BlockstateVariantDefinitionModel, BlockstateVariantModelDefinitionRotations,
+    BlockstateVariantModelDefinition, BlockstateVariantModelDefinitionRotations,
 };
 use crate::mc::datapack::{NamespacedResource, TextureVariableOrResource};
 
 use indexmap::map::IndexMap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 use serde_json::Value;
+use crate::mc::block::model::BlockModelMesh;
+use crate::mc::block::multipart_json::MultipartJson;
+use crate::mc::BlockManager;
+use crate::WmRenderer;
 
 pub mod blockstate;
 pub mod model;
+
+///Multipart definitions from a JSON datapack
+pub mod multipart_json {
+    use std::collections::HashMap;
+    use serde::{Deserialize};
+
+    #[derive(Deserialize)]
+    pub struct MultipartApplyJson {
+        pub model: String,
+        #[serde(default)]
+        pub x: u8,
+        #[serde(default)]
+        pub y: u8,
+        #[serde(default)]
+        pub uvlock: bool,
+        #[serde(default = "default_weight")]
+        pub weight: u16
+    }
+
+    fn default_weight() -> u16 { 1 }
+
+    use serde_with::{serde_as, OneOrMany};
+    use serde_with::formats::PreferMany;
+
+    #[serde_as]
+    #[derive(Deserialize)]
+    pub struct MultipartCaseJson {
+        #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+        pub when: Vec<HashMap<String, String>>,
+        #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+        pub apply: Vec<MultipartApplyJson>
+    }
+    
+    pub struct MultipartJson {
+        pub cases: Vec<MultipartCaseJson>
+    }
+
+}
 
 pub struct MultipartPredicate {
     pub key: String,
@@ -17,9 +60,9 @@ pub struct MultipartPredicate {
 }
 
 pub struct MultipartApply {
-    pub model: TextureVariableOrResource,
+    pub model: Arc<BlockModelMesh>,
     pub x: u8,
-    pub z: u8,
+    pub y: u8,
     pub uvlock: bool,
     pub weight: u16
 }
@@ -35,8 +78,37 @@ pub struct Multipart {
 
 impl Multipart {
 
-    pub fn generate(&self, keys: &HashMap<String, String>) -> &[&MultipartApply] {
-        &self.cases.iter().filter_map(|case| {
+    pub fn from_json(json: &MultipartJson, block_manager: &BlockManager) -> Self {
+        Self {
+            cases: json.cases.iter().map(|case| {
+                MultipartCase {
+                    predicates: case.when.iter().map(|when| {
+                        when.iter().map(|(key, value)| {
+                            MultipartPredicate {
+                                key: key.clone(),
+                                value: value.clone()
+                            }
+                        })
+                    }).flatten().collect(),
+                    apply: case.apply.iter().map(|apply| {
+                        MultipartApply {
+                            model: block_manager.model_meshes.get(
+                                &NamespacedResource::try_from(&apply.model[..]).unwrap()
+                            ).unwrap().clone(),
+                            x: apply.x,
+                            y: apply.y,
+                            uvlock: apply.uvlock,
+                            weight: apply.weight
+                        }
+                    }).collect()
+                }
+            }).collect()
+        }
+
+    }
+
+    pub fn generate(&self, keys: &HashMap<String, String>) -> Vec<&MultipartApply> {
+        self.cases.iter().filter_map(|case| {
             if case.predicates.iter().any(|predicate|
                 keys.get(&predicate.key)
                     .map_or(false, |value| value == &predicate.value)
@@ -50,142 +122,34 @@ impl Multipart {
 
 }
 
-pub enum BlockDefinition {
+pub enum BlockDefinitionType {
     Multipart {
-         multipart: Multipart
+         multipart: multipart_json::MultipartJson
     },
     Variants {
-        states: IndexMap<BlockstateVariantKey, BlockstateVariantDefinitionModel>
+        states: HashMap<String, BlockstateVariantModelDefinition>
     }
 }
 
-pub struct Block {
+///The representation that a [Block] will be derived from. It's a direct representation of how blockstates are defined in datapacks
+pub struct BlockDefinition {
     pub id: NamespacedResource,
-    pub definition: BlockDefinition
+    pub definition: BlockDefinitionType
 }
 
-impl Block {
-    fn parse_multipart(name: &str, json: &serde_json::Value) -> Option<Self> {
-        Some(Self {
-            id: name.try_into().ok()?,
-            definition: BlockDefinition::Multipart {
-                multipart: Multipart {
-                    cases: json.as_array()?
-                        .iter()
-                        .map(|case| {
-                            let case = case.as_object()?;
+impl BlockDefinition {
 
-                            let mut multipart_case = MultipartCase {
-                                predicates: Vec::new(),
-                                apply: Vec::new()
-                            };
-
-                            match case.get("when") {
-                                None => {}
-                                Some(when) => {
-                                    let when = when.as_object()?;
-
-                                    if when.contains_key("or") {
-                                        multipart_case.predicates = when.get("or")?
-                                            .as_array()?
-                                            .iter()
-                                            .map(|when_entry| {
-                                                let when = when_entry.as_object()?
-                                                    .iter()
-                                                    .next()?;
-
-                                                Some(
-                                                    MultipartPredicate {
-                                                        key: when.0.clone(),
-                                                        value: when.1.as_str().unwrap().into()
-                                                    }
-                                                )
-                                            })
-                                            .collect::<Option<Vec<MultipartPredicate>>>()?;
-                                    } else {
-                                        let when_entry = when
-                                            .iter()
-                                            .next()?;
-
-                                        multipart_case.predicates.push(
-                                            MultipartPredicate {
-                                                key: when_entry.0.clone(),
-                                                value: when_entry.1.as_str().unwrap().into()
-                                            }
-                                        );
-                                    }
-                                }
-                            };
-
-                            let apply = case.get("apply")?;
-
-                            match apply {
-                                Value::Array(applies) => {
-                                    multipart_case.apply = applies
-                                        .iter()
-                                        .map(|apply| {
-                                            let apply = apply.as_object()?;
-
-                                            Some(
-                                                MultipartApply {
-                                                    model: apply.get("model")?.as_str()?
-                                                        .try_into().ok()?,
-                                                    x: match apply.get("x") {
-                                                        None => 0,
-                                                        Some(val) => val.as_u64()? as u8
-                                                    },
-                                                    z: match apply.get("z") {
-                                                        None => 0,
-                                                        Some(val) => val.as_u64()? as u8
-                                                    },
-                                                    uvlock: match apply.get("uvlock") {
-                                                        None => false,
-                                                        Some(val) => val.as_bool()?
-                                                    },
-                                                    weight: match apply.get("weight") {
-                                                        None => 1,
-                                                        Some(val) => val.as_u64()? as u16
-                                                    },
-                                                }
-                                            )
-                                        })
-                                        .collect::<Option<Vec<MultipartApply>>>()?;
-                                }
-                                Value::Object(apply) => {
-                                    multipart_case.apply.push(
-                                        MultipartApply {
-                                            model: apply.get("model")?.as_str()?
-                                                .try_into().ok()?,
-                                            x: match apply.get("x") {
-                                                None => 0,
-                                                Some(val) => val.as_u64()? as u8
-                                            },
-                                            z: match apply.get("z") {
-                                                None => 0,
-                                                Some(val) => val.as_u64()? as u8
-                                            },
-                                            uvlock: match apply.get("uvlock") {
-                                                None => false,
-                                                Some(val) => val.as_bool()?
-                                            },
-                                            weight: match apply.get("weight") {
-                                                None => 1,
-                                                Some(val) => val.as_u64()? as u16
-                                            },
-                                        }
-                                    );
-                                },
-                                _ => None?
-                            }
-
-                            Some(
-                                multipart_case
-                            )
-                        })
-                        .collect::<Option<Vec<MultipartCase>>>()?
+    fn parse_multipart(name: &str, json: serde_json::Value) -> Option<Self> {
+        Some(
+            Self {
+                id: name.try_into().ok()?,
+                definition: BlockDefinitionType::Multipart {
+                    multipart: MultipartJson {
+                        cases: serde_json::from_value(json).ok()?
+                    }
                 }
             }
-        })
+        )
     }
 
     fn parse_variants(name: &str, json: &serde_json::Map<String, serde_json::Value>) -> Option<Self> {
@@ -197,7 +161,7 @@ impl Block {
 
                 Some((
                     key.clone(),
-                    BlockstateVariantDefinitionModel {
+                    BlockstateVariantModelDefinition {
                         id: NamespacedResource::try_from(key.as_str()).ok()?,
                         rotations: BlockstateVariantModelDefinitionRotations {
                             x: obj
@@ -217,11 +181,11 @@ impl Block {
                     },
                 ))
             })
-            .collect::<Option<IndexMap<String, BlockstateVariantDefinitionModel>>>()?;
+            .collect::<Option<HashMap<String, BlockstateVariantModelDefinition>>>()?;
 
         Some(Self {
             id: name.try_into().ok()?,
-            definition: BlockDefinition::Variants {
+            definition: BlockDefinitionType::Variants {
                 states: variants.into()
             }
         })
@@ -235,7 +199,7 @@ impl Block {
         if object.contains_key("variants") {
             Self::parse_variants(name, object.get("variants")?.as_object()?)
         } else {
-            Self::parse_multipart(name, object.get("multipart")?)
+            Self::parse_multipart(name, object.get("multipart")?.to_owned())
         }
     }
 }
@@ -266,53 +230,53 @@ impl From<&str> for BlockDirection {
 
 pub type BlockPos = (i32, u16, i32);
 
-pub type BlockstateVariantKey = String;
+pub type BlockstateKey = u32;
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct BlockstateKey {
-    block_key: u16,
-    state_index: u16
-}
-
-impl BlockstateKey {
-
-    pub fn new(block_key: u16, state_index: u16) -> Self {
-        Self {
-            block_key,
-            state_index
-        }
-    }
-
-    pub fn pack(&self) -> u32 {
-        ((self.block_key as u32) << 16) | (self.state_index as u32)
-    }
-
-    pub fn state_index(&self) -> u16 {
-        self.state_index
-    }
-
-    pub fn block_key(&self) -> u16 {
-        self.block_key
-    }
-
-}
-
-impl Into<u32> for BlockstateKey {
-    fn into(self) -> u32 {
-        self.pack()
-    }
-}
-
-impl From<u32> for BlockstateKey {
-
-    fn from(num: u32) -> Self {
-        Self::new((num >> 16) as u16, (num & 0xffff) as u16)
-    }
-
-}
+// #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+// pub struct BlockstateKey {
+//     block_key: u16,
+//     state_index: u16
+// }
+//
+// impl BlockstateKey {
+//
+//     pub fn new(block_key: u16, state_index: u16) -> Self {
+//         Self {
+//             block_key,
+//             state_index
+//         }
+//     }
+//
+//     pub fn pack(&self) -> u32 {
+//         ((self.block_key as u32) << 16) | (self.state_index as u32)
+//     }
+//
+//     pub fn state_index(&self) -> u16 {
+//         self.state_index
+//     }
+//
+//     pub fn block_key(&self) -> u16 {
+//         self.block_key
+//     }
+//
+// }
+//
+// impl Into<u32> for BlockstateKey {
+//     fn into(self) -> u32 {
+//         self.pack()
+//     }
+// }
+//
+// impl From<u32> for BlockstateKey {
+//
+//     fn from(num: u32) -> Self {
+//         Self::new((num >> 16) as u16, (num & 0xffff) as u16)
+//     }
+//
+// }
 
 ///The state of one block, describing which variant
 #[derive(Clone, Copy, Debug)]
-pub struct BlockState {
+pub struct ChunkBlockState {
     pub packed_key: Option<BlockstateKey>,
 }

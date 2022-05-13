@@ -9,21 +9,22 @@ use parking_lot::RwLock;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
-use crate::mc::block::{Block, BlockstateVariantKey, BlockstateKey, BlockDefinition};
+use crate::mc::block::{BlockDefinition, BlockstateKey, BlockDefinitionType, Multipart};
 use crate::mc::chunk::ChunkManager;
 use crate::mc::datapack::{BlockModel, NamespacedResource, TextureVariableOrResource};
-use crate::mc::entity::EntityModel;
+use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::RenderPipelineManager;
 
-use self::block::model::BlockstateVariantMesh;
-use crate::mc::block::blockstate::BlockstateVariantDefinitionModel;
+use self::block::model::BlockModelMesh;
+use crate::mc::block::blockstate::BlockstateVariantModelDefinition;
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use crate::{WgpuState, WmRenderer};
 use indexmap::map::IndexMap;
-use crate::mc::block::model::BlockStateDefinition;
+use crate::mc::block::model::{Block, BlockStateDefinitionType};
+use crate::mc::block::multipart_json::MultipartJson;
 
 pub mod block;
 pub mod chunk;
@@ -38,15 +39,58 @@ pub struct BlockEntry {
     pub model: BlockModel,
 }
 
+///Manages everything related to block states.
+///
+/// Example usage
+///
+///```
+/// use wgpu_mc::mc::block::BlockDefinition;
+/// use wgpu_mc::mc::datapack::NamespacedResource;
+/// use wgpu_mc::WmRenderer;use wgpu_mc::WmRenderer;
+/// let wm: WmRenderer;
+///
+/// let block_manager = wm.mc.block_manager.write();
+/// let blockstate_json = r#"
+/// {
+///    "variants": { ... },
+///    "textures": { ...}
+/// }
+/// "#;
+///
+/// block_manager.block_definitions.insert(
+///    "wgpu_mc_example:blockstates/example_block.json".try_into().unwrap(),
+///    BlockDefinition::from_json(blockstate_json).unwrap()
+/// );
+///
+/// //The formatter here is used to define how you would like the blockstates to be named when wgpu-mc
+/// //populates the [BlockManager] field
+/// fn formatter(resource: &NamespacedResource, state_key: &str) -> String {
+///    format!("{}#{}", resource, state_key)
+/// }
+///
+/// wm.mc.bake_blocks(&wm, formatter);
+/// ```
 pub struct BlockManager {
-    pub blocks: IndexMap<NamespacedResource, Block>,
-    pub models: IndexMap<NamespacedResource, BlockModel>,
-    pub block_states: Vec<BlockStateDefinition>,
-    pub variant_indices: HashMap<String, usize>,
+    ///This is the first field that should be populated when providing wgpu-mc with block info.
+    pub block_definitions: HashMap<NamespacedResource, BlockDefinition>,
+    ///A map of block models (not meshes) which can be baked into meshes
+    pub models: HashMap<NamespacedResource, BlockModel>,
+    ///Same as the models field but instead baked into meshes which are ready to be used in rendering
+    pub model_meshes: HashMap<NamespacedResource, Arc<BlockModelMesh>>,
+    ///A list of all block definitions (multipart or varianted), which are ready to be used in rendering
+    pub blocks: Vec<Arc<Block>>,
+    ///[BlockstateKey]s are indices into this Vec. The first element is the block key, for example
+    /// `Block{minecraft:anvil}[facing=west]`, and the second element is an [Arc<Block>] which is then
+    /// accessed when figuring out how the block should end up being rendered. If the block is varianted (thus not multipart)
+    /// then the String will be used directly as a key to get the mesh. If the Block is multipart, it will be matched
+    /// against the [MultipartCase]s, and the mesh will be created dynamically as such.
+    pub block_keys: Vec<(String, Arc<Block>)>,
+    /// A HashMap that provides indices into the block_keys field
+    pub block_key_indices: HashMap<String, usize>,
 }
 
 fn get_model_or_deserialize<'a>(
-    models: &'a mut IndexMap<NamespacedResource, BlockModel>,
+    models: &'a mut HashMap<NamespacedResource, BlockModel>,
     model_id: &NamespacedResource,
     resource_provider: &dyn ResourceProvider,
 ) -> Option<&'a BlockModel> {
@@ -67,13 +111,14 @@ fn get_model_or_deserialize<'a>(
     models.get(model_id)
 }
 
+///Minecraft-specific state and data structures go in here
 pub struct MinecraftState {
     pub sun_position: ArcSwap<f32>,
 
     pub block_manager: RwLock<BlockManager>,
 
     pub chunks: ChunkManager,
-    pub entity_models: RwLock<Vec<EntityModel>>,
+    pub entity_models: RwLock<Vec<Entity>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
 
@@ -86,10 +131,9 @@ pub struct MinecraftState {
 }
 
 impl MinecraftState {
+
     #[must_use]
     pub fn new(
-        _wgpu_state: &WgpuState,
-        _pipelines: &RenderPipelineManager,
         resource_provider: Arc<dyn ResourceProvider>,
     ) -> Self {
         MinecraftState {
@@ -100,10 +144,12 @@ impl MinecraftState {
             texture_manager: TextureManager::new(),
 
             block_manager: RwLock::new(BlockManager {
-                blocks: IndexMap::new(),
-                models: IndexMap::new(),
-                block_states: Vec::new(),
-                variant_indices: HashMap::new(),
+                block_definitions: HashMap::new(),
+                models: HashMap::new(),
+                model_meshes: HashMap::new(),
+                blocks: Vec::new(),
+                block_keys: Vec::new(),
+                block_key_indices: HashMap::new(),
             }),
 
             camera: ArcSwap::new(Arc::new(Camera::new(1.0))),
@@ -148,44 +194,54 @@ impl MinecraftState {
             .store(Arc::new(Some(camera_bind_group)))
     }
 
-    pub fn bake_blocks(&self, wm: &WmRenderer) {
+    ///Create and register all block models from the [Block]s that have been registered
+    pub fn bake_blocks<T: Fn(&NamespacedResource, &str) -> String>(&self, wm: &WmRenderer, block_state_name_formatter: T) {
         let mut block_manager = self.block_manager.write();
 
         self.generate_block_models(&mut *block_manager);
         self.generate_block_texture_atlas(wm, &block_manager);
-        self.bake_blockstate_meshes(&mut *block_manager);
+        self.bake_blockstates(&mut *block_manager, block_state_name_formatter);
     }
 
-    ///Loops through all the blocks in the `BlockManager`, and generates their `BlockModel`s
     fn generate_block_models(&self, block_manager: &mut BlockManager) {
-        let mut model_map = HashMap::new();
+        let mut models = HashSet::new();
 
         block_manager
-            .blocks
+            .block_definitions
             .iter()
-            .for_each(|(_name, block): (_, &Block)| {
+            .for_each(|(_name, block): (_, &BlockDefinition)| {
                 match &block.definition {
-                    BlockDefinition::Multipart { .. } => {}
-                    BlockDefinition::Variants { states } => {
+                    BlockDefinitionType::Multipart { multipart } => {
+                        multipart.cases.iter().for_each(|case| {
+                            case.apply.iter().for_each(|apply| {
+                                models.insert(NamespacedResource::try_from(&apply.model[..]).unwrap());
+                            });
+                        });
+                    }
+                    BlockDefinitionType::Variants { states } => {
                         states.iter().for_each(
                             |(_variant_key, variant_definition): (
-                                &BlockstateVariantKey,
-                                &BlockstateVariantDefinitionModel,
+                                &String,
+                                &BlockstateVariantModelDefinition,
                             )| {
-                                let model_resource = &variant_definition.model;
-
-                                BlockModel::deserialize(
-                                    model_resource,
-                                    &*self.resource_provider,
-                                    &mut model_map,
-                                );
+                                models.insert(variant_definition.model.clone());
                             },
                         );
                     }
                 }
             });
 
-        block_manager.models = model_map.into_iter().collect();
+        let mut model_map = HashMap::new();
+
+        models.iter().for_each(|model_name| {
+            BlockModel::deserialize(
+                model_name,
+                &*self.resource_provider,
+                &mut model_map,
+            );
+        });
+
+        block_manager.models = model_map;
     }
 
     fn generate_block_texture_atlas(&self, wm: &WmRenderer, block_manager: &BlockManager) {
@@ -203,8 +259,6 @@ impl MinecraftState {
         });
 
         let block_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
-        //TODO: this goes somewhere else, and do we even need it?
-        let _gui_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
 
         block_atlas.allocate(
             &textures
@@ -213,7 +267,8 @@ impl MinecraftState {
                     (
                         *resource,
                         self.resource_provider
-                            .get_resource(&resource.prepend("textures/").append(".png")),
+                            .get_resource(&resource.prepend("textures/").append(".png"))
+                            .unwrap(),
                     )
                 })
                 .collect::<Vec<(&NamespacedResource, Vec<u8>)>>()[..],
@@ -230,41 +285,71 @@ impl MinecraftState {
             .store(Arc::new(block_atlas));
     }
 
-    fn bake_blockstate_meshes(&self, block_manager: &mut BlockManager) {
-        let mut meshes = Vec::new();
-        let mut indices = HashMap::new();
+    fn bake_blockstates<T: Fn(&NamespacedResource, &str) -> String>(&self, block_manager: &mut BlockManager, block_name_formatter: T) {
+        let mut blockstates = HashMap::new();
 
-        block_manager.blocks.iter().for_each(|(name, block)| {
-            block.states.iter().for_each(|(key, state)| {
-                let block_model = get_model_or_deserialize(
-                    &mut block_manager.models,
-                    &state.model,
-                    &*self.resource_provider,
-                )
-                .unwrap_or_else(|| panic!("{:?}", state.model));
+        let mut multiparts = Vec::new();
 
-                let mesh = BlockstateVariantMesh::bake_block_model(
-                    block_model,
-                    &*self.resource_provider,
-                    &self.texture_manager,
-                    &state.rotations,
-                )
-                .unwrap_or_else(|| panic!("{}", name));
+        block_manager.block_definitions.iter().for_each(|(name, block): (&NamespacedResource, &BlockDefinition)| {
+            match &block.definition {
+                BlockDefinitionType::Multipart { multipart } => {
+                    let formatted_name = NamespacedResource::try_from(
+                        &block_name_formatter(name, "")
+                    ).unwrap();
 
-                let mut variant_resource = format!("Block{{{}}}", name);
-
-                if !key.is_empty() {
-                    variant_resource.push_str(&format!("[{}]", key));
+                    multiparts.push(
+                        (formatted_name, multipart)
+                    );
                 }
+                BlockDefinitionType::Variants { states } => {
+                    states.iter().for_each(|(key, state)| {
+                        let block_model = get_model_or_deserialize(
+                            &mut block_manager.models,
+                            &state.model,
+                            &*self.resource_provider,
+                        ).unwrap();
 
-                meshes.push(mesh);
-                indices.insert(variant_resource, meshes.len() - 1);
-            });
+                        let mesh = BlockModelMesh::bake_block_model(
+                            block_model,
+                            &*self.resource_provider,
+                            &self.texture_manager,
+                            &state.rotations,
+                        ).unwrap();
+
+                        let name: NamespacedResource = block_name_formatter(name, key).try_into().unwrap();
+
+                        blockstates.insert(name.clone(), Block {
+                            name,
+                            transparent_or_complex: mesh.transparent_or_complex,
+                            kind: BlockStateDefinitionType::Variant(mesh),
+                        });
+                    });
+                }
+            }
         });
 
-        // println!("{:?}", variants);
+        let mut indices = HashMap::new();
+        let mut block_state_vec = Vec::new();
 
-        block_manager.block_states = meshes;
-        block_manager.variant_indices = indices;
+        multiparts.into_iter().for_each(|(name, multipart)| {
+            blockstates.insert(
+                name.clone(),
+                Block {
+                    name: name.clone(),
+                    kind: BlockStateDefinitionType::Multipart(Arc::new(
+                        Multipart::from_json(multipart, &block_manager)
+                    )),
+                    transparent_or_complex: false
+                }
+            );
+        });
+
+        blockstates.into_iter().for_each(|(key, blockstate)| {
+            block_state_vec.push(Arc::new(blockstate));
+            indices.insert(key.to_string(), block_state_vec.len() - 1);
+        });
+
+        block_manager.block_key_indices = indices;
+        block_manager.blocks = block_state_vec;
     }
 }

@@ -25,28 +25,37 @@ pub struct BlockModelFaces {
 #[derive(Debug)]
 ///Makes chunk mesh baking a bit faster
 pub enum CubeOrComplexMesh {
+    ///Known to be a simple cube. Only cubes are eligible for sides to be culled depending on the state if it's neighbours
     Cube(Box<BlockModelFaces>),
+    ///Something other than a simple cube, such as an anvil, slab, or enchanting table.
     Custom(Vec<BlockModelFaces>),
 }
 
+///A block can be defined as having simple variants, or it can be multipart, meaning multiple models
+/// will be applied when this block is being baked into a chunk, depending on the block's state.
 pub enum BlockStateDefinitionType {
-    Variant(BlockstateVariantMesh),
-    Multipart(Arc<Multipart>, HashMap<String, String>)
+    Variant(BlockModelMesh),
+    Multipart(Arc<Multipart>)
 }
 
-pub struct BlockStateDefinition {
+///Represents a block that has completely deserialized and is ready to be used in world rendering
+pub struct Block {
     pub name: NamespacedResource,
-    pub kind: BlockStateDefinitionType
+    pub kind: BlockStateDefinitionType,
+    ///True if this `self.kind` is [BlockStateDefinitionType::Multipart] and that [BlockModelMesh] also has transparent_or_complex set to true
+    pub transparent_or_complex: bool
 }
 
+///A block model which has been baked into a mesh and is ready for rendering
 #[derive(Debug)]
-pub struct BlockstateVariantMesh {
+pub struct BlockModelMesh {
     pub name: NamespacedResource,
     pub shape: CubeOrComplexMesh,
+    ///Used as a rendering hint for block side culling
     pub transparent_or_complex: bool,
 }
 
-impl BlockstateVariantMesh {
+impl BlockModelMesh {
     pub fn absolute_atlas_uv(
         face: &FaceTexture,
         tex_manager: &TextureManager,

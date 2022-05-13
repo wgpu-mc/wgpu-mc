@@ -4,21 +4,21 @@ use crate::mc::chunk::{
 };
 use crate::model::MeshVertex;
 
-use crate::mc::block::BlockState;
+use crate::mc::block::ChunkBlockState;
 use bytemuck::Pod;
 
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
-use crate::mc::block::model::{BlockStateDefinition, BlockstateVariantMesh, CubeOrComplexMesh};
+use crate::mc::block::model::{Block, BlockModelMesh, CubeOrComplexMesh, BlockStateDefinitionType};
 
 use crate::mc::BlockManager;
 use crate::WmRenderer;
 
-fn get_block_mesh<'a>(
+fn get_block<'a>(
     block_manager: &'a BlockManager,
-    state: &BlockState,
-) -> Option<&'a BlockStateDefinition> {
-    (&block_manager.block_states).get((*state).packed_key?.state_index() as usize)
+    state: &ChunkBlockState,
+) -> Option<&'a Block> {
+    Some(&block_manager.block_keys.get(state.packed_key? as usize)?.1)
 }
 
 #[derive(Debug)]
@@ -135,9 +135,12 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
         block_manager: &BlockManager,
         chunk: &Chunk,
         mapper: fn(&MeshVertex, f32, f32, f32) -> T,
-        filter: Box<dyn Fn(BlockState) -> bool>,
+        filter: Box<dyn Fn(ChunkBlockState) -> bool>,
         state_provider: &dyn BlockStateProvider,
     ) -> Self {
+        let chunk_world_x = (chunk.pos.0 * (CHUNK_WIDTH as i32));
+        let chunk_world_z = (chunk.pos.1 * (CHUNK_WIDTH as i32));
+
         //Generates the mesh for this chunk, hiding any full-block faces that aren't touching a transparent block
         let mut north_vertices = Vec::new();
         let mut east_vertices = Vec::new();
@@ -154,183 +157,190 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
             let section_index = y / (CHUNK_SECTION_HEIGHT as i16);
 
-            let block_state: BlockState = state_provider.get_state(x, y, z);
+            let block_state: ChunkBlockState = state_provider.get_state(x, y, z);
 
             if !filter(block_state) {
                 continue;
             }
 
-            let baked_mesh = match get_block_mesh(block_manager, &block_state) {
+            let baked_mesh = match get_block(block_manager, &block_state) {
                 None => continue,
                 Some(mesh) => mesh,
             };
 
-            match &baked_mesh.shape {
-                CubeOrComplexMesh::Cube(model) => {
-                    let render_north = {
-                        let block_mesh =
-                            get_block_mesh(block_manager, &state_provider.get_state(x, y, z - 1));
+            match &baked_mesh.kind {
+                BlockStateDefinitionType::Variant(mesh) => {
+                    match &mesh.shape {
+                        CubeOrComplexMesh::Cube(model) => {
+                            let render_north = {
+                                let block =
+                                    get_block(block_manager, &state_provider.get_state(x, y, z - 1));
 
-                        match block_mesh {
-                            Some(mesh) => mesh.transparent_or_complex,
-                            None => true,
+                                match block {
+                                    Some(block) => block.transparent_or_complex,
+                                    None => true,
+                                }
+                            };
+
+                            let render_south = {
+                                let block =
+                                    get_block(block_manager, &state_provider.get_state(x, y, z + 1));
+
+                                match block {
+                                    Some(block) => block.transparent_or_complex,
+                                    None => true,
+                                }
+                            };
+
+                            let render_up = {
+                                let block =
+                                    get_block(block_manager, &state_provider.get_state(x, y + 1, z));
+
+                                match block {
+                                    Some(block) => block.transparent_or_complex,
+                                    None => true,
+                                }
+                            };
+
+                            let render_down = {
+                                let block =
+                                    get_block(block_manager, &state_provider.get_state(x, y - 1, z));
+
+                                match block {
+                                    Some(block) => block.transparent_or_complex,
+                                    None => true,
+                                }
+                            };
+
+                            let render_west = {
+                                let block =
+                                    get_block(block_manager, &state_provider.get_state(x - 1, y, z));
+
+                                match block {
+                                    Some(block) => block.transparent_or_complex,
+                                    None => true,
+                                }
+                            };
+
+                            let render_east = {
+                                let block =
+                                    get_block(block_manager, &state_provider.get_state(x + 1, y, z));
+
+                                match block {
+                                    Some(block) => block.transparent_or_complex,
+                                    None => true,
+                                }
+                            };
+
+                            if render_north {
+                                match &model.north {
+                                    None => {}
+                                    Some(north) => north_vertices.extend(north.iter().map(|v| {
+                                        mapper(
+                                            v,
+                                            (x as i32 + chunk_world_x) as f32,
+                                            y as f32,
+                                            (z as i32 + chunk_world_z) as f32,
+                                        )
+                                    })),
+                                };
+                            }
+                            if render_east {
+                                match &model.east {
+                                    None => {}
+                                    Some(east) => east_vertices.extend(east.iter().map(|v| {
+                                        mapper(
+                                            v,
+                                            (x as i32 + chunk_world_x) as f32,
+                                            y as f32,
+                                            (z as i32 + chunk_world_z) as f32,
+                                        )
+                                    })),
+                                };
+                            }
+                            if render_south {
+                                match &model.south {
+                                    None => {}
+                                    Some(south) => south_vertices.extend(south.iter().map(|v| {
+                                        mapper(
+                                            v,
+                                            (x as i32 + chunk_world_x) as f32,
+                                            y as f32,
+                                            (z as i32 + chunk_world_z) as f32,
+                                        )
+                                    })),
+                                };
+                            }
+                            if render_west {
+                                match &model.west {
+                                    None => {}
+                                    Some(west) => west_vertices.extend(west.iter().map(|v| {
+                                        mapper(
+                                            v,
+                                            (x as i32 + chunk_world_x) as f32,
+                                            y as f32,
+                                            (z as i32 + chunk_world_z) as f32,
+                                        )
+                                    })),
+                                };
+                            }
+                            if render_up {
+                                match &model.up {
+                                    None => {}
+                                    Some(up) => up_vertices.extend(up.iter().map(|v| {
+                                        mapper(
+                                            v,
+                                            (x as i32 + chunk_world_x) as f32,
+                                            y as f32,
+                                            (z as i32 + chunk_world_z) as f32,
+                                        )
+                                    })),
+                                };
+                            }
+                            if render_down {
+                                match &model.down {
+                                    None => {}
+                                    Some(down) => down_vertices.extend(down.iter().map(|v| {
+                                        mapper(
+                                            v,
+                                            (x as i32 + chunk_world_x) as f32,
+                                            y as f32,
+                                            (z as i32 + chunk_world_z) as f32,
+                                        )
+                                    })),
+                                };
+                            }
                         }
-                    };
-
-                    let render_south = {
-                        let block_mesh =
-                            get_block_mesh(block_manager, &state_provider.get_state(x, y, z + 1));
-
-                        match block_mesh {
-                            Some(mesh) => mesh.transparent_or_complex,
-                            None => true,
+                        CubeOrComplexMesh::Custom(model) => {
+                            other_vertices.extend(
+                                model
+                                    .iter()
+                                    .flat_map(|faces| {
+                                        [
+                                            faces.north.as_ref(),
+                                            faces.east.as_ref(),
+                                            faces.south.as_ref(),
+                                            faces.west.as_ref(),
+                                            faces.up.as_ref(),
+                                            faces.down.as_ref(),
+                                        ]
+                                    })
+                                    .flatten()
+                                    .flatten()
+                                    .map(|v| {
+                                        mapper(
+                                            v,
+                                            (x as i32 + chunk.pos.0) as f32,
+                                            y as f32,
+                                            (z as i32 + chunk.pos.1) as f32,
+                                        )
+                                    }),
+                            );
                         }
-                    };
-
-                    let render_up = {
-                        let block_mesh =
-                            get_block_mesh(block_manager, &state_provider.get_state(x, y + 1, z));
-
-                        match block_mesh {
-                            Some(mesh) => mesh.transparent_or_complex,
-                            None => true,
-                        }
-                    };
-
-                    let render_down = {
-                        let block_mesh =
-                            get_block_mesh(block_manager, &state_provider.get_state(x, y - 1, z));
-
-                        match block_mesh {
-                            Some(mesh) => mesh.transparent_or_complex,
-                            None => true,
-                        }
-                    };
-
-                    let render_west = {
-                        let block_mesh =
-                            get_block_mesh(block_manager, &state_provider.get_state(x - 1, y, z));
-
-                        match block_mesh {
-                            Some(mesh) => mesh.transparent_or_complex,
-                            None => true,
-                        }
-                    };
-
-                    let render_east = {
-                        let block_mesh =
-                            get_block_mesh(block_manager, &state_provider.get_state(x + 1, y, z));
-
-                        match block_mesh {
-                            Some(mesh) => mesh.transparent_or_complex,
-                            None => true,
-                        }
-                    };
-
-                    if render_north {
-                        match &model.north {
-                            None => {}
-                            Some(north) => north_vertices.extend(north.iter().map(|v| {
-                                mapper(
-                                    v,
-                                    (x as i32 + chunk.pos.0) as f32,
-                                    y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
-                                )
-                            })),
-                        };
-                    }
-                    if render_east {
-                        match &model.east {
-                            None => {}
-                            Some(east) => east_vertices.extend(east.iter().map(|v| {
-                                mapper(
-                                    v,
-                                    (x as i32 + chunk.pos.0) as f32,
-                                    y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
-                                )
-                            })),
-                        };
-                    }
-                    if render_south {
-                        match &model.south {
-                            None => {}
-                            Some(south) => south_vertices.extend(south.iter().map(|v| {
-                                mapper(
-                                    v,
-                                    (x as i32 + chunk.pos.0) as f32,
-                                    y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
-                                )
-                            })),
-                        };
-                    }
-                    if render_west {
-                        match &model.west {
-                            None => {}
-                            Some(west) => west_vertices.extend(west.iter().map(|v| {
-                                mapper(
-                                    v,
-                                    (x as i32 + chunk.pos.0) as f32,
-                                    y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
-                                )
-                            })),
-                        };
-                    }
-                    if render_up {
-                        match &model.up {
-                            None => {}
-                            Some(up) => up_vertices.extend(up.iter().map(|v| {
-                                mapper(
-                                    v,
-                                    (x as i32 + chunk.pos.0) as f32,
-                                    y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
-                                )
-                            })),
-                        };
-                    }
-                    if render_down {
-                        match &model.down {
-                            None => {}
-                            Some(down) => down_vertices.extend(down.iter().map(|v| {
-                                mapper(
-                                    v,
-                                    (x as i32 + chunk.pos.0) as f32,
-                                    y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
-                                )
-                            })),
-                        };
                     }
                 }
-                CubeOrComplexMesh::Custom(model) => {
-                    other_vertices.extend(
-                        model
-                            .iter()
-                            .flat_map(|faces| {
-                                [
-                                    faces.north.as_ref(),
-                                    faces.east.as_ref(),
-                                    faces.south.as_ref(),
-                                    faces.west.as_ref(),
-                                    faces.up.as_ref(),
-                                    faces.down.as_ref(),
-                                ]
-                            })
-                            .flatten()
-                            .flatten()
-                            .map(|v| {
-                                mapper(
-                                    v,
-                                    (x as i32 + chunk.pos.0) as f32,
-                                    y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
-                                )
-                            }),
-                    );
+                BlockStateDefinitionType::Multipart(multipart) => {
+                    // multipart.generate();
                 }
             }
         }

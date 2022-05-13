@@ -10,7 +10,7 @@ pub struct BlockstateVariantModelDefinitionRotations {
 //Blocks can either be multipart or have simple variants defined.
 //If it has variants, those definitions are serialized into this struct
 
-pub struct BlockstateVariantDefinitionModel {
+pub struct BlockstateVariantModelDefinition {
     pub id: NamespacedResource,
     pub rotations: BlockstateVariantModelDefinitionRotations,
     pub model: NamespacedResource,

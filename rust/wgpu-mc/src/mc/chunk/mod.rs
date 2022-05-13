@@ -1,4 +1,4 @@
-use crate::mc::block::{BlockPos, BlockState, BlockstateKey};
+use crate::mc::block::{BlockPos, ChunkBlockState, BlockstateKey};
 use std::collections::HashMap;
 
 use crate::render::world::chunk::BakedChunkLayer;
@@ -26,7 +26,7 @@ pub type ChunkPos = (i32, i32);
 #[derive(Clone, Debug)]
 pub struct ChunkSection {
     pub empty: bool,
-    pub blocks: Box<[BlockState; SECTION_VOLUME]>,
+    pub blocks: Box<[ChunkBlockState; SECTION_VOLUME]>,
     pub offset_y: usize,
 }
 
@@ -45,7 +45,7 @@ pub struct ChunkLayers {
 ///Return a BlockState within the provided (world) coordinates. If the coordinates are out of bounds,
 /// an `Option<BlockstateKey>` value of None should be returned
 pub trait BlockStateProvider: Send + Sync + Debug {
-    fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState;
+    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
 }
 
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl Chunk {
         }
     }
 
-    pub fn blockstate_at_pos(&self, pos: BlockPos) -> BlockState {
+    pub fn blockstate_at_pos(&self, pos: BlockPos) -> ChunkBlockState {
         let x = pos.0 % 16;
         let y = pos.1 as i16;
         let z = pos.2 % 16;
@@ -74,7 +74,7 @@ impl Chunk {
 
     pub fn bake(&self, block_manager: &BlockManager) {
         let glass_index: BlockstateKey = (*block_manager
-            .variant_indices
+            .block_key_indices
             .get("Block{minecraft:glass}")
             .unwrap() as u32)
             .into();
