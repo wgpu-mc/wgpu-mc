@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::mem::size_of;
 
@@ -11,7 +12,7 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::block::{Block, BlockstateVariantKey, BlockstateKey};
 use crate::mc::chunk::ChunkManager;
-use crate::mc::datapack::{BlockModel, NamespacedResource, TextureVariableOrResource};
+use crate::mc::datapack::{AnimationData, BlockModel, NamespacedResource, TextureVariableOrResource};
 use crate::mc::entity::EntityModel;
 use crate::mc::resource::ResourceProvider;
 
@@ -97,6 +98,9 @@ pub struct MinecraftState {
     pub camera_bind_group: ArcSwap<Option<wgpu::BindGroup>>,
 
     pub texture_manager: TextureManager,
+
+    pub animated_block_buffer: ArcSwap<Option<wgpu::Buffer>>,
+    pub animated_block_bind_group: ArcSwap<Option<wgpu::BindGroup>>,
 }
 
 impl MinecraftState {
@@ -126,6 +130,9 @@ impl MinecraftState {
             camera_bind_group: ArcSwap::new(Arc::new(None)),
 
             resource_provider,
+
+            animated_block_buffer: ArcSwap::new(Arc::new(None)),
+            animated_block_bind_group: ArcSwap::new(Arc::new(None)),
         }
     }
 
@@ -219,13 +226,15 @@ impl MinecraftState {
             &textures
                 .iter()
                 .map(|resource| {
+                    let res = &resource.prepend("textures/").append(".png");
                     (
                         *resource,
                         self.resource_provider
                             .get_resource(&resource.prepend("textures/").append(".png")).unwrap(),
+                                   AnimationData::deserialize(res, self.resource_provider.borrow()),
                     )
                 })
-                .collect::<Vec<(&NamespacedResource, Vec<u8>)>>()[..],
+                .collect::<Vec<(&NamespacedResource, Vec<u8>, Option<AnimationData>)>>()[..],
         );
 
         block_atlas.upload(wm);

@@ -75,7 +75,7 @@ impl Chunk {
     pub fn bake(&self, block_manager: &BlockManager) {
         let glass_index = *block_manager
             .variant_indices
-            .get("Block{minecraft:glass}")
+            .get("Block{minecraft:blockstates/glass.json}")
             .unwrap() as u32;
 
         let glass = BakedChunkLayer::bake(
@@ -88,6 +88,7 @@ impl Chunk {
                 normal: [v.normal[0], v.normal[1], v.normal[2], 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
                 tangent: [1.0, 1.0, 1.0, 1.0],
+                uv_offset: v.uv_offset,
             },
             Box::new(move |state| match state.packed_key {
                 None => false,
@@ -106,6 +107,7 @@ impl Chunk {
                 normal: [v.normal[0], v.normal[1], v.normal[2], 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
                 tangent: [1.0, 1.0, 1.0, 1.0],
+                uv_offset: v.uv_offset,
             },
             Box::new(move |state| match state.packed_key {
                 None => false,

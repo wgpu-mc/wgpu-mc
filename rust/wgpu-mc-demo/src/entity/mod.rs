@@ -53,7 +53,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
     let player_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full());
 
     //Allocate the image with the alex_skin_ns variable as the key
-    player_atlas.allocate(&[(&alex_skin_ns, &alex_skin_resource)]);
+    player_atlas.allocate(&[(&alex_skin_ns, alex_skin_resource, None)]);
 
     //Uploads the atlas texture to the GPU
     player_atlas.upload(wm);

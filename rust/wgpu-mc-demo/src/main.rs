@@ -212,6 +212,8 @@ fn begin_rendering(
 
     let mut spin = 0.0;
 
+    let mut frame : u32 = 0;
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -287,9 +289,14 @@ fn begin_rendering(
             Event::RedrawRequested(_) => {
                 wm.upload_camera();
 
+                if frame % 20 == 0 {
+                    wm.update_animated_textures(frame / 20 as u32);
+                }
+
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
                 spin += 0.5;
+                frame += 1;
 
                 let mut camera = **wm.mc.camera.load();
 

@@ -18,17 +18,19 @@ pub struct TerrainVertex {
     pub normal: [f32; 4],
     pub color: [f32; 4],
     pub tangent: [f32; 4],
+    pub uv_offset: u32,
 }
 
 impl TerrainVertex {
 
-    const VAA: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
+    const VAA: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
         0 => Float32x3,
         1 => Float32x2,
         2 => Float32x2,
         3 => Float32x4,
         4 => Float32x4,
-        5 => Float32x4
+        5 => Float32x4,
+        6 => Uint32
     ];
 
     #[must_use]
@@ -85,6 +87,7 @@ impl WmPipeline for TerrainPipeline {
                         //&layouts.texture, &layouts.matrix4, &layouts.cubemap
                         layouts.get("texture").unwrap(),
                         layouts.get("matrix4").unwrap(),
+                        layouts.get("ssbo").unwrap(),
                     ],
                     push_constant_ranges: &[],
                 }),
@@ -187,6 +190,14 @@ impl WmPipeline for TerrainPipeline {
         render_pass.set_bind_group(
             1,
             (**arena.alloc(wm.mc.camera_bind_group.load_full()))
+                .as_ref()
+                .unwrap(),
+            &[],
+        );
+
+        render_pass.set_bind_group(
+            2,
+            (**arena.alloc(wm.mc.animated_block_bind_group.load_full()))
                 .as_ref()
                 .unwrap(),
             &[],

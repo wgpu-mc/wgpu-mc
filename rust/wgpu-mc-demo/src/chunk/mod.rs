@@ -24,7 +24,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
 
     let variant_key = *bm
         .variant_indices
-        .get("Block{minecraft:blockstates/cobblestone.json}")
+        .get("Block{minecraft:blockstates/magma_block.json}")
         .unwrap();
 
     let provider = SimpleBlockstateProvider(variant_key as BlockstateKey);

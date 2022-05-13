@@ -1,5 +1,6 @@
 #![feature(set_ptr_value)]
 
+use std::borrow::Borrow;
 use std::iter;
 use tracing::{span, Level};
 
@@ -20,7 +21,7 @@ use crate::mc::MinecraftState;
 use raw_window_handle::HasRawWindowHandle;
 
 use std::collections::HashMap;
-use wgpu::{RenderPassDescriptor, TextureFormat, TextureViewDescriptor};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, RenderPassDescriptor, TextureFormat, TextureViewDescriptor};
 
 use crate::texture::TextureSamplerView;
 
@@ -32,6 +33,7 @@ use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
 use arc_swap::ArcSwap;
 
 use crate::render::atlas::Atlas;
+use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 
 use crate::util::WmArena;
 
@@ -218,6 +220,61 @@ impl WmRenderer {
             (*self.mc.camera_buffer.load_full()).as_ref().unwrap(),
             0,
             bytemuck::cast_slice(&[uniforms]),
+        );
+    }
+
+    pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
+        let d = data.as_slice();
+
+        let buf = self.mc.animated_block_buffer.borrow().load_full();
+        if buf.is_some() {
+            buf.as_ref().as_ref().unwrap().destroy();
+        }
+
+        let animated_block_buffer = self.wgpu_state.device.create_buffer(&BufferDescriptor {
+            label: None,
+            size: (d.len() * 8) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let animated_block_bind_group = self
+            .wgpu_state
+            .device
+            .create_bind_group(&BindGroupDescriptor {
+                label: None,
+                layout: self
+                    .render_pipeline_manager
+                    .load()
+                    .bind_group_layouts
+                    .read()
+                    .get("ssbo")
+                    .unwrap(),
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(
+                        animated_block_buffer.as_entire_buffer_binding(),
+                    ),
+                }],
+            });
+
+        self.mc.animated_block_buffer.store(Arc::new(Some(animated_block_buffer)));
+        self.mc.animated_block_bind_group.store(Arc::new(Some(animated_block_bind_group)));
+
+        self.wgpu_state.queue.write_buffer(
+            (*self.mc.animated_block_buffer.load_full()).as_ref().unwrap(),
+            0,
+            bytemuck::cast_slice(d),
+        );
+    }
+
+    pub fn update_animated_textures(&self, subframe: u32) {
+        self.upload_animated_block_buffer(
+            self
+            .mc
+            .texture_manager.atlases
+            .load_full()
+            .get(BLOCK_ATLAS_NAME)
+            .unwrap().load_full().update_textures(subframe)
         );
     }
 

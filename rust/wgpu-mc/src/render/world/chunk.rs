@@ -2,7 +2,7 @@ use crate::mc::chunk::{
     BlockStateProvider, Chunk, WorldBuffers, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME,
     CHUNK_WIDTH,
 };
-use crate::model::MeshVertex;
+use crate::model::{AnimatedMeshVertex, MeshVertex};
 
 use crate::mc::block::BlockState;
 use bytemuck::Pod;
@@ -134,7 +134,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
     pub fn bake(
         block_manager: &BlockManager,
         chunk: &Chunk,
-        mapper: fn(&MeshVertex, f32, f32, f32) -> T,
+        mapper: fn(&AnimatedMeshVertex, f32, f32, f32) -> T,
         filter: Box<dyn Fn(BlockState) -> bool>,
         state_provider: &dyn BlockStateProvider,
     ) -> Self {

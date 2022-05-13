@@ -37,6 +37,15 @@ impl GuiVertex {
     }
 }
 
+///Represents a meshvertex, that does not directly contain UV, but it contains an offset into a buffer that contains the UV.
+#[derive(Copy, Clone, Debug)]
+pub struct AnimatedMeshVertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
+    pub normal: [f32; 3],
+    pub uv_offset: u32,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct MeshVertex {
     pub position: [f32; 3],

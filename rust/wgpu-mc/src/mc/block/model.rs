@@ -4,7 +4,7 @@ use crate::mc::block::blockstate::BlockstateVariantModelDefinitionRotations;
 use crate::mc::datapack;
 use crate::mc::datapack::{FaceTexture, NamespacedResource, TextureVariableOrResource};
 use crate::mc::resource::ResourceProvider;
-use crate::model::MeshVertex;
+use crate::model::{AnimatedMeshVertex, MeshVertex};
 use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS};
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use crate::texture::UV;
@@ -12,12 +12,12 @@ use cgmath::{Matrix3, SquareMatrix, Vector3};
 
 #[derive(Debug)]
 pub struct BlockModelFaces {
-    pub north: Option<[MeshVertex; 6]>,
-    pub east: Option<[MeshVertex; 6]>,
-    pub south: Option<[MeshVertex; 6]>,
-    pub west: Option<[MeshVertex; 6]>,
-    pub up: Option<[MeshVertex; 6]>,
-    pub down: Option<[MeshVertex; 6]>,
+    pub north: Option<[AnimatedMeshVertex; 6]>,
+    pub east: Option<[AnimatedMeshVertex; 6]>,
+    pub south: Option<[AnimatedMeshVertex; 6]>,
+    pub west: Option<[AnimatedMeshVertex; 6]>,
+    pub up: Option<[AnimatedMeshVertex; 6]>,
+    pub down: Option<[AnimatedMeshVertex; 6]>,
 }
 
 #[derive(Debug)]
@@ -108,50 +108,124 @@ impl BlockstateVariantMesh {
                 //Face textures
 
                 // println!("{:?}", element);
-                let north = element.face_textures.north.as_ref().map(|tex| Self::absolute_atlas_uv(
+                let north = element.face_textures.north.as_ref().and_then(|tex|
+                    match Self::absolute_atlas_uv(
                     tex,
                     tex_manager,
                     &model.textures
-                ).unwrap_or_else(|| panic!("{}, {:?}", model.id, tex.texture)));
+                    ) {
+                        None => None,
+                        Some(f) => {
+                            match tex_manager.atlases
+                                .load_full()
+                                .get(BLOCK_ATLAS_NAME)
+                                .unwrap().load_full().animated_texture_offsets.load_full()
+                                .get(tex.texture.recurse_resolve_as_resource(&model.textures).unwrap()) {
+                                None => Some((f, 0 as u32)),
+                                Some(t) => Some((f, *t)),
+                            }
+                        }
+                    }
+                );
 
                 let east = element.face_textures.east.as_ref().and_then(|tex| {
-                    Self::absolute_atlas_uv(
+                    match Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )
+                    ) {
+                        None => None,
+                        Some(f) => {
+                            match tex_manager.atlases
+                                .load_full()
+                                .get(BLOCK_ATLAS_NAME)
+                                .unwrap().load_full().animated_texture_offsets.load_full()
+                                .get(tex.texture.recurse_resolve_as_resource(&model.textures).unwrap()) {
+                                None => Some((f, 0 as u32)),
+                                Some(t) => Some((f, *t)),
+                            }
+                        }
+                    }
                 });
 
                 let south = element.face_textures.south.as_ref().and_then(|tex| {
-                    Self::absolute_atlas_uv(
+                    match Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )
+                    ) {
+                        None => None,
+                        Some(f) => {
+                            match tex_manager.atlases
+                                .load_full()
+                                .get(BLOCK_ATLAS_NAME)
+                                .unwrap().load_full().animated_texture_offsets.load_full()
+                                .get(tex.texture.recurse_resolve_as_resource(&model.textures).unwrap()) {
+                                None => Some((f, 0 as u32)),
+                                Some(t) => Some((f, *t)),
+                            }
+                        }
+                    }
                 });
 
                 let west = element.face_textures.west.as_ref().and_then(|tex| {
-                    Self::absolute_atlas_uv(
+                    match Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )
+                    ) {
+                        None => None,
+                        Some(f) => {
+                            match tex_manager.atlases
+                                .load_full()
+                                .get(BLOCK_ATLAS_NAME)
+                                .unwrap().load_full().animated_texture_offsets.load_full()
+                                .get(tex.texture.recurse_resolve_as_resource(&model.textures).unwrap()) {
+                                None => Some((f, 0 as u32)),
+                                Some(t) => Some((f, *t)),
+                            }
+                        }
+                    }
                 });
 
                 let up = element.face_textures.up.as_ref().and_then(|tex| {
-                    Self::absolute_atlas_uv(
+                    match Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )
+                    ) {
+                        None => None,
+                        Some(f) => {
+                            match tex_manager.atlases
+                                .load_full()
+                                .get(BLOCK_ATLAS_NAME)
+                                .unwrap().load_full().animated_texture_offsets.load_full()
+                                .get(tex.texture.recurse_resolve_as_resource(&model.textures).unwrap()) {
+                                None => Some((f, 0 as u32)),
+                                Some(t) => Some((f, *t)),
+                            }
+                        }
+                    }
                 });
 
                 let down = element.face_textures.down.as_ref().and_then(|tex| {
-                    Self::absolute_atlas_uv(
+                    match Self::absolute_atlas_uv(
                         tex,
                         tex_manager,
                         &model.textures
-                    )
+                    ) {
+                        None => None,
+                        Some(f) => {
+                            match tex_manager.atlases
+                                .load_full()
+                                .get(BLOCK_ATLAS_NAME)
+                                .unwrap().load_full().animated_texture_offsets.load_full()
+                                .get(tex.texture.recurse_resolve_as_resource(&model.textures).unwrap()) {
+                                None => Some((f, 0 as u32)),
+                                Some(t) => Some((f, *t)),
+                            }
+                        }
+                    }
                 });
 
                 let a = (matrix * Vector3::new(1.0 - element.from.0, element.from.1, element.from.2)).into();
@@ -166,52 +240,52 @@ impl BlockstateVariantMesh {
                 #[rustfmt::skip]
                 let faces = BlockModelFaces {
                     south: south.map(|south| {[
-                        MeshVertex { position: e, tex_coords: [south.1.0, south.1.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: h, tex_coords: [south.1.0, south.0.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: g, tex_coords: [south.0.0, south.0.1], normal: [0.0, 0.0, 1.0] },
-                        MeshVertex { position: f, tex_coords: [south.0.0, south.1.1], normal: [0.0, 0.0, 1.0] },
+                        AnimatedMeshVertex { position: e, tex_coords: [south.0.1.0, south.0.1.1], normal: [0.0, 0.0, 1.0], uv_offset: south.1 },
+                        AnimatedMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0], uv_offset: south.1 },
+                        AnimatedMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0], uv_offset: south.1 },
+                        AnimatedMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0], uv_offset: south.1 },
+                        AnimatedMeshVertex { position: g, tex_coords: [south.0.0.0, south.0.0.1], normal: [0.0, 0.0, 1.0], uv_offset: south.1 },
+                        AnimatedMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0], uv_offset: south.1 },
                     ]}),
                     west: west.map(|west| {[
-                        MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
-                        MeshVertex { position: b, tex_coords: [west.0.0, west.1.1], normal: [-1.0, 0.0, 0.0] },
-                        MeshVertex { position: f, tex_coords: [west.1.0, west.1.1], normal: [-1.0, 0.0, 0.0] },
-                        MeshVertex { position: c, tex_coords: [west.0.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
-                        MeshVertex { position: b, tex_coords: [west.0.0, west.1.1], normal: [-1.0, 0.0, 0.0] },
-                        MeshVertex { position: g, tex_coords: [west.1.0, west.0.1], normal: [-1.0, 0.0, 0.0] },
+                        AnimatedMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0], uv_offset: west.1 },
+                        AnimatedMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0], uv_offset: west.1 },
+                        AnimatedMeshVertex { position: f, tex_coords: [west.0.1.0, west.0.1.1], normal: [-1.0, 0.0, 0.0], uv_offset: west.1 },
+                        AnimatedMeshVertex { position: c, tex_coords: [west.0.0.0, west.0.0.1], normal: [-1.0, 0.0, 0.0], uv_offset: west.1 },
+                        AnimatedMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0], uv_offset: west.1 },
+                        AnimatedMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0], uv_offset: west.1 },
                     ]}),
                     north: north.map(|north| {[
-                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: b, tex_coords: [north.1.0, north.1.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: d, tex_coords: [north.0.0, north.0.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: a, tex_coords: [north.0.0, north.1.1], normal: [0.0, 0.0, -1.0] },
-                        MeshVertex { position: c, tex_coords: [north.1.0, north.0.1], normal: [0.0, 0.0, -1.0] },
+                        AnimatedMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0], uv_offset: north.1 },
+                        AnimatedMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0], uv_offset: north.1 },
+                        AnimatedMeshVertex { position: b, tex_coords: [north.0.1.0, north.0.1.1], normal: [0.0, 0.0, -1.0], uv_offset: north.1 },
+                        AnimatedMeshVertex { position: d, tex_coords: [north.0.0.0, north.0.0.1], normal: [0.0, 0.0, -1.0], uv_offset: north.1 },
+                        AnimatedMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0], uv_offset: north.1 },
+                        AnimatedMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0], uv_offset: north.1 },
                     ]}),
                     east: east.map(|east| {[
-                        MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: a, tex_coords: [east.1.0, east.1.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: d, tex_coords: [east.1.0, east.0.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: d, tex_coords: [east.1.0, east.0.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: h, tex_coords: [east.0.0, east.0.1], normal: [1.0, 0.0, 0.0] },
-                        MeshVertex { position: e, tex_coords: [east.0.0, east.1.1], normal: [1.0, 0.0, 0.0] },
+                        AnimatedMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0], uv_offset: east.1 },
+                        AnimatedMeshVertex { position: a, tex_coords: [east.0.1.0, east.0.1.1], normal: [1.0, 0.0, 0.0], uv_offset: east.1 },
+                        AnimatedMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0], uv_offset: east.1 },
+                        AnimatedMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0], uv_offset: east.1 },
+                        AnimatedMeshVertex { position: h, tex_coords: [east.0.0.0, east.0.0.1], normal: [1.0, 0.0, 0.0], uv_offset: east.1 },
+                        AnimatedMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0], uv_offset: east.1 },
                     ]}),
                     up: up.map(|up| {[
-                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [0.0, 1.0, 0.0] },
-                        MeshVertex { position: h, tex_coords: [up.0.0, up.0.1], normal: [0.0, 1.0, 0.0] },
-                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [0.0, 1.0, 0.0] },
-                        MeshVertex { position: c, tex_coords: [up.1.0, up.1.1], normal: [0.0, 1.0, 0.0] },
-                        MeshVertex { position: g, tex_coords: [up.1.0, up.0.1], normal: [0.0, 1.0, 0.0] },
-                        MeshVertex { position: d, tex_coords: [up.0.0, up.1.1], normal: [0.0, 1.0, 0.0] },
+                        AnimatedMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0], uv_offset: up.1 },
+                        AnimatedMeshVertex { position: h, tex_coords: [up.0.0.0, up.0.0.1], normal: [0.0, 1.0, 0.0], uv_offset: up.1 },
+                        AnimatedMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0], uv_offset: up.1 },
+                        AnimatedMeshVertex { position: c, tex_coords: [up.0.1.0, up.0.1.1], normal: [0.0, 1.0, 0.0], uv_offset: up.1 },
+                        AnimatedMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0], uv_offset: up.1 },
+                        AnimatedMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0], uv_offset: up.1 },
                     ]}),
                     down: down.map(|down| {[
-                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: b, tex_coords: [down.0.0, down.0.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: f, tex_coords: [down.0.0, down.1.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: a, tex_coords: [down.1.0, down.0.1], normal: [0.0, -1.0, 0.0] },
-                        MeshVertex { position: e, tex_coords: [down.1.0, down.1.1], normal: [0.0, -1.0, 0.0] },
+                        AnimatedMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0], uv_offset: down.1 },
+                        AnimatedMeshVertex { position: b, tex_coords: [down.0.0.0, down.0.0.1], normal: [0.0, -1.0, 0.0], uv_offset: down.1 },
+                        AnimatedMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0], uv_offset: down.1 },
+                        AnimatedMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0], uv_offset: down.1 },
+                        AnimatedMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0], uv_offset: down.1 },
+                        AnimatedMeshVertex { position: e, tex_coords: [down.0.1.0, down.0.1.1], normal: [0.0, -1.0, 0.0], uv_offset: down.1 },
                     ]}),
                 };
 
