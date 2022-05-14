@@ -114,15 +114,16 @@ impl Multipart {
 
     pub fn generate(&self, keys: &HashMap<String, String>) -> Vec<&MultipartApply> {
         self.cases.iter().filter_map(|case| {
-            if case.predicates.iter().any(|predicate|
+            if case.predicates.len() == 0 || case.predicates.iter().any(|predicate|
                 keys.get(&predicate.key)
                     .map_or(false, |value| value == &predicate.value)
             ) {
-                Some(&case.apply)
+                //TODO: use weights with the apply
+                Some(case.apply.first().unwrap())
             } else {
                 None
             }
-        }).flatten().collect::<Vec<&MultipartApply>>()
+        }).collect::<Vec<&MultipartApply>>()
     }
 
 }

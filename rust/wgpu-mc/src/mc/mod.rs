@@ -276,7 +276,7 @@ impl MinecraftState {
                         *resource,
                         self.resource_provider
                             .get_resource(&resource.prepend("textures/").append(".png")).unwrap(),
-                                   AnimationData::deserialize(res, self.resource_provider.borrow()),
+                        AnimationData::from_datapack(res, self.resource_provider.borrow()),
                     )
                 })
                 .collect::<Vec<(&NamespacedResource, Vec<u8>, Option<AnimationData>)>>()[..],
@@ -302,12 +302,8 @@ impl MinecraftState {
         block_manager.block_definitions.iter().for_each(|(name, block): (&NamespacedResource, &BlockDefinition)| {
             match &block.definition {
                 BlockDefinitionType::Multipart { multipart } => {
-                    let formatted_name = NamespacedResource::try_from(
-                        &block_name_formatter(name, "")
-                    ).unwrap();
-
                     multiparts.push(
-                        (formatted_name, multipart)
+                        (name.clone(), multipart)
                     );
                 }
                 BlockDefinitionType::Variants { states } => {

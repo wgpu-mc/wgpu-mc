@@ -8,7 +8,7 @@ use std::fs;
 
 use std::path::PathBuf;
 
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use wgpu_mc::mc::datapack::NamespacedResource;
 
 use futures::executor::block_on;
@@ -294,9 +294,7 @@ fn begin_rendering(
             Event::RedrawRequested(_) => {
                 wm.upload_camera();
 
-                if frame % 20 == 0 {
-                    wm.update_animated_textures(frame / 20 as u32);
-                }
+                wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
 
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 

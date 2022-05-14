@@ -313,7 +313,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                 };
                             }
                         }
-                        CubeOrComplexMesh::Custom(model) => {
+                        CubeOrComplexMesh::Complex(model) => {
                             other_vertices.extend(
                                 model
                                     .iter()
@@ -342,7 +342,61 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                     }
                 }
                 BlockStateDefinitionType::Multipart(multipart) => {
-                    // multipart.generate();
+                    let applies = multipart.generate(state_kv);
+
+                    applies.iter().for_each(|apply| {
+                        match &apply.model.shape {
+                            CubeOrComplexMesh::Cube(cube) => {
+                                other_vertices.extend(
+                                    [
+                                        &cube.north,
+                                        &cube.south,
+                                        &cube.up,
+                                        &cube.down,
+                                        &cube.west,
+                                        &cube.east
+                                    ]
+                                        .iter()
+                                        .flat_map(|&side| side)
+                                        .flatten()
+                                        .map(|v| {
+                                            mapper(
+                                                v,
+                                                (x as i32 + chunk_world_x) as f32,
+                                                y as f32,
+                                                (z as i32 + chunk_world_z) as f32,
+                                            )
+                                        })
+                                )
+                            }
+                            CubeOrComplexMesh::Complex(custom) => {
+                                other_vertices.extend(
+                                    custom
+                                        .iter()
+                                        .flat_map(|faces| {
+                                            [
+                                                faces.north.as_ref(),
+                                                faces.east.as_ref(),
+                                                faces.south.as_ref(),
+                                                faces.west.as_ref(),
+                                                faces.up.as_ref(),
+                                                faces.down.as_ref(),
+                                            ]
+                                        })
+                                        .flatten()
+                                        .flatten()
+                                        .map(|v| {
+                                            mapper(
+                                                v,
+                                                (x as i32 + chunk_world_x) as f32,
+                                                y as f32,
+                                                (z as i32 + chunk_world_z) as f32,
+                                            )
+                                        }),
+                                );
+                            }
+                        }
+                    });
                 }
             }
         }

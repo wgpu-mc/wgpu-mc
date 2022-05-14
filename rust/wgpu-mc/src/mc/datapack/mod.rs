@@ -7,6 +7,7 @@ use cgmath::Matrix4;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter};
+use serde::Deserialize;
 
 #[macro_export]
 macro_rules! nsr (
@@ -374,81 +375,41 @@ impl BlockModel {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
 pub struct AnimationData {
+    #[serde(default = "frame_time")]
     pub frame_time: u32,
+    #[serde(default)]
     pub interpolate: bool,
     pub frames: Option<Vec<u32>>,
 }
+
+fn frame_time() -> u32 { 5 }
 
 impl AnimationData {
     pub fn new() -> Self {
         Self {
             frame_time: 0,
             interpolate: false,
-            frames: Option::None,
+            frames: None
         }
     }
 
-    pub fn clone(animation: &AnimationData) -> Self {
-        Self {
-            frame_time: animation.frame_time,
-            interpolate: animation.interpolate,
-            frames: match &animation.frames {
-                None => None,
-                Some(frames) => {
-                    let mut out = Vec::new();
-
-                    for frame in frames {
-                        out.push(*frame);
-                    }
-
-                    Some(out)
-                }
-            },
-        }
-    }
-
-    pub fn deserialize(
+    pub fn from_datapack(
         identifier: &NamespacedResource,
         resource_provider: &dyn ResourceProvider,
     ) -> Option<Self> {
         let res = identifier.append(".mcmeta");
-        let optional_res = resource_provider.get_resource(&res);
+        let bytes = resource_provider.get_resource(&res)?;
 
-        if optional_res.is_none() { return None; }
-
-        let bytes = optional_res.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         let obj = json.as_object().unwrap();
 
-        let animation_opt = obj.get("animation");
+        let animation = obj.get("animation")?;
 
-        if animation_opt.is_none() { return None; }
+        let from_val: Result<Self, _> = serde_json::from_value(animation.clone());
 
-        let animation = animation_opt.unwrap();
-
-        Some(
-            Self {
-                frame_time: match animation.get("frametime") {
-                    None => 1,
-                    Some(f) => f.as_u64().unwrap() as u32
-                },
-                interpolate: match animation.get("interpolate") {
-                    None => false,
-                    Some(i) => i.as_bool().unwrap()
-                },
-                frames: match animation.get("frames") {
-                    None => None,
-                    Some(f) => {
-                        let mut v : Vec<u32> = Vec::new();
-                        for frame in f.as_array().unwrap().iter() {
-                            v.push(frame.as_u64().unwrap() as u32);
-                        }
-                        Some(v)
-                    }
-                }
-            }
-        )
+        from_val.ok()
     }
 }

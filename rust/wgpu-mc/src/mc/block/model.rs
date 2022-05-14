@@ -28,7 +28,7 @@ pub enum CubeOrComplexMesh {
     ///Known to be a simple cube. Only cubes are eligible for sides to be culled depending on the state if it's neighbours
     Cube(Box<BlockModelFaces>),
     ///Something other than a simple cube, such as an anvil, slab, or enchanting table.
-    Custom(Vec<BlockModelFaces>),
+    Complex(Vec<BlockModelFaces>),
 }
 
 ///A block can be defined as having simple variants, or it can be multipart, meaning multiple models
@@ -324,7 +324,7 @@ impl BlockModelMesh {
             shape: if is_cube {
                 CubeOrComplexMesh::Cube(Box::new(results.pop().unwrap()))
             } else {
-                CubeOrComplexMesh::Custom(results)
+                CubeOrComplexMesh::Complex(results)
             },
             transparent_or_complex: !is_cube || has_transparency,
         })
