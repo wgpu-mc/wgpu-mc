@@ -24,21 +24,23 @@ impl WgslShader {
         device: &wgpu::Device,
         frag_entry: String,
         vert_entry: String,
-    ) -> Self {
-        let shader_src = rp.get_resource(resource).unwrap();
+    ) -> Option<Self> {
+        let shader_src = rp.get_resource(resource)?;
 
-        let shader_src = std::str::from_utf8(&shader_src).unwrap();
+        let shader_src = std::str::from_utf8(&shader_src).ok()?;
 
         let module = device.create_shader_module(&ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(Cow::from(shader_src)),
         });
 
-        Self {
-            shader: module,
-            frag_entry,
-            vert_entry,
-        }
+        Some(
+            Self {
+                shader: module,
+                frag_entry,
+                vert_entry,
+            }
+        )
     }
 }
 
@@ -70,8 +72,6 @@ impl GlslShader {
 
         let frag_src = std::str::from_utf8(&frag_src).unwrap();
         let vert_src = std::str::from_utf8(&vert_src).unwrap();
-
-        println!("{}", frag_src);
 
         let frag_module = device.create_shader_module(&ShaderModuleDescriptor {
             label: None,

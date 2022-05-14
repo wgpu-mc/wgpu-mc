@@ -39,9 +39,10 @@ impl Display for NamespacedResource {
 }
 
 impl TryFrom<&str> for NamespacedResource {
+
     type Error = ();
 
-    fn try_from(string: &str) -> Result<Self, Self::Error> {
+    fn try_from(string: &str) -> Result<NamespacedResource, Self::Error> {
         // Parse the rest of the namespace
         let mut split = string.split(':').take(2);
 
@@ -51,6 +52,41 @@ impl TryFrom<&str> for NamespacedResource {
             _ => return Err(()),
         })
     }
+
+}
+
+impl TryFrom<&String> for NamespacedResource {
+
+    type Error = ();
+
+    fn try_from(string: &String) -> Result<NamespacedResource, Self::Error> {
+        // Parse the rest of the namespace
+        let mut split = string.split(':').take(2);
+
+        Ok(match (split.next(), split.next()) {
+            (Some(ns), Some(id)) => Self(ns.into(), id.into()),
+            (Some(id), None) => Self("minecraft".into(), id.into()),
+            _ => return Err(()),
+        })
+    }
+
+}
+
+impl TryFrom<String> for NamespacedResource {
+
+    type Error = ();
+
+    fn try_from(string: String) -> Result<NamespacedResource, Self::Error> {
+        // Parse the rest of the namespace
+        let mut split = string.split(':').take(2);
+
+        Ok(match (split.next(), split.next()) {
+            (Some(ns), Some(id)) => Self(ns.into(), id.into()),
+            (Some(id), None) => Self("minecraft".into(), id.into()),
+            _ => return Err(()),
+        })
+    }
+
 }
 
 impl From<(&str, &str)> for NamespacedResource {
@@ -263,10 +299,7 @@ impl BlockModel {
             return model_map.get(identifier);
         }
 
-        let bytes_opt = resource_provider.get_resource(&identifier.prepend("models/").append(".json"));
-        if bytes_opt.is_none() { return None; }
-
-        let bytes = bytes_opt.unwrap();
+        let bytes = resource_provider.get_resource(&identifier.prepend("models/").append(".json"))?;
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         let obj = json.as_object()?;

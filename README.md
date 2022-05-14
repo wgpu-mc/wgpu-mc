@@ -28,10 +28,12 @@ with Java Edition.
 Engine
 
 - [x] Block models from standard datapacks
+  - [x] Multipart
+  - [x] Variants
 - [x] Terrain rendering
 - [x] Skybox support
 - [x] Instanced Entity Rendering
-- [ ] Animated textures
+- [x] Animated textures
 - [ ] Particles
 - [ ] Lighting
 - [ ] Item rendering

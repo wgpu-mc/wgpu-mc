@@ -25,7 +25,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                 &wm.wgpu_state.device,
                 "fs_main".into(),
                 "vs_main".into(),
-            )) as Box<dyn WmShader>,
+            ).unwrap()) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
@@ -141,18 +141,18 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
             ),
         );
 
-        self.frames.iter().for_each(|instance_type| {
+        self.frames.iter().for_each(|frame| {
             render_pass.set_bind_group(
                 0,
-                arena.alloc(instance_type.part_transform_matrices.clone()),
+                arena.alloc(frame.part_transform_matrices.clone()),
                 &[],
             );
 
-            render_pass.set_bind_group(1, arena.alloc(instance_type.texture_offsets.clone()), &[]);
+            render_pass.set_bind_group(1, arena.alloc(frame.texture_offsets.clone()), &[]);
 
             render_pass.set_bind_group(
                 2,
-                &arena.alloc(instance_type.texture.clone()).bind_group,
+                &arena.alloc(frame.texture.clone()).bind_group,
                 &[],
             );
 
@@ -164,14 +164,18 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                 &[],
             );
 
-            render_pass.set_vertex_buffer(0, arena.alloc(instance_type.vbo.clone()).slice(..));
+            render_pass.set_vertex_buffer(
+                0,
+                arena.alloc(frame.entity.mesh.clone())
+                    .slice(..)
+            );
 
             render_pass
-                .set_vertex_buffer(1, arena.alloc(instance_type.instance_vbo.clone()).slice(..));
+                .set_vertex_buffer(1, arena.alloc(frame.instance_vbo.clone()).slice(..));
 
             render_pass.draw(
-                0..instance_type.vertex_count,
-                0..instance_type.instance_count,
+                0..frame.vertex_count,
+                0..frame.instance_count,
             );
         });
     }

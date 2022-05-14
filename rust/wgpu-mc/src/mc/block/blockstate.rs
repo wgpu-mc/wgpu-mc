@@ -1,18 +1,17 @@
 use crate::mc::datapack::NamespacedResource;
 
-pub struct BlockstateVariantModelDefinitionRotations {
+#[derive(Debug)]
+pub struct BlockModelRotations {
     pub x: u16,
     pub y: u16,
     pub z: u16,
 }
 
-//Blocks are defined in-game like minecraft:cobblestone
-//All `Block`s have blockstate variant definitions, (`BlockstateVariantDefinitionModel`)
-//which define how to render the block in various configurations
-//Those various configurations are called variants, which are baked into a BlockstateVariantMesh
-
-pub struct BlockstateVariantDefinitionModel {
+///Blocks can either be multipart or have simple variants defined.
+///If it has variants, those definitions are deserialized into this struct. This isn't a [BlockModelMesh]
+#[derive(Debug)]
+pub struct BlockstateVariantModelDefinition {
     pub id: NamespacedResource,
-    pub rotations: BlockstateVariantModelDefinitionRotations,
+    pub rotations: BlockModelRotations,
     pub model: NamespacedResource,
 }

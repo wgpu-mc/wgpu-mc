@@ -1,6 +1,7 @@
 use crate::model::BindableTexture;
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
+use crate::mc::entity::Entity;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -78,7 +79,7 @@ impl EntityRenderInstance {
 
 pub struct EntityGroupInstancingFrame {
     ///The model for the entity
-    pub vbo: Arc<wgpu::Buffer>,
+    pub entity: Arc<Entity>,
     ///`EntityRenderInstance`s
     pub instance_vbo: Arc<wgpu::Buffer>,
 

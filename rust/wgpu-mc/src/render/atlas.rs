@@ -164,6 +164,7 @@ impl Atlas {
         None
     }
 
+    ///Upload the atlas texture to the GPU
     pub fn upload(&self, wm: &WmRenderer) {
         let tsv = TextureSamplerView::from_rgb_bytes(
             &*wm.wgpu_state,
@@ -186,17 +187,11 @@ impl Atlas {
     }
 
     pub fn update_textures(&self, subframe: u32) -> Vec<f32> {
-        let mut out: Vec<f32> = Vec::new();
+        //Most blocks don't have animations so we create a zeroed animation state
+        let mut out: Vec<f32> = vec![0.0; 6];
 
-        out.push(0.0);
-        out.push(0.0);
-        out.push(0.0);
-        out.push(0.0);
-        out.push(0.0);
-        out.push(0.0);
-
-        for a in self.animated_textures.load_full().iter() {
-            out.append(&mut a.update(subframe));
+        for a in self.animated_textures.load().iter() {
+            out.extend_from_slice(&a.update(subframe));
             out.push(0.0); //padding
         }
 
@@ -260,17 +255,17 @@ impl AnimatedTexture {
         self.frame_size
     }
 
-    pub fn update(&self, subframe: u32) -> Vec<f32> {
+    pub fn update(&self, subframe: u32) -> [f32; 5] {
 
-        let mut out: Vec<f32>  = Vec::new();
+        //Due to padding in the buffer, some of these elements are always left as 0.0
+        let mut out = [0.0; 5];
         let mut current_frame = (subframe / self.animation.frame_time) % self.frame_count;
 
         if self.animation.frames.is_some() { //if custom frame order is present translate to that
             current_frame = self.animation.frames.as_ref().unwrap()[current_frame as usize];
         }
 
-        out.push(0.0);
-        out.push(self.real_frame_size * (current_frame as f32));
+        out[1] = self.real_frame_size * (current_frame as f32);
 
         if self.animation.interpolate {
             let mut next_frame = ((subframe / self.animation.frame_time) + 1) % self.frame_count;
@@ -279,13 +274,8 @@ impl AnimatedTexture {
                 next_frame = self.animation.frames.as_ref().unwrap()[next_frame as usize];
             }
 
-            out.push(0.0);
-            out.push(self.real_frame_size * (next_frame as f32));
-            out.push(((subframe % self.animation.frame_time) as f32) / (self.animation.frame_time as f32));
-        } else {
-            out.push(0.0);//The second frame
-            out.push(0.0);
-            out.push(0.0);//blend
+            out[3] = self.real_frame_size * (next_frame as f32);
+            out[4] = ((subframe % self.animation.frame_time) as f32) / (self.animation.frame_time as f32);
         }
 
         out

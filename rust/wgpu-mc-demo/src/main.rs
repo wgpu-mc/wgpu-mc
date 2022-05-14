@@ -30,7 +30,7 @@ use arc_swap::ArcSwap;
 use fastanvil::pre18::JavaChunk;
 use fastnbt::de::from_bytes;
 use rayon::iter::IntoParallelIterator;
-use wgpu_mc::mc::block::Block;
+use wgpu_mc::mc::block::BlockDefinition;
 
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
@@ -54,10 +54,8 @@ struct FsResourceProvider {
 impl ResourceProvider for FsResourceProvider {
     fn get_resource(&self, id: &NamespacedResource) -> Option<Vec<u8>> {
         let real_path = self.asset_root.join(&id.0).join(&id.1);
-        if !real_path.exists() { return None; }
 
-        Some(fs::read(&real_path)
-            .unwrap_or_else(|_| panic!("{}", real_path.to_str().unwrap().to_string())))
+        fs::read(&real_path).ok()
     }
 }
 
@@ -164,20 +162,27 @@ fn main() {
                 format!("blockstates/{}", model.file_name().to_str().unwrap()),
             );
 
-            match Block::from_json(
+            match BlockDefinition::from_json(
                 model.file_name().to_str().unwrap(),
                 std::str::from_utf8(&fs::read(model.path()).unwrap()).unwrap(),
             ) {
                 None => {}
                 Some(block) => {
-                    bm.blocks.insert(resource_name, block);
+                    bm.block_definitions.insert(resource_name, block);
                 }
             };
         });
     }
 
-    // println!("Generating blocks");
-    wm.mc.bake_blocks(&wm);
+    wm.mc.bake_blocks(&wm, |nsr, key| {
+        let mut string = format!("Block{{{}}}", nsr);
+
+        if key != "" {
+            string.push_str(&format!("[{}]", key));
+        }
+
+        string
+    });
 
     let window = wrapper.window;
 

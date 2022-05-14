@@ -35,7 +35,7 @@ use std::fmt::{Debug, Formatter};
 use std::ops::Shr;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
-use wgpu_mc::mc::block::{Block, BlockPos, BlockState, BlockstateKey};
+use wgpu_mc::mc::block::{BlockDefinition, BlockPos, ChunkBlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
 use wgpu_mc::mc::datapack::NamespacedResource;
 use wgpu_mc::mc::resource::ResourceProvider;
@@ -114,7 +114,7 @@ struct MinecraftResourceManagerAdapter {
 }
 
 impl ResourceProvider for MinecraftResourceManagerAdapter {
-    fn get_resource(&self, id: &NamespacedResource) -> Vec<u8> {
+    fn get_resource(&self, id: &NamespacedResource) -> Option<Vec<u8>> {
         let env = self.jvm.attach_current_thread().unwrap();
 
         let ident_ns = env.new_string(&id.0).unwrap();
@@ -129,24 +129,22 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
                     JValue::Object(ident_ns.into()),
                     JValue::Object(ident_path.into()),
                 ],
-            )
-            .unwrap()
-            .l()
-            .unwrap();
+            ).ok()?.l().ok()?;
 
         let elements = env
-            .get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack)
-            .unwrap();
+            .get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack).ok()?;
 
-        let mut vec = vec![0u8; elements.size().unwrap() as usize];
+        let size = elements.size().ok()? as usize;
+
+        let mut vec = vec![0u8; size];
         vec.copy_from_slice(unsafe {
             std::slice::from_raw_parts(
                 elements.as_ptr() as *const u8,
-                elements.size().unwrap() as usize,
+                size,
             )
         });
 
-        vec
+        Some(vec)
     }
 }
 
@@ -242,9 +240,9 @@ struct JavaBlockStateProvider {
 
 impl BlockStateProvider for JavaBlockStateProvider {
     //Technically this should be able to provide a blockstate for anywhere in the world but I won't implement that yet
-    fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState {
+    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
         if y >= CHUNK_HEIGHT as i16 || y < 0 {
-            return BlockState { packed_key: None };
+            return ChunkBlockState { packed_key: None };
         }
 
         let storage_index = y / 24;
@@ -254,7 +252,7 @@ impl BlockStateProvider for JavaBlockStateProvider {
         let storage = match unsafe {
             (self.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
         } {
-            None => return BlockState { packed_key: None },
+            None => return ChunkBlockState { packed_key: None },
             Some(storage) => storage,
         };
 
@@ -266,11 +264,11 @@ impl BlockStateProvider for JavaBlockStateProvider {
                 .unwrap()
         };
 
-        BlockState {
+        ChunkBlockState {
             packed_key: palette
                 .get(palette_key as usize)
-                .filter(|element| element.1 != self.air as usize)
-                .map(|element| element.1 as BlockstateKey),
+                .filter(|element| element.1 as BlockstateKey != self.air)
+                .map(|element| (element.1 as u32).into()),
         }
     }
 }
@@ -319,8 +317,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
     let jbsp = JavaBlockStateProvider {
         storages: *storages,
         palettes: *palettes,
-        air: *wm.mc.block_manager.read().variant_indices.get("Block{minecraft:air}").unwrap() as BlockstateKey
+        air: (*wm.mc.block_manager.read().block_state_indices.get("Block{minecraft:air}").unwrap() as u32).into()
     };
+
 
     println!("{:?}", jbsp.get_state(10, 380, 10));
 
@@ -587,26 +586,35 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
             let json_bytes = wm
                 .mc
                 .resource_provider
-                .get_resource(&identifier.prepend("blockstates/").append(".json"));
+                .get_resource(&identifier.prepend("blockstates/").append(".json"))
+                .unwrap();
 
             let json = std::str::from_utf8(&json_bytes).unwrap();
 
-            match Block::from_json(&identifier.to_string(), json) {
+            match BlockDefinition::from_json(&identifier.to_string(), json) {
                 None => {}
                 Some(block) => {
-                    block_manager.blocks.insert(identifier, block);
+                    block_manager.block_definitions.insert(identifier, block);
                 }
             }
         });
     }
 
-    wm.mc.bake_blocks(&wm);
+    wm.mc.bake_blocks(&wm, |nsr, key| {
+        let mut string = format!("Block{{{}}}", nsr);
+
+        if key != "" {
+            string.push_str(&format!("[{}]", key));
+        }
+
+        string
+    });
 
     {
         let block_manager = wm.mc.block_manager.read();
 
         let bedrock_key = *block_manager
-            .variant_indices
+            .block_state_indices
             .get("Block{minecraft:bedrock}")
             .unwrap();
 
@@ -617,7 +625,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
             .iter()
             .for_each(|(key, global_ref)| {
                 let offset = *block_manager
-                    .variant_indices
+                    .block_state_indices
                     .get(
                         &key
                             .replace(",waterlogged=true", "")

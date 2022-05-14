@@ -18,7 +18,7 @@ pub type EntityType = usize;
 pub struct EntityManager {
     pub mob_texture_atlas: RwLock<Atlas>,
     pub player_texture_atlas: RwLock<Atlas>,
-    pub entity_types: RwLock<Vec<Arc<EntityModel>>>,
+    pub entity_types: RwLock<Vec<Arc<Entity>>>,
     pub entity_vertex_buffers: ArcSwap<HashMap<usize, Arc<wgpu::BindGroup>>>,
 }
 
@@ -95,7 +95,7 @@ pub struct Cuboid {
 }
 
 impl Cuboid {
-    pub fn describe(&self, matrix: &Matrix4<f32>, part_id: u32) -> [[EntityVertex; 6]; 6] {
+    pub fn describe(&self, matrix: Matrix4<f32>, part_id: u32) -> [[EntityVertex; 6]; 6] {
         let a = (matrix * Vector4::new(self.x, self.y, self.z, 1.0))
             .truncate()
             .into();
@@ -360,6 +360,8 @@ impl Cuboid {
     }
 }
 
+///A part of an entity model, defined as a transform, some cuboids, and some child [EntityPart]s, which recursively inherit the transforms
+/// of their respective parents
 #[derive(Clone, Debug)]
 pub struct EntityPart {
     pub name: Arc<String>,
@@ -368,18 +370,18 @@ pub struct EntityPart {
     pub children: Vec<EntityPart>,
 }
 
-#[derive(Clone, Debug)]
-pub struct EntityModel {
-    pub root: EntityPart,
+///A struct that represents an entity model and it's vertex mesh
+#[derive(Debug)]
+pub struct Entity {
+    pub model_root: EntityPart,
     /// Names of each part referencing an index for applicable transforms
     pub parts: HashMap<String, usize>,
+    pub mesh: Arc<wgpu::Buffer>
 }
 
 fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id: &mut u32) {
-    let mat = part.transform.describe();
-
     part.cuboids.iter().for_each(|cuboid| {
-        vertices.extend(cuboid.describe(&mat, *part_id).iter().copied().flatten());
+        vertices.extend(cuboid.describe(Matrix4::identity(), *part_id).iter().copied().flatten());
     });
 
     *part_id += 1;
@@ -397,33 +399,51 @@ fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<S
         .for_each(|part| recurse_get_names(part, index, names));
 }
 
-impl EntityModel {
-    pub fn new(root: EntityPart) -> Self {
+impl Entity {
+
+    ///Create an entity from an [EntityPart] and upload it's mesh to the GPU
+    pub fn new(root: EntityPart, wgpu_state: &WgpuState) -> Self {
         let mut parts = HashMap::new();
 
         recurse_get_names(&root, &mut 0, &mut parts);
 
-        Self { root, parts }
-    }
-
-    pub fn generate_mesh(&self) -> Vec<EntityVertex> {
-        let mut out = Vec::new();
+        let mut mesh = Vec::new();
 
         let mut part_id = 0;
-        recurse_get_mesh(&self.root, &mut out, &mut part_id);
+        recurse_get_mesh(&root, &mut mesh, &mut part_id);
 
-        out
+        Self {
+            model_root: root,
+            parts,
+            mesh: Arc::new(
+                wgpu_state.device.create_buffer_init(
+                    &BufferInitDescriptor {
+                        label: None,
+                        contents: bytemuck::cast_slice(&mesh[..]),
+                        usage: wgpu::BufferUsages::VERTEX
+                    }
+                )
+            )
+        }
     }
+
 }
 
-pub struct DescribedEntityInstances {
+///A container struct for all of the instance transforms that will be uploaded to the [EntityGroupTransformsSSBO]
+pub struct EntityInstancingTransforms {
     ///the mat4[] for part transforms that's found in the shader
     pub matrices: Vec<Vec<[[f32; 4]; 4]>>,
 }
 
+///A struct representing the SSBO containing the model transforms to be used in the entity pipeline vertex shader
+pub struct EntityGroupTransformsSSBO {
+    pub buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup
+}
+
 pub type UploadedEntityInstanceBuffer = (wgpu::Buffer, wgpu::BindGroup);
 
-impl DescribedEntityInstances {
+impl EntityInstancingTransforms {
     pub fn upload(&self, wm: &WmRenderer) -> UploadedEntityInstanceBuffer {
         let cast_matrices = self
             .matrices
@@ -461,20 +481,16 @@ impl DescribedEntityInstances {
 
 pub struct EntityInstance {
     ///Index
-    pub entity_model: usize,
+    pub entity: Arc<Entity>,
     pub position: Position,
-    ///Rotation around the Y axis (yaw)
+    ///Rotation around the Y axis
     pub looking_yaw: f32,
     pub uv_offset: (f32, f32),
-    ///Paint it red. Or something
-    pub hurt: bool,
     pub part_transforms: Vec<PartTransform>,
 }
 
 impl EntityInstance {
-    pub fn describe_instance(&self, entity_manager: &EntityManager) -> Vec<[[f32; 4]; 4]> {
-        let model: &Arc<EntityModel> = &entity_manager.entity_types.read()[self.entity_model];
-
+    pub fn describe_instance(&self) -> Vec<[[f32; 4]; 4]> {
         let transforms: Vec<Matrix4<f32>> = self
             .part_transforms
             .iter()
@@ -486,7 +502,7 @@ impl EntityInstance {
         let mut index = 0;
         recurse_transforms(
             cgmath::Matrix4::identity(),
-            &model.root,
+            &self.entity.model_root,
             &mut vec,
             &mut index,
             &transforms[..],

@@ -53,7 +53,7 @@ impl WmPipeline for DebugLinesPipeline {
                 &wm.wgpu_state.device,
                 "fs_main".into(),
                 "vs_main".into(),
-            )) as Box<dyn WmShader>,
+            ).unwrap()) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()

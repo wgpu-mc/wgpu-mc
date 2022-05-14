@@ -80,7 +80,7 @@ impl WmPipeline for GlPipeline {
                     &wm.wgpu_state.device,
                     "fs_main".into(),
                     "vs_main".into(),
-                )) as Box<dyn WmShader>,
+                ).unwrap()) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_col_uint".into(),
@@ -90,7 +90,7 @@ impl WmPipeline for GlPipeline {
                     &wm.wgpu_state.device,
                     "fs_main".into(),
                     "vs_main".into(),
-                )) as Box<dyn WmShader>,
+                ).unwrap()) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_tex".into(),
@@ -100,7 +100,7 @@ impl WmPipeline for GlPipeline {
                     &wm.wgpu_state.device,
                     "fs_main".into(),
                     "vs_main".into(),
-                )) as Box<dyn WmShader>,
+                ).unwrap()) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/clearcolor".into(),
@@ -110,7 +110,7 @@ impl WmPipeline for GlPipeline {
                     &wm.wgpu_state.device,
                     "fs_main".into(),
                     "vs_main".into(),
-                )) as Box<dyn WmShader>,
+                ).unwrap()) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_color_uv_light".into(),
@@ -120,7 +120,7 @@ impl WmPipeline for GlPipeline {
                     &wm.wgpu_state.device,
                     "fs_main".into(),
                     "vs_main".into(),
-                )) as Box<dyn WmShader>,
+                ).unwrap()) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_texture_color".into(),
@@ -130,7 +130,7 @@ impl WmPipeline for GlPipeline {
                     &wm.wgpu_state.device,
                     "fs_main".into(),
                     "vs_main".into(),
-                )) as Box<dyn WmShader>,
+                ).unwrap()) as Box<dyn WmShader>,
             ),
         ]
         .into_iter()

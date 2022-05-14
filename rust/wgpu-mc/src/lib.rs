@@ -46,7 +46,7 @@ pub struct WgpuState {
     pub size: ArcSwap<WindowSize>,
 }
 
-///Data specific to wgpu and rendering goes here, everything specific to Minecraft
+///The main wgpu-mc renderer struct. This mostly just contains wgpu state.
 /// goes in `MinecraftState`
 #[derive(Clone)]
 pub struct WmRenderer {
@@ -125,7 +125,7 @@ impl WmRenderer {
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         let pipelines = render::pipeline::RenderPipelineManager::new(resource_provider.clone());
 
-        let mc = MinecraftState::new(&wgpu_state, &pipelines, resource_provider);
+        let mc = MinecraftState::new(resource_provider);
         let depth_texture = TextureSamplerView::create_depth_texture(
             &wgpu_state.device,
             &wgpu_state.surface_config.load(),

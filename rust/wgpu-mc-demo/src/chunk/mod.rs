@@ -1,5 +1,5 @@
 use std::time::Instant;
-use wgpu_mc::mc::block::{BlockState, BlockstateKey};
+use wgpu_mc::mc::block::{ChunkBlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_VOLUME};
 use wgpu_mc::render::world::chunk::BakedChunkLayer;
 use wgpu_mc::WmRenderer;
@@ -8,8 +8,8 @@ use wgpu_mc::WmRenderer;
 struct SimpleBlockstateProvider(BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
-    fn get_state(&self, x: i32, y: i16, z: i32) -> BlockState {
-        BlockState {
+    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
+        ChunkBlockState {
             packed_key: if x >= 0 && x < 16 && z >= 0 && z < 16 {
                 Some(self.0)
             } else {
@@ -23,11 +23,11 @@ pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
     let bm = wm.mc.block_manager.read();
 
     let variant_key = *bm
-        .variant_indices
+        .block_state_indices
         .get("Block{minecraft:blockstates/magma_block.json}")
-        .unwrap();
+        .unwrap() as BlockstateKey;
 
-    let provider = SimpleBlockstateProvider(variant_key as BlockstateKey);
+    let provider = SimpleBlockstateProvider(variant_key);
 
     let chunk = Chunk::new((0, 0), Box::new(provider));
     let time = Instant::now();

@@ -37,20 +37,13 @@ impl GuiVertex {
     }
 }
 
-///Represents a meshvertex, that does not directly contain UV, but it contains an offset into a buffer that contains the UV.
+///Represents a vertex in a block mesh, including an additional UV offset index for animated textures.
 #[derive(Copy, Clone, Debug)]
-pub struct AnimatedMeshVertex {
+pub struct BlockMeshVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
-    pub normal: [f32; 3],
+    pub normal: [f32; 4],
     pub uv_offset: u32,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct MeshVertex {
-    pub position: [f32; 3],
-    pub tex_coords: [f32; 2],
-    pub normal: [f32; 3],
 }
 
 ///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
