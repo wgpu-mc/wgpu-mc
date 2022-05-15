@@ -10,14 +10,13 @@ public class WgpuResourceProvider {
 
     public static ResourceManager manager;
 
-    public static byte[] getResource(String namespace, String path) throws IOException {
+    public static byte[] getResource(String namespace, String path) {
         try {
             return WgpuNative.digestInputStream(
                 manager.getResource(new Identifier(namespace, path)).getInputStream()
             );
         } catch(IOException e) {
-            e.printStackTrace();
-            throw e;
+            return null;
         }
     }
 

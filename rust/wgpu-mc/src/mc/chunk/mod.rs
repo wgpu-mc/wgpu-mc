@@ -76,7 +76,7 @@ impl Chunk {
     pub fn bake(&self, block_manager: &BlockManager) {
         let glass_index: BlockstateKey = (*block_manager
             .block_state_indices
-            .get("Block{minecraft:blockstates/glass.json}")
+            .get("Block{minecraft:glass}")
             .unwrap() as u32)
             .into();
 

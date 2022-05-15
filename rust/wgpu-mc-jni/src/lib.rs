@@ -7,7 +7,7 @@ use crate::gl::GlTexture;
 use crate::palette::{IdList, JavaPalette};
 use arc_swap::ArcSwap;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-use cgmath::{Matrix4, Point3, Vector3};
+use cgmath::{Deg, Matrix4, Point3, Vector3};
 use core::slice;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use futures::executor::block_on;
@@ -29,8 +29,9 @@ use std::io::Cursor;
 use std::num::NonZeroU32;
 use std::ptr::drop_in_place;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::{fs, mem, thread};
+use std::f32::consts::PI;
 use std::fmt::{Debug, Formatter};
 use std::ops::Shr;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -263,6 +264,7 @@ impl BlockStateProvider for JavaBlockStateProvider {
                 .as_ref()
                 .unwrap()
         };
+        };
 
         ChunkBlockState {
             packed_key: palette
@@ -321,7 +323,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
     };
 
 
-    println!("{:?}", jbsp.get_state(10, 380, 10));
+    // println!("{:?}", jbsp.get_state(10, 10, 10));
 
     let chunk = Chunk {
         pos: (x, z),
@@ -547,21 +549,22 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 
                 let mc_state = MC_STATE.get().unwrap().load();
 
-                // let mut pipelines = Vec::new();
-                // if mc_state.render_world {
-                //     pipelines.push(&TerrainPipeline as &dyn WmPipeline);
-                // } else {
-                //     pipelines.push(GL_PIPELINE.get().unwrap());
-                // }
+                let mut pipelines = Vec::new();
+                if mc_state.render_world {
+                    wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
+                    pipelines.push(&TerrainPipeline as &dyn WmPipeline);
+                } else {
+                    pipelines.push(GL_PIPELINE.get().unwrap());
+                }
 
-                // wm.render(&pipelines);
+                wm.render(&pipelines);
 
-                wm.render(
-                    &[
-                        &TerrainPipeline,
-                        GL_PIPELINE.get().unwrap(),
-                    ]
-                );
+                // wm.render(
+                //     &[
+                //         &TerrainPipeline,
+                //         GL_PIPELINE.get().unwrap(),
+                //     ]
+                // );
             }
             _ => {}
         }
@@ -1658,8 +1661,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
 
     let mut camera = **renderer.mc.camera.load();
     camera.position = Point3::new(x as f32, y as f32, z as f32);
-    camera.yaw = yaw;
-    camera.pitch = pitch;
+    camera.yaw = (PI / 180.0) * yaw;
+    camera.pitch = (PI / 180.0) * pitch;
 
     renderer.mc.camera.store(Arc::new(camera));
     renderer.upload_camera();

@@ -51,12 +51,12 @@ public class Wgpu {
 
     public static void startRendering() {
         if (!INITIALIZED) {
-//            try {
-//                System.loadLibrary("renderdoc");
-//            } catch(UnsatisfiedLinkError e) {
-//                LOGGER.debug("Error while loading RenderDoc:\n" + e.getMessage());
-//                e.printStackTrace();
-//            }
+            try {
+                System.loadLibrary("renderdoc");
+            } catch(UnsatisfiedLinkError e) {
+                LOGGER.debug("Error while loading RenderDoc:\n" + e.getMessage());
+                e.printStackTrace();
+            }
 
             WgpuNative.startRendering("Minecraft");
         } else {

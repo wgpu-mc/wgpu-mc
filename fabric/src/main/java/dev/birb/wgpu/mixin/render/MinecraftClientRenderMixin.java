@@ -12,6 +12,7 @@ import net.minecraft.client.WindowSettings;
 import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.client.util.Window;
 import net.minecraft.client.util.WindowProvider;
+import net.minecraft.client.world.ClientWorld;
 import net.minecraft.resource.ReloadableResourceManagerImpl;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.resource.ResourceReloader;
@@ -80,8 +81,12 @@ public abstract class MinecraftClientRenderMixin {
         RenderSystem.replayQueue();
 //        WgpuNative.setProjectionMatrix(Render);
         MinecraftClient client = (MinecraftClient) (Object) this;
+
         if(client.player != null) {
-            WgpuNative.setCamera(client.player.getX(), client.player.getY(), client.player.getZ(), client.player.renderYaw, client.player.renderPitch);
+            int originX = ((ClientWorld) client.world).getChunkManager().chunks.centerChunkX;
+            int originZ = ((ClientWorld) client.world).getChunkManager().chunks.centerChunkX;
+
+            WgpuNative.setCamera(client.player.getX() - (originX * 16.0f), client.player.getY(), client.player.getZ() - (originZ * 16.0f), client.player.renderYaw, client.player.renderPitch);
         }
 
         if(Wgpu.INITIALIZED) {
