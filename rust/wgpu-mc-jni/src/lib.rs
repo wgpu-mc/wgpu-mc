@@ -264,7 +264,6 @@ impl BlockStateProvider for JavaBlockStateProvider {
                 .as_ref()
                 .unwrap()
         };
-        };
 
         ChunkBlockState {
             packed_key: palette
