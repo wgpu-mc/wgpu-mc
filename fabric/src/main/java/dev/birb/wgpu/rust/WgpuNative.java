@@ -78,7 +78,7 @@ public class WgpuNative {
 
     public static native void setIndexBuffer(int[] buffer);
 
-    public static native void debugPalette(long palette);
+    public static native void debugPalette(long palette, int x, int y, int z);
 
     public static native void setVertexBuffer(byte[] buffer);
 

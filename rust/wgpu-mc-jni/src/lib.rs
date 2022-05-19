@@ -1519,15 +1519,17 @@ impl PackedIntegerArray {
         assert!(index < self.size, "index: {}, size: {}", index, self.size);
 
         let i: i32 = self.compute_storage_index(index);
-        let l: i64 = self.data[i as usize];
+        let l: i64 = i64::from_be_bytes(self.data[i as usize].to_ne_bytes());
 
         let j: i32 = (index - (i * self.elements_per_long)) * self.element_bits;
         ((l >> j) & self.max_value) as i32
     }
 
-    fn compute_storage_index(&self, index: i32) -> i32 {
+    pub fn compute_storage_index(&self, index: i32) -> i32 {
         let l = self.index_scale as u32 as i64;
         let m = self.index_offset as u32 as i64;
+
+        // println!("l {} m {} idxs {}", l, m, self.index_shift);
 
         (((((index as i64) * l) + m) >> 32) >> self.index_shift) as i32
     }
@@ -1575,9 +1577,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
     env: JNIEnv,
     class: JClass,
-    packed_integer_array: jlong
+    packed_integer_array: jlong,
+    x: jint,
+    y: jint,
+    z: jint
 ) {
     let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
+    println!(
+        "array val @ {},{},{} {}",
+        x, y, z,
+         array.get(x, y as u16, z)
+    );
     // dbg!(array.index_offset, array.index_scale, array.index_shift, array.element_bits, array.size, array.element_bits, array.elements_per_long);
 }
 
