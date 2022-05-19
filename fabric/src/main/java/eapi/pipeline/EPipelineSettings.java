@@ -40,4 +40,5 @@ public class EPipelineSettings {
     public ELayout<EPipeline.VertexAttributeType> getVertexLayout() {
         return vertexLayout;
     }
+
 }
