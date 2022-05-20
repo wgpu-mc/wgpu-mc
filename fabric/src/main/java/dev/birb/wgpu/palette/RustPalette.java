@@ -33,9 +33,13 @@ public class RustPalette<T> implements Palette<T> {
 
     @Override
     public int index(T object) {
+//        RustBlockStateAccessor accessor = (RustBlockStateAccessor) object;
+//
+//        return WgpuNative.paletteIndex(this.rustPalettePointer, object, accessor.getRustBlockStateIndex());
+
         RustBlockStateAccessor accessor = (RustBlockStateAccessor) object;
 
-        return WgpuNative.paletteIndex(this.rustPalettePointer, object, accessor.getRustBlockStateIndex());
+        return WgpuNative.paletteIndex(this.rustPalettePointer, object, 0);
     }
 
     @Override

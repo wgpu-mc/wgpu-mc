@@ -18,6 +18,8 @@
     "core.MinecraftClientCoreMixin",
     "core.MouseMixin",
     "core.RegistryMixin",
+    "core.TextRendererMixin",
+    "core.OptionsScreenMixin",
     "render.BufferRendererMixin",
     "render.FramebufferMixin",
     "render.GameRendererMixin",
@@ -27,9 +29,10 @@
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
+    "world.BlockStateMixin",
     "world.PaletteProviderMixin",
     "world.WorldChunkMixin",
-    "world.BlockStateMixin"
+    "world.PackedIntegerArrayMixin"
   ],
   "injectors": {
     "defaultRequire": 1

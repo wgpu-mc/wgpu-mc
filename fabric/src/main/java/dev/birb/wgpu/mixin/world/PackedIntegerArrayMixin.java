@@ -18,6 +18,14 @@ import static dev.birb.wgpu.render.Wgpu.UNSAFE;
 @Mixin(PackedIntegerArray.class)
 public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAccessor {
 
+    static {
+        try {
+            WgpuNative.load("wgpu_mc_jni", true);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Shadow @Final public int elementsPerLong;
     @Shadow @Final private int elementBits;
     @Shadow @Final public long maxValue;

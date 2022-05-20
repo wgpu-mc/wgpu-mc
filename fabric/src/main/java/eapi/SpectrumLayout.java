@@ -2,11 +2,11 @@ package eapi;
 
 import java.util.List;
 
-public class ELayout<T> {
+public class SpectrumLayout<T> {
 
     private final List<T> layout;
 
-    public ELayout(List<T> elements) {
+    public SpectrumLayout(List<T> elements) {
         this.layout = List.copyOf(elements);
     }
 

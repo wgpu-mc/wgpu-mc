@@ -7,14 +7,6 @@ import net.minecraft.world.chunk.PalettedContainer;
 
 public class SubvertedPaletteProvider {
 
-//    static {
-//        try {
-//            WgpuNative.load("wgpu_mc_jni", true);
-//        } catch (Throwable e) {
-//            throw new RuntimeException(e);
-//        }
-//    }
-
     public static PalettedContainer.PaletteProvider PROVIDER = new PalettedContainer.PaletteProvider(4){
 
         @Override

@@ -639,9 +639,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
                     )
                     .unwrap_or(&bedrock_key);
 
-                if offset != 27 {
-                    println!("{} {}", key, offset);
-                }
+                println!("{} {}", key, offset);
 
                 env.call_static_method(
                     "dev/birb/wgpu/render/Wgpu",
