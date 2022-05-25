@@ -90,34 +90,32 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
 
     @Inject(method = "swap", at = @At("RETURN"))
     public void swap(int index, int value, CallbackInfoReturnable<Integer> cir) {
-        Validate.inclusiveBetween(0L, (long)(this.size - 1), (long)index);
-        Validate.inclusiveBetween(0L, this.maxValue, (long)value);
+        Validate.inclusiveBetween(0L, this.size - 1, index);
+        Validate.inclusiveBetween(0L, this.maxValue, value);
         int i = this.getStorageIndex(index);
 
-        long address = this.rawStoragePointer + (((long) i) * 8L);
 
-        long l = UNSAFE.getLong(address);
+        long l = UNSAFE.getLong(this.rawStoragePointer + (i * 8L));
 
         int j = (index - i * this.elementsPerLong) * this.elementBits;
         int k = (int)(l >> j & this.maxValue);
 
-        UNSAFE.putLong(address, l & ~(this.maxValue << j) | ((long)value & this.maxValue) << j);
+        long data = l & (this.maxValue << j ^ 0xFFFFFFFFFFFFFFFFL) | ((long)value & this.maxValue) << j;
+        UNSAFE.putLong(this.rawStoragePointer + (i * 8L), data);
 
-        assert k == cir.getReturnValue();
+        assert cir.getReturnValue() == k;
     }
 
     @Inject(method = "set", at = @At("RETURN"))
     public void set(int index, int value, CallbackInfo ci) {
-        Validate.inclusiveBetween(0L, (long)(this.size - 1), (long)index);
-        Validate.inclusiveBetween(0L, this.maxValue, (long)value);
+        Validate.inclusiveBetween(0L, this.size - 1, index);
+        Validate.inclusiveBetween(0L, this.maxValue, value);
         int i = this.getStorageIndex(index);
-
-        long address = this.rawStoragePointer + (((long) i) * 8L);
-
-        long l = UNSAFE.getLong(address);
-
+        long l = UNSAFE.getLong(this.rawStoragePointer + (i * 8L));
         int j = (index - i * this.elementsPerLong) * this.elementBits;
-        UNSAFE.putLong(address, l & ~(this.maxValue << j) | ((long)value & this.maxValue) << j);
+        long data = l & (this.maxValue << j ^ 0xFFFFFFFFFFFFFFFFL) | ((long)value & this.maxValue) << j;
+
+        UNSAFE.putLong(this.rawStoragePointer + (i * 8L), data);
     }
 
     @Inject(method = "get", at = @At("RETURN"), cancellable = true)
@@ -130,7 +128,9 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         long l = UNSAFE.getLong(address);
 
         int j = (index - i * this.elementsPerLong) * this.elementBits;
-        cir.setReturnValue((int)(l >> j & this.maxValue));
+        int val = (int)(l >> j & this.maxValue);
+
+        assert val == cir.getReturnValue();
     }
 
     @Inject(method = "method_39892", at = @At("RETURN"))

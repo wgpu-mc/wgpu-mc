@@ -1,7 +1,7 @@
 use crate::model::BindableTexture;
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
-use crate::mc::entity::Entity;
+use crate::mc::entity::{Entity, EntityInstance};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -94,3 +94,29 @@ pub struct EntityGroupInstancingFrame {
     ///how many vertices for this kind of entity
     pub vertex_count: u32,
 }
+
+// impl EntityGroupInstancingFrame {
+//
+//     pub fn create(entity: &Arc<Entity>, instances: &[EntityInstance]) -> Self {
+//         let mut index = 0;
+//         let instance_vbo_pre = instances.iter().map(|instance| {
+//             index += 1;
+//             EntityRenderInstance {
+//                 entity_index: index - 1,
+//                 entity_texture_index: instance.u,
+//                 parts_per_entity: entity.parts.len() as u32
+//             }
+//         });
+//
+//         Self {
+//             entity: entity.clone(),
+//             instance_vbo: Arc::new(()),
+//             part_transform_matrices: Arc::new(()),
+//             texture_offsets: Arc::new(()),
+//             texture: Arc::new(BindableTexture {}),
+//             instance_count: 0,
+//             vertex_count: 0
+//         }
+//     }
+//
+// }

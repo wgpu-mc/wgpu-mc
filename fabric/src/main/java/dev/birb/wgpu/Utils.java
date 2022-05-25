@@ -19,12 +19,12 @@ public class Utils {
         return ColorHelper.Argb.getArgb(a, r, g, b);
     }
 
-    public static void chunkDebug(PackedIntegerArray array, int x, int y, int z) {
+    public static void chunkDebug(PackedIntegerArray array, int index) {
 //        ChunkSection section = chunk.getSection(y / 16);
 //        PalettedContainer<BlockState> container = section.getBlockStateContainer();
 //        PackedIntegerArray array = (PackedIntegerArray) container.data.storage();
         PackedIntegerArrayAccessor accessor = ((PackedIntegerArrayAccessor) (Object) array);
-        WgpuNative.debugPalette(accessor.getStoragePointer(), x, y, z);
+        WgpuNative.debugPalette(accessor.getStoragePointer(), index);
     }
 
 }

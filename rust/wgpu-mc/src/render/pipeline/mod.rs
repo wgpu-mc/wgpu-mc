@@ -3,6 +3,7 @@ pub mod entity;
 pub mod sky;
 pub mod terrain;
 pub mod transparent;
+// pub mod skybox;
 
 use crate::render::shader::WmShader;
 use wgpu::{BindGroupLayout, PipelineLayout, SamplerBindingType};
@@ -66,7 +67,7 @@ impl RenderPipelineManager {
                     label: Some("Camera Bind Group Layout"),
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -146,7 +147,7 @@ impl RenderPipelineManager {
                     label: Some("Mat4x4<f32> Bind Group Layout"),
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,

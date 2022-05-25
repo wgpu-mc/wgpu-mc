@@ -234,7 +234,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
 //This is per chunk
 #[derive(Debug)]
 struct JavaBlockStateProvider {
+    //Pointers to JavaPalette structs
     pub palettes: [usize; 24],
+    //Pointers to PackedIntegerArray structs
     pub storages: [usize; 24],
     pub air: BlockstateKey
 }
@@ -246,7 +248,7 @@ impl BlockStateProvider for JavaBlockStateProvider {
             return ChunkBlockState { packed_key: None };
         }
 
-        let storage_index = y / 24;
+        let storage_index = y / 16;
 
         assert!(storage_index < (CHUNK_HEIGHT as i16 / 16) && storage_index >= 0);
 
@@ -283,6 +285,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
     palettes: jlongArray,
     storages: jlongArray,
 ) {
+    let wm = RENDERER.get().unwrap();
+
     let palette_elements = env
         .get_long_array_elements(palettes, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -313,16 +317,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .try_into()
         .unwrap();
 
-    let wm = RENDERER.get().unwrap().clone();
-
     let jbsp = JavaBlockStateProvider {
         storages: *storages,
         palettes: *palettes,
         air: (*wm.mc.block_manager.read().block_state_indices.get("Block{minecraft:air}").unwrap() as u32).into()
     };
-
-
-    // println!("{:?}", jbsp.get_state(10, 10, 10));
 
     let chunk = Chunk {
         pos: (x, z),
@@ -330,8 +329,26 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         baked: ArcSwap::new(Arc::new(None)),
     };
 
+    wm.mc.chunks.loaded_chunks
+        .write()
+        .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
+    env: JNIEnv,
+    class: JClass,
+    x: jint,
+    z: jint
+) {
     THREAD_POOL.get().unwrap().spawn(move || {
+        let wm = RENDERER.get().unwrap();
         let bm = wm.mc.block_manager.read();
+
+        let chunk = wm.mc.chunks.loaded_chunks
+            .read()
+            .get(&(x, z))
+            .unwrap().load();
 
         let instant = Instant::now();
         chunk.bake(&bm);
@@ -342,23 +359,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
             z,
             Instant::now().duration_since(instant).as_millis(),
         );
-
-        if !{
-            let read = wm.mc.chunks.loaded_chunks.read();
-            let bool = read.contains_key(&(x,z));
-            drop(read);
-            bool
-        } {
-            wm.mc.chunks.loaded_chunks
-                .write()
-                .insert((x, z), ArcSwap::new(Arc::new(chunk)));
-        } else {
-            wm.mc.chunks.loaded_chunks
-                .read()
-                .get(&(x, z))
-                .unwrap()
-                .store(Arc::new(chunk));
-        }
 
         wm.mc.chunks.assemble_world_meshes(&wm);
     });
@@ -1496,14 +1496,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_addIdListEntry(
 
 #[derive(Debug)]
 pub struct PackedIntegerArray {
-    data: Vec<jlong>,
+    data: Box<[i64]>,
     elements_per_long: i32,
     element_bits: i32,
     max_value: i64,
     index_scale: i32,
     index_offset: i32,
     index_shift: i32,
-    size: i32,
+    size: i32
 }
 
 impl PackedIntegerArray {
@@ -1515,12 +1515,26 @@ impl PackedIntegerArray {
         self.get_by_index(((((y as i32) << 4) | z) << 4) | x)
     }
 
+    pub fn debug_pointer(&self, index: i32) -> usize {
+        assert!(index < self.size, "index: {}, size: {}", index, self.size);
+
+        let i: i32 = self.compute_storage_index(index);
+
+        unsafe { self.data.as_ptr().offset(i as isize) as usize }
+    }
+
     pub fn get_by_index(&self, index: i32) -> i32 {
         assert!(index < self.size, "index: {}, size: {}", index, self.size);
 
         let i: i32 = self.compute_storage_index(index);
-        let l: i64 = i64::from_be_bytes(self.data[i as usize].to_ne_bytes());
 
+        let ptr = unsafe { self.data.as_ptr().offset(i as isize) };
+
+        let l: i64 = unsafe { ptr.read_volatile() };
+        // let l: i64 = i64::from_be_bytes(self.data[i as usize].to_ne_bytes());
+        // let l: i64 = self.data[i as usize];
+
+        // (index - i * this.elementsPerLong) * this.elementBits
         let j: i32 = (index - (i * self.elements_per_long)) * self.element_bits;
         ((l >> j) & self.max_value) as i32
     }
@@ -1556,7 +1570,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
             unsafe {
                 std::slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
             }
-        ),
+        ).into_boxed_slice(),
         elements_per_long,
         element_bits,
         max_value,
@@ -1578,15 +1592,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
     env: JNIEnv,
     class: JClass,
     packed_integer_array: jlong,
-    x: jint,
-    y: jint,
-    z: jint
+    index: jint
 ) {
     let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
     println!(
-        "array val @ {},{},{} {}",
-        x, y, z,
-         array.get(x, y as u16, z)
+        "array val index: {} computed: {} ptr: {} raw read: {} val: {}\n{:?}",
+        index,
+        array.compute_storage_index(index),
+        array.debug_pointer(index),
+        unsafe { (array.debug_pointer(index) as *mut i64).read_volatile() },
+        array.get_by_index(index),
+        array
     );
     // dbg!(array.index_offset, array.index_scale, array.index_shift, array.element_bits, array.size, array.element_bits, array.elements_per_long);
 }

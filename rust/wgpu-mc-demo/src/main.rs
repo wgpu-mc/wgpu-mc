@@ -31,9 +31,11 @@ use fastanvil::pre18::JavaChunk;
 use fastnbt::de::from_bytes;
 use rayon::iter::IntoParallelIterator;
 use wgpu_mc::mc::block::BlockDefinition;
+use wgpu_mc::render::entity::EntityGroupInstancingFrame;
 
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
+use wgpu_mc::render::pipeline::sky::SkyPipeline;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
@@ -143,6 +145,7 @@ fn main() {
     wm.init(&[
         &EntityPipeline { frames: &[] },
         &TerrainPipeline,
+        &SkyPipeline,
         &TransparentPipeline,
         &DebugLinesPipeline,
     ]);
@@ -209,6 +212,8 @@ fn begin_rendering(
     }
 
     wm.mc.chunks.assemble_world_meshes(&wm);
+
+    let entity = describe_entity(&wm);
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;
@@ -309,10 +314,24 @@ fn begin_rendering(
                 wm.mc.camera.store(Arc::new(camera));
 
                 let _ = wm.render(&[
+                    // &SkyPipeline,
                     &TerrainPipeline,
                     // &GrassPipeline,
                     &TransparentPipeline,
                     &DebugLinesPipeline,
+                    // &EntityPipeline {
+                    //     frames: &[
+                    //         EntityGroupInstancingFrame {
+                    //             entity: entity.1,
+                    //             instance_vbo: entity.,
+                    //             part_transform_matrices: Arc::new(()),
+                    //             texture_offsets: Arc::new(()),
+                    //             texture: Arc::new(BindableTexture {}),
+                    //             instance_count: 0,
+                    //             vertex_count: 0
+                    //         }
+                    //     ]
+                    // }
                 ]);
 
                 frame_start = Instant::now();

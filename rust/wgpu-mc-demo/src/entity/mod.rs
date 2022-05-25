@@ -87,12 +87,11 @@ pub fn describe_entity(wm: &WmRenderer) -> (UploadedEntityInstanceBuffer, Arc<En
         }],
     };
 
-    let described_instance = entity_instance.describe_instance();
+    let described_instance = entity_instance.get_matrices();
 
     let (entity_instance_buffer, entity_instance_bind_group) = EntityInstancingTransforms {
         matrices: vec![described_instance],
-    }
-    .upload(wm);
+    }.upload(wm);
 
     (
         (entity_instance_buffer, entity_instance_bind_group),

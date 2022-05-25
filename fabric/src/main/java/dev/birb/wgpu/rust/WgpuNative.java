@@ -18,6 +18,14 @@ import java.util.function.Predicate;
 
 public class WgpuNative {
 
+    static {
+        try {
+            WgpuNative.load("wgpu_mc_jni", true);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static HashMap<Object, Long> idLists = new HashMap<>();
 
     /**
@@ -78,7 +86,7 @@ public class WgpuNative {
 
     public static native void setIndexBuffer(int[] buffer);
 
-    public static native void debugPalette(long palette, int x, int y, int z);
+    public static native void debugPalette(long palette, int index);
 
     public static native void setVertexBuffer(byte[] buffer);
 
@@ -156,5 +164,7 @@ public class WgpuNative {
     public static native void cacheBlockStates();
 
     public static native void setCamera(double x, double y, double z, float renderYaw, float renderPitch);
+
+    public static native void bakeChunk(int x, int z);
 
 }

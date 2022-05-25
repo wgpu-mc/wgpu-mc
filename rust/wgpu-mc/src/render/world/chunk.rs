@@ -234,7 +234,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                 }
                             };
 
-                            if render_north {
+                            if render_north || true {
                                 match &model.north {
                                     None => {}
                                     Some(north) => north_vertices.extend(north.iter().map(|v| {
@@ -247,7 +247,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                     })),
                                 };
                             }
-                            if render_east {
+                            if render_east || true {
                                 match &model.east {
                                     None => {}
                                     Some(east) => east_vertices.extend(east.iter().map(|v| {
@@ -260,7 +260,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                     })),
                                 };
                             }
-                            if render_south {
+                            if render_south || true {
                                 match &model.south {
                                     None => {}
                                     Some(south) => south_vertices.extend(south.iter().map(|v| {
@@ -273,7 +273,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                     })),
                                 };
                             }
-                            if render_west {
+                            if render_west || true {
                                 match &model.west {
                                     None => {}
                                     Some(west) => west_vertices.extend(west.iter().map(|v| {
@@ -286,7 +286,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                     })),
                                 };
                             }
-                            if render_up {
+                            if render_up || true {
                                 match &model.up {
                                     None => {}
                                     Some(up) => up_vertices.extend(up.iter().map(|v| {
@@ -299,7 +299,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                                     })),
                                 };
                             }
-                            if render_down {
+                            if render_down || true {
                                 match &model.down {
                                     None => {}
                                     Some(down) => down_vertices.extend(down.iter().map(|v| {

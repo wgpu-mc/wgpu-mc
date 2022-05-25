@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::render::atlas::Atlas;
 use crate::texture::UV;
 
-use crate::render::entity::EntityVertex;
+use crate::render::entity::{EntityGroupInstancingFrame, EntityVertex};
 use crate::render::pipeline::RenderPipelineManager;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{WgpuState, WmRenderer};
@@ -490,7 +490,7 @@ pub struct EntityInstance {
 }
 
 impl EntityInstance {
-    pub fn describe_instance(&self) -> Vec<[[f32; 4]; 4]> {
+    pub fn get_matrices(&self) -> Vec<[[f32; 4]; 4]> {
         let transforms: Vec<Matrix4<f32>> = self
             .part_transforms
             .iter()

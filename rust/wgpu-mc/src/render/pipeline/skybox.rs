@@ -4,23 +4,181 @@ use wgpu::util::DeviceExt;
 
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
-use crate::render::world::sky::SkyVertex;
+use crate::render::world::sky::{SkyboxVertex, SkyVertex};
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
 
-pub struct SkyPipeline;
+const VERTICES: [SkyboxVertex; 36] = [
+    SkyboxVertex {
+        position: e,
+        //south 2nd uv
+        uv: [self.textures.south.1 .0, self.textures.south.1 .1]
+    },
+    SkyboxVertex {
+        position: h,
+        uv: [self.textures.south.1 .0, self.textures.south.0 .1],
+    },
+    SkyboxVertex {
+        position: f,
+        uv: [self.textures.south.0 .0, self.textures.south.1 .1],
+    },
+    SkyboxVertex {
+        position: h,
+        uv: [self.textures.south.1 .0, self.textures.south.0 .1],
+    },
+    SkyboxVertex {
+        position: g,
+        uv: [self.textures.south.0 .0, self.textures.south.0 .1],
+    },
+    SkyboxVertex {
+        position: f,
+        uv: [self.textures.south.0 .0, self.textures.south.1 .1],
+    },
+    SkyboxVertex {
+        position: g,
+        uv: [self.textures.west.1 .0, self.textures.west.0 .1],
+    },
+    SkyboxVertex {
+        position: b,
+        uv: [self.textures.west.0 .0, self.textures.west.1 .1],
+    },
+    SkyboxVertex {
+        position: f,
+        uv: [self.textures.west.1 .0, self.textures.west.1 .1],
+    },
+    SkyboxVertex {
+        position: c,
+        uv: [self.textures.west.0 .0, self.textures.west.0 .1],
+    },
+    SkyboxVertex {
+        position: b,
+        uv: [self.textures.west.0 .0, self.textures.west.1 .1],
+    },
+    SkyboxVertex {
+        position: g,
+        uv: [self.textures.west.1 .0, self.textures.west.0 .1],
+    },
+    SkyboxVertex {
+        position: c,
+        uv: [self.textures.north.1 .0, self.textures.north.0 .1],
+    },
+    SkyboxVertex {
+        position: a,
+        uv: [self.textures.north.0 .0, self.textures.north.1 .1],
+    },
+    SkyboxVertex {
+        position: b,
+        uv: [self.textures.north.1 .0, self.textures.north.1 .1],
+    },
+    SkyboxVertex {
+        position: d,
+        uv: [self.textures.north.0 .0, self.textures.north.0 .1],
+    },
+    SkyboxVertex {
+        position: a,
+        uv: [self.textures.north.0 .0, self.textures.north.1 .1],
+    },
+    SkyboxVertex {
+        position: c,
+        uv: [self.textures.north.1 .0, self.textures.north.0 .1],
+    },
+    SkyboxVertex {
+        position: e,
+        uv: [self.textures.east.0 .0, self.textures.east.1 .1],
+    },
+    SkyboxVertex {
+        position: a,
+        uv: [self.textures.east.1 .0, self.textures.east.1 .1],
+    },
+    SkyboxVertex {
+        position: d,
+        uv: [self.textures.east.1 .0, self.textures.east.0 .1],
+    },
+    SkyboxVertex {
+        position: d,
+        uv: [self.textures.east.1 .0, self.textures.east.0 .1],
+    },
+    SkyboxVertex {
+        position: h,
+        uv: [self.textures.east.0 .0, self.textures.east.0 .1],
+    },
+    SkyboxVertex {
+        position: e,
+        uv: [self.textures.east.0 .0, self.textures.east.1 .1],
+    },
+    SkyboxVertex {
+        position: g,
+        uv: [self.textures.up.1 .0, self.textures.up.0 .1],
+    },
+    SkyboxVertex {
+        position: h,
+        uv: [self.textures.up.0 .0, self.textures.up.0 .1],
+    },
+    SkyboxVertex {
+        position: d,
+        uv: [self.textures.up.0 .0, self.textures.up.1 .1],
+    },
+    SkyboxVertex {
+        position: c,
+        uv: [self.textures.up.1 .0, self.textures.up.1 .1],
+    },
+    SkyboxVertex {
+        position: g,
+        uv: [self.textures.up.1 .0, self.textures.up.0 .1],
+    },
+    SkyboxVertex {
+        position: d,
+        uv: [self.textures.up.0 .0, self.textures.up.1 .1],
+    },
+    SkyboxVertex {
+        position: a,
+        uv: [self.textures.down.1 .0, self.textures.down.0 .1],
+    },
+    SkyboxVertex {
+        position: b,
+        uv: [self.textures.down.0 .0, self.textures.down.0 .1],
+        normal: [0.0, -1.0, 0.0],
+        part_id,
+    },
+    SkyboxVertex {
+        position: f,
+        uv: [self.textures.down.0 .0, self.textures.down.1 .1],
+        normal: [0.0, -1.0, 0.0],
+        part_id,
+    },
+    SkyboxVertex {
+        position: e,
+        uv: [self.textures.down.1 .0, self.textures.down.1 .1],
+        normal: [0.0, -1.0, 0.0],
+        part_id,
+    },
+    SkyboxVertex {
+        position: a,
+        uv: [self.textures.down.1 .0, self.textures.down.0 .1],
+        normal: [0.0, -1.0, 0.0],
+        part_id,
+    },
+    SkyboxVertex {
+        position: f,
+        uv: [self.textures.down.0 .0, self.textures.down.1 .1],
+        normal: [0.0, -1.0, 0.0],
+        part_id,
+    }
+];
 
-impl WmPipeline for SkyPipeline {
+pub struct SkyboxPipeline;
+
+impl WmPipeline for SkyboxPipeline {
     fn name(&self) -> &'static str {
-        "wgpu_mc:pipelines/sky"
+        "wgpu_mc:pipelines/skybox"
     }
 
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
-            "wgpu_mc:shaders/sky".into(),
+            "wgpu_mc:shaders/skybox".into(),
             Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/sky.wgsl".try_into().unwrap(),
+                &"wgpu_mc:shaders/skybox.wgsl".try_into().unwrap(),
                 &*wm.mc.resource_provider,
                 &wm.wgpu_state.device,
                 "fs_main".into(),
@@ -45,14 +203,14 @@ impl WmPipeline for SkyPipeline {
         let mut map = HashMap::new();
 
         map.insert(
-            "wgpu_mc:layouts/sky".into(),
+            "wgpu_mc:layouts/skybox".into(),
             wm.wgpu_state
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Sky Pipeline Layout"),
+                    label: Some("Skybox Pipeline Layout"),
                     bind_group_layouts: &[
-                        // layouts.get("cubemap").unwrap(),
                         layouts.get("matrix4").unwrap(),
+                        layouts.get("texture").unwrap()
                     ],
                     push_constant_ranges: &[],
                 }),
@@ -65,21 +223,21 @@ impl WmPipeline for SkyPipeline {
         let pipeline_manager = wm.render_pipeline_manager.load_full();
         let layouts = &pipeline_manager.pipeline_layouts.load_full();
         let shader_map = pipeline_manager.shader_map.read();
-        let shader = shader_map.get("wgpu_mc:shaders/sky").unwrap();
+        let shader = shader_map.get("wgpu_mc:shaders/skybox").unwrap();
 
         let mut map = HashMap::new();
 
         map.insert(
-            "wgpu_mc:pipelines/sky".into(),
+            "wgpu_mc:pipelines/skybox".into(),
             wm.wgpu_state
                 .device
                 .create_render_pipeline(&RenderPipelineDescriptor {
                     label: None,
-                    layout: Some(layouts.get("wgpu_mc:layouts/sky").unwrap()),
+                    layout: Some(layouts.get("wgpu_mc:layouts/skybox").unwrap()),
                     vertex: wgpu::VertexState {
                         module: shader.get_vert().0,
                         entry_point: shader.get_vert().1,
-                        buffers: &[SkyVertex::desc()],
+                        buffers: &[SkyboxVertex::desc()],
                     },
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -129,26 +287,7 @@ impl WmPipeline for SkyPipeline {
     ) {
         let pipeline_manager = wm.render_pipeline_manager.load();
 
-        let vertices = [
-            SkyVertex {
-                position: [1.0, 1.0, 0.5],
-            },
-            SkyVertex {
-                position: [-1.0, 1.0, 0.5],
-            },
-            SkyVertex {
-                position: [-1.0, -1.0, 0.5],
-            },
-            SkyVertex {
-                position: [-1.0, -1.0, 0.5],
-            },
-            SkyVertex {
-                position: [1.0, 1.0, 0.5],
-            },
-            SkyVertex {
-                position: [-1.0, 1.0, 0.5],
-            },
-        ];
+        let vertices = 
 
         let vertex_buffer = arena.alloc(wm.wgpu_state.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {

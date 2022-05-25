@@ -40,12 +40,6 @@ public class Wgpu {
     }
 
     public static void preInit(String windowTitle) {
-        try {
-            WgpuNative.load("wgpu_mc_jni", true);
-        } catch (Throwable e) {
-            throw new RuntimeException(e);
-        }
-
         WgpuNative.preInit();
     }
 
