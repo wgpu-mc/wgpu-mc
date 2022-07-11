@@ -26,4 +26,5 @@ indexmap = { version = "1.7.0", features = ["std"] }
 multi-map = { git = "https://github.com/rust-embedded-community/multi-map.git" }
 tracing = "0.1.31"
 serde_with = "1.13.0"
-web-sys="0.3.53"
+web-sys = "0.3.53"
+minecraft-assets = { git = "https://github.com/wgpu-mc/minecraft-assets.git" }

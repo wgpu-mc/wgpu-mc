@@ -9,7 +9,6 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::mc::BlockManager;
-use crate::model::BlockMeshVertex;
 use crate::render::pipeline::terrain::TerrainVertex;
 
 pub const CHUNK_WIDTH: usize = 16;
@@ -43,8 +42,7 @@ pub struct ChunkLayers {
     terrain: BakedChunkLayer<TerrainVertex>,
 }
 
-///Return a BlockState within the provided (world) coordinates. If the coordinates are out of bounds,
-/// an `Option<BlockstateKey>` value of None should be returned
+///Return a BlockState within the provided world coordinates.
 pub trait BlockStateProvider: Send + Sync + Debug {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
 }
@@ -52,33 +50,22 @@ pub trait BlockStateProvider: Send + Sync + Debug {
 #[derive(Debug)]
 pub struct Chunk {
     pub pos: ChunkPos,
-    pub state_provider: Box<dyn BlockStateProvider>,
     pub baked: ArcSwap<Option<ChunkLayers>>,
 }
 
 impl Chunk {
-    pub fn new(pos: ChunkPos, state_provider: Box<dyn BlockStateProvider>) -> Self {
+    pub fn new(pos: ChunkPos) -> Self {
         Self {
             pos,
-            state_provider,
             baked: ArcSwap::new(Arc::new(None)),
         }
     }
 
-    pub fn blockstate_at_pos(&self, pos: BlockPos) -> ChunkBlockState {
-        let x = pos.0 % 16;
-        let y = pos.1 as i16;
-        let z = pos.2 % 16;
-
-        self.state_provider.get_state(x, y, z)
-    }
-
-    pub fn bake(&self, block_manager: &BlockManager) {
-        let glass_index: BlockstateKey = (*block_manager
-            .block_state_indices
-            .get("Block{minecraft:glass}")
-            .unwrap() as u32)
-            .into();
+    pub fn bake<T: BlockStateProvider>(&self, block_manager: &BlockManager, provider: &T) {
+        let glass_state = BlockstateKey {
+            block: block_manager.blocks.get_full("minecraft:glass").unwrap().0 as u16,
+            augment: 0,
+        };
 
         let glass = BakedChunkLayer::bake(
             block_manager,
@@ -90,13 +77,10 @@ impl Chunk {
                 normal: [v.normal[0], v.normal[1], v.normal[2], 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
                 tangent: [1.0, 1.0, 1.0, 1.0],
-                uv_offset: v.uv_offset,
+                uv_offset: v.animation_uv_offset,
             },
-            Box::new(move |state| match state.packed_key {
-                None => false,
-                Some(key) => key == glass_index,
-            }),
-            &*self.state_provider,
+            Box::new(move |state| state == glass_state),
+            provider,
         );
 
         let terrain = BakedChunkLayer::bake(
@@ -109,13 +93,10 @@ impl Chunk {
                 normal: [v.normal[0], v.normal[1], v.normal[2], 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
                 tangent: [1.0, 1.0, 1.0, 1.0],
-                uv_offset: v.uv_offset,
+                uv_offset: v.animation_uv_offset,
             },
-            Box::new(move |state| match state.packed_key {
-                None => false,
-                Some(key) => key != glass_index,
-            }),
-            &*self.state_provider,
+            Box::new(move |state| state != glass_state),
+            provider,
         );
 
         self.baked
@@ -151,7 +132,7 @@ impl ChunkManager {
         }
     }
 
-    pub fn bake_meshes(&self, wm: &WmRenderer) {
+    pub fn bake_meshes<T: BlockStateProvider>(&self, wm: &WmRenderer, provider: &T) {
         let block_manager = wm.mc.block_manager.read();
 
         use rayon::iter::ParallelIterator;
@@ -159,7 +140,7 @@ impl ChunkManager {
             .read()
             .iter()
             .map(|(_pos, chunk)| {
-                chunk.load().bake(&block_manager);
+                chunk.load().bake(&block_manager, provider);
             })
             .collect::<Vec<_>>();
     }

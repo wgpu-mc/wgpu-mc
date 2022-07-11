@@ -1,18 +1,18 @@
-#[macro_use]
-extern crate wgpu_mc;
-
 mod chunk;
 mod entity;
 
-use std::fs;
+#[macro_use]
+extern crate wgpu_mc;
+
+use std::{fs, thread};
 
 use std::path::PathBuf;
 
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use wgpu_mc::mc::datapack::NamespacedResource;
+use wgpu_mc::mc::resource::ResourcePath;
 
 use futures::executor::block_on;
-use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
+use wgpu_mc::{HasWindowSize, wgpu, WindowSize, WmRenderer};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
@@ -30,8 +30,7 @@ use arc_swap::ArcSwap;
 use fastanvil::pre18::JavaChunk;
 use fastnbt::de::from_bytes;
 use rayon::iter::IntoParallelIterator;
-use wgpu_mc::mc::block::BlockDefinition;
-use wgpu_mc::render::entity::EntityGroupInstancingFrame;
+use wgpu_mc::mc::entity::{EntityInstanceTransforms, PartTransform};
 
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
@@ -54,8 +53,8 @@ struct FsResourceProvider {
 
 //ResourceProvider is what wm uses to fetch resources. This is a basic implementation that's just backed by the filesystem
 impl ResourceProvider for FsResourceProvider {
-    fn get_resource(&self, id: &NamespacedResource) -> Option<Vec<u8>> {
-        let real_path = self.asset_root.join(&id.0).join(&id.1);
+    fn get_bytes(&self, id: &ResourcePath) -> Option<Vec<u8>> {
+        let real_path = self.asset_root.join(id.0.replace(":", "/"));
 
         fs::read(&real_path).ok()
     }
@@ -80,40 +79,7 @@ unsafe impl HasRawWindowHandle for WinitWindowWrapper {
     }
 }
 
-fn load_anvil_chunks() -> Vec<(usize, usize, JavaChunk)> {
-    let root = crate_root::root().unwrap().join("wgpu-mc-demo").join("res");
-    let demo_root = root.join("demo_world");
-    let region_dir = std::fs::read_dir(demo_root.join("region")).unwrap();
-    // let mut model_map = HashMap::new();
-
-    let _begin = Instant::now();
-
-    let regions: Vec<Vec<u8>> = region_dir
-        .map(|region| {
-            let region = region.unwrap();
-            fs::read(region.path()).unwrap()
-        })
-        .collect();
-
-    use rayon::iter::ParallelIterator;
-    regions
-        .into_par_iter()
-        .flat_map(|region| {
-            let cursor = Cursor::new(region);
-            let mut region = RegionBuffer::new(cursor);
-            let mut chunks = Vec::new();
-            region.for_each_chunk(|x, z, chunk_data| {
-                let chunk: JavaChunk = from_bytes(&chunk_data[..]).unwrap();
-                chunks.push((x, z, chunk));
-            });
-            chunks
-        })
-        .collect()
-}
-
 fn main() {
-    let anvil_chunks = load_anvil_chunks();
-
     let event_loop = EventLoop::new();
     let title = "wgpu-mc test";
     let window = winit::window::WindowBuilder::new()
@@ -143,7 +109,7 @@ fn main() {
     let wm = WmRenderer::new(wgpu_state, rsp);
 
     wm.init(&[
-        &EntityPipeline { frames: &[] },
+        &EntityPipeline { entities: &[] },
         &TerrainPipeline,
         &SkyPipeline,
         &TransparentPipeline,
@@ -152,77 +118,42 @@ fn main() {
 
     let blockstates_path = _mc_root.join("blockstates");
 
-    {
+    let blocks = {
+        //Read all of the blockstates in the Minecraft datapack folder thingy
         let blockstate_dir = std::fs::read_dir(blockstates_path).unwrap();
         // let mut model_map = HashMap::new();
         let mut bm = wm.mc.block_manager.write();
 
-        blockstate_dir.for_each(|m| {
+        blockstate_dir.map(|m| {
             let model = m.unwrap();
+        })
+    };
 
-            let resource_name = NamespacedResource(
-                String::from("minecraft"),
-                format!("blockstates/{}", model.file_name().to_str().unwrap()),
-            );
-
-            match BlockDefinition::from_json(
-                model.file_name().to_str().unwrap(),
-                std::str::from_utf8(&fs::read(model.path()).unwrap()).unwrap(),
-            ) {
-                None => {}
-                Some(block) => {
-                    bm.block_definitions.insert(resource_name, block);
-                }
-            };
-        });
-    }
-
-    wm.mc.bake_blocks(&wm, |nsr, key| {
-        let mut string = format!("Block{{{}}}", nsr);
-
-        if key != "" {
-            string.push_str(&format!("[{}]", key));
-        }
-
-        string
-    });
+    // wm.mc.bake_blocks(&wm, );
 
     let window = wrapper.window;
 
     println!("Starting rendering");
-    begin_rendering(event_loop, window, wm, anvil_chunks);
+    begin_rendering(event_loop, window, wm);
 }
 
 fn begin_rendering(
     event_loop: EventLoop<()>,
     window: Window,
-    wm: WmRenderer,
-    _chunks: Vec<(usize, usize, JavaChunk)>,
+    wm: WmRenderer
 ) {
-    // let entity_rendering = describe_entity(&wm);
+    let (entity, mut instances) = describe_entity(&wm);
 
-    let chunks = make_chunks(&wm);
-
-    {
-        let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
-
-        chunks.into_iter().for_each(|chunk| {
-            loaded_chunks.insert(chunk.pos, ArcSwap::new(Arc::new(chunk)));
-        });
-    }
-
-    wm.mc.chunks.assemble_world_meshes(&wm);
-
-    let entity = describe_entity(&wm);
+    println!("made it here");
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;
 
     let mut forward = 0.0;
 
-    let mut spin = 0.0;
+    let mut spin: f32 = 0.0;
 
-    let mut frame : u32 = 0;
+    let mut frame: u32 = 0;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -313,26 +244,111 @@ fn begin_rendering(
 
                 wm.mc.camera.store(Arc::new(camera));
 
-                let _ = wm.render(&[
-                    // &SkyPipeline,
-                    &TerrainPipeline,
-                    // &GrassPipeline,
-                    &TransparentPipeline,
-                    &DebugLinesPipeline,
-                    // &EntityPipeline {
-                    //     frames: &[
-                    //         EntityGroupInstancingFrame {
-                    //             entity: entity.1,
-                    //             instance_vbo: entity.,
-                    //             part_transform_matrices: Arc::new(()),
-                    //             texture_offsets: Arc::new(()),
-                    //             texture: Arc::new(BindableTexture {}),
-                    //             instance_count: 0,
-                    //             vertex_count: 0
-                    //         }
-                    //     ]
-                    // }
-                ]);
+                let surface = wm.wgpu_state.surface.as_ref().unwrap();
+                let texture = surface.get_current_texture().unwrap();
+                let view = texture.texture.create_view(
+                    &wgpu::TextureViewDescriptor {
+                        label: None,
+                        format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                        dimension: Some(wgpu::TextureViewDimension::D2),
+                        aspect: Default::default(),
+                        base_mip_level: 0,
+                        mip_level_count: None,
+                        base_array_layer: 0,
+                        array_layer_count: None
+                    }
+                );
+
+                let _ = wm.render(
+                    &[
+                        // &SkyPipeline,
+                        // &TerrainPipeline,
+                        // &GrassPipeline,
+                        // &TransparentPipeline,
+                        &DebugLinesPipeline,
+                        &EntityPipeline {
+                            entities: &[
+                                &instances
+                            ]
+                        }
+                    ],
+                    &view
+                );
+
+                texture.present();
+
+                instances.instances = (0..100).map(
+                    |id| {
+                        EntityInstanceTransforms {
+                            position: ((id / 10) as f32 * 5.0, 0.0, (id % 10) as f32 * 5.0),
+                            looking_yaw: 0.0,
+                            uv_offset: (0.0, 0.0),
+                            part_transforms: vec![
+                                PartTransform {
+                                    x: 0.0,
+                                    y: 0.0,
+                                    z: 0.0,
+                                    pivot_x: 1.0,
+                                    pivot_y: 0.125,
+                                    pivot_z: 1.0,
+                                    yaw: 0.0,
+                                    pitch: 0.0,
+                                    roll: 0.0,
+                                    scale_x: 1.0,
+                                    scale_y: 1.0,
+                                    scale_z: 1.0
+                                },
+                                PartTransform {
+                                    x: 0.0,
+                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    y: 0.0,
+                                    z: 0.0,
+                                    pivot_x: 0.5,
+                                    pivot_y: 0.5,
+                                    pivot_z: 0.5,
+                                    yaw: spin + 30.0 + (id as f32 + 5.0),
+                                    pitch: spin + 30.0 + (id as f32 + 5.0),
+                                    roll: spin + 30.0 + (id as f32 + 5.0),
+                                    scale_x: 1.0,
+                                    scale_y: 1.0,
+                                    scale_z: 1.0
+                                },
+                                PartTransform {
+                                    x: 0.0,
+                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    y: 0.0,
+                                    z: 0.0,
+                                    pivot_x: 0.6,
+                                    pivot_y: 0.6,
+                                    pivot_z: 0.6,
+                                    yaw: spin + (id as f32 + 5.0),
+                                    pitch: spin + (id as f32 + 5.0),
+                                    roll: spin + (id as f32 + 5.0),
+                                    scale_x: 1.0,
+                                    scale_y: 1.0,
+                                    scale_z: 1.0
+                                },
+                                PartTransform {
+                                    x: 0.0,
+                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    y: 0.0,
+                                    z: 0.0,
+                                    pivot_x: 0.6,
+                                    pivot_y: 0.6,
+                                    pivot_z: 0.6,
+                                    yaw: spin + 10.0 + (id as f32 + 5.0),
+                                    pitch: spin + 50.0 + (id as f32 + 5.0),
+                                    roll: spin + 150.0 + (id as f32 + 5.0),
+                                    scale_x: 1.0,
+                                    scale_y: 1.0,
+                                    scale_z: 1.0
+                                }
+                            ]
+                        }
+                    }
+                ).collect();
+
+                instances.upload(&wm);
 
                 frame_start = Instant::now();
             }

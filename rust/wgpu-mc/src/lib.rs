@@ -1,4 +1,41 @@
-#![feature(set_ptr_value)]
+/*!
+# wgpu-mc
+wgpu-mc is a pure-Rust crate which is designed to be usable by anyone who needs to render
+Minecraft-style scenes using Rust. The main user of this crate at this time is the Minecraft mod
+Electrum which replaces Minecraft's official renderer with wgpu-mc.
+However, anyone is able to use this crate, and the API is designed to be completely independent
+of any single project, allowing anyone to use it. It is mostly batteries-included, except for a
+few things.
+
+# Considerations
+
+This crate is unstable and subject to change. The basic structure for features such
+as terrain rendering and entity rendering are already in-place but could very well change significantly
+in the future.
+
+# Setup
+wgpu-mc, as you could have probably guessed, uses the [wgpu](https://github.com/gfx-rs/wgpu) crate
+for communicating with the GPU. Assuming you aren't running wgpu-mc headless (if you are, I assume
+you already know what you're doing), wgpu-mc can handle surface and device setup for you, as long
+as you pass in a valid window handle. See [init_wgpu]
+
+# Rendering
+
+wgpu-mc makes use of a trait called `WmPipeline` to describe any struct which is used for
+rendering. There are multiple built in pipelines, but they aren't required to use while rendering.
+
+## Terrain Rendering
+
+The first step to begin terrain rendering is to implement [BlockStateProvider](cr).
+This is a trait that provides a block state key for a given coordinate.
+
+## Entity Rendering
+
+To render entities, you need an entity model. wgpu-mc makes no assumptions about how entity models are defined, 
+so it's up to you to provide them to wgpu-mc.
+
+See the [render::entity] module for an example of rendering an example entity.
+*/
 
 use std::borrow::Borrow;
 use std::iter;
@@ -6,7 +43,6 @@ use tracing::{span, Level};
 
 pub mod camera;
 pub mod mc;
-pub mod model;
 pub mod render;
 pub mod texture;
 pub mod util;
@@ -38,16 +74,16 @@ use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use crate::util::WmArena;
 
 pub struct WgpuState {
-    pub surface: wgpu::Surface,
+    pub surface: Option<wgpu::Surface>,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub surface_config: ArcSwap<wgpu::SurfaceConfiguration>,
-    pub size: ArcSwap<WindowSize>,
+    pub surface_config: Option<ArcSwap<wgpu::SurfaceConfiguration>>,
+    pub size: Option<ArcSwap<WindowSize>>,
 }
 
 ///The main wgpu-mc renderer struct. This mostly just contains wgpu state.
-/// goes in `MinecraftState`
+///Resources pertaining to Minecraft go in `MinecraftState`
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
@@ -70,6 +106,10 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
+    ///This is a convenience method;
+    ///
+    /// This takes in a raw window handle and returns a [WgpuState], which is then used to
+    /// initialize a [WmRenderer].
     pub async fn init_wgpu<W: HasRawWindowHandle + HasWindowSize>(window: &W) -> WgpuState {
         let size = window.get_window_size();
 
@@ -113,12 +153,12 @@ impl WmRenderer {
         surface.configure(&device, &surface_config);
 
         WgpuState {
-            surface,
+            surface: Some(surface),
             adapter,
             device,
             queue,
-            surface_config: ArcSwap::new(Arc::new(surface_config)),
-            size: ArcSwap::new(Arc::new(size)),
+            surface_config: Some(ArcSwap::new(Arc::new(surface_config))),
+            size: Some(ArcSwap::new(Arc::new(size))),
         }
     }
 
@@ -126,9 +166,15 @@ impl WmRenderer {
         let pipelines = render::pipeline::RenderPipelineManager::new(resource_provider.clone());
 
         let mc = MinecraftState::new(resource_provider);
+        let surface_config = &wgpu_state.surface_config.as_ref().unwrap().load();
+
         let depth_texture = TextureSamplerView::create_depth_texture(
             &wgpu_state.device,
-            &wgpu_state.surface_config.load(),
+            wgpu::Extent3d {
+                width: surface_config.width,
+                height: surface_config.height,
+                depth_or_array_layers: 1
+            },
             "depth texture",
         );
 
@@ -181,13 +227,15 @@ impl WmRenderer {
             return;
         }
 
-        let mut surface_config = (*self.wgpu_state.surface_config.load_full()).clone();
+        let mut surface_config = (*self.wgpu_state.surface_config.as_ref().unwrap().load_full()).clone();
 
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
 
         self.wgpu_state
             .surface
+            .as_ref()
+            .unwrap()
             .configure(&self.wgpu_state.device, &surface_config);
 
         let mut new_camera = *self.mc.camera.load_full();
@@ -198,7 +246,11 @@ impl WmRenderer {
         self.depth_texture
             .store(Arc::new(texture::TextureSamplerView::create_depth_texture(
                 &self.wgpu_state.device,
-                &surface_config,
+                wgpu::Extent3d {
+                    width: surface_config.width,
+                    height: surface_config.height,
+                    depth_or_array_layers: 1
+                },
                 "depth_texture",
             )));
     }
@@ -207,7 +259,7 @@ impl WmRenderer {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
-        let surface_config = self.wgpu_state.surface_config.load();
+        let surface_config = self.wgpu_state.surface_config.as_ref().unwrap().load();
         camera.aspect = surface_config.width as f32 / surface_config.height as f32;
 
         let uniforms = UniformMatrixHelper {
@@ -267,30 +319,18 @@ impl WmRenderer {
     }
 
     pub fn update_animated_textures(&self, subframe: u32) {
-        self.upload_animated_block_buffer(
-            self
-            .mc
-            .texture_manager.atlases
-            .load_full()
-            .get(BLOCK_ATLAS_NAME)
-            .unwrap().load_full().update_textures(subframe)
-        );
+        // self.upload_animated_block_buffer(
+        //     self
+        //     .mc
+        //     .texture_manager.atlases
+        //     .load_full()
+        //     .get(BLOCK_ATLAS_NAME)
+        //     .unwrap().load_full().update_textures(subframe)
+        // );
     }
 
-    pub fn render(&self, wm_pipelines: &[&dyn WmPipeline]) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&self, wm_pipelines: &[&dyn WmPipeline], output_texture_view: &wgpu::TextureView) -> Result<(), wgpu::SurfaceError> {
         let _span_ = span!(Level::TRACE, "render").entered();
-
-        let output = self.wgpu_state.surface.get_current_texture()?;
-        let view = output.texture.create_view(&TextureViewDescriptor {
-            label: None,
-            format: Some(TextureFormat::Bgra8Unorm),
-            dimension: Some(wgpu::TextureViewDimension::D2),
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        });
 
         let mut encoder =
             self.wgpu_state
@@ -306,7 +346,7 @@ impl WmRenderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
                 color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: &output_texture_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -332,15 +372,15 @@ impl WmRenderer {
                 wm_pipeline.render(self, &mut render_pass, &mut arena);
             }
         }
+
         self.wgpu_state.queue.submit(iter::once(encoder.finish()));
-        output.present();
 
         Ok(())
     }
 
     pub fn get_backend_description(&self) -> String {
         format!(
-            "Wgpu 0.12 ({:?})",
+            "wgpu 0.12 ({:?})",
             self.wgpu_state.adapter.get_info().backend
         )
     }

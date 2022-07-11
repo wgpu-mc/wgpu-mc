@@ -1,14 +1,14 @@
-use crate::render::entity::EntityGroupInstancingFrame;
-use crate::render::entity::{EntityRenderInstance, EntityVertex};
+use crate::render::entity::{EntityVertex};
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
 use std::collections::HashMap;
+use crate::mc::entity::{EntityInstances, EntityInstanceVBOEntry};
 
-pub struct EntityPipeline<'frames> {
-    pub frames: &'frames [&'frames EntityGroupInstancingFrame],
+pub struct EntityPipeline<'entities> {
+    pub entities: &'entities [&'entities EntityInstances],
 }
 
 impl<'frames> WmPipeline for EntityPipeline<'frames> {
@@ -52,7 +52,6 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                     label: Some("Entity Pipeline Layout"),
                     bind_group_layouts: &[
                         layouts.get("ssbo").unwrap(),
-                        layouts.get("ssbo").unwrap(),
                         layouts.get("texture").unwrap(),
                         layouts.get("matrix4").unwrap(),
                     ],
@@ -81,7 +80,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                     vertex: wgpu::VertexState {
                         module: shader.get_vert().0,
                         entry_point: shader.get_vert().1,
-                        buffers: &[EntityVertex::desc(), EntityRenderInstance::desc()],
+                        buffers: &[EntityVertex::desc(), EntityInstanceVBOEntry::desc()],
                     },
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -110,8 +109,8 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                         targets: &[wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent::REPLACE,
-                                alpha: wgpu::BlendComponent::REPLACE,
+                                color: wgpu::BlendComponent::OVER,
+                                alpha: wgpu::BlendComponent::OVER,
                             }),
                             write_mask: Default::default(),
                         }],
@@ -141,23 +140,31 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
             ),
         );
 
-        self.frames.iter().for_each(|frame| {
+        self.entities.iter().for_each(|instances| {
+            let uploaded = {
+                let lock = instances.uploaded.read();
+                arena.alloc(lock.as_ref().unwrap().clone())
+            };
+
+            let entity = arena.alloc(instances.entity.clone());
+
+            //Bind the transform SSBO
             render_pass.set_bind_group(
                 0,
-                arena.alloc(frame.part_transform_matrices.clone()),
+                &uploaded.transform_ssbo.1,
                 &[],
             );
 
-            render_pass.set_bind_group(1, arena.alloc(frame.texture_offsets.clone()), &[]);
+            //Bind the entity texture atlas
+            render_pass.set_bind_group(
+                1,
+                &entity.texture.bind_group,
+                &[],
+            );
 
+            //Bind projection matrix
             render_pass.set_bind_group(
                 2,
-                &arena.alloc(frame.texture.clone()).bind_group,
-                &[],
-            );
-
-            render_pass.set_bind_group(
-                3,
                 (**arena.alloc(wm.mc.camera_bind_group.load_full()))
                     .as_ref()
                     .unwrap(),
@@ -166,16 +173,16 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
 
             render_pass.set_vertex_buffer(
                 0,
-                arena.alloc(frame.entity.mesh.clone())
+                entity.mesh
                     .slice(..)
             );
 
             render_pass
-                .set_vertex_buffer(1, arena.alloc(frame.instance_vbo.clone()).slice(..));
+                .set_vertex_buffer(1, uploaded.instance_vbo.slice(..));
 
             render_pass.draw(
-                0..frame.vertex_count,
-                0..frame.instance_count,
+                0..instances.entity.vertices,
+                0..instances.instances.len() as u32,
             );
         });
     }

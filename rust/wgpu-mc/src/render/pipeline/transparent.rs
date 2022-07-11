@@ -147,7 +147,7 @@ impl WmPipeline for TransparentPipeline {
                 .load(),
         );
 
-        let bindable_texture = arena.alloc(block_atlas.bindable_texture.load_full());
+        let bindable_texture = arena.alloc(block_atlas.bindable_texture.clone());
 
         render_pass.set_bind_group(0, &bindable_texture.bind_group, &[]);
         render_pass.set_bind_group(

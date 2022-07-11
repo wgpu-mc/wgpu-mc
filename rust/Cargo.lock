@@ -1202,6 +1202,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
 
 [[package]]
+name = "minecraft-assets"
+version = "0.0.6"
+source = "git+https://github.com/wgpu-mc/minecraft-assets.git#13091bef491f2300482c7ddbec3eed6d59d6a88d"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2625,6 +2635,7 @@ dependencies = [
  "guillotiere",
  "image",
  "indexmap",
+ "minecraft-assets",
  "multi-map",
  "naga",
  "parking_lot",
@@ -2635,6 +2646,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tracing",
+ "web-sys",
  "wgpu",
  "winit",
 ]

@@ -74,13 +74,10 @@ impl<'a> WmArena<'a> {
         //Bump
         self.length += t_allocate_size;
 
-        //SAFETY: This new pointer is up until now unused
         let t_mut_ref = unsafe { (t_alloc_ptr as *mut T).as_mut().unwrap() };
 
         //Move `t` into the allocated spot and forget the zero-initialized T that was returned
-        let uninitialized_t = std::mem::replace(t_mut_ref, t);
-
-        std::mem::forget(uninitialized_t);
+        std::mem::forget(std::mem::replace(t_mut_ref, t));
 
         let callback = |ptr: *mut T| {
             //SAFETY: this will only be called once WmArena is dropped, meaning that there are no

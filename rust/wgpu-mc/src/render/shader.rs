@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
-use crate::mc::datapack::NamespacedResource;
-use crate::mc::resource::ResourceProvider;
+use crate::mc::resource::{ResourceProvider, ResourcePath};
 use crate::wgpu::{ShaderModule, ShaderModuleDescriptor};
 
 pub trait WmShader: Send + Sync {
@@ -19,13 +18,13 @@ pub struct WgslShader {
 
 impl WgslShader {
     pub fn init(
-        resource: &NamespacedResource,
+        resource: &ResourcePath,
         rp: &dyn ResourceProvider,
         device: &wgpu::Device,
         frag_entry: String,
         vert_entry: String,
     ) -> Option<Self> {
-        let shader_src = rp.get_resource(resource)?;
+        let shader_src = rp.get_bytes(resource)?;
 
         let shader_src = std::str::from_utf8(&shader_src).ok()?;
 
@@ -62,13 +61,13 @@ pub struct GlslShader {
 
 impl GlslShader {
     pub fn init(
-        frag: &NamespacedResource,
-        vert: &NamespacedResource,
+        frag: &ResourcePath,
+        vert: &ResourcePath,
         rp: &dyn ResourceProvider,
         device: &wgpu::Device,
     ) -> Self {
-        let frag_src = rp.get_resource(frag).unwrap();
-        let vert_src = rp.get_resource(vert).unwrap();
+        let frag_src = rp.get_bytes(frag).unwrap();
+        let vert_src = rp.get_bytes(vert).unwrap();
 
         let frag_src = std::str::from_utf8(&frag_src).unwrap();
         let vert_src = std::str::from_utf8(&vert_src).unwrap();

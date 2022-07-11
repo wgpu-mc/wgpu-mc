@@ -1,6 +1,6 @@
 use image::GenericImageView;
 
-use crate::WgpuState;
+use crate::{WgpuState, render::pipeline::RenderPipelineManager};
 use std::num::NonZeroU32;
 use wgpu::Extent3d;
 
@@ -31,14 +31,9 @@ impl TextureSamplerView {
     #[must_use]
     pub fn create_depth_texture(
         device: &wgpu::Device,
-        surface_config: &wgpu::SurfaceConfiguration,
+        size: wgpu::Extent3d,
         label: &str,
     ) -> Self {
-        let size = wgpu::Extent3d {
-            width: surface_config.width,
-            height: surface_config.height,
-            depth_or_array_layers: 1,
-        };
         let desc = wgpu::TextureDescriptor {
             label: Some(label),
             size,
@@ -147,3 +142,53 @@ impl TextureSamplerView {
         })
     }
 }
+
+///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
+#[derive(Debug)]
+pub struct BindableTexture {
+    pub tsv: TextureSamplerView,
+    pub bind_group: wgpu::BindGroup,
+}
+
+impl BindableTexture {
+    #[must_use]
+    pub fn from_tsv(
+        wgpu_state: &WgpuState,
+        pipelines: &RenderPipelineManager,
+        texture: TextureSamplerView,
+    ) -> Self {
+        let bind_group = wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: pipelines.bind_group_layouts.read().get("texture").unwrap(),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                }
+            ],
+        });
+
+        Self {
+            tsv: texture,
+            bind_group,
+        }
+    }
+}
+
+// impl TryFrom<(&WmRenderer, &NamespacedResource)> for BindableTexture {
+//     type Error = anyhow::Error;
+//
+//     fn try_from(value: (&WmRenderer, &NamespacedResource)) -> Result<Self, Self::Error> {
+//         Ok(Self::from_tsv(
+//             &value.0.wgpu_state,
+//             &value.0.render_pipeline_manager.load(),
+//             TextureSamplerView::from_image_file_bytes(
+//                 &value.0.wgpu_state, value.0.mc.resource_provider.get_bytes(value.1).ok_or(), ""
+//             )?
+//         ))
+//     }
+// }

@@ -36,9 +36,9 @@ use std::fmt::{Debug, Formatter};
 use std::ops::Shr;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
-use wgpu_mc::mc::block::{BlockDefinition, BlockPos, ChunkBlockState, BlockstateKey};
+use wgpu_mc::mc::block::{BlockstateJson, BlockPos, ChunkBlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
-use wgpu_mc::mc::datapack::NamespacedResource;
+use wgpu_mc::mc::datapack::ResourceId;
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::model::BindableTexture;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
@@ -56,7 +56,6 @@ use wgpu_mc::camera::Camera;
 mod gl;
 mod mc_interface;
 mod palette;
-
 enum RenderMessage {
     SetTitle(String),
     Task(Box<dyn FnOnce() + Send + Sync>),
@@ -88,7 +87,56 @@ static THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
 static JAVA_BLOCK_STATES: OnceCell<RwLock<HashMap<String, GlobalRef>>> = OnceCell::new();
 static BLOCKS: OnceCell<Mutex<Vec<String>>> = OnceCell::new();
+static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
 
+#[derive(Debug)]
+struct ChunkHolder {
+    pub palettes: [usize; 24],
+    pub storages: [usize; 24],
+}
+
+#[derive(Debug)]
+struct MinecraftBlockstateProvider {
+    pub chunks: RwLock<HashMap<(i32, i32), RwLock<ChunkHolder>>>,
+    pub air: BlockstateKey
+}
+
+impl BlockStateProvider for MinecraftBlockstateProvider {
+    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
+        if y >= CHUNK_HEIGHT as i16 || y < 0 {
+            return ChunkBlockState { packed_key: None };
+        }
+
+        let chunk_x = x / 16;
+        let chunk_z = z / 16;
+
+        let storage_index = y / 16;
+
+        assert!(storage_index < (CHUNK_HEIGHT as i16 / 16) && storage_index >= 0);
+
+        let storage = match unsafe {
+            (self.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
+        } {
+            None => return ChunkBlockState { packed_key: None },
+            Some(storage) => storage,
+        };
+
+        let palette_key = storage.get(x, y as u16, z);
+
+        let palette = unsafe {
+            (self.palettes[(y as usize) / 24] as *mut JavaPalette)
+                .as_ref()
+                .unwrap()
+        };
+
+        ChunkBlockState {
+            packed_key: palette
+                .get(palette_key as usize)
+                .filter(|element| element.1 as BlockstateKey != self.air)
+                .map(|element| (element.1 as u32).into()),
+        }
+    }
+}
 struct WinitWindowWrapper<'a> {
     window: &'a Window,
 }
@@ -115,7 +163,7 @@ struct MinecraftResourceManagerAdapter {
 }
 
 impl ResourceProvider for MinecraftResourceManagerAdapter {
-    fn get_resource(&self, id: &NamespacedResource) -> Option<Vec<u8>> {
+    fn get_bytes(&self, id: &ResourceId) -> Option<Vec<u8>> {
         let env = self.jvm.attach_current_thread().unwrap();
 
         let ident_ns = env.new_string(&id.0).unwrap();
@@ -325,8 +373,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
 
     let chunk = Chunk {
         pos: (x, z),
-        state_provider: Box::new(jbsp),
-        baked: ArcSwap::new(Arc::new(None)),
+        baked: ArcSwap::new(Arc::new(None))
     };
 
     wm.mc.chunks.loaded_chunks
@@ -556,14 +603,25 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                     pipelines.push(GL_PIPELINE.get().unwrap());
                 }
 
-                wm.render(&pipelines);
+                let surface = wm.wgpu_state.surface.as_ref().unwrap();
+                let texture = surface.get_current_texture().unwrap();
+                let view = texture.texture.create_view(
+                    &wgpu::TextureViewDescriptor {
+                        label: None,
+                        format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                        dimension: Some(wgpu::TextureViewDimension::D2),
+                        aspect: Default::default(),
+                        base_mip_level: 0,
+                        mip_level_count: None,
+                        base_array_layer: 0,
+                        array_layer_count: None
+                    }
+                );
 
-                // wm.render(
-                //     &[
-                //         &TerrainPipeline,
-                //         GL_PIPELINE.get().unwrap(),
-                //     ]
-                // );
+                wm.render(&pipelines, &view);
+
+                texture.present();
+                
             }
             _ => {}
         }
@@ -583,20 +641,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
         let blocks = BLOCKS.get().unwrap().lock();
 
         blocks.iter().for_each(|identifier| {
-            let identifier = NamespacedResource::try_from(&identifier[..]).unwrap();
+            let identifier = ResourceId::try_from(&identifier[..]).unwrap();
 
             let json_bytes = wm
                 .mc
                 .resource_provider
-                .get_resource(&identifier.prepend("blockstates/").append(".json"))
+                .get_bytes(&identifier.prepend("blockstates/").append(".json"))
                 .unwrap();
 
             let json = std::str::from_utf8(&json_bytes).unwrap();
 
-            match BlockDefinition::from_json(&identifier.to_string(), json) {
+            match BlockstateJson::from_json(&identifier.to_string(), json) {
                 None => {}
                 Some(block) => {
-                    block_manager.block_definitions.insert(identifier, block);
+                    block_manager.blockstates.insert(identifier, block);
                 }
             }
         });
