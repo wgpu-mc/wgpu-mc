@@ -18,7 +18,7 @@ impl BlockStateProvider for SimpleBlockstateProvider {
     }
 }
 
-pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
+pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let mut bm = wm.mc.block_manager.write();
 
     let magma_block_key = BlockstateKey {
@@ -38,5 +38,5 @@ pub fn make_chunks(wm: &WmRenderer) -> Vec<Chunk> {
         Instant::now().duration_since(time).as_micros()
     );
 
-    vec![chunk]
+    chunk
 }

@@ -67,8 +67,14 @@ pub enum CubeOrComplexMesh {
 fn recurse_model_parents(model: &schemas::Model, resource_provider: &dyn ResourceProvider, models: &mut Vec<ResourcePath>) {
     match &model.parent {
         Some(parent_path_string) => {
-            let parent_path: ResourcePath = parent_path_string.into();
-            recurse_model_parents(&serde_json::from_str(&resource_provider.get_string(&parent_path).unwrap()).unwrap(), resource_provider, models);
+            let parent_path: ResourcePath = ResourcePath::from(parent_path_string).prepend("models/").append(".json");
+            recurse_model_parents(
+                &serde_json::from_str(
+                    &resource_provider.get_string(&parent_path).expect(&parent_path.0)
+                ).unwrap(), 
+                resource_provider, 
+                models
+            );
             models.push(parent_path);
         },
         None => {},
@@ -137,14 +143,15 @@ impl ModelMesh {
         let models = variants.into_iter()
             .flat_map(|variant| variant.models())
             .map(|model_properties| {
+            let model_resource_path = ResourcePath::from(&model_properties.model).prepend("models/").append(".json");
             //Recursively resolve the model using it's parents if it has any
             let model: schemas::Model = resolve_model(
                 //Parse the JSON into the model schema
                 serde_json::from_str(
                     //Get the model JSON
-                    &resource_provider.get_string(&(&model_properties.model).into())
+                    &resource_provider.get_string(&model_resource_path)
                         .ok_or(
-                            MeshBakeError::UnresolvedTextureReference((&model_properties.model).into())
+                            MeshBakeError::UnresolvedResourcePath(model_resource_path)
                         )?
                 ).map_err(|err| MeshBakeError::JsonError(err))?,
                 resource_provider
@@ -175,7 +182,7 @@ impl ModelMesh {
 
                     let unallocated_textures: Vec<(&ResourcePath, Vec<u8>)> = unallocated_textures
                         .iter()
-                        .map(|path| (path, resource_provider.get_bytes(path).unwrap()))
+                        .map(|path| (path, resource_provider.get_bytes(&path.prepend("textures/").append(".png")).unwrap()))
                         .collect();
 
                     block_atlas.allocate(

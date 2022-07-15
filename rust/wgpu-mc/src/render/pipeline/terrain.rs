@@ -87,7 +87,7 @@ impl WmPipeline for TerrainPipeline {
                         //&layouts.texture, &layouts.matrix4, &layouts.cubemap
                         layouts.get("texture").unwrap(),
                         layouts.get("matrix4").unwrap(),
-                        layouts.get("ssbo").unwrap(),
+                        // layouts.get("ssbo").unwrap(),
                     ],
                     push_constant_ranges: &[],
                 }),
@@ -195,13 +195,14 @@ impl WmPipeline for TerrainPipeline {
             &[],
         );
 
-        render_pass.set_bind_group(
-            2,
-            (**arena.alloc(wm.mc.animated_block_bind_group.load_full()))
-                .as_ref()
-                .unwrap(),
-            &[],
-        );
+        //TODO
+        // render_pass.set_bind_group(
+        //     2,
+        //     (**arena.alloc(wm.mc.animated_block_bind_group.load_full()))
+        //         .as_ref()
+        //         .unwrap(),
+        //     &[],
+        // );
 
         let buffers = arena.alloc(wm.mc.chunks.section_buffers.load_full());
         let terrain = buffers.get("terrain").unwrap();

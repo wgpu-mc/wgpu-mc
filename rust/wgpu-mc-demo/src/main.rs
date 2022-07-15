@@ -126,14 +126,23 @@ fn main() {
 
         blockstate_dir.map(|m| {
             let model = m.unwrap();
+            (
+                format!("minecraft:{}", model.file_name().to_str().unwrap().replace(".json", "")),
+                format!("minecraft:blockstates/{}", model.file_name().to_str().unwrap()).into()
+            )
         })
-    };
+    }.collect::<Vec<_>>();
 
-    // wm.mc.bake_blocks(&wm, );
+    let now = Instant::now();
+
+    wm.mc.bake_blocks(&wm, blocks.iter().map(|(a,b)| (a, b)));
+
+    let end = Instant::now();
+
+    println!("Baked {} blocks in {}ms", wm.mc.block_manager.read().blocks.len(), end.duration_since(now).as_millis());
 
     let window = wrapper.window;
 
-    println!("Starting rendering");
     begin_rendering(event_loop, window, wm);
 }
 
@@ -144,7 +153,14 @@ fn begin_rendering(
 ) {
     let (entity, mut instances) = describe_entity(&wm);
 
-    println!("made it here");
+    let chunk = make_chunks(&wm);
+
+    {
+        wm.mc.chunks.loaded_chunks.write().insert((0, 0), ArcSwap::new(Arc::new(chunk)));
+    }
+
+    // wm.mc.chunks.bake_meshes(&wm, provider);
+    wm.mc.chunks.assemble_world_meshes(&wm);
 
     let mut frame_start = Instant::now();
     let mut frame_time = 1.0;
@@ -262,25 +278,26 @@ fn begin_rendering(
                 let _ = wm.render(
                     &[
                         // &SkyPipeline,
-                        // &TerrainPipeline,
+                        &TerrainPipeline,
                         // &GrassPipeline,
                         // &TransparentPipeline,
-                        &DebugLinesPipeline,
                         &EntityPipeline {
                             entities: &[
                                 &instances
                             ]
-                        }
+                        },
+                        &DebugLinesPipeline
                     ],
                     &view
                 );
 
                 texture.present();
 
-                instances.instances = (0..100).map(
+                instances.instances = (0..1).map(
                     |id| {
                         EntityInstanceTransforms {
-                            position: ((id / 10) as f32 * 5.0, 0.0, (id % 10) as f32 * 5.0),
+                            // position: ((id / 10) as f32 * 5.0, 0.0, (id % 10) as f32 * 5.0),
+                            position: (0.0, 0.0, 0.0),
                             looking_yaw: 0.0,
                             uv_offset: (0.0, 0.0),
                             part_transforms: vec![
@@ -288,9 +305,9 @@ fn begin_rendering(
                                     x: 0.0,
                                     y: 0.0,
                                     z: 0.0,
-                                    pivot_x: 1.0,
-                                    pivot_y: 0.125,
-                                    pivot_z: 1.0,
+                                    pivot_x: 0.0,
+                                    pivot_y: 0.0,
+                                    pivot_z: 0.0,
                                     yaw: 0.0,
                                     pitch: 0.0,
                                     roll: 0.0,
@@ -298,51 +315,51 @@ fn begin_rendering(
                                     scale_y: 1.0,
                                     scale_z: 1.0
                                 },
-                                PartTransform {
-                                    x: 0.0,
-                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                    y: 0.0,
-                                    z: 0.0,
-                                    pivot_x: 0.5,
-                                    pivot_y: 0.5,
-                                    pivot_z: 0.5,
-                                    yaw: spin + 30.0 + (id as f32 + 5.0),
-                                    pitch: spin + 30.0 + (id as f32 + 5.0),
-                                    roll: spin + 30.0 + (id as f32 + 5.0),
-                                    scale_x: 1.0,
-                                    scale_y: 1.0,
-                                    scale_z: 1.0
-                                },
-                                PartTransform {
-                                    x: 0.0,
-                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                    y: 0.0,
-                                    z: 0.0,
-                                    pivot_x: 0.6,
-                                    pivot_y: 0.6,
-                                    pivot_z: 0.6,
-                                    yaw: spin + (id as f32 + 5.0),
-                                    pitch: spin + (id as f32 + 5.0),
-                                    roll: spin + (id as f32 + 5.0),
-                                    scale_x: 1.0,
-                                    scale_y: 1.0,
-                                    scale_z: 1.0
-                                },
-                                PartTransform {
-                                    x: 0.0,
-                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                    y: 0.0,
-                                    z: 0.0,
-                                    pivot_x: 0.6,
-                                    pivot_y: 0.6,
-                                    pivot_z: 0.6,
-                                    yaw: spin + 10.0 + (id as f32 + 5.0),
-                                    pitch: spin + 50.0 + (id as f32 + 5.0),
-                                    roll: spin + 150.0 + (id as f32 + 5.0),
-                                    scale_x: 1.0,
-                                    scale_y: 1.0,
-                                    scale_z: 1.0
-                                }
+                                // PartTransform {
+                                //     x: 0.0,
+                                //     // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                //     y: 0.0,
+                                //     z: 0.0,
+                                //     pivot_x: 0.5,
+                                //     pivot_y: 0.5,
+                                //     pivot_z: 0.5,
+                                //     yaw: spin + 30.0 + (id as f32 + 5.0),
+                                //     pitch: spin + 30.0 + (id as f32 + 5.0),
+                                //     roll: spin + 30.0 + (id as f32 + 5.0),
+                                //     scale_x: 1.0,
+                                //     scale_y: 1.0,
+                                //     scale_z: 1.0
+                                // },
+                                // PartTransform {
+                                //     x: 0.0,
+                                //     // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                //     y: 0.0,
+                                //     z: 0.0,
+                                //     pivot_x: 0.6,
+                                //     pivot_y: 0.6,
+                                //     pivot_z: 0.6,
+                                //     yaw: spin + (id as f32 + 5.0),
+                                //     pitch: spin + (id as f32 + 5.0),
+                                //     roll: spin + (id as f32 + 5.0),
+                                //     scale_x: 1.0,
+                                //     scale_y: 1.0,
+                                //     scale_z: 1.0
+                                // },
+                                // PartTransform {
+                                //     x: 0.0,
+                                //     // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                //     y: 0.0,
+                                //     z: 0.0,
+                                //     pivot_x: 0.6,
+                                //     pivot_y: 0.6,
+                                //     pivot_z: 0.6,
+                                //     yaw: spin + 10.0 + (id as f32 + 5.0),
+                                //     pitch: spin + 50.0 + (id as f32 + 5.0),
+                                //     roll: spin + 150.0 + (id as f32 + 5.0),
+                                //     scale_x: 1.0,
+                                //     scale_y: 1.0,
+                                //     scale_z: 1.0
+                                // }
                             ]
                         }
                     }

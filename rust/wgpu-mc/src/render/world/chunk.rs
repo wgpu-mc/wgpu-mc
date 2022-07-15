@@ -239,7 +239,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                         }
                     };
 
-                    if render_north || true {
+                    if render_north {
                         match &model.north {
                             None => {}
                             Some(north) => north_vertices.extend(north.iter().map(|v| {
@@ -252,7 +252,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             })),
                         };
                     }
-                    if render_east || true {
+                    if render_east {
                         match &model.east {
                             None => {}
                             Some(east) => east_vertices.extend(east.iter().map(|v| {
@@ -265,7 +265,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             })),
                         };
                     }
-                    if render_south || true {
+                    if render_south {
                         match &model.south {
                             None => {}
                             Some(south) => south_vertices.extend(south.iter().map(|v| {
@@ -278,7 +278,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             })),
                         };
                     }
-                    if render_west || true {
+                    if render_west {
                         match &model.west {
                             None => {}
                             Some(west) => west_vertices.extend(west.iter().map(|v| {
@@ -291,7 +291,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             })),
                         };
                     }
-                    if render_up || true {
+                    if render_up {
                         match &model.up {
                             None => {}
                             Some(up) => up_vertices.extend(up.iter().map(|v| {
@@ -304,7 +304,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             })),
                         };
                     }
-                    if render_down || true {
+                    if render_down {
                         match &model.down {
                             None => {}
                             Some(down) => down_vertices.extend(down.iter().map(|v| {

@@ -41,6 +41,7 @@ pub struct BlockManager {
     pub blocks: IndexMap<String, Block>
 }
 
+#[derive(Debug)]
 pub enum Block {
     Multipart(Multipart),
     Variants(IndexMap<String, Arc<ModelMesh>>)
@@ -60,6 +61,8 @@ impl Block {
     }
 
 }
+
+#[derive(Debug)]
 pub struct Multipart {
     pub cases: Vec<schemas::blockstates::multipart::Case>,
     pub keys: RwLock<IndexMap<String, Arc<ModelMesh>>>
@@ -190,7 +193,7 @@ impl MinecraftState {
     pub fn bake_blocks<'a>(
         &self, 
         wm: &WmRenderer, 
-        block_states: impl IntoIterator<Item = (&'a String, &'a ResourcePath)>
+        block_states: impl IntoIterator<Item = (impl AsRef<str>, &'a ResourcePath)>
     ) {
         let mut block_manager = self.block_manager.write();
         let block_atlas = self.texture_manager.atlases.load()
@@ -222,7 +225,7 @@ impl MinecraftState {
                 },
             };
 
-            block_manager.blocks.insert(block_name.clone(), block);
+            block_manager.blocks.insert(String::from(block_name.as_ref()), block);
         });
 
     }

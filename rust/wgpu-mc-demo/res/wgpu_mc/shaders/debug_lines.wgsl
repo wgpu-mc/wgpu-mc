@@ -18,6 +18,8 @@ fn vs_main(
     var vr: VertexResult;
 
     vr.pos = uniform_data.view_proj * vec4<f32>(pos_in, 1.0);
+    vr.pos.x = vr.pos.x * 0.4;
+    vr.pos.y = vr.pos.y * 0.4;
     vr.pos.z = vr.pos.z + 0.5;
 
     vr.color = color;

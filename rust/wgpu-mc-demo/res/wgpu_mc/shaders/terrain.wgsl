@@ -16,8 +16,8 @@ struct UVs {
 [[group(1), binding(0)]]
 var<uniform> camera_uniform: CameraUniform;
 
-[[group(2), binding(0)]]
-var<storage> uv_offsets: UVs;
+// [[group(2), binding(0)]]
+// var<storage> uv_offsets: UVs;
 
 struct VertexResult {
     [[builtin(position)]] pos: vec4<f32>;
@@ -34,13 +34,16 @@ fn vs_main(
     [[location(2)]] normal: vec3<f32>,
     [[location(6)]] uv_offset: u32
 ) -> VertexResult {
-    var uv = uv_offsets.uvs[uv_offset];
+    // var uv = uv_offsets.uvs[uv_offset];
 
     var vr: VertexResult;
     vr.pos = camera_uniform.view_proj * vec4<f32>(pos_in, 1.0);
-    vr.tex_coords = tex_coords + uv.uv1;
-    vr.tex_coords2 = tex_coords + uv.uv2;
-    vr.blend = uv.blend;
+    vr.tex_coords = tex_coords;
+    vr.tex_coords2 = tex_coords;
+    vr.blend = 1.0;
+    // vr.tex_coords = tex_coords + uv.uv1;
+    // vr.tex_coords2 = tex_coords + uv.uv2;
+    // vr.blend = uv.blend;
     vr.normal = normal;
 
     return vr;
