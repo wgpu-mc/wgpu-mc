@@ -143,8 +143,8 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
         filter: Box<dyn Fn(BlockstateKey) -> bool>,
         state_provider: &Provider,
     ) -> Self {
-        let chunk_world_x = (chunk.pos.0 * (CHUNK_WIDTH as i32));
-        let chunk_world_z = (chunk.pos.1 * (CHUNK_WIDTH as i32));
+        let chunk_world_x = chunk.pos.0 * (CHUNK_WIDTH as i32);
+        let chunk_world_z = chunk.pos.1 * (CHUNK_WIDTH as i32);
 
         //Generates the mesh for this chunk, culling any faces of cube-shaped blocks that aren't touching a transparent block
         let mut north_vertices = Vec::new();

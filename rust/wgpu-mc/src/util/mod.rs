@@ -51,7 +51,7 @@ impl<'a> WmArena<'a> {
         unsafe { alloc_zeroed(Layout::from_size_align(size, ALIGN).unwrap()) }
     }
 
-    pub fn alloc<T>(&mut self, t: T) -> &'a mut T {
+    pub fn alloc<T>(&mut self, mut t: T) -> &'a mut T {
         let heap_end = unsafe { self.heap.add(self.length) };
 
         let t_size = size_of::<T>();
@@ -69,15 +69,14 @@ impl<'a> WmArena<'a> {
         }
 
         //Pointer to where the data will be allocated
-        let t_alloc_ptr = unsafe { heap_end.add(align_offset) };
+        let t_alloc_ptr = unsafe { heap_end.add(align_offset) as *mut T };
 
         //Bump
         self.length += t_allocate_size;
 
-        let t_mut_ref = unsafe { (t_alloc_ptr as *mut T).as_mut().unwrap() };
-
-        //Move `t` into the allocated spot and forget the zero-initialized T that was returned
-        std::mem::forget(std::mem::replace(t_mut_ref, t));
+        //Copy t into the memory location, and forget t
+        unsafe { std::ptr::copy(&mut t as *mut T, t_alloc_ptr, 1); }
+        std::mem::forget(t);
 
         let callback = |ptr: *mut T| {
             //SAFETY: this will only be called once WmArena is dropped, meaning that there are no
@@ -90,9 +89,9 @@ impl<'a> WmArena<'a> {
         let transmuted_callback =
             unsafe { std::mem::transmute::<fn(*mut T), fn(*mut u8)>(callback) };
 
-        self.objects.push((t_alloc_ptr, transmuted_callback));
+        self.objects.push((t_alloc_ptr as *mut u8, transmuted_callback));
 
-        t_mut_ref
+        unsafe { &mut *t_alloc_ptr }
     }
 }
 
