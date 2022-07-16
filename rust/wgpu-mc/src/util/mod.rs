@@ -7,7 +7,7 @@ use std::ptr::drop_in_place;
 
 const ALIGN: usize = 8;
 
-type WmArenaObject = (*mut u8, fn(*mut u8));
+type WmArenaObject = (*mut u8, unsafe fn(*mut u8));
 ///Untyped arena for render passes
 pub struct WmArena<'a> {
     heap: *mut u8,
@@ -78,18 +78,10 @@ impl<'a> WmArena<'a> {
         unsafe { std::ptr::copy(&mut t as *mut T, t_alloc_ptr, 1); }
         std::mem::forget(t);
 
-        let callback = |ptr: *mut T| {
-            //SAFETY: this will only be called once WmArena is dropped, meaning that there are no
-            // references to this data.
-            unsafe {
-                drop_in_place(ptr);
-            }
-        };
+        let drop_fn =
+            unsafe { std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*mut u8)>(drop_in_place::<T>) };
 
-        let transmuted_callback =
-            unsafe { std::mem::transmute::<fn(*mut T), fn(*mut u8)>(callback) };
-
-        self.objects.push((t_alloc_ptr as *mut u8, transmuted_callback));
+        self.objects.push((t_alloc_ptr as *mut u8, drop_fn));
 
         unsafe { &mut *t_alloc_ptr }
     }
@@ -98,7 +90,7 @@ impl<'a> WmArena<'a> {
 impl<'a> Drop for WmArena<'a> {
     fn drop(&mut self) {
         self.objects.iter().for_each(|(ptr, dealloc)| {
-            dealloc(*ptr);
+            unsafe { dealloc(*ptr); }
         });
 
         self.heaps.iter().for_each(|heap| unsafe {
