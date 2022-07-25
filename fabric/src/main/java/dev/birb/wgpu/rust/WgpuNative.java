@@ -112,7 +112,7 @@ public class WgpuNative {
 
     public static native void destroyPalette(long rustPalettePointer);
 
-    public static native int paletteIndex(long ptr, Object object, long index);
+    public static native int paletteIndex(long ptr, Object object, int index);
 
     public static native long getRawStoragePointer(long paletteStorage);
 
@@ -151,7 +151,7 @@ public class WgpuNative {
 
     public static native void setCursorMode(int mode);
 
-    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, long[] blockstateOffsets);
+    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, int[] blockstateOffsets);
 
     public static native void registerBlock(String name);
 

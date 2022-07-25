@@ -3,7 +3,7 @@ use std::vec::Vec;
 use parking_lot::RwLock;
 
 use pipeline::GLCommand;
-use wgpu_mc::model::BindableTexture;
+use wgpu_mc::texture::BindableTexture;
 
 use std::sync::Arc;
 

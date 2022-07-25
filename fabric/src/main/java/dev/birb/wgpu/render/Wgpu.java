@@ -103,8 +103,8 @@ public class Wgpu {
         client.execute(() -> MinecraftClient.getInstance().onResolutionChanged());
     }
 
-    public static void helperSetBlockStateIndex(Object o, long usize) {
-        ((RustBlockStateAccessor) o).setRustBlockStateIndex(usize);
+    public static void helperSetBlockStateIndex(Object o, int blockstateKey) {
+        ((RustBlockStateAccessor) o).setRustBlockStateIndex(blockstateKey);
     }
 
 

@@ -1,5 +1,6 @@
 use jni::objects::{GlobalRef, JObject};
 use jni::sys::{jlong, jobject};
+use wgpu_mc::mc::Block;
 use std::collections::HashMap;
 use wgpu_mc::mc::block::BlockstateKey;
 
@@ -17,9 +18,8 @@ impl IdList {
 
 #[derive(Clone)]
 pub struct JavaPalette {
-    //GlobalRef is a ref to the java BlockState, the usize is an index into the wgpu-mc blockstate Vec
-    store: Vec<(GlobalRef, usize)>,
-    indices: HashMap<usize, usize>,
+    store: Vec<(GlobalRef, BlockstateKey)>,
+    indices: HashMap<BlockstateKey, usize>,
     pub id_list: *mut IdList,
 }
 
@@ -32,7 +32,7 @@ impl JavaPalette {
         }
     }
 
-    pub fn index(&mut self, element: (GlobalRef, usize)) -> usize {
+    pub fn index(&mut self, element: (GlobalRef, BlockstateKey)) -> usize {
         match self.indices.get(&element.1) {
             None => {
                 self.indices.insert(element.1, self.store.len());
@@ -43,7 +43,7 @@ impl JavaPalette {
         }
     }
 
-    pub fn add(&mut self, element: (GlobalRef, usize)) {
+    pub fn add(&mut self, element: (GlobalRef, BlockstateKey)) {
         self.indices.insert(element.1, self.store.len());
         self.store.push(element);
     }
@@ -58,7 +58,7 @@ impl JavaPalette {
         self.store.len()
     }
 
-    pub fn get(&self, index: usize) -> Option<&(GlobalRef, usize)> {
+    pub fn get(&self, index: usize) -> Option<&(GlobalRef, BlockstateKey)> {
         self.store.get(index)
     }
 

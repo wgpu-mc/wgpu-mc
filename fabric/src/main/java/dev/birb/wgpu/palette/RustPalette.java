@@ -58,7 +58,7 @@ public class RustPalette<T> implements Palette<T> {
 
         int size = buf.readVarInt();
 
-        long[] blockstateOffsets = new long[size];
+        int[] blockstateOffsets = new int[size];
 
         for(int i=0;i<size;i++) {
             T object = this.idList.get(buf.readVarInt());

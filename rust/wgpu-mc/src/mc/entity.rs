@@ -99,8 +99,11 @@ pub struct CuboidUV {
     pub down: UV,
 }
 
+///Cuboid dimensions are in block units (16 block units per block aka 1 meter)
+/// Position offsets are in meters
 #[derive(Copy, Clone, Debug)]
 pub struct Cuboid {
+    //X offset of this cuboid in world units
     pub x: f32,
     pub y: f32,
     pub z: f32,

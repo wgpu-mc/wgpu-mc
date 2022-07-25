@@ -49,6 +49,7 @@ pub mod util;
 
 pub use naga;
 pub use wgpu;
+pub use minecraft_assets;
 
 use crate::camera::UniformMatrixHelper;
 

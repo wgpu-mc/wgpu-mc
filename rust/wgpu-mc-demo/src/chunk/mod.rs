@@ -1,32 +1,47 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::Arc;
 use std::time::Instant;
+use wgpu_mc::mc::MinecraftState;
 use wgpu_mc::mc::block::{ChunkBlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_VOLUME};
+use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
+use wgpu_mc::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use wgpu_mc::render::world::chunk::BakedChunkLayer;
 use wgpu_mc::WmRenderer;
-
-#[derive(Debug)]
-struct SimpleBlockstateProvider(BlockstateKey);
+struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
-        if x >= 0 && x < 16 && z >= 0 && z < 16 {
-            ChunkBlockState::State(self.0)
+        if y == 0 && x.abs_diff(7) < 8 && z.abs_diff(7) < 8 {
+            ChunkBlockState::State(self.1)
         } else {
             ChunkBlockState::Air
         }
     }
 }
 
+impl Debug for SimpleBlockstateProvider {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("")
+    }
+
+}
+
 pub fn make_chunks(wm: &WmRenderer) -> Chunk {
-    let mut bm = wm.mc.block_manager.write();
+    let mut bm = wm.mc.block_manager.read();
+    let atlas = wm.mc.texture_manager.atlases.load().get(BLOCK_ATLAS_NAME).unwrap().load();
 
-    let magma_block_key = BlockstateKey {
-        block: bm.blocks.get_full("minecraft:magma_block").unwrap().0 as u16,
-        augment: 0,
-    };
+    let (index, _, fence) = bm.blocks.get_full("minecraft:oak_fence").unwrap();
+    let fence_model = fence.get_model_by_key([("north", &StateValue::Bool(true))], &*wm.mc.resource_provider, &atlas);
 
-    let provider = SimpleBlockstateProvider(magma_block_key);
+    println!("{:?}", fence_model);
+
+    let provider = SimpleBlockstateProvider(wm.mc.clone(), BlockstateKey {
+        block: index as u16,
+        augment: fence_model.1 as u16,
+    });
 
     let chunk = Chunk::new((0, 0));
     let time = Instant::now();

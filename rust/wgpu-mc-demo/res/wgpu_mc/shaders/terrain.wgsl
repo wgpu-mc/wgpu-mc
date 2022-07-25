@@ -59,5 +59,7 @@ var t_sampler: sampler;
 fn fs_main(in: VertexResult) -> [[location(0)]] vec4<f32> {
     let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
     let col2 = textureSample(t_texture, t_sampler, in.tex_coords2);
-    return mix(col1, col2, in.blend);
+
+    let col = mix(col1, col2, in.blend);
+    return col;
 }

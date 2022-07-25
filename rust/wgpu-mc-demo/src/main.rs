@@ -303,7 +303,7 @@ fn begin_rendering(
                             part_transforms: vec![
                                 PartTransform {
                                     x: 0.0,
-                                    y: 0.0,
+                                    y: 1.0,
                                     z: 0.0,
                                     pivot_x: 0.0,
                                     pivot_y: 0.0,
@@ -315,51 +315,51 @@ fn begin_rendering(
                                     scale_y: 1.0,
                                     scale_z: 1.0
                                 },
-                                // PartTransform {
-                                //     x: 0.0,
-                                //     // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                //     y: 0.0,
-                                //     z: 0.0,
-                                //     pivot_x: 0.5,
-                                //     pivot_y: 0.5,
-                                //     pivot_z: 0.5,
-                                //     yaw: spin + 30.0 + (id as f32 + 5.0),
-                                //     pitch: spin + 30.0 + (id as f32 + 5.0),
-                                //     roll: spin + 30.0 + (id as f32 + 5.0),
-                                //     scale_x: 1.0,
-                                //     scale_y: 1.0,
-                                //     scale_z: 1.0
-                                // },
-                                // PartTransform {
-                                //     x: 0.0,
-                                //     // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                //     y: 0.0,
-                                //     z: 0.0,
-                                //     pivot_x: 0.6,
-                                //     pivot_y: 0.6,
-                                //     pivot_z: 0.6,
-                                //     yaw: spin + (id as f32 + 5.0),
-                                //     pitch: spin + (id as f32 + 5.0),
-                                //     roll: spin + (id as f32 + 5.0),
-                                //     scale_x: 1.0,
-                                //     scale_y: 1.0,
-                                //     scale_z: 1.0
-                                // },
-                                // PartTransform {
-                                //     x: 0.0,
-                                //     // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                //     y: 0.0,
-                                //     z: 0.0,
-                                //     pivot_x: 0.6,
-                                //     pivot_y: 0.6,
-                                //     pivot_z: 0.6,
-                                //     yaw: spin + 10.0 + (id as f32 + 5.0),
-                                //     pitch: spin + 50.0 + (id as f32 + 5.0),
-                                //     roll: spin + 150.0 + (id as f32 + 5.0),
-                                //     scale_x: 1.0,
-                                //     scale_y: 1.0,
-                                //     scale_z: 1.0
-                                // }
+                                PartTransform {
+                                    x: 0.0,
+                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    y: 0.0,
+                                    z: 0.0,
+                                    pivot_x: 0.5,
+                                    pivot_y: 0.5,
+                                    pivot_z: 0.5,
+                                    yaw: spin + 30.0 + (id as f32 + 5.0),
+                                    pitch: spin + 30.0 + (id as f32 + 5.0),
+                                    roll: spin + 30.0 + (id as f32 + 5.0),
+                                    scale_x: 1.0,
+                                    scale_y: 1.0,
+                                    scale_z: 1.0
+                                },
+                                PartTransform {
+                                    x: 0.0,
+                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    y: 0.0,
+                                    z: 0.0,
+                                    pivot_x: 0.6,
+                                    pivot_y: 0.6,
+                                    pivot_z: 0.6,
+                                    yaw: spin + (id as f32 + 5.0),
+                                    pitch: spin + (id as f32 + 5.0),
+                                    roll: spin + (id as f32 + 5.0),
+                                    scale_x: 1.0,
+                                    scale_y: 1.0,
+                                    scale_z: 1.0
+                                },
+                                PartTransform {
+                                    x: 0.0,
+                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    y: 0.0,
+                                    z: 0.0,
+                                    pivot_x: 0.6,
+                                    pivot_y: 0.6,
+                                    pivot_z: 0.6,
+                                    yaw: spin + 10.0 + (id as f32 + 5.0),
+                                    pitch: spin + 50.0 + (id as f32 + 5.0),
+                                    roll: spin + 150.0 + (id as f32 + 5.0),
+                                    scale_x: 1.0,
+                                    scale_y: 1.0,
+                                    scale_z: 1.0
+                                }
                             ]
                         }
                     }

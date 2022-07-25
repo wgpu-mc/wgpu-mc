@@ -7,15 +7,15 @@ import org.spongepowered.asm.mixin.Mixin;
 @Mixin(BlockState.class)
 public class BlockStateMixin implements RustBlockStateAccessor {
 
-    private long rustBlockStateIndex = 0;
+    private int rustBlockStateIndex = 0;
 
     @Override
-    public long getRustBlockStateIndex() {
+    public int getRustBlockStateIndex() {
         return this.rustBlockStateIndex;
     }
 
     @Override
-    public void setRustBlockStateIndex(long l) {
+    public void setRustBlockStateIndex(int l) {
         this.rustBlockStateIndex = l;
     }
 

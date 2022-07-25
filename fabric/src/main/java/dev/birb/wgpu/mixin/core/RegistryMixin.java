@@ -19,9 +19,9 @@ public class RegistryMixin {
             Block block = (Block) entry;
 
             WgpuNative.registerBlock(Registry.BLOCK.getId(block).toString());
-            for(BlockState state : block.getStateManager().getStates()) {
-                WgpuNative.registerBlockState(state, state.toString());
-            }
+            // for(BlockState state : block.getStateManager().getStates()) {
+            //     WgpuNative.registerBlockState(state, state.toString());
+            // }
         }
     }
 

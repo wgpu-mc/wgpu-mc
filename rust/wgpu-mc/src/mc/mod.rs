@@ -60,6 +60,45 @@ impl Block {
         }
     }
 
+    pub fn get_model_by_key<'a>(
+        &self, 
+        key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)> + Clone,
+        resource_provider: &dyn ResourceProvider,
+        block_atlas: &Atlas
+    ) -> (Arc<ModelMesh>, u16) {
+        let key_string = key.clone().into_iter()
+                    .map(|(key, value)| format!("{}={}", key, match value {
+                        schemas::blockstates::multipart::StateValue::Bool(bool) => if *bool { "true" } else { "false" },
+                        schemas::blockstates::multipart::StateValue::String(string) => &string,
+                    }))
+                    .collect::<Vec<String>>()
+                    .join(",");
+
+        match &self {
+            Block::Multipart(multipart) => {
+                {
+                    match multipart.keys.read().get_full(&key_string) {
+                        Some(full) => return (full.2.clone(), full.0 as u16),
+                        None => {}
+                    }
+                }
+
+                let mesh = multipart.generate_mesh(key, resource_provider, block_atlas);
+
+                let mut multipart_write = multipart.keys.write();
+                multipart_write.insert(
+                    key_string, 
+                    mesh.clone()
+                );
+                
+                (mesh, multipart_write.len() as u16 - 1)
+            },
+            Block::Variants(variants) => {
+                let full = variants.get_full(&key_string).unwrap();
+                (full.2.clone(), full.0 as u16)
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -76,8 +115,6 @@ impl Multipart {
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas
     ) -> Arc<ModelMesh> {
-
-
         let apply_variants = self.cases.iter()
             .filter_map(|case| {
                 if case.applies(key.clone()) {
@@ -190,6 +227,20 @@ impl MinecraftState {
     }
 
     ///Bake blocks from their blockstates
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use wgpu_mc::mc::MinecraftState;
+    ///
+    /// let minecraft_state: MinecraftState;
+    /// let wm: WmRenderer;
+    /// 
+    /// minecraft_state.bake_blocks(
+    ///     &wm, 
+    ///     ["minecraft:anvil", "minecraft:blockstates/anvil.json".into()]
+    /// );
+    /// ```
     pub fn bake_blocks<'a>(
         &self, 
         wm: &WmRenderer, 
@@ -227,6 +278,8 @@ impl MinecraftState {
 
             block_manager.blocks.insert(String::from(block_name.as_ref()), block);
         });
+
+        block_atlas.upload(&wm);
 
     }
 

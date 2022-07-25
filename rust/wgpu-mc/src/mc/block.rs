@@ -10,12 +10,29 @@ use parking_lot::RwLock;
 
 pub type BlockPos = (i32, u16, i32);
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct BlockstateKey {
     ///An index into [BlockManager]
     pub block: u16,
     ///Used to quickly figure out which [ModelMesh] a [Block] should return without having to hash strings
     pub augment: u16
+}
+
+impl From<(u16, u16)> for BlockstateKey {
+    fn from(tuple: (u16, u16)) -> Self {
+        Self { block: tuple.0, augment: tuple.1 }
+    }
+}
+
+impl From<u32> for BlockstateKey {
+    fn from(int: u32) -> Self {
+        Self::from(
+            (
+                (int >> 16) as u16,
+                (int & 0xffff) as u16
+            )
+        )
+    }
 }
 
 ///The state of one block, describing which variant
@@ -143,251 +160,252 @@ impl ModelMesh {
         let models = variants.into_iter()
             .flat_map(|variant| variant.models())
             .map(|model_properties| {
-            let model_resource_path = ResourcePath::from(&model_properties.model).prepend("models/").append(".json");
-            //Recursively resolve the model using it's parents if it has any
-            let model: schemas::Model = resolve_model(
-                //Parse the JSON into the model schema
-                serde_json::from_str(
-                    //Get the model JSON
-                    &resource_provider.get_string(&model_resource_path)
-                        .ok_or(
-                            MeshBakeError::UnresolvedResourcePath(model_resource_path)
-                        )?
-                ).map_err(|err| MeshBakeError::JsonError(err))?,
-                resource_provider
-            );
+                let model_resource_path = ResourcePath::from(&model_properties.model).prepend("models/").append(".json");
+                
+                //Recursively resolve the model using it's parents if it has any
+                let model: schemas::Model = resolve_model(
+                    //Parse the JSON into the model schema
+                    serde_json::from_str(
+                        //Get the model JSON
+                        &resource_provider.get_string(&model_resource_path)
+                            .ok_or(
+                                MeshBakeError::UnresolvedResourcePath(model_resource_path)
+                            )?
+                    ).map_err(|err| MeshBakeError::JsonError(err))?,
+                    resource_provider
+                );
 
-            match model.textures {
-                Some(textures) => {
-                    //Make sure the textures in the model are fully resolved with no references
-                    match textures.iter().find(|(key, value)| value.reference().is_some()) {
-                        Some(reference) => return Err(MeshBakeError::UnresolvedTextureReference(format!("key: {} value: {:?}", reference.0, reference.1))),
-                        None => {},
-                    }
+                match model.textures {
+                    Some(textures) => {
+                        //Make sure the textures in the model are fully resolved with no references
+                        match textures.iter().find(|(key, value)| value.reference().is_some()) {
+                            Some(reference) => return Err(MeshBakeError::UnresolvedTextureReference(format!("key: {} value: {:?}", reference.0, reference.1))),
+                            None => {},
+                        }
 
-                    let uv_map = block_atlas.uv_map.read();
+                        let uv_map = block_atlas.uv_map.read();
 
-                    let unallocated_textures: Vec<ResourcePath> = textures.iter()
-                        .filter_map(|(_, texture)| {
-                            let texture_id: ResourcePath = (&texture.0).into();
-                            if !uv_map.contains_key(&texture_id) {
-                                //Block UV atlas doesn't contain a texture, so we add it
-                                Some(texture_id)
-                            } else {
-                                None
-                            }
-                        }).collect();
+                        let unallocated_textures: Vec<ResourcePath> = textures.iter()
+                            .filter_map(|(_, texture)| {
+                                let texture_id: ResourcePath = (&texture.0).into();
+                                if !uv_map.contains_key(&texture_id) {
+                                    //Block UV atlas doesn't contain a texture, so we add it
+                                    Some(texture_id)
+                                } else {
+                                    None
+                                }
+                            }).collect();
 
-                    drop(uv_map);
+                        drop(uv_map);
 
-                    let unallocated_textures: Vec<(&ResourcePath, Vec<u8>)> = unallocated_textures
-                        .iter()
-                        .map(|path| (path, resource_provider.get_bytes(&path.prepend("textures/").append(".png")).unwrap()))
-                        .collect();
+                        let unallocated_textures: Vec<(&ResourcePath, Vec<u8>)> = unallocated_textures
+                            .iter()
+                            .map(|path| (path, resource_provider.get_bytes(&path.prepend("textures/").append(".png")).unwrap()))
+                            .collect();
 
-                    block_atlas.allocate(
-                        unallocated_textures.iter()
-                            .map(|(path, data)| (*path, data)),
-                        resource_provider
-                    );
-                },
-                None => {},
-            };
-
-            let matrix = Matrix3::from_angle_y(Deg(model_properties.y as f32));
-    
-            let is_cube = model.elements.iter().len() == 1 && {
-                match model.elements.iter().flatten().next() {
-                    Some(first) => {
-                        first.from[0] == 0.0
-                        && first.from[1] == 0.0
-                        && first.from[2] == 0.0
-                        && first.to[0] == 1.0
-                        && first.to[1] == 1.0
-                        && first.to[2] == 1.0
+                        block_atlas.allocate(
+                            unallocated_textures.iter()
+                                .map(|(path, data)| (*path, data)),
+                            resource_provider
+                        );
                     },
-                    None => false,
-                }
-            };
+                    None => {},
+                };
+
+                let matrix = Matrix3::from_angle_y(Deg(model_properties.y as f32));
     
-            let mut results = model
-                .elements
-                .iter()
-                .flatten()
-                .map(|element| {
-                    //Face textures
+                let is_cube = model.elements.iter().len() == 1 && {
+                    match model.elements.iter().flatten().next() {
+                        Some(first) => {
+                            first.from[0] == 0.0
+                            && first.from[1] == 0.0
+                            && first.from[2] == 0.0
+                            && first.to[0] == 16.0
+                            && first.to[1] == 16.0
+                            && first.to[2] == 16.0
+                        },
+                        None => false,
+                    }
+                };
     
-                    let north = element.faces.get(&schemas::models::BlockFace::North).as_ref().and_then(|tex|        
-                        get_atlas_uv(
-                            tex,
-                            block_atlas
-                        ).and_then(|uv| {
-                            Some((
-                                //The default UV for this texture
-                                uv,
-                                //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
-                            ))
-                        })
-                    );
-    
-                    let east = element.faces.get(&schemas::models::BlockFace::East).as_ref().and_then(|tex|        
-                        get_atlas_uv(
-                            tex,
-                            block_atlas
-                        ).and_then(|uv| {
-                            Some((
-                                //The default UV for this texture
-                                uv,
-                                //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
-                            ))
-                        })
-                    );
-    
-                    let south = element.faces.get(&schemas::models::BlockFace::South).as_ref().and_then(|tex|        
-                        get_atlas_uv(
-                            tex,
-                            block_atlas
-                        ).and_then(|uv| {
-                            Some((
-                                //The default UV for this texture
-                                uv,
-                                //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
-                            ))
-                        })
-                    );
-    
-                    let west = element.faces.get(&schemas::models::BlockFace::West).as_ref().and_then(|tex|        
-                        get_atlas_uv(
-                            tex,
-                            block_atlas
-                        ).and_then(|uv| {
-                            Some((
-                                //The default UV for this texture
-                                uv,
-                                //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
-                            ))
-                        })
-                    );
-    
-                    let up = element.faces.get(&schemas::models::BlockFace::Up).as_ref().and_then(|tex|        
-                        get_atlas_uv(
-                            tex,
-                            block_atlas
-                        ).and_then(|uv| {
-                            Some((
-                                //The default UV for this texture
-                                uv,
-                                //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
-                            ))
-                        })
-                    );
-    
-                    let down = element.faces.get(&schemas::models::BlockFace::Down).as_ref().and_then(|tex|        
-                        get_atlas_uv(
-                            tex,
-                            block_atlas
-                        ).and_then(|uv| {
-                            Some((
-                                //The default UV for this texture
-                                uv,
-                                //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
-                            ))
-                        })
-                    );
-    
-                    let a = (matrix * Vector3::new(1.0 - element.from[0], element.from[1], element.from[2])).into();
-                    let b = (matrix * Vector3::new(1.0 - element.to[0], element.from[1], element.from[2])).into();
-                    let c = (matrix * Vector3::new(1.0 - element.to[0], element.to[1], element.from[2])).into();
-                    let d = (matrix * Vector3::new(1.0 - element.from[0], element.to[1], element.from[2])).into();
-                    let e = (matrix * Vector3::new(1.0 - element.from[0], element.from[1], element.to[2])).into();
-                    let f = (matrix * Vector3::new(1.0 - element.to[0], element.from[1], element.to[2])).into();
-                    let g = (matrix * Vector3::new(1.0 - element.to[0], element.to[1], element.to[2])).into();
-                    let h = (matrix * Vector3::new(1.0 - element.from[0], element.to[1], element.to[2])).into();
-    
-                    #[rustfmt::skip]
-                    let faces = BlockModelFaces {
-                        south: south.map(|south| {[
-                            BlockMeshVertex { position: e, tex_coords: [south.0.1.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                            BlockMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                            BlockMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                            BlockMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                            BlockMeshVertex { position: g, tex_coords: [south.0.0.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                            BlockMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                        ]}),
-                        west: west.map(|west| {[
-                            BlockMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                            BlockMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                            BlockMeshVertex { position: f, tex_coords: [west.0.1.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                            BlockMeshVertex { position: c, tex_coords: [west.0.0.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                            BlockMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                            BlockMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                        ]}),
-                        north: north.map(|north| {[
-                            BlockMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                            BlockMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                            BlockMeshVertex { position: b, tex_coords: [north.0.1.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                            BlockMeshVertex { position: d, tex_coords: [north.0.0.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                            BlockMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                            BlockMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                        ]}),
-                        east: east.map(|east| {[
-                            BlockMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                            BlockMeshVertex { position: a, tex_coords: [east.0.1.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                            BlockMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                            BlockMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                            BlockMeshVertex { position: h, tex_coords: [east.0.0.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                            BlockMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                        ]}),
-                        up: up.map(|up| {[
-                            BlockMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                            BlockMeshVertex { position: h, tex_coords: [up.0.0.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                            BlockMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                            BlockMeshVertex { position: c, tex_coords: [up.0.1.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                            BlockMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                            BlockMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                        ]}),
-                        down: down.map(|down| {[
-                            BlockMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                            BlockMeshVertex { position: b, tex_coords: [down.0.0.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                            BlockMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                            BlockMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                            BlockMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                            BlockMeshVertex { position: e, tex_coords: [down.0.1.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                        ]}),
-                    };
-    
-                    Ok(faces)
-                }).collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>()?;
-    
-            //TODO
-            let has_transparency = false;
-    
-            Ok((if is_cube {
-                    CubeOrComplexMesh::Cube(Box::new(results.pop().unwrap()))
-                } else {
-                    CubeOrComplexMesh::Complex(results)
-                },
-                !is_cube || has_transparency
-            ))
-        }).collect::<Result<Vec<_>, MeshBakeError>>()?;
+                let mut results = model
+                    .elements
+                    .iter()
+                    .flatten()
+                    .map(|element| {
+                        //Face textures
+        
+                        let north = element.faces.get(&schemas::models::BlockFace::North).as_ref().and_then(|tex|        
+                            get_atlas_uv(
+                                tex,
+                                block_atlas
+                            ).and_then(|uv| {
+                                Some((
+                                    //The default UV for this texture
+                                    uv,
+                                    //If this texture has an animation, get the offset, otherwise default to 0
+                                    *block_atlas.animated_texture_offsets.read()
+                                        .get(&(&tex.texture.0).into())
+                                        .unwrap_or(&0)
+                                ))
+                            })
+                        );
+        
+                        let east = element.faces.get(&schemas::models::BlockFace::East).as_ref().and_then(|tex|        
+                            get_atlas_uv(
+                                tex,
+                                block_atlas
+                            ).and_then(|uv| {
+                                Some((
+                                    //The default UV for this texture
+                                    uv,
+                                    //If this texture has an animation, get the offset, otherwise default to 0
+                                    *block_atlas.animated_texture_offsets.read()
+                                        .get(&(&tex.texture.0).into())
+                                        .unwrap_or(&0)
+                                ))
+                            })
+                        );
+        
+                        let south = element.faces.get(&schemas::models::BlockFace::South).as_ref().and_then(|tex|        
+                            get_atlas_uv(
+                                tex,
+                                block_atlas
+                            ).and_then(|uv| {
+                                Some((
+                                    //The default UV for this texture
+                                    uv,
+                                    //If this texture has an animation, get the offset, otherwise default to 0
+                                    *block_atlas.animated_texture_offsets.read()
+                                        .get(&(&tex.texture.0).into())
+                                        .unwrap_or(&0)
+                                ))
+                            })
+                        );
+        
+                        let west = element.faces.get(&schemas::models::BlockFace::West).as_ref().and_then(|tex|        
+                            get_atlas_uv(
+                                tex,
+                                block_atlas
+                            ).and_then(|uv| {
+                                Some((
+                                    //The default UV for this texture
+                                    uv,
+                                    //If this texture has an animation, get the offset, otherwise default to 0
+                                    *block_atlas.animated_texture_offsets.read()
+                                        .get(&(&tex.texture.0).into())
+                                        .unwrap_or(&0)
+                                ))
+                            })
+                        );
+        
+                        let up = element.faces.get(&schemas::models::BlockFace::Up).as_ref().and_then(|tex|        
+                            get_atlas_uv(
+                                tex,
+                                block_atlas
+                            ).and_then(|uv| {
+                                Some((
+                                    //The default UV for this texture
+                                    uv,
+                                    //If this texture has an animation, get the offset, otherwise default to 0
+                                    *block_atlas.animated_texture_offsets.read()
+                                        .get(&(&tex.texture.0).into())
+                                        .unwrap_or(&0)
+                                ))
+                            })
+                        );
+        
+                        let down = element.faces.get(&schemas::models::BlockFace::Down).as_ref().and_then(|tex|        
+                            get_atlas_uv(
+                                tex,
+                                block_atlas
+                            ).and_then(|uv| {
+                                Some((
+                                    //The default UV for this texture
+                                    uv,
+                                    //If this texture has an animation, get the offset, otherwise default to 0
+                                    *block_atlas.animated_texture_offsets.read()
+                                        .get(&(&tex.texture.0).into())
+                                        .unwrap_or(&0)
+                                ))
+                            })
+                        );
+        
+                        let a = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0)).into();
+                        let b = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0)).into();
+                        let c = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0)).into();
+                        let d = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0)).into();
+                        let e = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0)).into();
+                        let f = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0)).into();
+                        let g = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0)).into();
+                        let h = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0)).into();
+        
+                        #[rustfmt::skip]
+                        let faces = BlockModelFaces {
+                            south: south.map(|south| {[
+                                BlockMeshVertex { position: e, tex_coords: [south.0.1.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: g, tex_coords: [south.0.0.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                            ]}),
+                            west: west.map(|west| {[
+                                BlockMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: f, tex_coords: [west.0.1.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: c, tex_coords: [west.0.0.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                            ]}),
+                            north: north.map(|north| {[
+                                BlockMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: b, tex_coords: [north.0.1.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: d, tex_coords: [north.0.0.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                            ]}),
+                            east: east.map(|east| {[
+                                BlockMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: a, tex_coords: [east.0.1.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: h, tex_coords: [east.0.0.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                            ]}),
+                            up: up.map(|up| {[
+                                BlockMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: h, tex_coords: [up.0.0.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: c, tex_coords: [up.0.1.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                            ]}),
+                            down: down.map(|down| {[
+                                BlockMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: b, tex_coords: [down.0.0.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: e, tex_coords: [down.0.1.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                            ]}),
+                        };
+        
+                        Ok(faces)
+                    }).collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>()?;
+        
+                //TODO
+                let has_transparency = false;
+
+                Ok((if is_cube {
+                        CubeOrComplexMesh::Cube(Box::new(results.pop().unwrap()))
+                    } else {
+                        CubeOrComplexMesh::Complex(results)
+                    },
+                    !is_cube || has_transparency
+                ))
+            }).collect::<Result<Vec<_>, MeshBakeError>>()?;
 
         Ok(Self {
             models

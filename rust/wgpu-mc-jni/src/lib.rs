@@ -36,14 +36,12 @@ use std::fmt::{Debug, Formatter};
 use std::ops::Shr;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
-use wgpu_mc::mc::block::{BlockstateJson, BlockPos, ChunkBlockState, BlockstateKey};
+use wgpu_mc::mc::block::{BlockPos, ChunkBlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
-use wgpu_mc::mc::datapack::ResourceId;
-use wgpu_mc::mc::resource::ResourceProvider;
-use wgpu_mc::model::BindableTexture;
+use wgpu_mc::mc::resource::{ResourceProvider, ResourcePath};
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::WmPipeline;
-use wgpu_mc::texture::TextureSamplerView;
+use wgpu_mc::texture::{TextureSamplerView, BindableTexture};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
@@ -97,43 +95,41 @@ struct ChunkHolder {
 
 #[derive(Debug)]
 struct MinecraftBlockstateProvider {
-    pub chunks: RwLock<HashMap<(i32, i32), RwLock<ChunkHolder>>>,
+    pub chunks: RwLock<HashMap<(i32, i32), ChunkHolder>>,
     pub air: BlockstateKey
 }
 
 impl BlockStateProvider for MinecraftBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
+        //Minecraft technically has negative y values now, but chunk data is technically indexed [0,384} instead of [-64,256}
         if y >= CHUNK_HEIGHT as i16 || y < 0 {
-            return ChunkBlockState { packed_key: None };
+            return ChunkBlockState::Air;
         }
 
         let chunk_x = x / 16;
         let chunk_z = z / 16;
 
-        let storage_index = y / 16;
+        let chunks_read = self.chunks.read();
 
-        assert!(storage_index < (CHUNK_HEIGHT as i16 / 16) && storage_index >= 0);
+        let chunk = chunks_read.get(&(chunk_x, chunk_z)).unwrap();
 
-        let storage = match unsafe {
-            (self.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
-        } {
-            None => return ChunkBlockState { packed_key: None },
-            Some(storage) => storage,
-        };
+        let storage_index = (y / 16) as usize;
 
-        let palette_key = storage.get(x, y as u16, z);
+        let storage = unsafe {
+            (chunk.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
+        }.unwrap();
 
         let palette = unsafe {
-            (self.palettes[(y as usize) / 24] as *mut JavaPalette)
-                .as_ref()
-                .unwrap()
-        };
+            (chunk.palettes[storage_index] as *mut JavaPalette).as_ref()
+        }.unwrap();
 
-        ChunkBlockState {
-            packed_key: palette
-                .get(palette_key as usize)
-                .filter(|element| element.1 as BlockstateKey != self.air)
-                .map(|element| (element.1 as u32).into()),
+        let palette_key = storage.get(x, y as u16, z);
+        let block = palette.get(palette_key as usize).unwrap().1;
+
+        if block == self.air {
+            return ChunkBlockState::Air;
+        } else {
+            return ChunkBlockState::State(block)
         }
     }
 }
@@ -156,27 +152,23 @@ unsafe impl HasRawWindowHandle for WinitWindowWrapper<'_> {
     }
 }
 
-struct JarShaderProvider {}
-
 struct MinecraftResourceManagerAdapter {
     jvm: JavaVM,
 }
 
 impl ResourceProvider for MinecraftResourceManagerAdapter {
-    fn get_bytes(&self, id: &ResourceId) -> Option<Vec<u8>> {
+    fn get_bytes(&self, id: &ResourcePath) -> Option<Vec<u8>> {
         let env = self.jvm.attach_current_thread().unwrap();
 
-        let ident_ns = env.new_string(&id.0).unwrap();
-        let ident_path = env.new_string(&id.1).unwrap();
+        let path = env.new_string(&id.0).unwrap();
 
         let bytes = env
             .call_static_method(
                 "dev/birb/wgpu/rust/WgpuResourceProvider",
                 "getResource",
-                "(Ljava/lang/String;Ljava/lang/String;)[B",
+                "(Ljava/lang/String;)[B",
                 &[
-                    JValue::Object(ident_ns.into()),
-                    JValue::Object(ident_path.into()),
+                    JValue::Object(path.into())
                 ],
             ).ok()?.l().ok()?;
 
@@ -217,49 +209,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     env.new_string(backend).unwrap().into_inner()
 }
 
-// #[no_mangle]
-// pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerSprite(
-//     env: JNIEnv,
-//     class: JClass,
-//     sprite_type: JString,
-//     jnamespace: JString,
-//     buffer: jbyteArray) {
-//
-//     let renderer = unsafe { RENDERER.get().unwrap() };
-//
-//
-//
-//     let namespace_str: String = env.get_string(jnamespace).unwrap().into();
-//     let sprite_type: String = env.get_string(sprite_type).unwrap().into();
-//     let identifier = NamespacedResource::try_from(namespace_str.as_str())
-//         .unwrap();
-//
-//     let buffer_arr = env.get_byte_array_elements(
-//         buffer,
-//         ReleaseMode::NoCopyBack)
-//         .unwrap();
-//
-//     let buffer_arr_size = buffer_arr.size().unwrap() as usize;
-//     let mut buffer: Vec<u8> = vec![0; buffer_arr_size];
-//     //Create a slice looking into the buffer so that we can immediately copy the data into a Vec.
-//     let slice: &[u8] = unsafe {
-//         std::mem::transmute(
-//             std::slice::from_raw_parts(
-//                 buffer_arr.as_ptr(),
-//                 buffer_arr_size)
-//         )
-//     };
-//
-//     buffer.copy_from_slice(slice);
-//
-//     // println!("{:?}", renderer.mc.texture_manager.textures);
-//     renderer.mc.texture_manager.textures.insert(identifier, buffer);
-// }
-
-pub unsafe fn get_root_object_pointer(object: jobject) -> usize {
-    (unsafe { *(mem::transmute::<_, *const jobject>(object)) }) as usize
-}
-
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
     env: JNIEnv,
@@ -293,7 +242,7 @@ impl BlockStateProvider for JavaBlockStateProvider {
     //Technically this should be able to provide a blockstate for anywhere in the world but I won't implement that yet
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
         if y >= CHUNK_HEIGHT as i16 || y < 0 {
-            return ChunkBlockState { packed_key: None };
+            return ChunkBlockState::Air;
         }
 
         let storage_index = y / 16;
@@ -303,7 +252,7 @@ impl BlockStateProvider for JavaBlockStateProvider {
         let storage = match unsafe {
             (self.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
         } {
-            None => return ChunkBlockState { packed_key: None },
+            None => return ChunkBlockState::Air,
             Some(storage) => storage,
         };
 
@@ -315,11 +264,12 @@ impl BlockStateProvider for JavaBlockStateProvider {
                 .unwrap()
         };
 
-        ChunkBlockState {
-            packed_key: palette
-                .get(palette_key as usize)
-                .filter(|element| element.1 as BlockstateKey != self.air)
-                .map(|element| (element.1 as u32).into()),
+        let key = palette.get(palette_key as usize).unwrap().1;
+
+        if key == self.air {
+            ChunkBlockState::Air
+        } else {
+            ChunkBlockState::State(key)
         }
     }
 }
@@ -368,7 +318,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
     let jbsp = JavaBlockStateProvider {
         storages: *storages,
         palettes: *palettes,
-        air: (*wm.mc.block_manager.read().block_state_indices.get("Block{minecraft:air}").unwrap() as u32).into()
+        air: BlockstateKey {
+            block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
+            augment: 0
+        }
     };
 
     let chunk = Chunk {
@@ -398,7 +351,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
             .unwrap().load();
 
         let instant = Instant::now();
-        chunk.bake(&bm);
+        chunk.bake(&bm, BLOCK_STATE_PROVIDER.get().unwrap());
 
         println!(
             "Baked chunk (x={}, z={}) in {}ms",
@@ -415,14 +368,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlock(
     env: JNIEnv,
     class: JClass,
-    identifier: JString,
+    name: JString,
 ) {
-    let identifier: String = env.get_string(identifier).unwrap().into();
+    let name: String = env.get_string(name).unwrap().into();
+
+    println!("{}", name);
 
     BLOCKS
         .get_or_init(|| Mutex::new(Vec::new()))
         .lock()
-        .push(identifier);
+        .push(name);
 }
 
 #[no_mangle]
@@ -636,47 +591,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     let wm = RENDERER.get().unwrap();
 
     {
-        let mut block_manager = wm.mc.block_manager.write();
-
         let blocks = BLOCKS.get().unwrap().lock();
 
-        blocks.iter().for_each(|identifier| {
-            let identifier = ResourceId::try_from(&identifier[..]).unwrap();
+        let blockstates = blocks.iter().map(|identifier| {
+             (identifier.clone(), ResourcePath::try_from(&identifier[..]).unwrap().prepend("blockstates/").append(".json"))
+        }).collect::<Vec<_>>();
 
-            let json_bytes = wm
-                .mc
-                .resource_provider
-                .get_bytes(&identifier.prepend("blockstates/").append(".json"))
-                .unwrap();
-
-            let json = std::str::from_utf8(&json_bytes).unwrap();
-
-            match BlockstateJson::from_json(&identifier.to_string(), json) {
-                None => {}
-                Some(block) => {
-                    block_manager.blockstates.insert(identifier, block);
-                }
-            }
-        });
+        wm.mc.bake_blocks(wm, blockstates.iter().map(|(string, resource)| (string, resource)));
     }
-
-    wm.mc.bake_blocks(&wm, |nsr, key| {
-        let mut string = format!("Block{{{}}}", nsr);
-
-        if key != "" {
-            string.push_str(&format!("[{}]", key));
-        }
-
-        string
-    });
 
     {
         let block_manager = wm.mc.block_manager.read();
 
-        let bedrock_key = *block_manager
-            .block_state_indices
-            .get("Block{minecraft:bedrock}")
-            .unwrap();
+        let default_missing_block = block_manager.blocks.get_full("minecraft:bedrock").unwrap().0 as u16;
 
         JAVA_BLOCK_STATES
             .get()
@@ -684,18 +611,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
             .read()
             .iter()
             .for_each(|(key, global_ref)| {
-                let offset = *block_manager
-                    .block_state_indices
-                    .get(
-                        &key
-                            .replace(",waterlogged=true", "")
-                            .replace(",waterlogged=false", "")
-                            .replace("waterlogged=true,", "")
-                            .replace("waterlogged=false,", "")
-                            .replace("[waterlogged=true]", "")
-                            .replace("[waterlogged=false]", "")
-                    )
-                    .unwrap_or(&bedrock_key);
+                let offset = block_manager
+                    .blocks
+                    .get_full(key)
+                    .map(|(index, _, _)| index as u16)
+                    .unwrap_or(default_missing_block);
 
                 if offset != 27 {
                     println!("{} {}", key, offset);
@@ -1139,7 +1059,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
 ) -> jint {
     RENDERER
         .get()
-        .map_or(1280, |wm| wm.wgpu_state.surface_config.load().width as i32)
+        .map_or(1280, |wm| wm.wgpu_state.surface_config.as_ref().unwrap().load().width as i32)
 }
 
 #[no_mangle]
@@ -1149,7 +1069,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
 ) -> jint {
     RENDERER
         .get()
-        .map_or(720, |wm| wm.wgpu_state.surface_config.load().height as i32)
+        .map_or(720, |wm| wm.wgpu_state.surface_config.as_ref().unwrap().load().height as i32)
 }
 
 #[no_mangle]
@@ -1385,14 +1305,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
     class: JClass,
     palette_long: jlong,
     object: JObject,
-    blockstate_index: jlong,
+    blockstate_index: jint,
 ) -> jint {
     let mut palette = (palette_long as usize) as *mut JavaPalette;
 
     (unsafe {
         palette.as_mut().unwrap().index((
             env.new_global_ref(object).unwrap(),
-            blockstate_index as usize,
+            (blockstate_index as u32).into(),
         ))
     }) as jint
 }
@@ -1484,14 +1404,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
         .unwrap();
 
     let blockstate_offsets_array = env
-        .get_long_array_elements(blockstate_offsets, ReleaseMode::NoCopyBack)
+        .get_int_array_elements(blockstate_offsets, ReleaseMode::NoCopyBack)
         .unwrap();
 
     let id_list = unsafe { palette.id_list.as_ref().unwrap() };
 
     let blockstate_offsets = unsafe {
         std::slice::from_raw_parts(
-            blockstate_offsets_array.as_ptr() as *mut usize,
+            blockstate_offsets_array.as_ptr() as *mut i32,
             blockstate_offsets_array.size().unwrap() as usize,
         )
     };
@@ -1506,14 +1426,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
     let mut cursor = Cursor::new(vec);
     let packet_len: i32 = cursor.read_var_int().unwrap().into();
 
-    // println!("{:?}", id_list.map.iter().map(|(a,b)| (a, b.as_obj().into_inner())).collect::<Vec<_>>());
-
     for i in 0..packet_len as usize {
         let var_int: i32 = cursor.read_var_int().unwrap().into();
 
         let object = id_list.map.get(&var_int.into()).unwrap().clone();
 
-        palette.add((object, blockstate_offsets[i]));
+        palette.add((object, BlockstateKey {
+            block: (blockstate_offsets[i] >> 16) as u16,
+            augment: (blockstate_offsets[i] & 0xffff) as u16
+        }));
     }
 
     //The amount of bytes read
