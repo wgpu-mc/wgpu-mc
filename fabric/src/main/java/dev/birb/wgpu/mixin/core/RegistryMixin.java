@@ -1,5 +1,6 @@
 package dev.birb.wgpu.mixin.core;
 
+import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -23,8 +24,8 @@ public class RegistryMixin {
             String blockId = Registry.BLOCK.getId(block).toString();
 
             WgpuNative.registerBlock(blockId);
+
             for(BlockState state : block.getStateManager().getStates()) {
-                // state.toString();
                 String stateKey = state.getEntries().entrySet().stream().map(net.minecraft.state.State.PROPERTY_MAP_PRINTER).collect(Collectors.joining(","));
                 WgpuNative.registerBlockState(state, blockId, stateKey);
             }

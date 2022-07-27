@@ -672,7 +672,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
             env.call_static_method(
                 "dev/birb/wgpu/render/Wgpu",
                 "helperSetBlockStateIndex",
-                "(Ljava/lang/Object;J)V",
+                "(Ljava/lang/Object;I)V",
                 &[
                     JValue::Object(global_ref.as_obj()),
                     JValue::Int(blockstate_key.pack() as i32),

@@ -71,6 +71,7 @@ public class Wgpu {
 
         client.execute(() -> client.mouse.onMouseButton(-1, button, action, 0));
     }
+    
     public static void onChar(int codepoint, int modifiers) {
         MinecraftClient client = MinecraftClient.getInstance();
         int mappedModifier = convertModifiers(modifiers);
