@@ -18,8 +18,8 @@ impl IdList {
 
 #[derive(Clone)]
 pub struct JavaPalette {
-    store: Vec<(GlobalRef, BlockstateKey)>,
-    indices: HashMap<BlockstateKey, usize>,
+    pub store: Vec<(GlobalRef, BlockstateKey)>,
+    pub indices: HashMap<BlockstateKey, usize>,
     pub id_list: *mut IdList,
 }
 

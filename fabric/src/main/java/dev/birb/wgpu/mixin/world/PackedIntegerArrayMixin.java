@@ -1,11 +1,13 @@
 package dev.birb.wgpu.mixin.world;
 
 import dev.birb.wgpu.palette.PackedIntegerArrayAccessor;
+import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.util.collection.PackedIntegerArray;
 import org.apache.commons.lang3.Validate;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -17,6 +19,10 @@ import static dev.birb.wgpu.render.Wgpu.UNSAFE;
 
 @Mixin(PackedIntegerArray.class)
 public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAccessor {
+
+    static {
+        WgpuNative.loadWm();
+    }
 
     @Shadow @Final public int elementsPerLong;
     @Shadow @Final private int elementBits;
@@ -66,7 +72,7 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
             }
 
             long address = this.rawStoragePointer + ((k++) * 8L);
-            UNSAFE.putLong(address, m);
+            UNSAFE.putLongVolatile(null, address, m);
         }
 
         int o = j - l;
@@ -79,7 +85,7 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
             }
 
             long address = this.rawStoragePointer + (k * 8L);
-            UNSAFE.putLong(address, p);
+            UNSAFE.putLongVolatile(null, address, p);
         }
     }
 
@@ -88,53 +94,62 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         return this.paletteStorage;
     }
 
-    @Inject(method = "swap", at = @At("RETURN"))
-    public void swap(int index, int value, CallbackInfoReturnable<Integer> cir) {
+    @Overwrite
+    // @Inject(method = "swap", at = @At("RETURN"))
+    // public void swap(int index, int value, CallbackInfoReturnable<Integer> cir) {
+    public int swap(int index, int value) {
         Validate.inclusiveBetween(0L, this.size - 1, index);
         Validate.inclusiveBetween(0L, this.maxValue, value);
         int i = this.getStorageIndex(index);
 
-
-        long l = UNSAFE.getLong(this.rawStoragePointer + (i * 8L));
+        long l = UNSAFE.getLongVolatile(null, this.rawStoragePointer + (i * 8L));
 
         int j = (index - i * this.elementsPerLong) * this.elementBits;
         int k = (int)(l >> j & this.maxValue);
 
         long data = l & (this.maxValue << j ^ 0xFFFFFFFFFFFFFFFFL) | ((long)value & this.maxValue) << j;
-        UNSAFE.putLong(this.rawStoragePointer + (i * 8L), data);
+        UNSAFE.putLongVolatile(null, this.rawStoragePointer + (i * 8L), data);
 
-        assert cir.getReturnValue() == k;
+        return k;
+        // assert cir.getReturnValue() == k;
     }
 
-    @Inject(method = "set", at = @At("RETURN"))
-    public void set(int index, int value, CallbackInfo ci) {
+    @Overwrite
+    // @Inject(method = "set", at = @At("RETURN"))
+    // public void set(int index, int value, CallbackInfo ci) {
+    public void set(int index, int value) {
         Validate.inclusiveBetween(0L, this.size - 1, index);
         Validate.inclusiveBetween(0L, this.maxValue, value);
         int i = this.getStorageIndex(index);
-        long l = UNSAFE.getLong(this.rawStoragePointer + (i * 8L));
+        long l = UNSAFE.getLongVolatile(null, this.rawStoragePointer + (i * 8L));
         int j = (index - i * this.elementsPerLong) * this.elementBits;
         long data = l & (this.maxValue << j ^ 0xFFFFFFFFFFFFFFFFL) | ((long)value & this.maxValue) << j;
 
-        UNSAFE.putLong(this.rawStoragePointer + (i * 8L), data);
+        UNSAFE.putLongVolatile(null, this.rawStoragePointer + (i * 8L), data);
     }
 
-    @Inject(method = "get", at = @At("RETURN"), cancellable = true)
-    public void get(int index, CallbackInfoReturnable<Integer> cir) {
+    @Overwrite
+    // @Inject(method = "get", at = @At("RETURN"), cancellable = true)
+    // public void get(int index, CallbackInfoReturnable<Integer> cir) {
+    public int get(int index) {
         Validate.inclusiveBetween(0L, (long)(this.size - 1), (long)index);
         int i = this.getStorageIndex(index);
 
         long address = this.rawStoragePointer + (((long) i) * 8L);
 
-        long l = UNSAFE.getLong(address);
+        long l = UNSAFE.getLongVolatile(null, address);
 
         int j = (index - i * this.elementsPerLong) * this.elementBits;
         int val = (int)(l >> j & this.maxValue);
 
-        assert val == cir.getReturnValue();
+        // assert val == cir.getReturnValue();
+        return val;
     }
 
-    @Inject(method = "method_39892", at = @At("RETURN"))
-    public void noClueWhatThisIs(int[] is, CallbackInfo ci) {
+    // @Inject(method = "method_39892", at = @At("RETURN"))
+    // public void noClueWhatThisIs(int[] is, CallbackInfo ci) {
+    @Overwrite
+    public void method_39892(int[] is) {
         int i = this.data.length;
         int j = 0;
 
@@ -144,7 +159,7 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         for(k = 0; k < i - 1; ++k) {
             long address = this.rawStoragePointer + (k * 8L);
 
-            l = UNSAFE.getLong(address);
+            l = UNSAFE.getLongVolatile(null, address);
 
             for(m = 0; m < this.elementsPerLong; ++m) {
                 is[j + m] = (int)(l & this.maxValue);
@@ -158,7 +173,7 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         if (k > 0) {
             long address = this.rawStoragePointer + ((i - 1) * 8L);
 
-            l = UNSAFE.getLong(address);
+            l = UNSAFE.getLongVolatile(null, address);
 
             for(m = 0; m < k; ++m) {
                 is[j + m] = (int)(l & this.maxValue);

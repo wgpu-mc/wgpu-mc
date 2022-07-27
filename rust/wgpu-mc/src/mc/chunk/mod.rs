@@ -158,10 +158,14 @@ impl ChunkManager {
 
         chunks.iter().for_each(|chunk| {
             let baked = chunk.baked.load();
-            let layers = (**baked).as_ref().unwrap();
 
-            glass.extend(&layers.glass);
-            terrain.extend(&layers.terrain);
+            match &(**baked) {
+                Some(layers) => {
+                    glass.extend(&layers.glass);
+                    terrain.extend(&layers.terrain);
+                },
+                None => {},
+            };
         });
 
         let mut map = HashMap::new();
