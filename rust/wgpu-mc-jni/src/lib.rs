@@ -642,16 +642,27 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     
         println!("{} {}", block_name, state_key);
 
-        let augment = wm_block.get_model_by_key(
+        let model = wm_block.get_model_by_key(
             key_iter.iter().map(|(a,b)| (*a, b)), 
             &*wm.mc.resource_provider, 
             &atlas
-        ).1;
-    
-        let key = BlockstateKey {
-            block: id_key as u16,
-            augment
+        );
+        let fallback_key = block_manager.blocks.get_full("minecraft:bedrock").unwrap();
+
+        let key = match model {
+            Some((_, augment)) => {
+                BlockstateKey {
+                    block: id_key as u16,
+                    augment
+                }
+            }
+            None => {
+                BlockstateKey {
+                    block: fallback_key.0 as u16,
+                    augment: 0
+            }}
         };
+    
 
         mappings.push((key, global_ref));
     });

@@ -65,7 +65,7 @@ impl Block {
         key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)> + Clone,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas
-    ) -> (Arc<ModelMesh>, u16) {
+    ) -> Option<(Arc<ModelMesh>, u16)> {
         let key_string = key.clone().into_iter()
                     .map(|(key, value)| format!("{}={}", key, match value {
                         schemas::blockstates::multipart::StateValue::Bool(bool) => if *bool { "true" } else { "false" },
@@ -78,7 +78,7 @@ impl Block {
             Block::Multipart(multipart) => {
                 {
                     match multipart.keys.read().get_full(&key_string) {
-                        Some(full) => return (full.2.clone(), full.0 as u16),
+                        Some(full) => return Some((full.2.clone(), full.0 as u16)),
                         None => {}
                     }
                 }
@@ -91,11 +91,11 @@ impl Block {
                     mesh.clone()
                 );
                 
-                (mesh, multipart_write.len() as u16 - 1)
+                Some((mesh, multipart_write.len() as u16 - 1))
             },
-            Block::Variants(variants) => {
-                let full = variants.get_full(&key_string).unwrap();
-                (full.2.clone(), full.0 as u16)
+            Block::Variants(variants) => {                
+                let full = variants.get_full(&key_string)?;
+                Some((full.2.clone(), full.0 as u16))
             }
         }
     }
