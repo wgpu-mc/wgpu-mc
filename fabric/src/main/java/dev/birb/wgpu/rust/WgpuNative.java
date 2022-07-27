@@ -19,6 +19,10 @@ import java.util.function.Predicate;
 public class WgpuNative {
 
     static {
+        loadWm();
+    }
+
+    public static void loadWm() {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
         } catch (Throwable e) {
@@ -86,7 +90,7 @@ public class WgpuNative {
 
     public static native void setIndexBuffer(int[] buffer);
 
-    public static native void debugPalette(long palette, int index);
+    public static native void debugPalette(long storage, long palette);
 
     public static native void setVertexBuffer(byte[] buffer);
 

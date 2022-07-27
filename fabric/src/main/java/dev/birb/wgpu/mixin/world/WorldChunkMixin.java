@@ -45,21 +45,22 @@ public abstract class WorldChunkMixin {
             PaletteStorage paletteStorage = chunk.getSection(i).getBlockStateContainer().data.storage;
 
             palettePointers[i] = rustPalette.getRustPointer();
+            if(paletteStorage instanceof PackedIntegerArray packedIntegerArray) {
+                long piaPtr = ((PackedIntegerArrayAccessor) packedIntegerArray).getStoragePointer();
 
-            if(paletteStorage instanceof PackedIntegerArray storage) {
-                PackedIntegerArray packedIntegerArray = (PackedIntegerArray) storage;
-
-                long rustPaletteStorage = ((PackedIntegerArrayAccessor) storage).getStoragePointer();
-
-                storagePointers[i] = rustPaletteStorage;
+                WgpuNative.debugPalette(piaPtr, palettePointers[i]);
+                storagePointers[i] = piaPtr;
             }
         }
+
+        // chunk.getBlockState(new BlockPos(0, 0, 0));
 
         ChunkPos pos = ((Chunk) (Object) this).getPos();
         int originX = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
         int originZ = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
 
         WgpuNative.createChunk(pos.x - originX, pos.z - originZ, palettePointers, storagePointers);
+        WgpuNative.bakeChunk(pos.x - originX, pos.z - originZ);
     }
 
 }

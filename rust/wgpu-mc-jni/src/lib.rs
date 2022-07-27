@@ -11,6 +11,7 @@ use cgmath::{Deg, Matrix4, Point3, Vector3};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::atlas::Atlas;
 use core::slice;
+use std::mem::size_of;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use futures::executor::block_on;
 use gl::pipeline::{GLCommand, GlPipeline};
@@ -114,17 +115,26 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
 
         let chunks_read = self.chunks.read();
 
-        let chunk = chunks_read.get(&(chunk_x, chunk_z)).unwrap();
+        let chunk = match chunks_read.get(&(chunk_x, chunk_z)) {
+            Some(chunk) => chunk,
+            None => return ChunkBlockState::Air,
+        };
 
         let storage_index = (y / 16) as usize;
 
         let storage = unsafe {
-            (chunk.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
-        }.unwrap();
+            match (chunk.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref() {
+                Some(storage) => storage,
+                None => return ChunkBlockState::Air,
+            }
+        };
 
         let palette = unsafe {
-            (chunk.palettes[storage_index] as *mut JavaPalette).as_ref()
-        }.unwrap();
+            match (chunk.palettes[storage_index] as *mut JavaPalette).as_ref() {
+                Some(palette) => palette,
+                None => return ChunkBlockState::Air,
+            }
+        };
 
         let palette_key = storage.get(x, y as u16, z);
         let block = palette.get(palette_key as usize).unwrap().1;
@@ -320,18 +330,27 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         )
     };
 
+    assert_eq!(size_of::<usize>(), 8);
+
     let storages: &[usize; 24] = bytemuck::cast_slice::<_, usize>(storage_elements)
         .try_into()
         .unwrap();
 
-    let jbsp = JavaBlockStateProvider {
-        storages: *storages,
-        palettes: *palettes,
-        air: BlockstateKey {
-            block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
-            augment: 0
+   let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| {
+        MinecraftBlockstateProvider { 
+            chunks: RwLock::new(HashMap::new()),
+            air: BlockstateKey {
+                block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
+                augment: 0
+            }
         }
-    };
+    });
+
+    let mut write = bsp.chunks.write();
+    write.insert((x, z), ChunkHolder {
+        palettes: *palettes,
+        storages: *storages,
+    });
 
     let chunk = Chunk {
         pos: (x, z),
@@ -558,12 +577,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                 let mc_state = MC_STATE.get().unwrap().load();
 
                 let mut pipelines = Vec::new();
-                // if mc_state.render_world {
+                if mc_state.render_world {
                     // wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
                     pipelines.push(&TerrainPipeline as &dyn WmPipeline);
-                // } else {
+                } else {
                     pipelines.push(GL_PIPELINE.get().unwrap());
-                // }
+                }
 
                 let surface = wm.wgpu_state.surface.as_ref().unwrap();
                 let texture = surface.get_current_texture().unwrap();
@@ -640,7 +659,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     
         let atlas = wm.mc.texture_manager.atlases.load().get(BLOCK_ATLAS_NAME).unwrap().load();
     
-        println!("{} {}", block_name, state_key);
+        // println!("{} {}", block_name, state_key);
 
         let model = wm_block.get_model_by_key(
             key_iter.iter().map(|(a,b)| (*a, b)), 
@@ -1314,6 +1333,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPalette(
     let mut palette = Box::new(JavaPalette::new(idList));
 
     let ptr = ((&mut *palette as *mut JavaPalette) as usize) as jlong;
+
     mem::forget(palette);
 
     ptr
@@ -1613,18 +1633,35 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
     env: JNIEnv,
     class: JClass,
     packed_integer_array: jlong,
-    index: jint
+    palette: jlong
 ) {
     let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
-    println!(
-        "array val index: {} computed: {} ptr: {} raw read: {} val: {}\n{:?}",
-        index,
-        array.compute_storage_index(index),
-        array.debug_pointer(index),
-        unsafe { (array.debug_pointer(index) as *mut i64).read_volatile() },
-        array.get_by_index(index),
-        array
-    );
+    let palette = unsafe { ((palette as usize) as *mut JavaPalette).as_ref().unwrap() };
+
+    let wm = RENDERER.get().unwrap();
+    let bm = wm.mc.block_manager.read();
+
+    // println!("{:?}", palette.indices);
+
+    (0..10).for_each(|id| {
+        let key = array.get_by_index(id);
+        match palette.get(key as usize) {
+            Some((_, blockstate_key)) => {
+                let (name, _) = bm.blocks.get_index(blockstate_key.block as usize).unwrap();
+                println!("{}", name);
+            },
+            None => {},
+        }
+    });
+    // println!(
+    //     "array val index: {} computed: {} ptr: {} raw read: {} val: {}\n{:?}",
+    //     index,
+    //     array.compute_storage_index(index),
+    //     array.debug_pointer(index),
+    //     unsafe { (array.debug_pointer(index) as *mut i64).read_volatile() },
+    //     array.get_by_index(index),
+    //     array
+    // );
     // dbg!(array.index_offset, array.index_scale, array.index_shift, array.element_bits, array.size, array.element_bits, array.elements_per_long);
 }
 
