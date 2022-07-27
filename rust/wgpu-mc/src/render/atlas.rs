@@ -20,7 +20,7 @@ use wgpu::Extent3d;
 use crate::render::pipeline::RenderPipelineManager;
 use crate::{WgpuState, WmRenderer};
 
-pub const ATLAS_DIMENSIONS: u32 = 1024;
+pub const ATLAS_DIMENSIONS: u32 = 2048;
 
 ///A texture atlas. This is used in many places, most notably terrain and entity rendering.
 /// 

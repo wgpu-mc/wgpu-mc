@@ -188,24 +188,27 @@ impl WmPipeline for GlPipeline {
         let layouts = pipeline_manager.pipeline_layouts.load();
         let shaders = pipeline_manager.shader_map.read();
 
-        let blank_tsv = TextureSamplerView::from_rgb_bytes(
-            &wm.wgpu_state,
-            &[0u8; 4],
-            Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            Some("Blank Texture"),
-            wgpu::TextureFormat::Bgra8Unorm,
-        )
-        .unwrap();
-
-        self.blank_texture.set(Arc::new(BindableTexture::from_tsv(
-            &wm.wgpu_state,
-            &*pipeline_manager,
-            blank_tsv,
-        )));
+        //Initialize the blank texture if necessary
+        self.blank_texture.get_or_init(|| {
+            let blank_tsv = TextureSamplerView::from_rgb_bytes(
+                &wm.wgpu_state,
+                &[0u8; 4],
+                Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                Some("Blank Texture"),
+                wgpu::TextureFormat::Bgra8Unorm,
+            )
+            .unwrap();
+    
+            Arc::new(BindableTexture::from_tsv(
+                &wm.wgpu_state,
+                &*pipeline_manager,
+                blank_tsv,
+            ))
+        });
 
         let pos_col_float3_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_float3").unwrap();
         let pos_col_uint_shader = shaders.get("wgpu_mc_ogl:shaders/pos_col_uint").unwrap();
@@ -268,7 +271,7 @@ impl WmPipeline for GlPipeline {
                             entry_point: pos_col_float3_shader.get_frag().1,
                             targets: &[wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
-                                blend: None,
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
                             }],
                         }),
@@ -324,10 +327,7 @@ impl WmPipeline for GlPipeline {
                             entry_point: pos_tex_shader.get_frag().1,
                             targets: &[wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
-                                blend: Some(BlendState {
-                                    color: BlendComponent::OVER,
-                                    alpha: BlendComponent::OVER,
-                                }),
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
                             }],
                         }),
@@ -383,10 +383,7 @@ impl WmPipeline for GlPipeline {
                             entry_point: pos_col_uint_shader.get_frag().1,
                             targets: &[wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
-                                blend: Some(BlendState {
-                                    color: BlendComponent::OVER,
-                                    alpha: BlendComponent::OVER,
-                                }),
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
                             }],
                         }),
@@ -569,7 +566,7 @@ impl WmPipeline for GlPipeline {
                             entry_point: pos_color_uv_light_shader.get_frag().1,
                             targets: &[wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
-                                blend: None,
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
                             }],
                         }),

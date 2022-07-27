@@ -22,6 +22,7 @@ accessible field net/minecraft/world/chunk/PalettedContainer$Data palette Lnet/m
 accessible field net/minecraft/client/world/ClientChunkManager chunks Lnet/minecraft/client/world/ClientChunkManager$ClientChunkMap;
 accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkX I
 accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkZ I
+accessible field net/minecraft/state/State PROPERTY_MAP_PRINTER Ljava/util/function/Function;
 
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;

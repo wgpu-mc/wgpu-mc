@@ -317,8 +317,8 @@ fn begin_rendering(
                                 },
                                 PartTransform {
                                     x: 0.0,
-                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                    y: 0.0,
+                                    y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    // y: 0.0,
                                     z: 0.0,
                                     pivot_x: 0.5,
                                     pivot_y: 0.5,
@@ -332,8 +332,8 @@ fn begin_rendering(
                                 },
                                 PartTransform {
                                     x: 0.0,
-                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                    y: 0.0,
+                                    y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    // y: 0.0,
                                     z: 0.0,
                                     pivot_x: 0.6,
                                     pivot_y: 0.6,
@@ -347,8 +347,8 @@ fn begin_rendering(
                                 },
                                 PartTransform {
                                     x: 0.0,
-                                    // y: ((spin / 20.0).sin() * 0.5) as f32,
-                                    y: 0.0,
+                                    y: ((spin / 20.0).sin() * 0.5) as f32,
+                                    // y: 0.0,
                                     z: 0.0,
                                     pivot_x: 0.6,
                                     pivot_y: 0.6,

@@ -19,7 +19,7 @@ fn vs_main(
 ) -> VertexResult {
     var vr: VertexResult;
     vr.pos = projection.view_proj * vec4<f32>(pos_in, 1.0);
-    vr.color = vec4<f32>(f32((color >> 16u) & 0xffu) / 255.0, f32((color >> 8u) & 0xffu) / 255.0, f32(color & 0xffu) / 255.0, f32((color >> 24u) & 0xffu) / 255.0);
+    vr.color = vec4<f32>(f32(color & 0xffu) / 255.0, f32((color >> 8u) & 0xffu) / 255.0, f32((color >> 16u) & 0xffu) / 255.0, f32((color >> 24u) & 0xffu) / 255.0);
     vr.tex_uv = tex_uv;
 
     return vr;

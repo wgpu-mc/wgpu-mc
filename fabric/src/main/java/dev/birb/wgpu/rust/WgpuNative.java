@@ -58,7 +58,7 @@ public class WgpuNative {
 
     public static native void updateWindowTitle(String title);
 
-    public static native void registerBlockState(Object state, String key);
+    public static native void registerBlockState(Object state, String blockId, String stateKey);
 
     public static native void doEventLoop();
 

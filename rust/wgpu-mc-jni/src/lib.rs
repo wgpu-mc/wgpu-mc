@@ -8,6 +8,8 @@ use crate::palette::{IdList, JavaPalette};
 use arc_swap::ArcSwap;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use cgmath::{Deg, Matrix4, Point3, Vector3};
+use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
+use wgpu_mc::render::atlas::Atlas;
 use core::slice;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use futures::executor::block_on;
@@ -39,7 +41,7 @@ use wgpu::Extent3d;
 use wgpu_mc::mc::block::{BlockPos, ChunkBlockState, BlockstateKey};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
 use wgpu_mc::mc::resource::{ResourceProvider, ResourcePath};
-use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
+use wgpu_mc::render::pipeline::terrain::{TerrainPipeline, BLOCK_ATLAS_NAME};
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::texture::{TextureSamplerView, BindableTexture};
 use wgpu_mc::wgpu;
@@ -83,8 +85,9 @@ static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
 static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
-static JAVA_BLOCK_STATES: OnceCell<RwLock<HashMap<String, GlobalRef>>> = OnceCell::new();
 static BLOCKS: OnceCell<Mutex<Vec<String>>> = OnceCell::new();
+static BLOCK_STATES: OnceCell<Mutex<Vec<(String, String, GlobalRef)>>> = OnceCell::new();
+
 static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
 
 #[derive(Debug)]
@@ -214,21 +217,27 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
     env: JNIEnv,
     class: JClass,
     block_state: JObject,
-    name: JString,
+    block_name: JString,
+    state_key: JString
 ) {
+    let (tx, _) = CHANNELS.get_or_init(|| {
+        let (tx, rx) = unbounded();
+        (tx, rx)
+    });
+
     let global_ref = env.new_global_ref(block_state).unwrap();
 
-    let block_state_key: String = env.get_string(name).unwrap().into();
-    // let block_state_key: String = env.get_string(JString::from(env.call_method(real_ptr, "toString", "()Ljava/lang/String;", &[]).unwrap().l().unwrap())).unwrap().into();
+    let block_name: String = env.get_string(block_name).unwrap().into();
+    let state_key: String = env.get_string(state_key).unwrap().into();
 
-    let mut java_block_states = JAVA_BLOCK_STATES
-        .get_or_init(|| RwLock::new(HashMap::new()))
-        .write();
+    let states = BLOCK_STATES.get_or_init(|| {
+        Mutex::new(Vec::new())
+    });
 
-    java_block_states.insert(block_state_key, global_ref);
+    states.lock().push((block_name, state_key, global_ref));
 }
 
-//This is per chunk
+
 #[derive(Debug)]
 struct JavaBlockStateProvider {
     //Pointers to JavaPalette structs
@@ -371,8 +380,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlock(
     name: JString,
 ) {
     let name: String = env.get_string(name).unwrap().into();
-
-    println!("{}", name);
 
     BLOCKS
         .get_or_init(|| Mutex::new(Vec::new()))
@@ -551,12 +558,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                 let mc_state = MC_STATE.get().unwrap().load();
 
                 let mut pipelines = Vec::new();
-                if mc_state.render_world {
-                    wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
+                // if mc_state.render_world {
+                    // wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
                     pipelines.push(&TerrainPipeline as &dyn WmPipeline);
-                } else {
+                // } else {
                     pipelines.push(GL_PIPELINE.get().unwrap());
-                }
+                // }
 
                 let surface = wm.wgpu_state.surface.as_ref().unwrap();
                 let texture = surface.get_current_texture().unwrap();
@@ -590,6 +597,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
 ) {
     let wm = RENDERER.get().unwrap();
 
+    println!("baking blocks");
+
     {
         let blocks = BLOCKS.get().unwrap().lock();
 
@@ -600,39 +609,65 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
         wm.mc.bake_blocks(wm, blockstates.iter().map(|(string, resource)| (string, resource)));
     }
 
-    {
-        let block_manager = wm.mc.block_manager.read();
+    let states = BLOCK_STATES.get().unwrap().lock();
 
-        let default_missing_block = block_manager.blocks.get_full("minecraft:bedrock").unwrap().0 as u16;
+    let block_manager = wm.mc.block_manager.write();
+    let mut mappings = Vec::new();
 
-        JAVA_BLOCK_STATES
-            .get()
-            .unwrap()
-            .read()
-            .iter()
-            .for_each(|(key, global_ref)| {
-                let offset = block_manager
-                    .blocks
-                    .get_full(key)
-                    .map(|(index, _, _)| index as u16)
-                    .unwrap_or(default_missing_block);
+    states.iter().for_each(|(block_name, state_key, global_ref)| {
+        let (id_key, _, wm_block) = block_manager.blocks.get_full(block_name).unwrap();
+    
+        let key_iter = if state_key != "" {
+            state_key
+                .split(",")
+                .filter_map(|kv_pair| {
+                    let mut split = kv_pair.split("=");
+                    if kv_pair == "" { return None; }
 
-                if offset != 27 {
-                    println!("{} {}", key, offset);
-                }
+                    Some((
+                        split.next().unwrap(),
+                        match split.next().unwrap() {
+                            "true" => StateValue::Bool(true),
+                            "false" => StateValue::Bool(false),
+                            other => StateValue::String(other.into())
+                        }
+                    ))
+                })
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
+    
+        let atlas = wm.mc.texture_manager.atlases.load().get(BLOCK_ATLAS_NAME).unwrap().load();
+    
+        println!("{} {}", block_name, state_key);
 
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "helperSetBlockStateIndex",
-                    "(Ljava/lang/Object;J)V",
-                    &[
-                        JValue::Object(global_ref.as_obj()),
-                        JValue::Long(offset as jlong),
-                    ],
-                )
-                .unwrap();
-            });
-    }
+        let augment = wm_block.get_model_by_key(
+            key_iter.iter().map(|(a,b)| (*a, b)), 
+            &*wm.mc.resource_provider, 
+            &atlas
+        ).1;
+    
+        let key = BlockstateKey {
+            block: id_key as u16,
+            augment
+        };
+
+        mappings.push((key, global_ref));
+    });
+
+    mappings.iter()
+        .for_each(|(blockstate_key, global_ref)| {
+            env.call_static_method(
+                "dev/birb/wgpu/render/Wgpu",
+                "helperSetBlockStateIndex",
+                "(Ljava/lang/Object;J)V",
+                &[
+                    JValue::Object(global_ref.as_obj()),
+                    JValue::Int(blockstate_key.pack() as i32),
+                ],
+            ).unwrap();
+        });
 }
 
 #[no_mangle]
@@ -901,10 +936,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
 
         let bindable =
             BindableTexture::from_tsv(&wm.wgpu_state, &wm.render_pipeline_manager.load(), tsv);
-
-        {
-            println!("GL ALLOC {}", gl::GL_ALLOC.get().unwrap().read().len());
-        }
 
         {
             gl::GL_ALLOC.get().unwrap().write().insert(

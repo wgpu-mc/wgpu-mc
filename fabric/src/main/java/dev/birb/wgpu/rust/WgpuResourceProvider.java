@@ -11,8 +11,6 @@ public class WgpuResourceProvider {
     public static ResourceManager manager;
 
     public static byte[] getResource(String path) {
-        System.out.println(path);
-
         try {
             return WgpuNative.digestInputStream(
                 manager.getResource(new Identifier(path)).getInputStream()

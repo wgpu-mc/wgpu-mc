@@ -18,6 +18,14 @@ pub struct BlockstateKey {
     pub augment: u16
 }
 
+impl BlockstateKey {
+
+    pub fn pack(&self) -> u32 {
+        ((self.block as u32) << 16) | (self.augment as u32)
+    }
+
+}
+
 impl From<(u16, u16)> for BlockstateKey {
     fn from(tuple: (u16, u16)) -> Self {
         Self { block: tuple.0, augment: tuple.1 }
@@ -112,9 +120,22 @@ fn resolve_model(model: schemas::Model, resource_provider: &dyn ResourceProvider
         ).unwrap()
     }).collect();
 
-    ModelResolver::resolve_model(
+    let mut schema = ModelResolver::resolve_model(
         [&model].into_iter().chain(parents.iter().map(|parent_borrow| parent_borrow))
-    )
+    );
+
+    if let Some(textures) = &mut schema.textures {
+        let copy = textures.clone();
+
+        textures.iter_mut()
+            .for_each(|(key, texture)| {
+                if texture.reference().is_some() {
+                    texture.0 = texture.resolve(&copy).unwrap().to_string();
+                }
+            })
+    }
+
+    schema
 }
 
 fn get_atlas_uv(
