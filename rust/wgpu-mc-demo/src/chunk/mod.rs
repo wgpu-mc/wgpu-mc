@@ -34,7 +34,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let atlas = wm.mc.texture_manager.atlases.load().get(BLOCK_ATLAS_NAME).unwrap().load();
 
     let (index, _, fence) = bm.blocks.get_full("minecraft:oak_fence").unwrap();
-    let fence_model = fence.get_model_by_key([("north", &StateValue::Bool(true))], &*wm.mc.resource_provider, &atlas);
+    let fence_model = fence.get_model_by_key([("north", &StateValue::Bool(true))], &*wm.mc.resource_provider, &atlas).unwrap();
 
     println!("{:?}", fence_model);
 
