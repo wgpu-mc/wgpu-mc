@@ -65,7 +65,7 @@ enum RenderMessage {
     KeyState(u32, u32, u32, u32),
     CharTyped(char, u32),
     MouseMove(f64, f64),
-    Resized,
+    Resized(u32, u32),
 }
 
 struct MinecraftRenderState {
@@ -490,7 +490,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
                             .get()
                             .unwrap()
                             .0
-                            .send(RenderMessage::Resized)
+                            .send(RenderMessage::Resized(physical_size.width, physical_size.height))
                             .unwrap();
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
@@ -739,8 +739,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
                 )
                 .unwrap();
             }
-            RenderMessage::Resized => {
-                env.call_static_method("dev/birb/wgpu/render/Wgpu", "onResize", "()V", &[])
+            RenderMessage::Resized(width,height) => {
+                env.call_static_method("dev/birb/wgpu/render/Wgpu", "onResize", "(II)V", &[JValue::Int(width as i32), JValue::Int(height as i32)])
                     .unwrap();
             }
             RenderMessage::KeyState(key, scancode, action, modifiers) => {
