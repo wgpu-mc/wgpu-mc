@@ -4,6 +4,7 @@ import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.util.Window;
 import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
 
@@ -28,6 +29,8 @@ public class Wgpu {
 
     public static Unsafe UNSAFE;
 
+    public static int windowWidth = 1280;
+    public static int windowHeight = 720;
     static {
         Field f = null; //Internal reference
         try {
@@ -71,14 +74,14 @@ public class Wgpu {
 
         client.execute(() -> client.mouse.onMouseButton(-1, button, action, 0));
     }
-    
+
     public static void onChar(int codepoint, int modifiers) {
         MinecraftClient client = MinecraftClient.getInstance();
         int mappedModifier = convertModifiers(modifiers);
 //       System.out.printf("onChar(%s, %s)\n", codepoint, modifiers);
 //       System.out.printf("Unmapped Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", modifiers & GLFW.GLFW_MOD_SHIFT, modifiers & GLFW.GLFW_MOD_CONTROL, modifiers & GLFW.GLFW_MOD_ALT, modifiers & GLFW.GLFW_MOD_SUPER);
 //       System.out.printf("Mapped   Shift: %s, Ctrl: %s, Alt: %s, Super: %s\n", mappedModifier & GLFW.GLFW_MOD_SHIFT, mappedModifier & GLFW.GLFW_MOD_CONTROL, mappedModifier & GLFW.GLFW_MOD_ALT, mappedModifier & GLFW.GLFW_MOD_SUPER);
-       
+
         client.execute(() -> client.keyboard.onChar(0,codepoint,mappedModifier));
 
     }
@@ -98,10 +101,12 @@ public class Wgpu {
         client.execute(() -> client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier));
     }
 
-    public static void onResize() {
+    public static void onResize(int width, int height) {
+        Wgpu.windowWidth = width;
+        Wgpu.windowHeight = height;
         MinecraftClient client = MinecraftClient.getInstance();
+        client.execute(() -> client.onResolutionChanged());
 
-        client.execute(() -> MinecraftClient.getInstance().onResolutionChanged());
     }
 
     public static void helperSetBlockStateIndex(Object o, int blockstateKey) {
