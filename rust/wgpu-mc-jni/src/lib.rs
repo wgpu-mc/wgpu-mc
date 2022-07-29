@@ -203,15 +203,6 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_uploadChunk(
-    env: JNIEnv,
-    _class: JClass,
-    world_chunk: JObject,
-) {
-    mc_interface::chunk_from_java_world_chunk(&env, &world_chunk);
-}
-
-#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     env: JNIEnv,
     class: JClass,
