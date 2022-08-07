@@ -55,7 +55,6 @@ use winit::window::Window;
 use wgpu_mc::camera::Camera;
 
 mod gl;
-mod mc_interface;
 mod palette;
 enum RenderMessage {
     SetTitle(String),
