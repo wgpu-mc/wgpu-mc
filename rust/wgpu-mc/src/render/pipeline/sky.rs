@@ -1,6 +1,9 @@
 use std::collections::HashMap;
-use wgpu::DepthStencilState;
 use wgpu::util::DeviceExt;
+use wgpu::{BufferUsages, DepthStencilState, FragmentState, PrimitiveState};
+use wgpu_biolerless::{
+    FragmentShaderState, ModuleSrc, PipelineBuilder, ShaderModuleSources, VertexShaderState,
+};
 
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
@@ -19,13 +22,16 @@ impl WmPipeline for SkyPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/sky".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/sky.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/sky.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    wm.wgpu_state.device(),
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
@@ -46,16 +52,13 @@ impl WmPipeline for SkyPipeline {
 
         map.insert(
             "wgpu_mc:layouts/sky".into(),
-            wm.wgpu_state
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Sky Pipeline Layout"),
-                    bind_group_layouts: &[
-                        // layouts.get("cubemap").unwrap(),
-                        layouts.get("matrix4").unwrap(),
-                    ],
-                    push_constant_ranges: &[],
-                }),
+            wm.wgpu_state.create_pipeline_layout(
+                &[
+                    // layouts.get("cubemap").unwrap(),
+                    layouts.get("matrix4").unwrap(),
+                ],
+                &[],
+            ),
         );
 
         map
@@ -71,17 +74,15 @@ impl WmPipeline for SkyPipeline {
 
         map.insert(
             "wgpu_mc:pipelines/sky".into(),
-            wm.wgpu_state
-                .device
-                .create_render_pipeline(&RenderPipelineDescriptor {
-                    label: None,
-                    layout: Some(layouts.get("wgpu_mc:layouts/sky").unwrap()),
-                    vertex: wgpu::VertexState {
-                        module: shader.get_vert().0,
+            wm.wgpu_state.create_pipeline(
+                PipelineBuilder::new()
+                    .layout(layouts.get("wgpu_mc:layouts/sky").unwrap())
+                    .vertex(VertexShaderState {
+                        //  module: shader.get_vert().0,
                         entry_point: shader.get_vert().1,
                         buffers: &[SkyVertex::desc()],
-                    },
-                    primitive: wgpu::PrimitiveState {
+                    })
+                    .primitive(PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
@@ -89,33 +90,31 @@ impl WmPipeline for SkyPipeline {
                         unclipped_depth: false,
                         polygon_mode: Default::default(),
                         conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
+                    })
+                    .depth_stencil(DepthStencilState {
                         format: wgpu::TextureFormat::Depth32Float,
                         depth_write_enabled: false,
                         depth_compare: wgpu::CompareFunction::Always,
                         stencil: wgpu::StencilState::default(),
                         bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: shader.get_frag().0,
+                    })
+                    .fragment(FragmentShaderState {
+                        // module: shader.get_frag().0,
                         entry_point: shader.get_frag().1,
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState {
                                 color: wgpu::BlendComponent::REPLACE,
                                 alpha: wgpu::BlendComponent::REPLACE,
                             }),
                             write_mask: Default::default(),
-                        }],
-                    }),
-                    multiview: None,
-                }),
+                        })],
+                    })
+                    .shader_src(ShaderModuleSources::Multi(
+                        ModuleSrc::Ref(shader.get_vert().0),
+                        ModuleSrc::Ref(shader.get_frag().0),
+                    )),
+            ),
         );
 
         map
@@ -150,13 +149,8 @@ impl WmPipeline for SkyPipeline {
             },
         ];
 
-        let vertex_buffer = arena.alloc(wm.wgpu_state.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            },
-        ));
+        let vertex_buffer =
+            arena.alloc(wm.wgpu_state.create_buffer(&vertices, BufferUsages::VERTEX));
 
         render_pass.set_pipeline(
             arena.alloc(

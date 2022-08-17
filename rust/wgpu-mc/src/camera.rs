@@ -2,10 +2,10 @@ use cgmath::{Point3, Vector3};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {
-    pub position: cgmath::Point3<f32>,
+    pub position: Point3<f32>,
     pub yaw: f32,
     pub pitch: f32,
-    pub up: cgmath::Vector3<f32>,
+    pub up: Vector3<f32>,
     pub aspect: f32,
     pub fovy: f32,
     pub znear: f32,
@@ -27,7 +27,7 @@ impl Camera {
         }
     }
 
-    pub fn get_direction(&self) -> cgmath::Vector3<f32> {
+    pub fn get_direction(&self) -> Vector3<f32> {
         Vector3::new(
             self.yaw.cos() * (1.0 - self.pitch.sin().abs()),
             self.pitch.sin(),

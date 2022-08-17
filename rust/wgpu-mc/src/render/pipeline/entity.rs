@@ -1,11 +1,15 @@
-use crate::render::entity::{EntityVertex};
+use crate::mc::entity::{EntityInstanceVBOEntry, EntityInstances};
+use crate::render::entity::EntityVertex;
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
 use std::collections::HashMap;
-use crate::mc::entity::{EntityInstances, EntityInstanceVBOEntry};
+use wgpu::{DepthStencilState, FragmentState, PrimitiveState};
+use wgpu_biolerless::{
+    FragmentShaderState, ModuleSrc, PipelineBuilder, ShaderModuleSources, VertexShaderState,
+};
 
 pub struct EntityPipeline<'entities> {
     pub entities: &'entities [&'entities EntityInstances],
@@ -19,13 +23,16 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/entity".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/entity.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/entity.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device(),
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
@@ -46,17 +53,14 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
 
         map.insert(
             "wgpu_mc:layouts/entity".into(),
-            wm.wgpu_state
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Entity Pipeline Layout"),
-                    bind_group_layouts: &[
-                        layouts.get("ssbo").unwrap(),
-                        layouts.get("texture").unwrap(),
-                        layouts.get("matrix4").unwrap(),
-                    ],
-                    push_constant_ranges: &[],
-                }),
+            wm.wgpu_state.create_pipeline_layout(
+                &[
+                    layouts.get("ssbo").unwrap(),
+                    layouts.get("texture").unwrap(),
+                    layouts.get("matrix4").unwrap(),
+                ],
+                &[],
+            ),
         );
 
         map
@@ -72,17 +76,10 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
 
         map.insert(
             "wgpu_mc:pipelines/entity".into(),
-            wm.wgpu_state
-                .device
-                .create_render_pipeline(&RenderPipelineDescriptor {
-                    label: None,
-                    layout: Some(layouts.get("wgpu_mc:layouts/entity").unwrap()),
-                    vertex: wgpu::VertexState {
-                        module: shader.get_vert().0,
-                        entry_point: shader.get_vert().1,
-                        buffers: &[EntityVertex::desc(), EntityInstanceVBOEntry::desc()],
-                    },
-                    primitive: wgpu::PrimitiveState {
+            wm.wgpu_state.create_pipeline(
+                PipelineBuilder::new()
+                    .layout(layouts.get("wgpu_mc:layouts/entity").unwrap())
+                    .primitive(PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Cw,
@@ -91,39 +88,42 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                         unclipped_depth: false,
                         polygon_mode: Default::default(),
                         conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
+                    })
+                    .depth_stencil(DepthStencilState {
                         format: wgpu::TextureFormat::Depth32Float,
                         depth_write_enabled: true,
                         depth_compare: wgpu::CompareFunction::Less,
                         stencil: wgpu::StencilState::default(),
                         bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: shader.get_frag().0,
+                    })
+                    .fragment(FragmentShaderState {
+                        // module: shader.get_frag().0,
                         entry_point: shader.get_frag().1,
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState {
                                 color: wgpu::BlendComponent::OVER,
                                 alpha: wgpu::BlendComponent::OVER,
                             }),
                             write_mask: Default::default(),
-                        }],
-                    }),
-                    multiview: None,
-                }),
+                        })],
+                    })
+                    .vertex(VertexShaderState {
+                        // module: shader.get_vert().0,
+                        entry_point: shader.get_vert().1,
+                        buffers: &[EntityVertex::desc(), EntityInstanceVBOEntry::desc()],
+                    })
+                    .shader_src(ShaderModuleSources::Multi(
+                        ModuleSrc::Ref(shader.get_vert().0),
+                        ModuleSrc::Ref(shader.get_frag().0),
+                    )),
+            ),
         );
 
         map
     }
 
-    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'c + 'd>(
+    fn render<'a: 'd, 'b, 'c, 'd: 'c, 'e: 'd>(
         &'a self,
         wm: &'b WmRenderer,
         render_pass: &'c mut RenderPass<'d>,
@@ -150,18 +150,10 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
             let entity = arena.alloc(instances.entity.clone());
 
             //Bind the transform SSBO
-            render_pass.set_bind_group(
-                0,
-                &uploaded.transform_ssbo.1,
-                &[],
-            );
+            render_pass.set_bind_group(0, &uploaded.transform_ssbo.1, &[]);
 
             //Bind the entity texture atlas
-            render_pass.set_bind_group(
-                1,
-                &entity.texture.bind_group,
-                &[],
-            );
+            render_pass.set_bind_group(1, &entity.texture.bind_group, &[]);
 
             //Bind projection matrix
             render_pass.set_bind_group(
@@ -172,14 +164,9 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                 &[],
             );
 
-            render_pass.set_vertex_buffer(
-                0,
-                entity.mesh
-                    .slice(..)
-            );
+            render_pass.set_vertex_buffer(0, entity.mesh.slice(..));
 
-            render_pass
-                .set_vertex_buffer(1, uploaded.instance_vbo.slice(..));
+            render_pass.set_vertex_buffer(1, uploaded.instance_vbo.slice(..));
 
             render_pass.draw(
                 0..instances.entity.vertices,

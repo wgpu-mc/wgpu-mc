@@ -11,17 +11,17 @@ use parking_lot::RwLock;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
-use crate::mc::block::{BlockstateKey};
+use crate::mc::block::BlockstateKey;
 use crate::mc::chunk::ChunkManager;
 use crate::mc::resource::ResourceProvider;
 
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::RenderPipelineManager;
 
-use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
-use crate::{WgpuState, WmRenderer};
-use indexmap::map::IndexMap;
 use crate::mc::entity::Entity;
+use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
+use crate::WmRenderer;
+use indexmap::map::IndexMap;
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -38,41 +38,56 @@ pub type BlockVariantFormatter = dyn Fn(&str, Option<&str>) -> String;
 pub struct BlockManager {
     ///This maps block state keys to either a [VariantMesh] or a [Multipart] struct. How the keys are formatted
     /// is defined by the user of wgpu-mc. For example `Block{minecraft:anvil}[facing=west]` or `minecraft:anvil#facing=west`
-    pub blocks: IndexMap<String, Block>
+    pub blocks: IndexMap<String, Block>,
 }
 
 #[derive(Debug)]
 pub enum Block {
     Multipart(Multipart),
-    Variants(IndexMap<String, Arc<ModelMesh>>)
+    Variants(IndexMap<String, Arc<ModelMesh>>),
 }
 
 impl Block {
-
     pub fn get_model(&self, key: u16) -> Arc<ModelMesh> {
         match &self {
-            Block::Multipart(multipart) => {
-                multipart.keys.read().get_index(key as usize).unwrap().1.clone()
-            },
-            Block::Variants(variants) => {
-                variants.get_index(key as usize).unwrap().1.clone()
-            }
+            Block::Multipart(multipart) => multipart
+                .keys
+                .read()
+                .get_index(key as usize)
+                .unwrap()
+                .1
+                .clone(),
+            Block::Variants(variants) => variants.get_index(key as usize).unwrap().1.clone(),
         }
     }
 
     pub fn get_model_by_key<'a>(
-        &self, 
-        key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)> + Clone,
+        &self,
+        key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)>
+            + Clone,
         resource_provider: &dyn ResourceProvider,
-        block_atlas: &Atlas
+        block_atlas: &Atlas,
     ) -> Option<(Arc<ModelMesh>, u16)> {
-        let key_string = key.clone().into_iter()
-                    .map(|(key, value)| format!("{}={}", key, match value {
-                        schemas::blockstates::multipart::StateValue::Bool(bool) => if *bool { "true" } else { "false" },
+        let key_string = key
+            .clone()
+            .into_iter()
+            .map(|(key, value)| {
+                format!(
+                    "{}={}",
+                    key,
+                    match value {
+                        schemas::blockstates::multipart::StateValue::Bool(bool) =>
+                            if *bool {
+                                "true"
+                            } else {
+                                "false"
+                            },
                         schemas::blockstates::multipart::StateValue::String(string) => &string,
-                    }))
-                    .collect::<Vec<String>>()
-                    .join(",");
+                    }
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(",");
 
         match &self {
             Block::Multipart(multipart) => {
@@ -86,14 +101,11 @@ impl Block {
                 let mesh = multipart.generate_mesh(key, resource_provider, block_atlas);
 
                 let mut multipart_write = multipart.keys.write();
-                multipart_write.insert(
-                    key_string, 
-                    mesh.clone()
-                );
-                
+                multipart_write.insert(key_string, mesh.clone());
+
                 Some((mesh, multipart_write.len() as u16 - 1))
-            },
-            Block::Variants(variants) => {                
+            }
+            Block::Variants(variants) => {
                 let full = variants.get_full(&key_string)?;
                 Some((full.2.clone(), full.0 as u16))
             }
@@ -104,42 +116,39 @@ impl Block {
 #[derive(Debug)]
 pub struct Multipart {
     pub cases: Vec<schemas::blockstates::multipart::Case>,
-    pub keys: RwLock<IndexMap<String, Arc<ModelMesh>>>
+    pub keys: RwLock<IndexMap<String, Arc<ModelMesh>>>,
 }
 
 impl Multipart {
-
     pub fn generate_mesh<'a>(
-        &self, 
-        key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)> + Clone, 
+        &self,
+        key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)>
+            + Clone,
         resource_provider: &dyn ResourceProvider,
-        block_atlas: &Atlas
+        block_atlas: &Atlas,
     ) -> Arc<ModelMesh> {
-        let apply_variants = self.cases.iter()
-            .filter_map(|case| {
-                if case.applies(key.clone()) {
-                    Some(&case.apply)
-                } else {
-                    None
-                }
-            });
-        
-        let mesh = ModelMesh::bake(apply_variants, resource_provider, block_atlas)
-            .unwrap();
-        
+        let apply_variants = self.cases.iter().filter_map(|case| {
+            if case.applies(key.clone()) {
+                Some(&case.apply)
+            } else {
+                None
+            }
+        });
+
+        let mesh = ModelMesh::bake(apply_variants, resource_provider, block_atlas).unwrap();
+
         Arc::new(mesh)
     }
-
 }
 pub enum MultipartOrMesh {
     Multipart(Arc<Multipart>),
-    Mesh(Arc<ModelMesh>)
+    Mesh(Arc<ModelMesh>),
 }
 
-///Multipart models are generated dynamically as they can be too complex 
+///Multipart models are generated dynamically as they can be too complex
 pub struct BlockInstance {
     pub render_settings: block::RenderSettings,
-    pub block: MultipartOrMesh
+    pub block: MultipartOrMesh,
 }
 
 ///Minecraft-specific state and data structures go in here
@@ -165,11 +174,8 @@ pub struct MinecraftState {
 }
 
 impl MinecraftState {
-
     #[must_use]
-    pub fn new(
-        resource_provider: Arc<dyn ResourceProvider>,
-    ) -> Self {
+    pub fn new(resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
             sun_position: ArcSwap::new(Arc::new(0.0)),
             chunks: ChunkManager::new(),
@@ -178,7 +184,7 @@ impl MinecraftState {
             texture_manager: TextureManager::new(),
 
             block_manager: RwLock::new(BlockManager {
-                blocks: IndexMap::new()
+                blocks: IndexMap::new(),
             }),
 
             camera: ArcSwap::new(Arc::new(Camera::new(1.0))),
@@ -194,32 +200,25 @@ impl MinecraftState {
     }
 
     pub fn init_camera(&self, wm: &WmRenderer) {
-        let camera_buffer = wm.wgpu_state.device.create_buffer(&BufferDescriptor {
+        let camera_buffer = wm.wgpu_state.device().create_buffer(&BufferDescriptor {
             label: None,
             size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let camera_bind_group = wm
-            .wgpu_state
-            .device
-            .create_bind_group(&BindGroupDescriptor {
-                label: None,
-                layout: wm
-                    .render_pipeline_manager
-                    .load()
-                    .bind_group_layouts
-                    .read()
-                    .get("matrix4")
-                    .unwrap(),
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(
-                        camera_buffer.as_entire_buffer_binding(),
-                    ),
-                }],
-            });
+        let camera_bind_group = wm.wgpu_state.create_bind_group(
+            wm.render_pipeline_manager
+                .load()
+                .bind_group_layouts
+                .read()
+                .get("matrix4")
+                .unwrap(),
+            &[BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(camera_buffer.as_entire_buffer_binding()),
+            }],
+        );
 
         self.camera_buffer.store(Arc::new(Some(camera_buffer)));
         self.camera_bind_group
@@ -235,52 +234,62 @@ impl MinecraftState {
     ///
     /// let minecraft_state: MinecraftState;
     /// let wm: WmRenderer;
-    /// 
+    ///
     /// minecraft_state.bake_blocks(
-    ///     &wm, 
+    ///     &wm,
     ///     ["minecraft:anvil", "minecraft:blockstates/anvil.json".into()]
     /// );
     /// ```
     pub fn bake_blocks<'a>(
-        &self, 
-        wm: &WmRenderer, 
-        block_states: impl IntoIterator<Item = (impl AsRef<str>, &'a ResourcePath)>
+        &self,
+        wm: &WmRenderer,
+        block_states: impl IntoIterator<Item = (impl AsRef<str>, &'a ResourcePath)>,
     ) {
         let mut block_manager = self.block_manager.write();
-        let block_atlas = self.texture_manager.atlases.load()
+        let block_atlas = self
+            .texture_manager
+            .atlases
+            .load()
             .get(BLOCK_ATLAS_NAME)
             .unwrap()
             .load();
 
         //Figure out which block models there are
-        block_states.into_iter().for_each(|(block_name, block_state)| {
-            let blockstates: schemas::BlockStates = serde_json::from_str(
-                &self.resource_provider.get_string(block_state).unwrap()
-            ).unwrap();
+        block_states
+            .into_iter()
+            .for_each(|(block_name, block_state)| {
+                let blockstates: schemas::BlockStates =
+                    serde_json::from_str(&self.resource_provider.get_string(block_state).unwrap())
+                        .unwrap();
 
-            let block = match &blockstates {
-                schemas::BlockStates::Variants { variants } => {
-                    let meshes: IndexMap<String, Arc<ModelMesh>> = variants.iter().map(|(variant_id, variant)| {
-                        let mesh = ModelMesh::bake([variant], &*self.resource_provider, &block_atlas)
-                            .unwrap();
-                        (variant_id.clone(), Arc::new(mesh))
-                    }).collect();
+                let block = match &blockstates {
+                    schemas::BlockStates::Variants { variants } => {
+                        let meshes: IndexMap<String, Arc<ModelMesh>> = variants
+                            .iter()
+                            .map(|(variant_id, variant)| {
+                                let mesh = ModelMesh::bake(
+                                    [variant],
+                                    &*self.resource_provider,
+                                    &block_atlas,
+                                )
+                                .unwrap();
+                                (variant_id.clone(), Arc::new(mesh))
+                            })
+                            .collect();
 
-                    Block::Variants(meshes)
-                },
-                schemas::BlockStates::Multipart { cases } => {
-                    Block::Multipart(Multipart {
+                        Block::Variants(meshes)
+                    }
+                    schemas::BlockStates::Multipart { cases } => Block::Multipart(Multipart {
                         cases: cases.clone(),
                         keys: RwLock::new(IndexMap::new()),
-                    })
-                },
-            };
+                    }),
+                };
 
-            block_manager.blocks.insert(String::from(block_name.as_ref()), block);
-        });
+                block_manager
+                    .blocks
+                    .insert(String::from(block_name.as_ref()), block);
+            });
 
         block_atlas.upload(&wm);
-
     }
-
 }

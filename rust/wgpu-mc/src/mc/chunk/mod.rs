@@ -1,4 +1,4 @@
-use crate::mc::block::{BlockPos, ChunkBlockState, BlockstateKey};
+use crate::mc::block::{BlockPos, BlockstateKey, ChunkBlockState};
 use std::collections::HashMap;
 
 use crate::render::world::chunk::BakedChunkLayer;
@@ -163,8 +163,8 @@ impl ChunkManager {
                 Some(layers) => {
                     glass.extend(&layers.glass);
                     terrain.extend(&layers.terrain);
-                },
-                None => {},
+                }
+                None => {}
             };
         });
 

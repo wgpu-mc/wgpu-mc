@@ -11,7 +11,12 @@ impl ResourcePath {
     pub fn prepend(&self, a: &str) -> Self {
         let mut split = self.0.split(":");
 
-        Self(format!("{}:{}{}", split.next().unwrap(), a, split.next().unwrap()))
+        Self(format!(
+            "{}:{}{}",
+            split.next().unwrap(),
+            a,
+            split.next().unwrap()
+        ))
     }
 }
 
@@ -22,7 +27,6 @@ impl Display for ResourcePath {
 }
 
 impl From<&str> for ResourcePath {
-
     fn from(string: &str) -> Self {
         // Parse the rest of the namespace
         let mut split = string.split(':').collect::<Vec<&str>>();
@@ -30,14 +34,12 @@ impl From<&str> for ResourcePath {
         match (split.get(0), split.get(1)) {
             (Some(path), None) => Self(format!("minecraft:{}", path)),
             (Some(namespace), Some(path)) => Self(format!("{}:{}", namespace, path)),
-            _ => Self("".into())
+            _ => Self("".into()),
         }
     }
-
 }
 
 impl From<&String> for ResourcePath {
-
     fn from(string: &String) -> Self {
         // Parse the rest of the namespace
         let mut split = string.split(':').collect::<Vec<&str>>();
@@ -45,14 +47,12 @@ impl From<&String> for ResourcePath {
         match (split.get(0), split.get(1)) {
             (Some(path), None) => Self(format!("minecraft:{}", path)),
             (Some(namespace), Some(path)) => Self(format!("{}:{}", namespace, path)),
-            _ => Self("".into())
+            _ => Self("".into()),
         }
     }
-
 }
 
 impl From<String> for ResourcePath {
-
     fn from(string: String) -> Self {
         // Parse the rest of the namespace
         let mut split = string.split(':').collect::<Vec<&str>>();
@@ -60,10 +60,9 @@ impl From<String> for ResourcePath {
         match (split.get(0), split.get(1)) {
             (Some(path), None) => Self(format!("minecraft:{}", path)),
             (Some(namespace), Some(path)) => Self(string),
-            _ => Self("".into())
+            _ => Self("".into()),
         }
     }
-
 }
 
 impl From<(&str, &str)> for ResourcePath {

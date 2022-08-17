@@ -206,7 +206,7 @@ impl RenderPipelineManager {
         {
             self.bind_group_layouts
                 .write()
-                .extend(Self::create_bind_group_layouts(&wm.wgpu_state.device).into_iter())
+                .extend(Self::create_bind_group_layouts(&wm.wgpu_state.device()).into_iter())
         }
 
         let pipeline_layouts = Self::build_pipeline_layouts(wm, wm_pipelines)

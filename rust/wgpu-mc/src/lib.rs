@@ -31,7 +31,7 @@ This is a trait that provides a block state key for a given coordinate.
 
 ## Entity Rendering
 
-To render entities, you need an entity model. wgpu-mc makes no assumptions about how entity models are defined, 
+To render entities, you need an entity model. wgpu-mc makes no assumptions about how entity models are defined,
 so it's up to you to provide them to wgpu-mc.
 
 See the [render::entity] module for an example of rendering an example entity.
@@ -47,137 +47,84 @@ pub mod render;
 pub mod texture;
 pub mod util;
 
+pub use minecraft_assets;
 pub use naga;
 pub use wgpu;
-pub use minecraft_assets;
 
 use crate::camera::UniformMatrixHelper;
 
 use crate::mc::MinecraftState;
 
-use raw_window_handle::HasRawWindowHandle;
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
 use std::collections::HashMap;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, RenderPassDescriptor, TextureFormat, TextureViewDescriptor};
+use wgpu::{
+    Adapter, Backends, BindGroupDescriptor, BindGroupEntry, BindingResource, BufferDescriptor,
+    Device, Features, PowerPreference, Queue, RenderPassDescriptor, Surface, SurfaceConfiguration,
+    SurfaceError, TextureFormat, TextureViewDescriptor,
+};
 
 use crate::texture::TextureSamplerView;
 
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::mc::resource::ResourceProvider;
 
 use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
 use arc_swap::ArcSwap;
+use parking_lot::RwLock;
+use wgpu_biolerless::{DeviceRequirements, State, StateBuilder, WindowSize};
 
 use crate::render::atlas::Atlas;
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 
 use crate::util::WmArena;
 
-pub struct WgpuState {
-    pub surface: Option<wgpu::Surface>,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub surface_config: Option<ArcSwap<wgpu::SurfaceConfiguration>>,
-    pub size: Option<ArcSwap<WindowSize>>,
-}
-
 ///The main wgpu-mc renderer struct. This mostly just contains wgpu state.
 ///Resources pertaining to Minecraft go in `MinecraftState`
 #[derive(Clone)]
 pub struct WmRenderer {
-    pub wgpu_state: Arc<WgpuState>,
+    pub wgpu_state: Arc<State>,
 
-    pub depth_texture: Arc<ArcSwap<texture::TextureSamplerView>>,
+    pub depth_texture: Arc<ArcSwap<TextureSamplerView>>,
 
     pub render_pipeline_manager: Arc<ArcSwap<RenderPipelineManager>>,
 
-    pub mc: Arc<mc::MinecraftState>,
-}
-
-#[derive(Copy, Clone)]
-pub struct WindowSize {
-    pub width: u32,
-    pub height: u32,
-}
-
-pub trait HasWindowSize {
-    fn get_window_size(&self) -> WindowSize;
+    pub mc: Arc<MinecraftState>,
 }
 
 impl WmRenderer {
     ///This is a convenience method;
     ///
-    /// This takes in a raw window handle and returns a [WgpuState], which is then used to
+    /// This takes in a raw window handle and returns a [State], which is then used to
     /// initialize a [WmRenderer].
-    pub async fn init_wgpu<W: HasRawWindowHandle + HasWindowSize>(window: &W) -> WgpuState {
-        let size = window.get_window_size();
-
+    pub async fn init_wgpu<W: WindowSize>(window: W) -> anyhow::Result<State> {
         //Vulkan works just fine, the issue is that using RenderDoc + Vulkan makes it hang on launch
         //about 90% of the time. DX12 is much more stable
         #[cfg(target_os = "windows")]
-        let instance = wgpu::Instance::new(wgpu::Backends::DX12);
+        let backend = Backends::DX12;
         #[cfg(not(target_os = "windows"))]
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
-
-        let surface = unsafe { instance.create_surface(window) };
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: false,
-                compatible_surface: Some(&surface),
+        let backend = Backends::PRIMARY;
+        StateBuilder::new()
+            .window(window)
+            .power_pref(PowerPreference::HighPerformance)
+            .device_requirements(DeviceRequirements {
+                features: Features::default() | Features::DEPTH_CLIP_CONTROL,
+                limits: Default::default(),
             })
+            .format(TextureFormat::Bgra8Unorm)
+            .backends(backend)
+            .build()
             .await
-            .unwrap();
-
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    features: wgpu::Features::default() | wgpu::Features::DEPTH_CLIP_CONTROL,
-                    limits: wgpu::Limits::default(),
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
-
-        let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8Unorm,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
-        };
-
-        surface.configure(&device, &surface_config);
-
-        WgpuState {
-            surface: Some(surface),
-            adapter,
-            device,
-            queue,
-            surface_config: Some(ArcSwap::new(Arc::new(surface_config))),
-            size: Some(ArcSwap::new(Arc::new(size))),
-        }
     }
 
-    pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
-        let pipelines = render::pipeline::RenderPipelineManager::new(resource_provider.clone());
+    pub fn new(wgpu_state: State, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
+        let pipelines = RenderPipelineManager::new(resource_provider.clone());
 
         let mc = MinecraftState::new(resource_provider);
-        let surface_config = &wgpu_state.surface_config.as_ref().unwrap().load();
 
-        let depth_texture = TextureSamplerView::create_depth_texture(
-            &wgpu_state.device,
-            wgpu::Extent3d {
-                width: surface_config.width,
-                height: surface_config.height,
-                depth_or_array_layers: 1
-            },
-            "depth texture",
-        );
+        let depth_texture = TextureSamplerView::create_depth_texture(&wgpu_state);
 
         Self {
             wgpu_state: Arc::new(wgpu_state),
@@ -223,36 +170,19 @@ impl WmRenderer {
         self.mc.init_camera(self);
     }
 
-    pub fn resize(&self, new_size: WindowSize) {
-        if new_size.width == 0 || new_size.height == 0 {
+    pub fn resize(&self, new_size: (u32, u32)) {
+        if !self.wgpu_state.resize(new_size) {
             return;
         }
 
-        let mut surface_config = (*self.wgpu_state.surface_config.as_ref().unwrap().load_full()).clone();
-
-        surface_config.width = new_size.width;
-        surface_config.height = new_size.height;
-
-        self.wgpu_state
-            .surface
-            .as_ref()
-            .unwrap()
-            .configure(&self.wgpu_state.device, &surface_config);
-
         let mut new_camera = *self.mc.camera.load_full();
 
-        new_camera.aspect = surface_config.width as f32 / surface_config.height as f32;
+        new_camera.aspect = new_size.0 as f32 / new_size.1 as f32;
         self.mc.camera.store(Arc::new(new_camera));
 
         self.depth_texture
-            .store(Arc::new(texture::TextureSamplerView::create_depth_texture(
-                &self.wgpu_state.device,
-                wgpu::Extent3d {
-                    width: surface_config.width,
-                    height: surface_config.height,
-                    depth_or_array_layers: 1
-                },
-                "depth_texture",
+            .store(Arc::new(TextureSamplerView::create_depth_texture(
+                &self.wgpu_state,
             )));
     }
 
@@ -260,8 +190,8 @@ impl WmRenderer {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
-        let surface_config = self.wgpu_state.surface_config.as_ref().unwrap().load();
-        camera.aspect = surface_config.width as f32 / surface_config.height as f32;
+        let (width, height) = self.wgpu_state.size();
+        camera.aspect = width as f32 / height as f32;
 
         let uniforms = UniformMatrixHelper {
             view_proj: camera.build_view_projection_matrix().into(),
@@ -269,10 +199,10 @@ impl WmRenderer {
 
         self.mc.camera.store(Arc::new(camera));
 
-        self.wgpu_state.queue.write_buffer(
+        self.wgpu_state.write_buffer(
             (*self.mc.camera_buffer.load_full()).as_ref().unwrap(),
             0,
-            bytemuck::cast_slice(&[uniforms]),
+            &[uniforms],
         );
     }
 
@@ -282,40 +212,39 @@ impl WmRenderer {
         let buf = self.mc.animated_block_buffer.borrow().load_full();
 
         if buf.is_none() {
-            let animated_block_buffer = self.wgpu_state.device.create_buffer(&BufferDescriptor {
+            let animated_block_buffer = self.wgpu_state.device().create_buffer(&BufferDescriptor {
                 label: None,
                 size: (d.len() * 8) as wgpu::BufferAddress,
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            let animated_block_bind_group = self
-                .wgpu_state
-                .device
-                .create_bind_group(&BindGroupDescriptor {
-                    label: None,
-                    layout: self
-                        .render_pipeline_manager
-                        .load()
-                        .bind_group_layouts
-                        .read()
-                        .get("ssbo")
-                        .unwrap(),
-                    entries: &[BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(
-                            animated_block_buffer.as_entire_buffer_binding(),
-                        ),
-                    }],
-                });
+            let animated_block_bind_group = self.wgpu_state.create_bind_group(
+                self.render_pipeline_manager
+                    .load()
+                    .bind_group_layouts
+                    .read()
+                    .get("ssbo")
+                    .unwrap(),
+                &[BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::Buffer(
+                        animated_block_buffer.as_entire_buffer_binding(),
+                    ),
+                }],
+            );
 
-            self.mc.animated_block_buffer.store(Arc::new(Some(animated_block_buffer)));
-            self.mc.animated_block_bind_group.store(Arc::new(Some(animated_block_bind_group)));
+            self.mc
+                .animated_block_buffer
+                .store(Arc::new(Some(animated_block_buffer)));
+            self.mc
+                .animated_block_bind_group
+                .store(Arc::new(Some(animated_block_bind_group)));
         }
 
-        self.wgpu_state.queue.write_buffer(
+        self.wgpu_state.write_buffer(
             (**self.mc.animated_block_buffer.load()).as_ref().unwrap(),
             0,
-            bytemuck::cast_slice(d),
+            d,
         );
     }
 
@@ -330,51 +259,52 @@ impl WmRenderer {
         // );
     }
 
-    pub fn render(&self, wm_pipelines: &[&dyn WmPipeline], output_texture_view: &wgpu::TextureView) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(
+        &self,
+        wm_pipelines: &[&dyn WmPipeline],
+        output_texture_view: &TextureViewDescriptor,
+    ) -> Result<(), SurfaceError> {
         let _span_ = span!(Level::TRACE, "render").entered();
-
-        let mut encoder =
-            self.wgpu_state
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                });
 
         let depth_texture = self.depth_texture.load();
         let mut arena = WmArena::new(8000);
 
-        {
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: None,
-                color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &output_texture_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
+        self.wgpu_state.render(
+            |view, mut encoder, state| {
+                {
+                    let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                        label: None,
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.0,
+                                    g: 0.0,
+                                    b: 0.0,
+                                    a: 1.0,
+                                }),
+                                store: true,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(1.0),
+                                store: true,
+                            }),
+                            stencil_ops: None,
                         }),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-            });
+                    });
 
-            for &wm_pipeline in wm_pipelines {
-                wm_pipeline.render(self, &mut render_pass, &mut arena);
-            }
-        }
-
-        self.wgpu_state.queue.submit(iter::once(encoder.finish()));
+                    for &wm_pipeline in wm_pipelines {
+                        wm_pipeline.render(self, &mut render_pass, &mut arena);
+                    }
+                }
+                encoder
+            },
+            output_texture_view,
+        )?;
 
         Ok(())
     }
@@ -382,7 +312,7 @@ impl WmRenderer {
     pub fn get_backend_description(&self) -> String {
         format!(
             "wgpu 0.12 ({:?})",
-            self.wgpu_state.adapter.get_info().backend
+            self.wgpu_state.adapter().get_info().backend
         )
     }
 }

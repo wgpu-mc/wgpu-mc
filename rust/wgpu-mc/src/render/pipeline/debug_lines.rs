@@ -10,7 +10,10 @@ use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
 use bytemuck::{Pod, Zeroable};
 use cgmath::Rad;
-use wgpu::{BindGroupDescriptor, BindGroupEntry};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferUsages, DepthStencilState, PrimitiveState};
+use wgpu_biolerless::{
+    FragmentShaderState, ModuleSrc, PipelineBuilder, ShaderModuleSources, VertexShaderState,
+};
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
@@ -47,13 +50,16 @@ impl WmPipeline for DebugLinesPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/debug_lines".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/debug_lines.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/debug_lines.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    wm.wgpu_state.device(),
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
@@ -75,12 +81,7 @@ impl WmPipeline for DebugLinesPipeline {
         map.insert(
             "wgpu_mc:layouts/debug_lines".into(),
             wm.wgpu_state
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Debug Lines Pipeline Layout"),
-                    bind_group_layouts: &[layouts.get("matrix4").unwrap()],
-                    push_constant_ranges: &[],
-                }),
+                .create_pipeline_layout(&[layouts.get("matrix4").unwrap()], &[]),
         );
 
         map
@@ -96,17 +97,15 @@ impl WmPipeline for DebugLinesPipeline {
 
         map.insert(
             "wgpu_mc:pipelines/debug_lines".into(),
-            wm.wgpu_state
-                .device
-                .create_render_pipeline(&RenderPipelineDescriptor {
-                    label: None,
-                    layout: Some(layouts.get("wgpu_mc:layouts/debug_lines").unwrap()),
-                    vertex: wgpu::VertexState {
-                        module: shader.get_vert().0,
+            wm.wgpu_state.create_pipeline(
+                PipelineBuilder::new()
+                    .layout(layouts.get("wgpu_mc:layouts/debug_lines").unwrap())
+                    .vertex(VertexShaderState {
+                        // module: shader.get_vert().0,
                         entry_point: shader.get_vert().1,
                         buffers: &[DebugLineVertex::desc()],
-                    },
-                    primitive: wgpu::PrimitiveState {
+                    })
+                    .primitive(PrimitiveState {
                         topology: wgpu::PrimitiveTopology::LineList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
@@ -114,33 +113,31 @@ impl WmPipeline for DebugLinesPipeline {
                         unclipped_depth: false,
                         polygon_mode: Default::default(),
                         conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
+                    })
+                    .depth_stencil(DepthStencilState {
                         format: wgpu::TextureFormat::Depth32Float,
                         depth_write_enabled: true,
                         depth_compare: wgpu::CompareFunction::Always,
                         stencil: wgpu::StencilState::default(),
                         bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: shader.get_frag().0,
+                    })
+                    .fragment(FragmentShaderState {
+                        // module: ,
                         entry_point: shader.get_frag().1,
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState {
                                 color: wgpu::BlendComponent::REPLACE,
                                 alpha: wgpu::BlendComponent::REPLACE,
                             }),
                             write_mask: Default::default(),
-                        }],
-                    }),
-                    multiview: None,
-                }),
+                        })],
+                    })
+                    .shader_src(ShaderModuleSources::Multi(
+                        ModuleSrc::Ref(shader.get_vert().0),
+                        ModuleSrc::Ref(shader.get_frag().0),
+                    )),
+            ),
         );
 
         map
@@ -181,40 +178,28 @@ impl WmPipeline for DebugLinesPipeline {
             view_proj: rotation_matrix.into(),
         };
 
-        let rotation_buffer = arena.alloc(wm.wgpu_state.device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::bytes_of(&helper),
-                usage: wgpu::BufferUsages::UNIFORM,
-            },
-        ));
-
-        let rotation_matrix_bind_group = arena.alloc(
+        let rotation_buffer = arena.alloc(
             wm.wgpu_state
-                .device
-                .create_bind_group(&BindGroupDescriptor {
-                    label: None,
-                    layout: wm
-                        .render_pipeline_manager
-                        .load_full()
-                        .bind_group_layouts
-                        .read()
-                        .get("matrix4")
-                        .unwrap(),
-                    entries: &[BindGroupEntry {
-                        binding: 0,
-                        resource: rotation_buffer.as_entire_binding(),
-                    }],
-                }),
+                .create_buffer(&[helper], BufferUsages::UNIFORM),
         );
 
-        let vertex_buffer = arena.alloc(wm.wgpu_state.device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            },
-        ));
+        let rotation_matrix_bind_group = arena.alloc(
+            wm.wgpu_state.create_bind_group(
+                wm.render_pipeline_manager
+                    .load_full()
+                    .bind_group_layouts
+                    .read()
+                    .get("matrix4")
+                    .unwrap(),
+                &[BindGroupEntry {
+                    binding: 0,
+                    resource: rotation_buffer.as_entire_binding(),
+                }],
+            ),
+        );
+
+        let vertex_buffer =
+            arena.alloc(wm.wgpu_state.create_buffer(vertices, BufferUsages::VERTEX));
 
         render_pass.set_bind_group(0, rotation_matrix_bind_group, &[]);
         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));

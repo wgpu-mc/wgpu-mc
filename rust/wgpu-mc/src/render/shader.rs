@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 
-use crate::mc::resource::{ResourceProvider, ResourcePath};
+use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::wgpu::{ShaderModule, ShaderModuleDescriptor};
 
 pub trait WmShader: Send + Sync {
-    fn get_frag(&self) -> (&wgpu::ShaderModule, &str);
+    fn get_frag(&self) -> (&ShaderModule, &str);
 
-    fn get_vert(&self) -> (&wgpu::ShaderModule, &str);
+    fn get_vert(&self) -> (&ShaderModule, &str);
 }
 
 #[derive(Debug)]
@@ -28,18 +28,16 @@ impl WgslShader {
 
         let shader_src = std::str::from_utf8(&shader_src).ok()?;
 
-        let module = device.create_shader_module(&ShaderModuleDescriptor {
+        let module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(Cow::from(shader_src)),
         });
 
-        Some(
-            Self {
-                shader: module,
-                frag_entry,
-                vert_entry,
-            }
-        )
+        Some(Self {
+            shader: module,
+            frag_entry,
+            vert_entry,
+        })
     }
 }
 
@@ -55,8 +53,8 @@ impl WmShader for WgslShader {
 
 #[derive(Debug)]
 pub struct GlslShader {
-    pub frag: wgpu::ShaderModule,
-    pub vert: wgpu::ShaderModule,
+    pub frag: ShaderModule,
+    pub vert: ShaderModule,
 }
 
 impl GlslShader {
@@ -72,20 +70,20 @@ impl GlslShader {
         let frag_src = std::str::from_utf8(&frag_src).unwrap();
         let vert_src = std::str::from_utf8(&vert_src).unwrap();
 
-        let frag_module = device.create_shader_module(&ShaderModuleDescriptor {
+        let frag_module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Glsl {
                 shader: Cow::from(frag_src),
-                stage: crate::naga::ShaderStage::Fragment,
+                stage: naga::ShaderStage::Fragment,
                 defines: Default::default(),
             },
         });
 
-        let vert_module = device.create_shader_module(&ShaderModuleDescriptor {
+        let vert_module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Glsl {
                 shader: Cow::from(vert_src),
-                stage: crate::naga::ShaderStage::Vertex,
+                stage: naga::ShaderStage::Vertex,
                 defines: Default::default(),
             },
         });

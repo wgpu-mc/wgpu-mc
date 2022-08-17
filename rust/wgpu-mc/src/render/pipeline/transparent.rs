@@ -5,6 +5,8 @@ use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
 use std::collections::HashMap;
+use wgpu::{DepthStencilState, PrimitiveState};
+use wgpu_biolerless::{FragmentShaderState, PipelineBuilder, VertexShaderState};
 
 pub struct TransparentPipeline;
 
@@ -16,13 +18,16 @@ impl WmPipeline for TransparentPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/transparent".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/transparent.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/transparent.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    wm.wgpu_state.device(),
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
@@ -43,17 +48,14 @@ impl WmPipeline for TransparentPipeline {
 
         map.insert(
             "wgpu_mc:layouts/transparent".into(),
-            wm.wgpu_state
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Transparent Pipeline Layout"),
-                    bind_group_layouts: &[
-                        //&layouts.texture, &layouts.matrix4, &layouts.get("cubemap").unwrap()
-                        layouts.get("texture").unwrap(),
-                        layouts.get("matrix4").unwrap(),
-                    ],
-                    push_constant_ranges: &[],
-                }),
+            wm.wgpu_state.create_pipeline_layout(
+                &[
+                    //&layouts.texture, &layouts.matrix4, &layouts.get("cubemap").unwrap()
+                    layouts.get("texture").unwrap(),
+                    layouts.get("matrix4").unwrap(),
+                ],
+                &[],
+            ),
         );
 
         map
@@ -69,17 +71,27 @@ impl WmPipeline for TransparentPipeline {
 
         map.insert(
             "wgpu_mc:pipelines/transparent".into(),
-            wm.wgpu_state
-                .device
-                .create_render_pipeline(&RenderPipelineDescriptor {
-                    label: None,
-                    layout: Some(layouts.get("wgpu_mc:layouts/transparent").unwrap()),
-                    vertex: wgpu::VertexState {
-                        module: shader.get_vert().0,
+            wm.wgpu_state.create_pipeline(
+                PipelineBuilder::new()
+                    .layout(layouts.get("wgpu_mc:layouts/transparent").unwrap())
+                    .vertex(VertexShaderState {
+                        // module: shader.get_vert().0,
                         entry_point: shader.get_vert().1,
                         buffers: &[TerrainVertex::desc()],
-                    },
-                    primitive: wgpu::PrimitiveState {
+                    })
+                    .fragment(FragmentShaderState {
+                        // module: shader.get_frag().0,
+                        entry_point: shader.get_frag().1,
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: wgpu::TextureFormat::Bgra8Unorm,
+                            blend: Some(wgpu::BlendState {
+                                color: wgpu::BlendComponent::REPLACE,
+                                alpha: wgpu::BlendComponent::REPLACE,
+                            }),
+                            write_mask: Default::default(),
+                        })],
+                    })
+                    .primitive(PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
@@ -87,33 +99,15 @@ impl WmPipeline for TransparentPipeline {
                         unclipped_depth: false,
                         polygon_mode: Default::default(),
                         conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
+                    })
+                    .depth_stencil(DepthStencilState {
                         format: wgpu::TextureFormat::Depth32Float,
                         depth_write_enabled: true,
                         depth_compare: wgpu::CompareFunction::Less,
                         stencil: wgpu::StencilState::default(),
                         bias: wgpu::DepthBiasState::default(),
                     }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: shader.get_frag().0,
-                        entry_point: shader.get_frag().1,
-                        targets: &[wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Bgra8Unorm,
-                            blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent::REPLACE,
-                                alpha: wgpu::BlendComponent::REPLACE,
-                            }),
-                            write_mask: Default::default(),
-                        }],
-                    }),
-                    multiview: None,
-                }),
+            ),
         );
 
         map

@@ -1,11 +1,11 @@
 use crate::mc::resource::ResourceProvider;
-use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS, Atlas};
+use crate::render::atlas::{Atlas, TextureManager, ATLAS_DIMENSIONS};
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use crate::texture::UV;
-use cgmath::{Matrix3, Vector3, Deg};
+use bytemuck::{Pod, Zeroable};
+use cgmath::{Deg, Matrix3, Vector3};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
-use bytemuck::{Pod, Zeroable};
 use parking_lot::RwLock;
 
 pub type BlockPos = (i32, u16, i32);
@@ -15,31 +15,27 @@ pub struct BlockstateKey {
     ///An index into [BlockManager]
     pub block: u16,
     ///Used to quickly figure out which [ModelMesh] a [Block] should return without having to hash strings
-    pub augment: u16
+    pub augment: u16,
 }
 
 impl BlockstateKey {
-
     pub fn pack(&self) -> u32 {
         ((self.block as u32) << 16) | (self.augment as u32)
     }
-
 }
 
 impl From<(u16, u16)> for BlockstateKey {
     fn from(tuple: (u16, u16)) -> Self {
-        Self { block: tuple.0, augment: tuple.1 }
+        Self {
+            block: tuple.0,
+            augment: tuple.1,
+        }
     }
 }
 
 impl From<u32> for BlockstateKey {
     fn from(int: u32) -> Self {
-        Self::from(
-            (
-                (int >> 16) as u16,
-                (int & 0xffff) as u16
-            )
-        )
+        Self::from(((int >> 16) as u16, (int & 0xffff) as u16))
     }
 }
 
@@ -47,15 +43,13 @@ impl From<u32> for BlockstateKey {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ChunkBlockState {
     Air,
-    State(BlockstateKey)
+    State(BlockstateKey),
 }
 
 impl ChunkBlockState {
-
     pub fn is_air(&self) -> bool {
         matches!(self, Self::Air)
     }
-
 }
 
 use super::resource::ResourcePath;
@@ -89,24 +83,36 @@ pub enum CubeOrComplexMesh {
     Complex(Vec<BlockModelFaces>),
 }
 
-fn recurse_model_parents(model: &schemas::Model, resource_provider: &dyn ResourceProvider, models: &mut Vec<ResourcePath>) {
+fn recurse_model_parents(
+    model: &schemas::Model,
+    resource_provider: &dyn ResourceProvider,
+    models: &mut Vec<ResourcePath>,
+) {
     match &model.parent {
         Some(parent_path_string) => {
-            let parent_path: ResourcePath = ResourcePath::from(parent_path_string).prepend("models/").append(".json");
+            let parent_path: ResourcePath = ResourcePath::from(parent_path_string)
+                .prepend("models/")
+                .append(".json");
             recurse_model_parents(
                 &serde_json::from_str(
-                    &resource_provider.get_string(&parent_path).expect(&parent_path.0)
-                ).unwrap(), 
-                resource_provider, 
-                models
+                    &resource_provider
+                        .get_string(&parent_path)
+                        .expect(&parent_path.0),
+                )
+                .unwrap(),
+                resource_provider,
+                models,
             );
             models.push(parent_path);
-        },
-        None => {},
+        }
+        None => {}
     }
 }
 
-fn resolve_model(model: schemas::Model, resource_provider: &dyn ResourceProvider) -> schemas::Model {
+fn resolve_model(
+    model: schemas::Model,
+    resource_provider: &dyn ResourceProvider,
+) -> schemas::Model {
     if model.parent.is_none() {
         return model;
     }
@@ -114,34 +120,33 @@ fn resolve_model(model: schemas::Model, resource_provider: &dyn ResourceProvider
     let mut parent_paths = Vec::new();
     recurse_model_parents(&model, resource_provider, &mut parent_paths);
 
-    let parents: Vec<schemas::Model> = parent_paths.iter().map(|parent_path| {
-        serde_json::from_str(
-            &resource_provider.get_string(parent_path).unwrap()
-        ).unwrap()
-    }).collect();
+    let parents: Vec<schemas::Model> = parent_paths
+        .iter()
+        .map(|parent_path| {
+            serde_json::from_str(&resource_provider.get_string(parent_path).unwrap()).unwrap()
+        })
+        .collect();
 
     let mut schema = ModelResolver::resolve_model(
-        [&model].into_iter().chain(parents.iter().map(|parent_borrow| parent_borrow))
+        [&model]
+            .into_iter()
+            .chain(parents.iter().map(|parent_borrow| parent_borrow)),
     );
 
     if let Some(textures) = &mut schema.textures {
         let copy = textures.clone();
 
-        textures.iter_mut()
-            .for_each(|(key, texture)| {
-                if texture.reference().is_some() {
-                    texture.0 = texture.resolve(&copy).unwrap().to_string();
-                }
-            })
+        textures.iter_mut().for_each(|(key, texture)| {
+            if texture.reference().is_some() {
+                texture.0 = texture.resolve(&copy).unwrap().to_string();
+            }
+        })
     }
 
     schema
 }
 
-fn get_atlas_uv(
-    face: &schemas::models::ElementFace,
-    block_atlas: &Atlas
-) -> Option<UV> {
+fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Option<UV> {
     let atlas_map = block_atlas.uv_map.read();
 
     let atlas_uv = atlas_map.get(&(&face.texture.0).into())?;
@@ -156,27 +161,27 @@ fn get_atlas_uv(
     Some(adjusted_uv)
 }
 pub struct RenderSettings {
-    pub opaque: bool
+    pub opaque: bool,
 }
 
 #[derive(Debug)]
 pub enum MeshBakeError {
     UnresolvedTextureReference(String),
     UnresolvedResourcePath(ResourcePath),
-    JsonError(serde_json::Error)
+    JsonError(serde_json::Error),
 }
 
 ///A block model which has been baked into a mesh and is ready for rendering
 #[derive(Debug)]
 pub struct ModelMesh {
-    pub models: Vec<(CubeOrComplexMesh, bool)>
+    pub models: Vec<(CubeOrComplexMesh, bool)>,
 }
 
 impl ModelMesh {
     pub fn bake<'a>(
         variants: impl IntoIterator<Item = &'a schemas::blockstates::Variant>,
         resource_provider: &dyn ResourceProvider,
-        block_atlas: &Atlas
+        block_atlas: &Atlas,
     ) -> Result<Self, MeshBakeError> {
         let models = variants.into_iter()
             .flat_map(|variant| variant.models())
@@ -428,8 +433,6 @@ impl ModelMesh {
                 ))
             }).collect::<Result<Vec<_>, MeshBakeError>>()?;
 
-        Ok(Self {
-            models
-        })
+        Ok(Self { models })
     }
 }

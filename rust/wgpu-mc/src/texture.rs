@@ -1,8 +1,9 @@
 use image::GenericImageView;
 
-use crate::{WgpuState, render::pipeline::RenderPipelineManager};
+use crate::render::pipeline::RenderPipelineManager;
 use std::num::NonZeroU32;
 use wgpu::Extent3d;
+use wgpu_biolerless::{State, TextureBuilder};
 
 pub type TextureId = u32;
 pub type UV = ((f32, f32), (f32, f32));
@@ -19,35 +20,17 @@ pub struct TextureSamplerView {
 impl TextureSamplerView {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn from_image_file_bytes(
-        wgpu_state: &WgpuState,
-        bytes: &[u8],
-        label: &str,
-    ) -> Result<Self, anyhow::Error> {
+    pub fn from_image_file_bytes(wgpu_state: &State, bytes: &[u8]) -> Result<Self, anyhow::Error> {
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(wgpu_state, &img, Some(label))
+        Self::from_image(wgpu_state, &img)
     }
 
     #[must_use]
-    pub fn create_depth_texture(
-        device: &wgpu::Device,
-        size: wgpu::Extent3d,
-        label: &str,
-    ) -> Self {
-        let desc = wgpu::TextureDescriptor {
-            label: Some(label),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        };
-        let texture = device.create_texture(&desc);
+    pub fn create_depth_texture(state: &State) -> Self {
+        let texture = state.create_depth_texture(Self::DEPTH_FORMAT);
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            // 4.
+        let sampler = state.device().create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -68,9 +51,8 @@ impl TextureSamplerView {
     }
 
     pub fn from_image(
-        wgpu_state: &WgpuState,
+        wgpu_state: &State,
         img: &image::DynamicImage,
-        label: Option<&str>,
     ) -> Result<Self, anyhow::Error> {
         let rgba8 = img.to_rgba8();
 
@@ -79,61 +61,36 @@ impl TextureSamplerView {
         Self::from_rgb_bytes(
             wgpu_state,
             &rgba8.as_raw()[..],
-            Extent3d {
-                width: dimensions.0,
-                height: dimensions.1,
-                depth_or_array_layers: 1,
-            },
-            label,
+            dimensions,
             wgpu::TextureFormat::Rgba8Unorm,
         )
     }
 
     pub fn from_rgb_bytes(
-        wgpu_state: &WgpuState,
+        wgpu_state: &State,
         bytes: &[u8],
-        size: wgpu::Extent3d,
-        label: Option<&str>,
+        size: (u32, u32),
         format: wgpu::TextureFormat,
     ) -> Result<Self, anyhow::Error> {
-        let texture = wgpu_state.device.create_texture(&wgpu::TextureDescriptor {
-            label,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING,
-        });
-
-        wgpu_state.queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            bytes,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: NonZeroU32::new(size.width * 4),
-                rows_per_image: NonZeroU32::new(size.height),
-            },
-            size,
+        let texture = wgpu_state.create_texture(
+            TextureBuilder::new()
+                .format(format)
+                .dimensions(size)
+                .data(bytes),
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = wgpu_state.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let sampler = wgpu_state
+            .device()
+            .create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::Repeat,
+                address_mode_v: wgpu::AddressMode::Repeat,
+                address_mode_w: wgpu::AddressMode::Repeat,
+                mag_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            });
 
         Ok(Self {
             texture,
@@ -153,14 +110,13 @@ pub struct BindableTexture {
 impl BindableTexture {
     #[must_use]
     pub fn from_tsv(
-        wgpu_state: &WgpuState,
+        wgpu_state: &State,
         pipelines: &RenderPipelineManager,
         texture: TextureSamplerView,
     ) -> Self {
-        let bind_group = wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: pipelines.bind_group_layouts.read().get("texture").unwrap(),
-            entries: &[
+        let bind_group = wgpu_state.create_bind_group(
+            pipelines.bind_group_layouts.read().get("texture").unwrap(),
+            &[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&texture.view),
@@ -168,9 +124,9 @@ impl BindableTexture {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                }
+                },
             ],
-        });
+        );
 
         Self {
             tsv: texture,

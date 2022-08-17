@@ -4,6 +4,10 @@ use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
 use std::collections::HashMap;
+use wgpu::{DepthStencilState, PrimitiveState};
+use wgpu_biolerless::{
+    FragmentShaderState, ModuleSrc, PipelineBuilder, ShaderModuleSources, VertexShaderState,
+};
 
 pub struct TerrainPipeline;
 
@@ -22,7 +26,6 @@ pub struct TerrainVertex {
 }
 
 impl TerrainVertex {
-
     const VAA: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
         0 => Float32x3,
         1 => Float32x2,
@@ -39,7 +42,7 @@ impl TerrainVertex {
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<TerrainVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::VAA
+            attributes: &Self::VAA,
         }
     }
 }
@@ -52,13 +55,16 @@ impl WmPipeline for TerrainPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/terrain".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/terrain.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/terrain.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    wm.wgpu_state.device(),
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
@@ -79,18 +85,15 @@ impl WmPipeline for TerrainPipeline {
 
         map.insert(
             "wgpu_mc:layouts/terrain".into(),
-            wm.wgpu_state
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Terrain Pipeline Layout"),
-                    bind_group_layouts: &[
-                        //&layouts.texture, &layouts.matrix4, &layouts.cubemap
-                        layouts.get("texture").unwrap(),
-                        layouts.get("matrix4").unwrap(),
-                        // layouts.get("ssbo").unwrap(),
-                    ],
-                    push_constant_ranges: &[],
-                }),
+            wm.wgpu_state.create_pipeline_layout(
+                &[
+                    //&layouts.texture, &layouts.matrix4, &layouts.cubemap
+                    layouts.get("texture").unwrap(),
+                    layouts.get("matrix4").unwrap(),
+                    // layouts.get("ssbo").unwrap(),
+                ],
+                &[],
+            ),
         );
 
         map
@@ -106,17 +109,14 @@ impl WmPipeline for TerrainPipeline {
 
         map.insert(
             "wgpu_mc:pipelines/terrain".into(),
-            wm.wgpu_state
-                .device
-                .create_render_pipeline(&RenderPipelineDescriptor {
-                    label: None,
-                    layout: Some(layouts.get("wgpu_mc:layouts/terrain").unwrap()),
-                    vertex: wgpu::VertexState {
-                        module: shader.get_vert().0,
+            wm.wgpu_state.create_pipeline(
+                PipelineBuilder::new()
+                    .layout(layouts.get("wgpu_mc:layouts/terrain").unwrap())
+                    .vertex(VertexShaderState {
                         entry_point: shader.get_vert().1,
                         buffers: &[TerrainVertex::desc()],
-                    },
-                    primitive: wgpu::PrimitiveState {
+                    })
+                    .primitive(PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
@@ -124,33 +124,30 @@ impl WmPipeline for TerrainPipeline {
                         unclipped_depth: false,
                         polygon_mode: Default::default(),
                         conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
+                    })
+                    .depth_stencil(DepthStencilState {
                         format: wgpu::TextureFormat::Depth32Float,
                         depth_write_enabled: true,
                         depth_compare: wgpu::CompareFunction::Less,
                         stencil: wgpu::StencilState::default(),
                         bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: shader.get_frag().0,
+                    })
+                    .fragment(FragmentShaderState {
                         entry_point: shader.get_frag().1,
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState {
                                 color: wgpu::BlendComponent::OVER,
                                 alpha: wgpu::BlendComponent::OVER,
                             }),
                             write_mask: Default::default(),
-                        }],
-                    }),
-                    multiview: None,
-                }),
+                        })],
+                    })
+                    .shader_src(ShaderModuleSources::Multi(
+                        ModuleSrc::Ref(shader.get_frag().0),
+                        ModuleSrc::Ref(shader.get_vert().0),
+                    )),
+            ),
         );
 
         map

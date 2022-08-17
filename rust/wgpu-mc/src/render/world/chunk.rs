@@ -1,16 +1,19 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use crate::mc::chunk::{
     BlockStateProvider, Chunk, WorldBuffers, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME,
     CHUNK_WIDTH,
 };
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::mc::block::{ChunkBlockState, CubeOrComplexMesh, BlockstateKey, BlockMeshVertex, ModelMesh};
+use crate::mc::block::{
+    BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
+};
 use bytemuck::Pod;
+use wgpu::BufferUsages;
 
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
-use crate::mc::{BlockManager};
+use crate::mc::BlockManager;
 use crate::WmRenderer;
 
 fn get_block<'a>(
@@ -19,11 +22,16 @@ fn get_block<'a>(
 ) -> Option<Arc<ModelMesh>> {
     let key = match state {
         ChunkBlockState::Air => return None,
-        ChunkBlockState::State(key ) => key,
+        ChunkBlockState::State(key) => key,
     };
 
-    Some(block_manager.blocks.get_index(key.block as usize)?
-        .1.get_model(key.augment))
+    Some(
+        block_manager
+            .blocks
+            .get_index(key.block as usize)?
+            .1
+            .get_model(key.augment),
+    )
 }
 
 #[derive(Debug)]
@@ -54,72 +62,37 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
         WorldBuffers {
             top: (
                 wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&self.top[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    }),
+                    .create_buffer(&self.top[..], BufferUsages::VERTEX),
                 self.top.len(),
             ),
             bottom: (
                 wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&self.bottom[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    }),
+                    .create_buffer(&self.bottom[..], BufferUsages::VERTEX),
                 self.bottom.len(),
             ),
             north: (
                 wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&self.north[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    }),
+                    .create_buffer(&self.north[..], BufferUsages::VERTEX),
                 self.north.len(),
             ),
             south: (
                 wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&self.south[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    }),
+                    .create_buffer(&self.south[..], BufferUsages::VERTEX),
                 self.south.len(),
             ),
             west: (
                 wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&self.west[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    }),
+                    .create_buffer(&self.west[..], BufferUsages::VERTEX),
                 self.west.len(),
             ),
             east: (
                 wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&self.east[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    }),
+                    .create_buffer(&self.east[..], BufferUsages::VERTEX),
                 self.east.len(),
             ),
             other: (
                 wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&self.nonstandard[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    }),
+                    .create_buffer(&self.nonstandard[..], BufferUsages::VERTEX),
                 self.nonstandard.len(),
             ),
         }
@@ -160,18 +133,20 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
             let y = (block_index / CHUNK_AREA) as i16;
             let z = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
 
-            let section_index = y / (CHUNK_SECTION_HEIGHT as i16);
-
             let block_state: ChunkBlockState = state_provider.get_state(x, y, z);
 
-            if block_state.is_air() { continue; }
+            if block_state.is_air() {
+                continue;
+            }
 
             let state_key = match block_state {
                 ChunkBlockState::Air => unreachable!(),
                 ChunkBlockState::State(key) => key,
             };
 
-            if !filter(state_key) { continue; }
+            if !filter(state_key) {
+                continue;
+            }
 
             let mesh = get_block(block_manager, block_state).unwrap();
 
@@ -180,8 +155,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
             match &mesh.models[0].0 {
                 CubeOrComplexMesh::Cube(model) => {
                     let render_north = {
-                        let state =
-                            get_block(block_manager, state_provider.get_state(x, y, z - 1));
+                        let state = get_block(block_manager, state_provider.get_state(x, y, z - 1));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -190,8 +164,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                     };
 
                     let render_south = {
-                        let state =
-                            get_block(block_manager, state_provider.get_state(x, y, z + 1));
+                        let state = get_block(block_manager, state_provider.get_state(x, y, z + 1));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -200,8 +173,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                     };
 
                     let render_up = {
-                        let state =
-                            get_block(block_manager, state_provider.get_state(x, y + 1, z));
+                        let state = get_block(block_manager, state_provider.get_state(x, y + 1, z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -210,8 +182,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                     };
 
                     let render_down = {
-                        let state =
-                            get_block(block_manager, state_provider.get_state(x, y - 1, z));
+                        let state = get_block(block_manager, state_provider.get_state(x, y - 1, z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -220,8 +191,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                     };
 
                     let render_west = {
-                        let state =
-                            get_block(block_manager, state_provider.get_state(x - 1, y, z));
+                        let state = get_block(block_manager, state_provider.get_state(x - 1, y, z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -230,8 +200,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                     };
 
                     let render_east = {
-                        let state =
-                            get_block(block_manager, state_provider.get_state(x + 1, y, z));
+                        let state = get_block(block_manager, state_provider.get_state(x + 1, y, z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,

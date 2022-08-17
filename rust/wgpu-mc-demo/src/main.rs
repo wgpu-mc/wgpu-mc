@@ -12,7 +12,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use wgpu_mc::mc::resource::ResourcePath;
 
 use futures::executor::block_on;
-use wgpu_mc::{HasWindowSize, wgpu, WindowSize, WmRenderer};
+use wgpu_mc::{wgpu, WindowSize, WmRenderer};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
@@ -22,10 +22,10 @@ use wgpu_mc::mc::resource::ResourceProvider;
 
 use futures::StreamExt;
 
+use arc_swap::ArcSwap;
 use fastanvil::RegionBuffer;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use std::io::Cursor;
-use arc_swap::ArcSwap;
 
 use fastanvil::pre18::JavaChunk;
 use fastnbt::de::from_bytes;
@@ -64,6 +64,14 @@ struct WinitWindowWrapper {
     window: Window,
 }
 
+impl WindowSize for WinitWindowWrapper {
+    fn window_size(&self) -> (u32, u32) {
+        let size = self.window.inner_size();
+        (size.width, size.height)
+    }
+}
+
+/*
 impl HasWindowSize for WinitWindowWrapper {
     fn get_window_size(&self) -> WindowSize {
         WindowSize {
@@ -71,7 +79,7 @@ impl HasWindowSize for WinitWindowWrapper {
             height: self.window.inner_size().height,
         }
     }
-}
+}*/
 
 unsafe impl HasRawWindowHandle for WinitWindowWrapper {
     fn raw_window_handle(&self) -> RawWindowHandle {
@@ -104,7 +112,7 @@ fn main() {
         .join("assets")
         .join("minecraft");
 
-    let wgpu_state = block_on(WmRenderer::init_wgpu(&wrapper));
+    let wgpu_state = block_on(WmRenderer::init_wgpu(&wrapper)).unwrap();
 
     let wm = WmRenderer::new(wgpu_state, rsp);
 
@@ -127,36 +135,48 @@ fn main() {
         blockstate_dir.map(|m| {
             let model = m.unwrap();
             (
-                format!("minecraft:{}", model.file_name().to_str().unwrap().replace(".json", "")),
-                format!("minecraft:blockstates/{}", model.file_name().to_str().unwrap()).into()
+                format!(
+                    "minecraft:{}",
+                    model.file_name().to_str().unwrap().replace(".json", "")
+                ),
+                format!(
+                    "minecraft:blockstates/{}",
+                    model.file_name().to_str().unwrap()
+                )
+                .into(),
             )
         })
-    }.collect::<Vec<_>>();
+    }
+    .collect::<Vec<_>>();
 
     let now = Instant::now();
 
-    wm.mc.bake_blocks(&wm, blocks.iter().map(|(a,b)| (a, b)));
+    wm.mc.bake_blocks(&wm, blocks.iter().map(|(a, b)| (a, b)));
 
     let end = Instant::now();
 
-    println!("Baked {} blocks in {}ms", wm.mc.block_manager.read().blocks.len(), end.duration_since(now).as_millis());
+    println!(
+        "Baked {} blocks in {}ms",
+        wm.mc.block_manager.read().blocks.len(),
+        end.duration_since(now).as_millis()
+    );
 
     let window = wrapper.window;
 
     begin_rendering(event_loop, window, wm);
 }
 
-fn begin_rendering(
-    event_loop: EventLoop<()>,
-    window: Window,
-    wm: WmRenderer
-) {
+fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
     let (entity, mut instances) = describe_entity(&wm);
 
     let chunk = make_chunks(&wm);
 
     {
-        wm.mc.chunks.loaded_chunks.write().insert((0, 0), ArcSwap::new(Arc::new(chunk)));
+        wm.mc
+            .chunks
+            .loaded_chunks
+            .write()
+            .insert((0, 0), ArcSwap::new(Arc::new(chunk)));
     }
 
     // wm.mc.chunks.bake_meshes(&wm, provider);
@@ -246,7 +266,13 @@ fn begin_rendering(
             Event::RedrawRequested(_) => {
                 wm.upload_camera();
 
-                wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
+                wm.update_animated_textures(
+                    (SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis()
+                        / 50) as u32,
+                );
 
                 frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
@@ -260,20 +286,16 @@ fn begin_rendering(
 
                 wm.mc.camera.store(Arc::new(camera));
 
-                let surface = wm.wgpu_state.surface.as_ref().unwrap();
-                let texture = surface.get_current_texture().unwrap();
-                let view = texture.texture.create_view(
-                    &wgpu::TextureViewDescriptor {
-                        label: None,
-                        format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                        dimension: Some(wgpu::TextureViewDimension::D2),
-                        aspect: Default::default(),
-                        base_mip_level: 0,
-                        mip_level_count: None,
-                        base_array_layer: 0,
-                        array_layer_count: None
-                    }
-                );
+                let view_desc = wgpu::TextureViewDescriptor {
+                    label: None,
+                    format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                    dimension: Some(wgpu::TextureViewDimension::D2),
+                    aspect: Default::default(),
+                    base_mip_level: 0,
+                    mip_level_count: None,
+                    base_array_layer: 0,
+                    array_layer_count: None,
+                };
 
                 let _ = wm.render(
                     &[
@@ -282,19 +304,17 @@ fn begin_rendering(
                         // &GrassPipeline,
                         // &TransparentPipeline,
                         &EntityPipeline {
-                            entities: &[
-                                &instances
-                            ]
+                            entities: &[&instances],
                         },
-                        &DebugLinesPipeline
+                        &DebugLinesPipeline,
                     ],
-                    &view
+                    &view_desc,
                 );
 
                 texture.present();
 
-                instances.instances = (0..1).map(
-                    |id| {
+                instances.instances = (0..1)
+                    .map(|id| {
                         EntityInstanceTransforms {
                             // position: ((id / 10) as f32 * 5.0, 0.0, (id % 10) as f32 * 5.0),
                             position: (0.0, 0.0, 0.0),
@@ -313,7 +333,7 @@ fn begin_rendering(
                                     roll: 0.0,
                                     scale_x: 1.0,
                                     scale_y: 1.0,
-                                    scale_z: 1.0
+                                    scale_z: 1.0,
                                 },
                                 PartTransform {
                                     x: 0.0,
@@ -328,7 +348,7 @@ fn begin_rendering(
                                     roll: spin + 30.0 + (id as f32 + 5.0),
                                     scale_x: 1.0,
                                     scale_y: 1.0,
-                                    scale_z: 1.0
+                                    scale_z: 1.0,
                                 },
                                 PartTransform {
                                     x: 0.0,
@@ -343,7 +363,7 @@ fn begin_rendering(
                                     roll: spin + (id as f32 + 5.0),
                                     scale_x: 1.0,
                                     scale_y: 1.0,
-                                    scale_z: 1.0
+                                    scale_z: 1.0,
                                 },
                                 PartTransform {
                                     x: 0.0,
@@ -358,12 +378,12 @@ fn begin_rendering(
                                     roll: spin + 150.0 + (id as f32 + 5.0),
                                     scale_x: 1.0,
                                     scale_y: 1.0,
-                                    scale_z: 1.0
-                                }
-                            ]
+                                    scale_z: 1.0,
+                                },
+                            ],
                         }
-                    }
-                ).collect();
+                    })
+                    .collect();
 
                 instances.upload(&wm);
 

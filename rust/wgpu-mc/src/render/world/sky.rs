@@ -1,4 +1,4 @@
-use wgpu::VertexAttribute;
+use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, VertexFormat, VertexStepMode};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -8,17 +8,17 @@ pub struct SkyVertex {
 
 impl SkyVertex {
     #[must_use]
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn desc<'a>() -> VertexBufferLayout<'a> {
         use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<SkyVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
+        VertexBufferLayout {
+            array_stride: mem::size_of::<SkyVertex>() as BufferAddress,
+            step_mode: VertexStepMode::Vertex,
             attributes: &[
                 //Position
-                wgpu::VertexAttribute {
+                VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: VertexFormat::Float32x3,
                 },
             ],
         }
