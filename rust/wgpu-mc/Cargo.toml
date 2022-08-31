@@ -27,4 +27,4 @@ tracing = "0.1.31"
 serde_with = "2.0.0"
 web-sys = "0.3.53"
 minecraft-assets = { git = "https://github.com/wgpu-mc/minecraft-assets.git" }
-wgpu-biolerless = { git = "https://github.com/terrarier2111/wgpu-boilerless" }
+wgpu-biolerless = { git = "https://github.com/terrarier2111/wgpu-boilerless", features = [] }
