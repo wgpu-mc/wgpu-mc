@@ -20,7 +20,6 @@ use crate::mc::resource::ResourceProvider;
 use crate::util::WmArena;
 
 use crate::wgpu::RenderPipeline;
-
 pub trait WmPipeline {
     fn name(&self) -> &'static str;
 

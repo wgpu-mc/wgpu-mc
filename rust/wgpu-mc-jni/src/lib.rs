@@ -136,12 +136,14 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         };
 
         let palette_key = storage.get(x, y as u16, z);
-        let block = palette.get(palette_key as usize).unwrap().1;
+        let (global_ref, block) = palette.get(palette_key as usize).unwrap();
 
-        if block == self.air {
+        dbg!(palette_key);
+
+        if *block == self.air {
             return ChunkBlockState::Air;
         } else {
-            return ChunkBlockState::State(block)
+            return ChunkBlockState::State(*block)
         }
     }
 }
@@ -1625,24 +1627,35 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
     packed_integer_array: jlong,
     palette: jlong
 ) {
-    let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
+    // let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
     let palette = unsafe { ((palette as usize) as *mut JavaPalette).as_ref().unwrap() };
 
-    let wm = RENDERER.get().unwrap();
-    let bm = wm.mc.block_manager.read();
-
-    // println!("{:?}", palette.indices);
-
-    (0..10).for_each(|id| {
-        let key = array.get_by_index(id);
-        match palette.get(key as usize) {
-            Some((_, blockstate_key)) => {
-                let (name, _) = bm.blocks.get_index(blockstate_key.block as usize).unwrap();
-                println!("{}", name);
-            },
-            None => {},
-        }
+    palette.store.iter().for_each(|foo| {
+        env.call_static_method(
+            "dev/birb/wgpu/render/Wgpu",
+            "debug",
+            "(Ljava/lang/Object;)V",
+            &[
+                JValue::Object(foo.0.as_obj()),
+            ],
+        ).unwrap();
     });
+
+    // let wm = RENDERER.get().unwrap();
+    // let bm = wm.mc.block_manager.read();
+    //
+    // // println!("{:?}", palette.indices);
+    //
+    // (0..10).for_each(|id| {
+    //     let key = array.get_by_index(id);
+    //     match palette.get(key as usize) {
+    //         Some((_, blockstate_key)) => {
+    //             let (name, _) = bm.blocks.get_index(blockstate_key.block as usize).unwrap();
+    //             println!("{}", name);
+    //         },
+    //         None => {},
+    //     }
+    // });
     // println!(
     //     "array val index: {} computed: {} ptr: {} raw read: {} val: {}\n{:?}",
     //     index,

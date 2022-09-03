@@ -114,7 +114,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getScaledWidth() {
-        return (int) ((double)this.getWidth() / this.scaleFactor);
+        return (int) ((double)this.getWidth() * this.scaleFactor);
     }
 
     /**
@@ -122,7 +122,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getScaledHeight() {
-        return (int) ((double)this.getHeight() / this.scaleFactor);
+        return (int) ((double)this.getHeight() * this.scaleFactor);
     }
 
     /**

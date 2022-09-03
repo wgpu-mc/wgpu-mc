@@ -5,11 +5,16 @@ import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.Window;
+import net.minecraft.network.MessageType;
+import net.minecraft.text.LiteralText;
+import net.minecraft.util.collection.PackedIntegerArray;
+
 import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
+import java.util.UUID;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 import static dev.birb.wgpu.input.WgpuKeys.*;
@@ -111,6 +116,11 @@ public class Wgpu {
 
     public static void helperSetBlockStateIndex(Object o, int blockstateKey) {
         ((RustBlockStateAccessor) o).setRustBlockStateIndex(blockstateKey);
+    }
+
+    public static void debug(Object o) {
+        MinecraftClient.getInstance().inGameHud.addChatMessage(MessageType.CHAT, new LiteralText(o.toString()), UUID.randomUUID());
+        // System.out.println(o);
     }
 
 

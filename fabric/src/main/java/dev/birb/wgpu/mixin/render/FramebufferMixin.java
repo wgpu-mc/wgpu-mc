@@ -29,7 +29,7 @@ public class FramebufferMixin {
      */
     @Overwrite
     public void delete() {
-        System.out.println("Deleted framebuffer");
+        
     }
 
     /**

@@ -114,9 +114,10 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         // assert cir.getReturnValue() == k;
     }
 
+    /**
+     * @author wgpu-mc
+     */
     @Overwrite
-    // @Inject(method = "set", at = @At("RETURN"))
-    // public void set(int index, int value, CallbackInfo ci) {
     public void set(int index, int value) {
         Validate.inclusiveBetween(0L, this.size - 1, index);
         Validate.inclusiveBetween(0L, this.maxValue, value);
@@ -133,12 +134,15 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
     // public void get(int index, CallbackInfoReturnable<Integer> cir) {
     public int get(int index) {
         Validate.inclusiveBetween(0L, (long)(this.size - 1), (long)index);
+ //I have a whole mixin into the PackedIntegerArray thing, and this *should* be calling index on the palette, which will populate
+ //it with an entry if there isn't already one, which would then immediately be reflected
         int i = this.getStorageIndex(index);
 
         long address = this.rawStoragePointer + (((long) i) * 8L);
 
         long l = UNSAFE.getLongVolatile(null, address);
 
+        // System.out.println(index + " " + address + " " + l);
         int j = (index - i * this.elementsPerLong) * this.elementBits;
         int val = (int)(l >> j & this.maxValue);
 

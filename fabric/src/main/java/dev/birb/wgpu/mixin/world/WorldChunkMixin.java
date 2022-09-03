@@ -59,8 +59,8 @@ public abstract class WorldChunkMixin {
         int originX = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
         int originZ = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
 
-        WgpuNative.createChunk(pos.x - originX, pos.z - originZ, palettePointers, storagePointers);
-        WgpuNative.bakeChunk(pos.x - originX, pos.z - originZ);
+        // WgpuNative.createChunk(pos.x - originX, pos.z - originZ, palettePointers, storagePointers);
+        // WgpuNative.bakeChunk(pos.x - originX, pos.z - originZ);
     }
 
 }

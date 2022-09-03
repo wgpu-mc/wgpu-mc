@@ -45,7 +45,8 @@ public class RustPalette<T> implements Palette<T> {
 
     @Override
     public T get(int id) {
-        return (T) WgpuNative.paletteGet(this.rustPalettePointer, id);
+        T t = (T) WgpuNative.paletteGet(this.rustPalettePointer, id);
+        return t;
     }
 
     @Override
