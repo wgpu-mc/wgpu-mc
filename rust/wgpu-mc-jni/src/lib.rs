@@ -1192,14 +1192,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createArrayPaletteStore(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jlong {
-    0
-}
-
-#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
     env: JNIEnv,
     _class: JClass,

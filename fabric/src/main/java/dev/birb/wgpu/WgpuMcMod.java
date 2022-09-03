@@ -12,10 +12,13 @@ import net.fabricmc.fabric.api.renderer.v1.RendererAccess;
 import net.fabricmc.fabric.impl.client.indigo.Indigo;
 import net.fabricmc.fabric.impl.client.indigo.IndigoMixinConfigPlugin;
 import net.fabricmc.fabric.impl.renderer.RendererAccessImpl;
+import net.minecraft.block.BlockState;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.world.chunk.Chunk;
 
+import net.minecraft.world.chunk.PalettedContainer;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,8 +45,15 @@ public class WgpuMcMod implements ClientModInitializer {
 				System.out.println("debug");
 				Chunk chunk = client.world.getChunk(client.player.getBlockPos());
 				int index = (client.player.getBlockY() + 64) / 16;
-				RustPalette<?> rustPalette = (RustPalette<?>) chunk.getSection(index).getBlockStateContainer().data.palette;
-				WgpuNative.debugPalette(0, rustPalette.getRustPointer());
+				PalettedContainer.Data<?> data = chunk.getSection(index).getBlockStateContainer().data;
+				RustPalette<?> rustPalette = (RustPalette<?>) data.palette;
+				PackedIntegerArray pia = (PackedIntegerArray) data.storage;
+//				WgpuNative.debugPalette(0, rustPalette.getRustPointer());
+
+				pia.forEach(paletteIndex -> {
+					BlockState state = (BlockState) rustPalette.get(paletteIndex);
+					int a = 0;
+				});
 			}
 		});
 	}

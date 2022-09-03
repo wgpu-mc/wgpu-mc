@@ -14,6 +14,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.function.IntConsumer;
+
 import static dev.birb.wgpu.palette.RustPalette.CLEANER;
 import static dev.birb.wgpu.render.Wgpu.UNSAFE;
 
@@ -94,6 +96,9 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         return this.paletteStorage;
     }
 
+    /**
+     * @author wgpu-mc
+     */
     @Overwrite
     // @Inject(method = "swap", at = @At("RETURN"))
     // public void swap(int index, int value, CallbackInfoReturnable<Integer> cir) {
@@ -129,13 +134,13 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         UNSAFE.putLongVolatile(null, this.rawStoragePointer + (i * 8L), data);
     }
 
+    /**
+     * @author wgpu-mc
+     */
     @Overwrite
-    // @Inject(method = "get", at = @At("RETURN"), cancellable = true)
-    // public void get(int index, CallbackInfoReturnable<Integer> cir) {
     public int get(int index) {
         Validate.inclusiveBetween(0L, (long)(this.size - 1), (long)index);
- //I have a whole mixin into the PackedIntegerArray thing, and this *should* be calling index on the palette, which will populate
- //it with an entry if there isn't already one, which would then immediately be reflected
+
         int i = this.getStorageIndex(index);
 
         long address = this.rawStoragePointer + (((long) i) * 8L);
@@ -150,8 +155,34 @@ public abstract class PackedIntegerArrayMixin implements PackedIntegerArrayAcces
         return val;
     }
 
-    // @Inject(method = "method_39892", at = @At("RETURN"))
-    // public void noClueWhatThisIs(int[] is, CallbackInfo ci) {
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public void forEach(IntConsumer action) {
+        int i = 0;
+        for(long offset=0;offset<this.data.length;offset++) {
+            long l = UNSAFE.getLongVolatile(null, this.rawStoragePointer  + (offset * 8L));
+            for (int j = 0; j < this.elementsPerLong; ++j) {
+                action.accept((int)(l & this.maxValue));
+                l >>= this.elementBits;
+                if (++i < this.size) continue;
+                return;
+            }
+        }
+    }
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public long[] getData() {
+        return this.data;
+    }
+
+    /**
+     * @author wgpu-mc
+     */
     @Overwrite
     public void method_39892(int[] is) {
         int i = this.data.length;
