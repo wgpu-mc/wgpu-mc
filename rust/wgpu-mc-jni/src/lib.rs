@@ -9,6 +9,7 @@ use arc_swap::ArcSwap;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use cgmath::{Deg, Matrix4, Point3, Vector3};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
+use wgpu_mc::naga::proc::index;
 use wgpu_mc::render::atlas::Atlas;
 use core::slice;
 use std::mem::size_of;
@@ -18,7 +19,7 @@ use gl::pipeline::{GLCommand, GlPipeline};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
     _jobject, jboolean, jbyte, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong,
-    jlongArray, jobject, jstring,
+    jlongArray, jobject, jstring, jsize, jshort,
 };
 use jni::{JNIEnv, JavaVM};
 use mc_varint::VarIntRead;
@@ -135,7 +136,7 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
             }
         };
 
-        let palette_key = storage.get(x, y as u16, z);
+        let palette_key = storage.get(x, y as i32, z);
         let (global_ref, block) = palette.get(palette_key as usize).unwrap();
 
         dbg!(palette_key);
@@ -267,7 +268,7 @@ impl BlockStateProvider for JavaBlockStateProvider {
             Some(storage) => storage,
         };
 
-        let palette_key = storage.get(x, y as u16, z);
+        let palette_key = storage.get(x, y as i32, z);
 
         let palette = unsafe {
             (self.palettes[(y as usize) / 24] as *mut JavaPalette)
@@ -328,30 +329,32 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .try_into()
         .unwrap();
 
-   let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| {
-        MinecraftBlockstateProvider { 
-            chunks: RwLock::new(HashMap::new()),
-            air: BlockstateKey {
-                block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
-                augment: 0
-            }
-        }
-    });
+    
 
-    let mut write = bsp.chunks.write();
-    write.insert((x, z), ChunkHolder {
-        palettes: *palettes,
-        storages: *storages,
-    });
+//    let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| {
+//         MinecraftBlockstateProvider { 
+//             chunks: RwLock::new(HashMap::new()),
+//             air: BlockstateKey {
+//                 block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
+//                 augment: 0
+//             }
+//         }
+//     });
 
-    let chunk = Chunk {
-        pos: (x, z),
-        baked: ArcSwap::new(Arc::new(None))
-    };
+//     let mut write = bsp.chunks.write();
+//     write.insert((x, z), ChunkHolder {
+//         palettes: *palettes,
+//         storages: *storages,
+//     });
 
-    wm.mc.chunks.loaded_chunks
-        .write()
-        .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+//     let chunk = Chunk {
+//         pos: (x, z),
+//         baked: ArcSwap::new(Arc::new(None))
+//     };
+
+//     wm.mc.chunks.loaded_chunks
+//         .write()
+//         .insert((x, z), ArcSwap::new(Arc::new(chunk)));
 }
 
 #[no_mangle]
@@ -1316,11 +1319,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPalette(
 ) -> jlong {
     let mut palette = Box::new(JavaPalette::new(idList));
 
-    let ptr = ((&mut *palette as *mut JavaPalette) as usize) as jlong;
-
-    mem::forget(palette);
-
-    ptr
+    Box::leak(palette) as *mut JavaPalette as usize as jlong
 }
 
 #[no_mangle]
@@ -1424,11 +1423,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
     index: i32,
 ) -> jobject {
     let palette = (palette_long as usize) as *mut JavaPalette;
+    let palette = unsafe { palette.as_ref().expect("Palette pointer was null") };
 
-    (unsafe { palette.as_ref().unwrap().get(index as usize).unwrap() })
-        .0
-        .as_obj()
-        .into_inner()
+    match palette.get(index as usize) {
+        Some((global_ref, _)) => {
+            return global_ref.as_obj().into_inner();
+        },
+        None => {
+            panic!("Palette index {} was not occupied\nPalette:\n{:?}", index, palette);
+        },
+    }
 }
 
 #[no_mangle]
@@ -1532,12 +1536,12 @@ pub struct PackedIntegerArray {
 }
 
 impl PackedIntegerArray {
-    pub fn get(&self, x: i32, y: u16, z: i32) -> i32 {
+    pub fn get(&self, x: i32, y: i32, z: i32) -> i32 {
         let x = x & 0xf;
         let y = y & 0xf;
         let z = z & 0xf;
 
-        self.get_by_index(((((y as i32) << 4) | z) << 4) | x)
+        self.get_by_index((((y << 4) | z) << 4) | x)
     }
 
     pub fn debug_pointer(&self, index: i32) -> usize {
@@ -1575,6 +1579,30 @@ impl PackedIntegerArray {
 }
 
 #[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGet(
+    env: JNIEnv,
+    class: JClass,
+    pia: jlong,
+    x: jint,
+    y: jint,
+    z: jint
+) -> jint {
+    let pia_ptr = unsafe { &mut *(pia as usize as *mut PackedIntegerArray) };
+    pia_ptr.get(x, y, z)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
+    env: JNIEnv,
+    class: JClass,
+    pia: jlong,
+    index: jint
+) -> jint {
+    let pia_ptr = unsafe { &mut *(pia as usize as *mut PackedIntegerArray) };
+    pia_ptr.get_by_index(index)
+}
+
+#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     env: JNIEnv,
     class: JClass,
@@ -1590,7 +1618,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     let copy = env.get_long_array_elements(data, ReleaseMode::NoCopyBack)
         .unwrap();
 
-    let packed_arr = Box::new(PackedIntegerArray {
+    let mut packed_arr = Box::new(PackedIntegerArray {
         data: Vec::from(
             unsafe {
                 std::slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
@@ -1605,7 +1633,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
         size,
     });
 
-    let ptr = (&*packed_arr as *const PackedIntegerArray) as usize;
+    let ptr = (&mut *packed_arr as *mut PackedIntegerArray) as usize;
 
     std::mem::forget(packed_arr);
 
@@ -1666,7 +1694,26 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getRawStoragePointer(
     class: JClass,
     packed_integer_array: jlong
 ) -> jlong {
-    unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap().data.as_ptr() as jlong }
+    let packed_integer_array_ptr = packed_integer_array as usize as *mut PackedIntegerArray;
+    (unsafe { &mut (&mut *packed_integer_array_ptr).data as *mut Box<[i64]> as usize }) as i64
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPaletteStorageData(
+    env: JNIEnv,
+    class: JClass,
+    packed_integer_array: jlong
+) -> jlongArray {
+    let packed_integer_array_ptr = packed_integer_array as usize as *mut PackedIntegerArray;
+    let packed_integer_array = unsafe { packed_integer_array_ptr.as_ref().unwrap() };
+    let array = env.new_long_array(packed_integer_array.data.len() as jsize).unwrap();
+    let elements = env.get_long_array_elements(array, ReleaseMode::NoCopyBack).unwrap();
+
+    unsafe {
+        std::ptr::copy(packed_integer_array.data.as_ptr() as *const i64, elements.as_ptr(), packed_integer_array.data.len());
+    }
+
+    array
 }
 
 #[no_mangle]

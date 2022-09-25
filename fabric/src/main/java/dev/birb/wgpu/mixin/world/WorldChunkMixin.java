@@ -1,6 +1,6 @@
 package dev.birb.wgpu.mixin.world;
 
-import dev.birb.wgpu.palette.PackedIntegerArrayAccessor;
+import dev.birb.wgpu.mixin.accessors.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustPalette;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.block.BlockState;
@@ -38,29 +38,47 @@ public abstract class WorldChunkMixin {
 
         Chunk chunk = (Chunk) (Object) this;
 
+        ChunkPos pos = ((Chunk) (Object) this).getPos();
+
         assert chunk.getSectionArray().length == 24;
 
         for(int i=0;i<24;i++) {
-            RustPalette<?> rustPalette = (RustPalette<?>) chunk.getSection(i).getBlockStateContainer().data.palette;
+            // RustPalette<?> rustPalette = (RustPalette<?>) chunk.getSection(i).getBlockStateContainer().data.palette;
             PaletteStorage paletteStorage = chunk.getSection(i).getBlockStateContainer().data.storage;
 
-            palettePointers[i] = rustPalette.getRustPointer();
+            // palettePointers[i] = rustPalette.getRustPointer();
             if(paletteStorage instanceof PackedIntegerArray packedIntegerArray) {
-                long piaPtr = ((PackedIntegerArrayAccessor) packedIntegerArray).getStoragePointer();
+                PackedIntegerArrayAccessor accessor = (PackedIntegerArrayAccessor) (Object) paletteStorage;
 
-                WgpuNative.debugPalette(piaPtr, palettePointers[i]);
-                storagePointers[i] = piaPtr;
+                long pointer = WgpuNative.createPaletteStorage(
+                    paletteStorage.getData(), 
+                    accessor.getElementsPerLong(), 
+                    paletteStorage.getElementBits(), 
+                    accessor.getMaxValue(), 
+                    accessor.getIndexScale(), 
+                    accessor.getIndexOffset(), 
+                    accessor.getIndexShift(), 
+                    paletteStorage.getSize()
+                );
+
+                assert packedIntegerArray.get(0) == WgpuNative.piaGetByIndex(pointer, 0);
+                // System.out.println(packedIntegerArray.get(1) + " / " + WgpuNative.piaGetByIndex(pointer, 1));
+                for(int a=0;a<packedIntegerArray.getSize();a++) {
+                    int wmVal = WgpuNative.piaGetByIndex(pointer, a);
+                    assert packedIntegerArray.get(a) == wmVal;
+                    if(pos.x % 20 == 0 && pos.z % 20 == 0) System.out.println(chunk.getSection(i).getBlockStateContainer().data.palette.get(wmVal));
+                }
+ 
+                storagePointers[i] = pointer;
             }
         }
 
         // chunk.getBlockState(new BlockPos(0, 0, 0));
 
-        ChunkPos pos = ((Chunk) (Object) this).getPos();
         int originX = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
         int originZ = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
 
         // WgpuNative.createChunk(pos.x - originX, pos.z - originZ, palettePointers, storagePointers);
-        // WgpuNative.bakeChunk(pos.x - originX, pos.z - originZ);
     }
 
 }

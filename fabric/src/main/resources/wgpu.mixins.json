@@ -4,11 +4,10 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
-    "world.BlockStateMixin",
-    "world.PaletteProviderMixin",
-    "world.PackedIntegerArrayMixin",
     "world.WorldChunkMixin",
-    "core.ClientPlayNetworkHandlerMixin"
+    "accessors.PackedIntegerArrayAccessor",
+    "world.BlockStateMixin",
+    "world.PaletteProviderMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -171,4 +171,10 @@ public class WgpuNative {
 
     public static native void bakeChunk(int x, int z);
 
+    public static native long[] copyPaletteStorageData(long paletteStorage);
+
+    public static native int piaGet(long ptr, int x, int y, int z);
+
+    public static native int piaGetByIndex(long ptr, int index);
+
 }

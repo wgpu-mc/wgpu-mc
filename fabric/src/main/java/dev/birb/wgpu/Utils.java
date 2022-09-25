@@ -1,6 +1,5 @@
 package dev.birb.wgpu;
 
-import dev.birb.wgpu.palette.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.block.BlockState;
@@ -19,12 +18,10 @@ public class Utils {
         return ColorHelper.Argb.getArgb(a, r, g, b);
     }
 
-    public static void chunkDebug(PackedIntegerArray array, int index) {
-//        ChunkSection section = chunk.getSection(y / 16);
-//        PalettedContainer<BlockState> container = section.getBlockStateContainer();
-//        PackedIntegerArray array = (PackedIntegerArray) container.data.storage();
-        PackedIntegerArrayAccessor accessor = ((PackedIntegerArrayAccessor) (Object) array);
-        WgpuNative.debugPalette(accessor.getStoragePointer(), index);
-    }
+//     public static void chunkDebug(PackedIntegerArray array, int index) {
+// //        ChunkSection section = chunk.getSection(y / 16);
+// //        PalettedContainer<BlockState> container = section.getBlockStateContainer();
+//         WgpuNative.debugPalette(accessor.getStoragePointer(), index);
+//     }
 
 }

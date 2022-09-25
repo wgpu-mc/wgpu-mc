@@ -48,4 +48,9 @@ public class MouseMixin {
         return -1;
     }
 
+    @Overwrite
+    public void lockCursor() {
+
+    }
+
 }

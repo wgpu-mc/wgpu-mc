@@ -3,6 +3,7 @@ use jni::sys::{jlong, jobject};
 use wgpu_mc::mc::Block;
 use std::collections::HashMap;
 use wgpu_mc::mc::block::BlockstateKey;
+use core::fmt::Debug;
 
 pub struct IdList {
     pub map: HashMap<i32, GlobalRef>,
@@ -65,5 +66,15 @@ impl JavaPalette {
     pub fn clear(&mut self) {
         self.store.clear();
         self.indices.clear();
+    }
+}
+
+impl Debug for JavaPalette {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let res = f.write_str("JavaPalette { store: [");
+        self.store.iter().for_each(|store_entry| {
+            write!(f, "(GlobalRef, {:?})", store_entry.1).unwrap();
+        });
+        res
     }
 }

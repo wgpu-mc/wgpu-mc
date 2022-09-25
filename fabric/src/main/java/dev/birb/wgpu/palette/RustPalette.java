@@ -75,12 +75,20 @@ public class RustPalette<T> implements Palette<T> {
 
     @Override
     public void writePacket(PacketByteBuf buf) {
-        System.out.println("tried to write packet");
+        int size = this.getSize();
+        buf.writeVarInt(size);
+        for (int i = 0; i < size; ++i) {
+            buf.writeVarInt(this.idList.getRawId(this.get(i)));
+        }
     }
 
     @Override
     public int getPacketSize() {
-        return 0;
+        int i = PacketByteBuf.getVarIntLength(this.getSize());
+        for (int j = 0; j < this.getSize(); ++j) {
+            i += PacketByteBuf.getVarIntLength(this.idList.getRawId(this.get(i)));
+        }
+        return i;
     }
 
     @Override
