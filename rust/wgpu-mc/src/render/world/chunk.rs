@@ -160,9 +160,12 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
             let y = (block_index / CHUNK_AREA) as i16;
             let z = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
 
+            let absolute_x = (chunk.pos.0*16) + x;
+            let absolute_z = (chunk.pos.1*16) + z;
+
             let section_index = y / (CHUNK_SECTION_HEIGHT as i16);
 
-            let block_state: ChunkBlockState = state_provider.get_state(x, y, z);
+            let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
 
             if block_state.is_air() { continue; }
 
@@ -181,7 +184,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                 CubeOrComplexMesh::Cube(model) => {
                     let render_north = {
                         let state =
-                            get_block(block_manager, state_provider.get_state(x, y, z - 1));
+                            get_block(block_manager, state_provider.get_state(absolute_x, y, absolute_z - 1));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -191,7 +194,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
                     let render_south = {
                         let state =
-                            get_block(block_manager, state_provider.get_state(x, y, z + 1));
+                            get_block(block_manager, state_provider.get_state(absolute_x, y, absolute_z + 1));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -201,7 +204,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
                     let render_up = {
                         let state =
-                            get_block(block_manager, state_provider.get_state(x, y + 1, z));
+                            get_block(block_manager, state_provider.get_state(absolute_x, y + 1, absolute_z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -211,7 +214,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
                     let render_down = {
                         let state =
-                            get_block(block_manager, state_provider.get_state(x, y - 1, z));
+                            get_block(block_manager, state_provider.get_state(absolute_x, y - 1, absolute_z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -221,7 +224,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
                     let render_west = {
                         let state =
-                            get_block(block_manager, state_provider.get_state(x - 1, y, z));
+                            get_block(block_manager, state_provider.get_state(absolute_x - 1, y, absolute_z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
@@ -231,7 +234,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
                     let render_east = {
                         let state =
-                            get_block(block_manager, state_provider.get_state(x + 1, y, z));
+                            get_block(block_manager, state_provider.get_state(absolute_x + 1, y, absolute_z));
 
                         match state {
                             Some(mesh) => mesh.models[0].1,
