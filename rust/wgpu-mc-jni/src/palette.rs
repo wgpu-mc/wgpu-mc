@@ -27,7 +27,7 @@ pub struct JavaPalette {
 impl JavaPalette {
     pub fn new(id_list: jlong) -> Self {
         Self {
-            store: Vec::with_capacity(256),
+            store: Vec::with_capacity(5),
             indices: HashMap::new(),
             id_list: id_list as usize as *mut IdList,
         }
@@ -60,7 +60,7 @@ impl JavaPalette {
     }
 
     pub fn get(&self, index: usize) -> Option<&(GlobalRef, BlockstateKey)> {
-        self.store.get(index)
+        self.store.get(index).or(self.store.get(0))
     }
 
     pub fn clear(&mut self) {

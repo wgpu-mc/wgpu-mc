@@ -119,8 +119,8 @@ public class Wgpu {
     }
 
     public static void debug(Object o) {
-        MinecraftClient.getInstance().inGameHud.addChatMessage(MessageType.CHAT, new LiteralText(o.toString()), UUID.randomUUID());
-        // System.out.println(o);
+        // MinecraftClient.getInstance().inGameHud.addChatMessage(MessageType.CHAT, new LiteralText(o.toString()), UUID.randomUUID());
+        System.out.println(o);
     }
 
 

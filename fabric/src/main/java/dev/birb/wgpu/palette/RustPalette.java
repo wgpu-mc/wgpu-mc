@@ -16,17 +16,21 @@ public class RustPalette<T> implements Palette<T> {
     private final long rustPalettePointer;
     private final long rustIdList;
     private final IndexedIterable<T> idList;
+    private final PaletteResizeListener<T> listener;
+    private final int bits;
 
     public static final Cleaner CLEANER = Cleaner.create();
 
-    public RustPalette(long rustIdList, IndexedIterable<T> idList) {
-        this(WgpuNative.createPalette(rustIdList), rustIdList, idList);
+    public RustPalette(long rustIdList, IndexedIterable<T> idList, PaletteResizeListener<T> listener, int bits) {
+        this(WgpuNative.createPalette(rustIdList), rustIdList, idList, listener, bits);
     }
 
-    public RustPalette(long rustPalettePointer, long rustIdList, IndexedIterable<T> idList) {
+    public RustPalette(long rustPalettePointer, long rustIdList, IndexedIterable<T> idList, PaletteResizeListener<T> listener, int bits) {
         this.rustPalettePointer = rustPalettePointer;
         this.rustIdList = rustIdList;
         this.idList = idList;
+        this.listener = listener;
+        this.bits = bits;
 
         CLEANER.register(this, () -> WgpuNative.destroyPalette(rustPalettePointer));
     }
@@ -35,12 +39,22 @@ public class RustPalette<T> implements Palette<T> {
     public int index(T object) {
         RustBlockStateAccessor accessor = (RustBlockStateAccessor) object;
 
-        return WgpuNative.paletteIndex(this.rustPalettePointer, object, accessor.getRustBlockStateIndex());
+        int index = WgpuNative.paletteIndex(this.rustPalettePointer, object, accessor.getRustBlockStateIndex());
+        if(index >= (1 << this.bits)) {
+            System.out.println("Resizing palette to " + (this.bits+1));
+            index = this.listener.onResize(this.bits + 1, object);
+        }
+        return index;
     }
 
     @Override
     public boolean hasAny(Predicate<T> predicate) {
-        return WgpuNative.paletteHasAny(this.rustPalettePointer, predicate);
+        for(int i=0;i<this.getSize();i++) {
+            T t = this.get(i);
+            if(predicate.test(t)) return true;
+        }
+
+        return false;
     }
 
     @Override
@@ -98,11 +112,11 @@ public class RustPalette<T> implements Palette<T> {
 
     @Override
     public Palette<T> copy() {
-        return new RustPalette<T>(WgpuNative.copyPalette(this.rustPalettePointer), this.rustIdList, this.idList);
+        return new RustPalette<T>(WgpuNative.copyPalette(this.rustPalettePointer), this.rustIdList, this.idList, this.listener, this.bits);
     }
 
     public static <A> Palette<A> create(int bits, IndexedIterable<A> idList, PaletteResizeListener<A> listener, List<A> list) {
-        return new RustPalette<A>(WgpuNative.uploadIdList((IndexedIterable<Object>) idList), idList);
+        return new RustPalette<A>(WgpuNative.uploadIdList((IndexedIterable<Object>) idList), idList, listener, bits);
     }
 
     public long getRustPointer() {

@@ -175,11 +175,6 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
 
             let mesh = get_block(block_manager, block_state).unwrap();
 
-            if y == 50 && x == 0 {
-                let (k, _) = block_manager.blocks.get_index(state_key.block as usize).unwrap();
-                println!("{}", k);
-            }
-
             //TODO: randomly select a mesh if there are multiple
 
             match &mesh.models[0].0 {

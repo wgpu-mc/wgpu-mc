@@ -8,6 +8,7 @@ use crate::palette::{IdList, JavaPalette};
 use arc_swap::ArcSwap;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use cgmath::{Deg, Matrix4, Point3, Vector3};
+use futures::task::UnsafeFutureObj;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::naga::proc::index;
 use wgpu_mc::render::atlas::Atlas;
@@ -329,32 +330,47 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .try_into()
         .unwrap();
 
-    
+    // storages.iter().zip(palettes.iter()).filter(|(s,p)| **s != 0 && **p != 0).for_each(|(storage_addr, palette_addr)| {
+    //     let storage = unsafe { (*storage_addr as *mut PackedIntegerArray).as_mut().unwrap() };
+    //     let palette = unsafe { (*palette_addr as *mut JavaPalette).as_mut().unwrap() };
+    //     for index in (0..16*16*16) {
+    //         let palette_index = unsafe { (*storage).get_by_index(index) };
+    //         let palette_result = unsafe { (*palette).get(palette_index as usize).unwrap() };
+    //         env.call_static_method(
+    //             "dev/birb/wgpu/render/Wgpu",
+    //             "debug",
+    //             "(Ljava/lang/Object;)V",
+    //             &[
+    //                 JValue::Object(palette_result.0.as_obj()),
+    //             ],
+    //         ).unwrap();
+    //     }
+    // })
 
-//    let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| {
-//         MinecraftBlockstateProvider { 
-//             chunks: RwLock::new(HashMap::new()),
-//             air: BlockstateKey {
-//                 block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
-//                 augment: 0
-//             }
-//         }
-//     });
+   let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| {
+        MinecraftBlockstateProvider { 
+            chunks: RwLock::new(HashMap::new()),
+            air: BlockstateKey {
+                block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
+                augment: 0
+            }
+        }
+    });
 
-//     let mut write = bsp.chunks.write();
-//     write.insert((x, z), ChunkHolder {
-//         palettes: *palettes,
-//         storages: *storages,
-//     });
+    let mut write = bsp.chunks.write();
+    write.insert((x, z), ChunkHolder {
+        palettes: *palettes,
+        storages: *storages,
+    });
 
-//     let chunk = Chunk {
-//         pos: (x, z),
-//         baked: ArcSwap::new(Arc::new(None))
-//     };
+    let chunk = Chunk {
+        pos: (x, z),
+        baked: ArcSwap::new(Arc::new(None))
+    };
 
-//     wm.mc.chunks.loaded_chunks
-//         .write()
-//         .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+    wm.mc.chunks.loaded_chunks
+        .write()
+        .insert((x, z), ArcSwap::new(Arc::new(chunk)));
 }
 
 #[no_mangle]

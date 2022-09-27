@@ -4,6 +4,7 @@ import dev.birb.wgpu.mixin.accessors.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustPalette;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.block.BlockState;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.network.PacketByteBuf;
@@ -42,9 +43,13 @@ public abstract class WorldChunkMixin {
 
         assert chunk.getSectionArray().length == 24;
 
+        // if(pos.x % 40 != 0 || pos.z % 40 != 0) return;
+
         for(int i=0;i<24;i++) {
-            // RustPalette<?> rustPalette = (RustPalette<?>) chunk.getSection(i).getBlockStateContainer().data.palette;
+            RustPalette<?> rustPalette = (RustPalette<?>) chunk.getSection(i).getBlockStateContainer().data.palette;
             PaletteStorage paletteStorage = chunk.getSection(i).getBlockStateContainer().data.storage;
+
+            palettePointers[i] = rustPalette.getRustPointer();
 
             // palettePointers[i] = rustPalette.getRustPointer();
             if(paletteStorage instanceof PackedIntegerArray packedIntegerArray) {
@@ -61,24 +66,15 @@ public abstract class WorldChunkMixin {
                     paletteStorage.getSize()
                 );
 
-                assert packedIntegerArray.get(0) == WgpuNative.piaGetByIndex(pointer, 0);
-                // System.out.println(packedIntegerArray.get(1) + " / " + WgpuNative.piaGetByIndex(pointer, 1));
-                for(int a=0;a<packedIntegerArray.getSize();a++) {
-                    int wmVal = WgpuNative.piaGetByIndex(pointer, a);
-                    assert packedIntegerArray.get(a) == wmVal;
-                    if(pos.x % 20 == 0 && pos.z % 20 == 0) System.out.println(chunk.getSection(i).getBlockStateContainer().data.palette.get(wmVal));
-                }
- 
                 storagePointers[i] = pointer;
             }
         }
 
-        // chunk.getBlockState(new BlockPos(0, 0, 0));
+        int x = pos.x - MinecraftClient.getInstance().player.getChunkPos().x;
+        int z = pos.z - MinecraftClient.getInstance().player.getChunkPos().z;
 
-        int originX = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
-        int originZ = ((ClientWorld) this.world).getChunkManager().chunks.centerChunkX;
-
-        // WgpuNative.createChunk(pos.x - originX, pos.z - originZ, palettePointers, storagePointers);
+        WgpuNative.createChunk(x, z, palettePointers, storagePointers);
+        WgpuNative.bakeChunk(x, z);
     }
 
 }

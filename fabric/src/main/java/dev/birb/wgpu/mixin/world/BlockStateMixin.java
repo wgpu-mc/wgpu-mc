@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.Mixin;
 @Mixin(BlockState.class)
 public class BlockStateMixin implements RustBlockStateAccessor {
 
+    //This is just to make each BlockState instance have its own unique ID during testing if wgpu-mc isn't active and setting it for it
     private int rustBlockStateIndex = (int) (System.nanoTime() & 0xffffff);
 
     @Override
