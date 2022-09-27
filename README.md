@@ -34,20 +34,22 @@ Engine
 - [x] Skybox support
 - [x] Instanced Entity Rendering
 - [x] Animated textures
-- [ ] Particles
+- [x] Particles
 - [ ] Lighting
-- [ ] Item rendering
 
 Minecraft
 
 - [x] Disable Blaze3d
 - [x] GUI rendering (text rendering is mangled but otherwise it works)
-- [ ] World rendering
+- [x] Terrain rendering
+    - [ ] Lightmap and AO integration
+    - [ ] Translucency sorting
+    - [ ] Chunk updates
 - [ ] Integrate entities
-- [ ] Implement the Fabric Render API (Electrum)
+- [ ] Item rendering
+- [ ] Implement the Fabric Rendering API (Electrum)
 - [ ] Particles
-- [ ] Lighting
-- [ ] Integrate Iris for more expansive/complex shader support
+- [ ] Advanced shader pipeline support
 
 Pie in the sky
 
