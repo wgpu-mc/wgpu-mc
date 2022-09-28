@@ -23,7 +23,13 @@ public class MainMixin {
     @Redirect(method = "main", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/MinecraftClient;isRunning()Z"))
     private static boolean redirectIsRunning(MinecraftClient instance) {
         //Block until the game is initialized enough for wgpu-mc to kick in
-        while(!Wgpu.MAY_INITIALIZE) {}
+        while(!Wgpu.MAY_INITIALIZE) {
+            try {
+                Thread.sleep(50);
+            } catch(InterruptedException e) {
+                Thread.interrupted();
+            }
+        }
 
         Thread helperThread = new Thread(WgpuNative::runHelperThread);
 

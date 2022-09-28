@@ -36,7 +36,7 @@ use std::io::Cursor;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ptr::drop_in_place;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH, Duration};
 use std::{fs, mem, thread};
 use std::f32::consts::PI;
 use std::fmt::{Debug, Formatter};
@@ -518,10 +518,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
             let instant = Instant::now();
 
             wm.render(&pipelines, &view).unwrap();
-
-            println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
+            // println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
 
             texture.present();
+
+            thread::sleep(Duration::from_secs(1));
         }
     });
 
@@ -691,7 +692,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
                 }
             }
             None => {
-                println!("{}[{:?}]", block_name, key_iter);
+                // println!("{}[{:?}]", block_name, key_iter);
 
                 BlockstateKey {
                     block: fallback_key.0 as u16,
