@@ -4,7 +4,7 @@
 
 extern crate core;
 
-use crate::gl::GlTexture;
+use crate::gl::{GlTexture, GL_ALLOC};
 use crate::palette::{IdList, JavaPalette};
 use arc_swap::ArcSwap;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
@@ -521,6 +521,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
             // println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
 
             texture.present();
+
+            println!("gl alloc size: {} entries", GL_ALLOC.get().unwrap().read().len());
 
             thread::sleep(Duration::from_secs(1));
         }
