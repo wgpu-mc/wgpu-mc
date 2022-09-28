@@ -25,7 +25,6 @@ byteorder = "1.4.3"
 crossbeam-channel = "0.5.4"
 mc-varint = "0.1.1"
 rayon = "1.5.2"
-tikv-jemallocator = "0.5"
 
 [lib]
 crate-type = ["cdylib"]
