@@ -2,7 +2,9 @@ package dev.birb.wgpu.mixin.world;
 
 import dev.birb.wgpu.mixin.accessors.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustPalette;
+import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
+import dev.birb.wgpu.rust.WmChunk;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
@@ -34,47 +36,13 @@ public abstract class WorldChunkMixin {
 
     @Inject(method = "loadFromPacket", at = @At("RETURN"))
     public void loadFromPacket(PacketByteBuf buf, NbtCompound nbt, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfo ci) {
-        long[] palettePointers = new long[24];
-        long[] storagePointers = new long[24];
+        WmChunk chunk = new WmChunk((WorldChunk) (Object) this);
+        try {
+            chunk.upload();
+            chunk.bake();
+        } catch(ClassCastException e) {
 
-        Chunk chunk = (Chunk) (Object) this;
-
-        ChunkPos pos = ((Chunk) (Object) this).getPos();
-
-        assert chunk.getSectionArray().length == 24;
-
-        // if(pos.x % 40 != 0 || pos.z % 40 != 0) return;
-
-        for(int i=0;i<24;i++) {
-            RustPalette<?> rustPalette = (RustPalette<?>) chunk.getSection(i).getBlockStateContainer().data.palette;
-            PaletteStorage paletteStorage = chunk.getSection(i).getBlockStateContainer().data.storage;
-
-            palettePointers[i] = rustPalette.getRustPointer();
-
-            // palettePointers[i] = rustPalette.getRustPointer();
-            if(paletteStorage instanceof PackedIntegerArray packedIntegerArray) {
-                PackedIntegerArrayAccessor accessor = (PackedIntegerArrayAccessor) (Object) paletteStorage;
-
-                long pointer = WgpuNative.createPaletteStorage(
-                    paletteStorage.getData(), 
-                    accessor.getElementsPerLong(), 
-                    paletteStorage.getElementBits(), 
-                    accessor.getMaxValue(), 
-                    accessor.getIndexScale(), 
-                    accessor.getIndexOffset(), 
-                    accessor.getIndexShift(), 
-                    paletteStorage.getSize()
-                );
-
-                storagePointers[i] = pointer;
-            }
         }
-
-        int x = pos.x - MinecraftClient.getInstance().player.getChunkPos().x;
-        int z = pos.z - MinecraftClient.getInstance().player.getChunkPos().z;
-
-        WgpuNative.createChunk(x, z, palettePointers, storagePointers);
-        WgpuNative.bakeChunk(x, z);
     }
 
 }

@@ -139,7 +139,7 @@ impl WmRenderer {
                     limits: wgpu::Limits::default(),
                 },
                 None, // Trace path
-            )
+             )
             .await
             .unwrap();
 
@@ -148,7 +148,7 @@ impl WmRenderer {
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: wgpu::PresentMode::Mailbox,
         };
 
         surface.configure(&device, &surface_config);

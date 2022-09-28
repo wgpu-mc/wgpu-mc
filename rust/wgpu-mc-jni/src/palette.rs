@@ -2,6 +2,7 @@ use jni::objects::{GlobalRef, JObject};
 use jni::sys::{jlong, jobject};
 use wgpu_mc::mc::Block;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use wgpu_mc::mc::block::BlockstateKey;
 use core::fmt::Debug;
 
@@ -21,15 +22,15 @@ impl IdList {
 pub struct JavaPalette {
     pub store: Vec<(GlobalRef, BlockstateKey)>,
     pub indices: HashMap<BlockstateKey, usize>,
-    pub id_list: *mut IdList,
+    pub id_list: NonZeroUsize,
 }
 
 impl JavaPalette {
-    pub fn new(id_list: jlong) -> Self {
+    pub fn new(id_list: NonZeroUsize) -> Self {
         Self {
             store: Vec::with_capacity(5),
             indices: HashMap::new(),
-            id_list: id_list as usize as *mut IdList,
+            id_list,
         }
     }
 

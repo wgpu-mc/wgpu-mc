@@ -1,6 +1,8 @@
 package dev.birb.wgpu.render;
 
+import dev.birb.wgpu.mixin.accessors.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustBlockStateAccessor;
+import dev.birb.wgpu.palette.RustPalette;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.client.MinecraftClient;
@@ -8,6 +10,9 @@ import net.minecraft.client.util.Window;
 import net.minecraft.network.MessageType;
 import net.minecraft.text.LiteralText;
 import net.minecraft.util.collection.PackedIntegerArray;
+import net.minecraft.util.collection.PaletteStorage;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.WorldChunk;
 
 import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
@@ -122,6 +127,5 @@ public class Wgpu {
         // MinecraftClient.getInstance().inGameHud.addChatMessage(MessageType.CHAT, new LiteralText(o.toString()), UUID.randomUUID());
         System.out.println(o);
     }
-
 
 }
