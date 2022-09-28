@@ -57,12 +57,7 @@ use winit::event::{ElementState, Event, ModifiersState, MouseButton, VirtualKeyC
 use winit::event_loop::ControlFlow;
 use winit::window::Window;
 use wgpu_mc::camera::Camera;
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 mod gl;
 mod palette;
