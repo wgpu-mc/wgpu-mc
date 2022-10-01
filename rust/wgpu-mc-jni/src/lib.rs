@@ -4,12 +4,15 @@
 
 extern crate core;
 
+use crate::entity::tmd_to_wm;
 use crate::gl::{GlTexture, GL_ALLOC};
 use crate::palette::{IdList, JavaPalette};
 use arc_swap::ArcSwap;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use cgmath::{Deg, Matrix4, Point3, Vector3};
+use entity::TexturedModelData;
 use futures::task::UnsafeFutureObj;
+use wgpu_mc::mc::entity::Entity;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::naga::proc::index;
 use wgpu_mc::render::atlas::Atlas;
@@ -61,6 +64,8 @@ use wgpu_mc::camera::Camera;
 
 mod gl;
 mod palette;
+mod entity;
+mod renderer;
 enum RenderMessage {
     SetTitle(String),
     Task(Box<dyn FnOnce() + Send + Sync>),
@@ -95,6 +100,7 @@ static BLOCKS: OnceCell<Mutex<Vec<String>>> = OnceCell::new();
 static BLOCK_STATES: OnceCell<Mutex<Vec<(String, String, GlobalRef)>>> = OnceCell::new();
 
 static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
+// static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 
 #[derive(Debug)]
 struct ChunkHolder {
@@ -186,14 +192,17 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
         let size = elements.size().ok()? as usize;
 
         let mut vec = vec![0u8; size];
-        vec.copy_from_slice(unsafe {
-            std::slice::from_raw_parts(
-                elements.as_ptr() as *const u8,
-                size,
+        
+        Some(
+            Vec::from(
+                unsafe {
+                    std::slice::from_raw_parts(
+                        elements.as_ptr() as *const u8,
+                        size
+                    )
+                }
             )
-        });
-
-        Some(vec)
+        )
     }
 }
 
@@ -231,52 +240,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
     });
 
     states.lock().push((block_name, state_key, global_ref));
-}
-
-
-#[derive(Debug)]
-struct JavaBlockStateProvider {
-    //Pointers to JavaPalette structs
-    pub palettes: [usize; 24],
-    //Pointers to PackedIntegerArray structs
-    pub storages: [usize; 24],
-    pub air: BlockstateKey
-}
-
-impl BlockStateProvider for JavaBlockStateProvider {
-    //Technically this should be able to provide a blockstate for anywhere in the world but I won't implement that yet
-    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
-        if y >= CHUNK_HEIGHT as i16 || y < 0 {
-            return ChunkBlockState::Air;
-        }
-
-        let storage_index = y / 16;
-
-        assert!(storage_index < (CHUNK_HEIGHT as i16 / 16) && storage_index >= 0);
-
-        let storage = match unsafe {
-            (self.storages[storage_index as usize] as *mut PackedIntegerArray).as_ref()
-        } {
-            None => return ChunkBlockState::Air,
-            Some(storage) => storage,
-        };
-
-        let palette_key = storage.get(x, y as i32, z);
-
-        let palette = unsafe {
-            (self.palettes[(y as usize) / 24] as *mut JavaPalette)
-                .as_ref()
-                .unwrap()
-        };
-
-        let key = palette.get(palette_key as usize).unwrap().1;
-
-        if key == self.air {
-            ChunkBlockState::Air
-        } else {
-            ChunkBlockState::State(key)
-        }
-    }
 }
 
 #[no_mangle]
@@ -338,12 +301,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         (x, z), 
         ChunkHolder { 
             sections: palettes.zip(*storages).map(|(palette_addr, storage_addr)| {
+                //If (in Java) the chunk storage class was not a PackedIntegerArray but an EmptyPaletteStorage, it won't have created a Rust
+                //version of the PackedIntegerArray and the jlong will default to 0, or null
                 if palette_addr == 0 || storage_addr == 0 { return None; }
 
+                //SAFETY: Java will have called Java_dev_birb_wgpu_rust_WgpuNative_createPalette and Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage
+                //respectively to create these pointers. Rust will also have ownership of the data at the pointers at this point.
+                //The only thing that updates "live" later in Java is the JavaPalette, so we clone that here to keep ownership later
                 unsafe {
                     Some(
                         (
-                            Box::from_raw(palette_addr as *mut JavaPalette),
+                            Box::from_raw(palette_addr as *mut JavaPalette).clone(),
                             Box::from_raw(storage_addr as *mut PackedIntegerArray)
                         )
                     )
@@ -410,221 +378,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlock(
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
     env: JNIEnv,
     _class: JClass,
-    string: JString,
+    title: JString,
 ) {
-    use winit::event_loop::EventLoop;
-
-    let title: String = env.get_string(string).unwrap().into();
-
-    THREAD_POOL.set(
-        ThreadPoolBuilder::new()
-            .num_threads(0)
-            .build()
-            .unwrap()
-    ).unwrap();
-
-    // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
-    #[cfg(target_os = "linux")]
-    let event_loop: EventLoop<()> = winit::platform::unix::EventLoopExtUnix::new_any_thread();
-    #[cfg(not(target_os = "linux"))]
-    let event_loop: EventLoop<()> = EventLoop::new();
-
-    let window = Arc::new(
-        winit::window::WindowBuilder::new()
-            .with_title(&title)
-            .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
-                width: 1280,
-                height: 720,
-            }))
-            .build(&event_loop)
-            .unwrap(),
-    );
-
-    println!("Opened window");
-
-    WINDOW.set(window.clone()).unwrap();
-
-    MC_STATE.set(ArcSwap::new(Arc::new(MinecraftRenderState {
-        render_world: false,
-    }))).unwrap();
-
-    let wrapper = &WinitWindowWrapper { window: &window };
-
-    let wgpu_state = block_on(WmRenderer::init_wgpu(wrapper));
-
-    println!("Initialized wgpu");
-
-    let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
-        jvm: env.get_java_vm().unwrap(),
-    });
-
-    let wm = WmRenderer::new(wgpu_state, resource_provider);
-
-    RENDERER.set(wm.clone());
-
-    wm.init(&[&DebugLinesPipeline, &TerrainPipeline, GL_PIPELINE.get().unwrap()]);
-
-    println!("Initialized wgpu-mc pipelines");
-
-    wm.mc.chunks.assemble_world_meshes(&wm);
-
-    println!("Assembled meshes");
-
-    env.set_static_field(
-        "dev/birb/wgpu/render/Wgpu",
-        ("dev/birb/wgpu/render/Wgpu", "INITIALIZED", "Z"),
-        JValue::Bool(true.into()),
-    );
-
-    let mut current_modifiers = ModifiersState::empty();
-
-    println!("Starting event loop");
-
-    let wm_clone = wm.clone();
-
-    thread::spawn(move || {
-        let wm = wm_clone;
-
-        loop {
-            wm.upload_camera();
-
-            let mc_state = MC_STATE.get().unwrap().load();
-
-            let mut pipelines = Vec::new();
-            pipelines.push(&TerrainPipeline as &dyn WmPipeline);
-            if mc_state.render_world {
-                // wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
-                pipelines.push(&DebugLinesPipeline as &dyn WmPipeline);
-            } else {
-                pipelines.push(GL_PIPELINE.get().unwrap());
-            }
-            // }
-
-            let surface = wm.wgpu_state.surface.as_ref().unwrap();
-            let texture = surface.get_current_texture().unwrap();
-            let view = texture.texture.create_view(
-                &wgpu::TextureViewDescriptor {
-                    label: None,
-                    format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                    dimension: Some(wgpu::TextureViewDimension::D2),
-                    aspect: Default::default(),
-                    base_mip_level: 0,
-                    mip_level_count: None,
-                    base_array_layer: 0,
-                    array_layer_count: None
-                }
-            );
-
-            let instant = Instant::now();
-
-            wm.render(&pipelines, &view).unwrap();
-            // println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
-
-            texture.present();
-
-            println!("gl alloc size: {} entries", GL_ALLOC.get().unwrap().read().len());
-
-            thread::sleep(Duration::from_secs(1));
-        }
-    });
-
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
-        match event {
-            Event::MainEventsCleared => window.request_redraw(),
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == window.id() => {
-                match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        wm.resize(WindowSize {
-                            width: physical_size.width,
-                            height: physical_size.height,
-                        });
-                        CHANNELS
-                            .get()
-                            .unwrap()
-                            .0
-                            .send(RenderMessage::Resized(physical_size.width, physical_size.height))
-                            .unwrap();
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        let _ = wm.resize(WindowSize {
-                            width: new_inner_size.width,
-                            height: new_inner_size.height,
-                        });
-                    }
-                    WindowEvent::CursorMoved {
-                        device_id: _,
-                        position,
-                        modifiers: _,
-                    } => {
-                        CHANNELS
-                            .get()
-                            .unwrap()
-                            .0
-                            .send(RenderMessage::MouseMove(position.x, position.y))
-                            .unwrap();
-                    }
-                    WindowEvent::MouseInput {
-                        device_id,
-                        state,
-                        button,
-                        modifiers,
-                    } => {
-                        CHANNELS
-                            .get()
-                            .unwrap()
-                            .0
-                            .send(RenderMessage::MouseState(*state, *button))
-                            .unwrap();
-                    }
-                    WindowEvent::ReceivedCharacter(c) => {
-                        CHANNELS
-                            .get()
-                            .unwrap()
-                            .0
-                            .send(RenderMessage::CharTyped(*c, current_modifiers.bits()))
-                            .unwrap();
-                    }
-                    WindowEvent::KeyboardInput {
-                        device_id,
-                        input,
-                        is_synthetic,
-                    } => {
-                        // input.scancode
-                        match input.virtual_keycode {
-                            None => {}
-                            Some(keycode) => CHANNELS
-                                .get()
-                                .unwrap()
-                                .0
-                                .send(RenderMessage::KeyState(
-                                    keycode as u32,
-                                    input.scancode,
-                                    match input.state {
-                                        ElementState::Pressed => 0,
-                                        ElementState::Released => 1,
-                                    },
-                                    current_modifiers.bits(),
-                                ))
-                                .unwrap(),
-                        }
-                    }
-                    WindowEvent::ModifiersChanged(new_modifiers) => {
-                        current_modifiers = *new_modifiers;
-                    }
-                    _ => {}
-                }
-            }
-            // Event::RedrawRequested(_) => {
-            
-            // }
-            _ => {}
-        }
-    });
+    renderer::start_rendering(env, title);
 }
 
 #[no_mangle]
@@ -1817,4 +1573,19 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
 
     renderer.mc.camera.store(Arc::new(camera));
     renderer.upload_camera();
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntityModel(
+    env: JNIEnv,
+    class: JClass,
+    json_jstring: JString
+) {
+    let renderer = RENDERER.get().unwrap();
+
+    let json_string: String = env.get_string(json_jstring).unwrap().into();
+    let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
+    let entity_part = tmd_to_wm(&model_data.data.data);
+    // println!("{:?}", entity);
+    // let entity = Entity::new(entity_part.unwrap(), &renderer.wgpu_state, texture)
 }

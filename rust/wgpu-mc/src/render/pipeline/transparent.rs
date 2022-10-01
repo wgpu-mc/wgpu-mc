@@ -106,8 +106,8 @@ impl WmPipeline for TransparentPipeline {
                         targets: &[wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState {
-                                color: wgpu::BlendComponent::REPLACE,
-                                alpha: wgpu::BlendComponent::REPLACE,
+                                color: wgpu::BlendComponent::OVER,
+                                alpha: wgpu::BlendComponent::OVER,
                             }),
                             write_mask: Default::default(),
                         }],
@@ -147,7 +147,7 @@ impl WmPipeline for TransparentPipeline {
                 .load(),
         );
 
-        let bindable_texture = arena.alloc(block_atlas.bindable_texture.clone());
+        let bindable_texture = arena.alloc(block_atlas.bindable_texture.load_full());
 
         render_pass.set_bind_group(0, &bindable_texture.bind_group, &[]);
         render_pass.set_bind_group(

@@ -204,6 +204,7 @@ impl WmRenderer {
                         Arc::new(ArcSwap::new(Arc::new(Atlas::new(
                             &self.wgpu_state,
                             &pipeline_manager,
+                            false
                         )))),
                     )
                 })

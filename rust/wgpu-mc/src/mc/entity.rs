@@ -27,8 +27,9 @@ pub struct EntityManager {
 impl EntityManager {
     pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager) -> Self {
         Self {
-            mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines)),
-            player_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines)),
+            mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines, false)),
+            //TODO: support resizing the atlas
+            player_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines, false)),
             entity_types: RwLock::new(Vec::new()),
             entity_vertex_buffers: Default::default(),
         }

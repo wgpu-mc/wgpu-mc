@@ -3,7 +3,7 @@ use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::texture::{TextureSamplerView, UV, BindableTexture};
 use bytemuck::{Pod, Zeroable};
 use guillotiere::euclid::Size2D;
-use guillotiere::AtlasAllocator;
+use guillotiere::{AtlasAllocator};
 use image::imageops::overlay;
 use image::{GenericImageView, ImageBuffer, Rgba};
 use minecraft_assets::schemas;
@@ -56,11 +56,14 @@ pub struct Atlas {
     ///The mapping of image [ResourcePath]s to UV coordinates
     pub uv_map: RwLock<HashMap<ResourcePath, UV>>,
     ///The representation of the [Atlas]'s image buffer on the GPU, which can be bound to a draw call
-    pub bindable_texture: Arc<BindableTexture>,
+    pub bindable_texture: ArcSwap<BindableTexture>,
     ///Not every [Atlas] is used for block textures, but the ones that are store the information for each animated texture here
     pub animated_textures: RwLock<Vec<schemas::texture::TextureAnimation>>,
     ///
     pub animated_texture_offsets: RwLock<HashMap<ResourcePath, u32>>,
+    pub resizes: bool,
+    size: RwLock<u32>,
+    gpu_size: RwLock<u32>
 }
 
 impl Debug for Atlas {
@@ -70,13 +73,13 @@ impl Debug for Atlas {
 }
 
 impl Atlas {
-    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager) -> Self {
+    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager, resizes: bool) -> Self {
         let bindable_texture = BindableTexture::from_tsv(
             wgpu_state,
             pipelines,
             TextureSamplerView::from_rgb_bytes(
                 wgpu_state,
-                &[0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
+                &vec![0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
                 Extent3d {
                     width: ATLAS_DIMENSIONS,
                     height: ATLAS_DIMENSIONS,
@@ -89,19 +92,18 @@ impl Atlas {
         );
 
         Self {
-            allocator: RwLock::new(AtlasAllocator::new(Size2D {
-                width: ATLAS_DIMENSIONS as i32,
-                height: ATLAS_DIMENSIONS as i32,
-                _unit: Default::default(),
-            })),
+            allocator: RwLock::new(AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS as i32, ATLAS_DIMENSIONS as i32))),
             image: RwLock::new(ImageBuffer::new(
                 ATLAS_DIMENSIONS,
                 ATLAS_DIMENSIONS,
             )),
             uv_map: Default::default(),
-            bindable_texture: Arc::new(bindable_texture),
+            bindable_texture: ArcSwap::new(Arc::new(bindable_texture)),
             animated_textures: RwLock::new(Vec::new()),
             animated_texture_offsets: Default::default(),
+            size: RwLock::new(ATLAS_DIMENSIONS),
+            gpu_size: RwLock::new(ATLAS_DIMENSIONS),
+            resizes
         }
     }
 
@@ -118,7 +120,7 @@ impl Atlas {
         let mut map = self.uv_map.write();
 
         let mut animated_textures = self.animated_textures.write();
-        let mut animated_texture_offsets = self.animated_texture_offsets.write();
+        // let mut animated_texture_offsets = self.animated_texture_offsets.write();
 
         images.into_iter().for_each(|(name, slice)| {
             self.allocate_one(
@@ -148,9 +150,26 @@ impl Atlas {
     ) {
         let image = image::load_from_memory(image_bytes).unwrap();
 
-        let allocation = allocator
-            .allocate(Size2D::new(image.width() as i32, image.height() as i32))
-            .unwrap();
+        let allocation = match (allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)), self.resizes) {
+            (Some(alloc), _) => alloc,
+            (None, true) => {
+                let mut size = self.size.write();
+                let old_size = *size;
+                let new_size = old_size + 1024;
+                *size = new_size;
+
+                drop(size);
+
+                allocator.grow(Size2D::new(new_size as i32, new_size as i32));
+                
+                let mut new_image = ImageBuffer::new(new_size, new_size);
+                overlay(&mut new_image, &image_buffer.view(0, 0, old_size, old_size), 0, 0);
+                *image_buffer = new_image;
+                
+                return self.allocate_one(image_buffer, map, allocator, animated_textures, path, image_bytes, resource_provider);
+            },
+            (None, false) => panic!("Atlas allocation failed: no more space")
+        };
 
         overlay(
             image_buffer,
@@ -190,29 +209,64 @@ impl Atlas {
         );
     }
 
-    ///Upload the atlas texture to the GPU
-    pub fn upload(&self, wm: &WmRenderer) {
+    ///Upload the atlas texture to the GPU. If the Atlas has to resize the texture on the GPU, then the bindable_texture that this struct provides may
+    /// become obsolete if you .load() the BindableTexture before calling upload(), so you should get the BindableTexture after calling this function and not before-hand
+    ///Returns true if the atlas was resized
+    pub fn upload(&self, wm: &WmRenderer) -> bool {
+        if self.resizes && *self.size.read() != *self.gpu_size.read() {
+            let size = *self.size.read();
+
+            let bindable_texture = BindableTexture::from_tsv(
+                &wm.wgpu_state,
+                &wm.render_pipeline_manager.load(),
+                TextureSamplerView::from_rgb_bytes(
+                    &wm.wgpu_state,
+                    &self.image.read().as_raw(),
+                    Extent3d {
+                        width: size,
+                        height: size,
+                        depth_or_array_layers: 1,
+                    },
+                    None,
+                    wgpu::TextureFormat::Rgba8Unorm,
+                )
+                .unwrap(),
+            );
+
+            self.bindable_texture.store(Arc::new(bindable_texture));
+
+            *self.gpu_size.write() = size;
+
+            return true;
+        }
+
+        let size = *self.size.read();
+
         wm.wgpu_state.queue.write_texture(
-            self.bindable_texture.tsv.texture.as_image_copy(),
+            self.bindable_texture.load().tsv.texture.as_image_copy(),
             self.image.read().as_raw(),
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(4 * ATLAS_DIMENSIONS as u32),
-                rows_per_image: NonZeroU32::new(ATLAS_DIMENSIONS as u32)
+                bytes_per_row: NonZeroU32::new(4 * size),
+                rows_per_image: NonZeroU32::new(size)
             },
             wgpu::Extent3d {
-                width: ATLAS_DIMENSIONS as u32,
-                height: ATLAS_DIMENSIONS as u32,
+                width: size as u32,
+                height: size as u32,
                 depth_or_array_layers: 1
             }
         );
+
+        false
     }
 
     pub fn clear(&self) {
+        let size = *self.size.read();
+
         self.allocator.write().clear();
         self.animated_texture_offsets.write().clear();
         self.animated_textures.write().clear();
-        *self.image.write() = ImageBuffer::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS);
+        *self.image.write() = ImageBuffer::new(size, size);
     }
 }
 
