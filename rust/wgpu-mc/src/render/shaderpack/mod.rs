@@ -1,6 +1,10 @@
 use linked_hash_map::LinkedHashMap;
 use serde_derive::*;
 
+/// semver
+pub const CONFIG_VERSION: &str = "v0.0.1";
+/// (major, minor, patch)
+pub const CONFIG_VERSION_TRIPLE: (u32, u32, u32) = (0, 0, 1);
 
 pub type Mat3 = [[f64; 3]; 3];
 pub type Mat4 = [[f64; 4]; 4];
@@ -11,6 +15,26 @@ pub struct ShaderPackConfig {
     pub support: String,
     pub resources: ResourcesConfig,
     pub pipelines: PipelinesConfig,
+}
+
+impl ShaderPackConfig {
+    /// Returns true if the first two numbers (major and minor) are as expected.
+    /// If the format is incorrect or they're different, this returns false.
+    pub fn is_correct_version(&self) -> bool {
+        let numbers: Vec<u32> = self
+            .version
+            .strip_prefix('v')
+            .unwrap_or_default() // if it couldn't find the default, numbers will be empty
+            .split('.')
+            .map(|number| &number[..number.len() - 1])
+            .map(|num_str| num_str.parse().unwrap_or(u32::MAX))
+            .collect();
+
+        numbers.len() == 3
+            && numbers[0] == CONFIG_VERSION_TRIPLE.0
+            && numbers[1] == CONFIG_VERSION_TRIPLE.1
+            && numbers[2] != u32::MAX
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -131,7 +155,7 @@ pub enum UniformVisibility {
 
 #[cfg(test)]
 mod tests {
-    use super::{ShaderPackConfig};
+    use super::ShaderPackConfig;
     use serde::Deserialize;
     use std::fmt::Debug;
 
@@ -149,7 +173,7 @@ mod tests {
     }
 
     const FULL_YAML: &str = r#"
-version: "0.0.1-SNAPSHOT"
+version: "0.0.1"
 support: glsl # could also be wgsl
 resources:
   shadowmap_texture_depth:
