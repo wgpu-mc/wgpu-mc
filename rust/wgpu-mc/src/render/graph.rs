@@ -34,7 +34,7 @@ impl WmPipeline for ShaderGraph {
         todo!()
     }
 
-    fn provide_shaders(&self, wm: &crate::WmRenderer) -> HashMap<String, Box<dyn super::shader::WmShader>> {
+    fn provide_shaders(&self, _wm: &crate::WmRenderer) -> HashMap<String, Box<dyn super::shader::WmShader>> {
         todo!()
     }
 
@@ -42,12 +42,12 @@ impl WmPipeline for ShaderGraph {
         todo!()
     }
 
-    fn build_wgpu_pipeline_layouts(&self, wm: &crate::WmRenderer)
+    fn build_wgpu_pipeline_layouts(&self, _wm: &crate::WmRenderer)
         -> HashMap<String, wgpu::PipelineLayout> {
         todo!()
     }
 
-    fn build_wgpu_pipelines(&self, wm: &crate::WmRenderer) -> HashMap<String, wgpu::RenderPipeline> {
+    fn build_wgpu_pipelines(&self, _wm: &crate::WmRenderer) -> HashMap<String, wgpu::RenderPipeline> {
         todo!()
     }
 
@@ -60,9 +60,9 @@ impl WmPipeline for ShaderGraph {
     >(
         &'pipeline self,
 
-        wm: &'wm crate::WmRenderer,
-        render_pass: &'pass_borrow mut wgpu::RenderPass<'render_pass>,
-        arena: &'pass_borrow mut crate::util::WmArena<'arena>,
+        _wm: &'wm crate::WmRenderer,
+        _render_pass: &'pass_borrow mut wgpu::RenderPass<'render_pass>,
+        _arena: &'pass_borrow mut crate::util::WmArena<'arena>,
     ) {
         todo!()
     }

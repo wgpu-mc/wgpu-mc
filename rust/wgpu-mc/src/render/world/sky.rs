@@ -1,4 +1,4 @@
-use wgpu::VertexAttribute;
+
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

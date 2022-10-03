@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
-use wgpu_mc::{mc::entity::{Entity, EntityPart, Cuboid, CuboidUV, PartTransform}, texture::BindableTexture, render::atlas::Atlas};
+use wgpu_mc::{mc::entity::{EntityPart, Cuboid, CuboidUV, PartTransform}, render::atlas::Atlas};
 
 pub static ENTITY_ATLAS: OnceCell<Arc<Atlas>> = OnceCell::new();
 

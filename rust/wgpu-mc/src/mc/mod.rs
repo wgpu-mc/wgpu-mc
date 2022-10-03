@@ -1,5 +1,5 @@
-use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
+
+
 use std::mem::size_of;
 
 use std::sync::Arc;
@@ -11,15 +11,15 @@ use parking_lot::RwLock;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
-use crate::mc::block::{BlockstateKey};
+
 use crate::mc::chunk::ChunkManager;
 use crate::mc::resource::ResourceProvider;
 
 use crate::render::atlas::{Atlas, TextureManager};
-use crate::render::pipeline::RenderPipelineManager;
+
 
 use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
-use crate::{WgpuState, WmRenderer};
+use crate::{WmRenderer};
 use indexmap::map::IndexMap;
 use crate::mc::entity::Entity;
 
@@ -69,7 +69,7 @@ impl Block {
         let key_string = key.clone().into_iter()
                     .map(|(key, value)| format!("{}={}", key, match value {
                         schemas::blockstates::multipart::StateValue::Bool(bool) => if *bool { "true" } else { "false" },
-                        schemas::blockstates::multipart::StateValue::String(string) => &string,
+                        schemas::blockstates::multipart::StateValue::String(string) => string,
                     }))
                     .collect::<Vec<String>>()
                     .join(",");
@@ -279,7 +279,7 @@ impl MinecraftState {
             block_manager.blocks.insert(String::from(block_name.as_ref()), block);
         });
 
-        block_atlas.upload(&wm);
+        block_atlas.upload(wm);
 
     }
 

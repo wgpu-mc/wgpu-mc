@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::render::atlas::Atlas;
-use crate::texture::{UV, BindableTexture};
+use crate::texture::{BindableTexture, UV};
 
-use crate::render::entity::{EntityVertex};
+use crate::render::entity::EntityVertex;
 use crate::render::pipeline::RenderPipelineManager;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{WgpuState, WmRenderer};
@@ -11,7 +11,7 @@ use arc_swap::ArcSwap;
 use cgmath::{Matrix4, SquareMatrix, Vector4};
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use crate::camera::UniformMatrixHelper;
+
 use bytemuck::{Pod, Zeroable};
 
 pub type Position = (f32, f32, f32);
@@ -49,27 +49,30 @@ pub struct PartTransform {
     pub roll: f32,
     pub scale_x: f32,
     pub scale_y: f32,
-    pub scale_z: f32
+    pub scale_z: f32,
 }
 
 impl PartTransform {
     pub fn describe(&self) -> cgmath::Matrix4<f32> {
         cgmath::Matrix4::from_nonuniform_scale(self.scale_x, self.scale_y, self.scale_z)
-        * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
-            self.pivot_x / self.scale_x,
-            self.pivot_y / self.scale_y,
-            self.pivot_z / self.scale_z,
-        )) * cgmath::Matrix4::from_angle_z(cgmath::Deg(self.roll))
+            * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+                self.pivot_x / self.scale_x,
+                self.pivot_y / self.scale_y,
+                self.pivot_z / self.scale_z,
+            ))
+            * cgmath::Matrix4::from_angle_z(cgmath::Deg(self.roll))
             * cgmath::Matrix4::from_angle_x(cgmath::Deg(self.pitch))
             * cgmath::Matrix4::from_angle_y(cgmath::Deg(self.yaw))
             * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
                 -self.pivot_x / self.scale_x,
                 -self.pivot_y / self.scale_y,
-                -self.pivot_z / self.scale_z))
+                -self.pivot_z / self.scale_z,
+            ))
             * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
                 self.x / self.scale_x,
                 self.y / self.scale_y,
-                self.z / self.scale_z))
+                self.z / self.scale_z,
+            ))
     }
 
     pub fn identity() -> Self {
@@ -85,7 +88,7 @@ impl PartTransform {
             roll: 0.0,
             scale_x: 1.0,
             scale_y: 1.0,
-            scale_z: 1.0
+            scale_z: 1.0,
         }
     }
 }
@@ -125,9 +128,7 @@ impl Cuboid {
         let y = self.y / 16.0;
         let z = self.z / 16.0;
 
-        let a = (matrix * Vector4::new(x, y, z, 1.0))
-            .truncate()
-            .into();
+        let a = (matrix * Vector4::new(x, y, z, 1.0)).truncate().into();
         let b = (matrix * Vector4::new(x + width, y, z, 1.0))
             .truncate()
             .into();
@@ -143,15 +144,9 @@ impl Cuboid {
         let f = (matrix * Vector4::new(x + width, y, z + length, 1.0))
             .truncate()
             .into();
-        let g = (matrix
-            * Vector4::new(
-                x + width,
-                y + height,
-                z + length,
-                1.0,
-            ))
-        .truncate()
-        .into();
+        let g = (matrix * Vector4::new(x + width, y + height, z + length, 1.0))
+            .truncate()
+            .into();
         let h = (matrix * Vector4::new(x, y + height, z + length, 1.0))
             .truncate()
             .into();
@@ -383,7 +378,7 @@ impl Cuboid {
                     tex_coords: [self.textures.down.1 .0, self.textures.down.1 .1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
-                }
+                },
             ],
         ]
     }
@@ -407,12 +402,18 @@ pub struct Entity {
     /// Names of each part referencing an index for applicable transforms
     pub parts: HashMap<String, usize>,
     pub mesh: Arc<wgpu::Buffer>,
-    pub vertices: u32
+    pub vertices: u32,
 }
 
 fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id: &mut u32) {
     part.cuboids.iter().for_each(|cuboid| {
-        vertices.extend(cuboid.describe(Matrix4::identity(), *part_id).iter().copied().flatten());
+        vertices.extend(
+            cuboid
+                .describe(Matrix4::identity(), *part_id)
+                .iter()
+                .copied()
+                .flatten(),
+        );
     });
 
     *part_id += 1;
@@ -431,7 +432,6 @@ fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<S
 }
 
 impl Entity {
-
     ///Create an entity from an [EntityPart] and upload it's mesh to the GPU
     pub fn new(root: EntityPart, wgpu_state: &WgpuState, texture: Arc<BindableTexture>) -> Self {
         let mut parts = HashMap::new();
@@ -447,26 +447,22 @@ impl Entity {
             model_root: root,
             texture,
             parts,
-            mesh: Arc::new(
-                wgpu_state.device.create_buffer_init(
-                    &BufferInitDescriptor {
-                        label: None,
-                        contents: bytemuck::cast_slice(&mesh[..]),
-                        usage: wgpu::BufferUsages::VERTEX
-                    }
-                )
-            ),
-            vertices: mesh.len() as u32
+            mesh: Arc::new(wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&mesh[..]),
+                usage: wgpu::BufferUsages::VERTEX,
+            })),
+            vertices: mesh.len() as u32,
         }
     }
-
 }
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct UploadedEntityInstances {
     pub(crate) transform_ssbo: (Arc<wgpu::Buffer>, Arc<wgpu::BindGroup>),
     pub(crate) instance_vbo: Arc<wgpu::Buffer>,
-    pub(crate) count: u32
+    pub(crate) count: u32,
 }
 
 #[derive(Copy, Clone, Zeroable, Pod)]
@@ -476,7 +472,7 @@ pub(crate) struct EntityInstanceVBOEntry {
     /// Index into mat4[]
     pub(crate) entity_index: u32,
     pub(crate) uv_offset: [f32; 2],
-    pub(crate) parts_per_entity: u32
+    pub(crate) parts_per_entity: u32,
 }
 
 impl EntityInstanceVBOEntry {
@@ -496,20 +492,18 @@ impl EntityInstanceVBOEntry {
     }
 }
 
-
 pub struct EntityInstances {
     pub(crate) entity: Arc<Entity>,
     pub instances: Vec<EntityInstanceTransforms>,
-    pub(crate) uploaded: RwLock<Option<UploadedEntityInstances>>
+    pub(crate) uploaded: RwLock<Option<UploadedEntityInstances>>,
 }
 
 impl EntityInstances {
-
     pub fn new(entity: Arc<Entity>, instances: Vec<EntityInstanceTransforms>) -> Self {
         Self {
             entity,
             instances,
-            uploaded: RwLock::new(None)
+            uploaded: RwLock::new(None),
         }
     }
 
@@ -518,37 +512,34 @@ impl EntityInstances {
             .instances
             .iter()
             .flat_map(|transforms| {
-                let matrices = transforms.get_matrices(&self.entity)
+                transforms
+                    .get_matrices(&self.entity)
                     .into_iter()
                     .flatten()
-                    .flatten();
-                matrices
+                    .flatten()
             })
             .collect::<Vec<f32>>();
-        
-        let instances: Vec<EntityInstanceVBOEntry> = self.instances.iter()
+
+        let instances: Vec<EntityInstanceVBOEntry> = self
+            .instances
+            .iter()
             .enumerate()
-            .map(|(index, instance)| {
-                EntityInstanceVBOEntry {
-                    entity_index: index as u32,
-                    uv_offset: [instance.uv_offset.0, instance.uv_offset.1],
-                    parts_per_entity: self.entity.parts.len() as u32
-                }
+            .map(|(index, instance)| EntityInstanceVBOEntry {
+                entity_index: index as u32,
+                uv_offset: [instance.uv_offset.0, instance.uv_offset.1],
+                parts_per_entity: self.entity.parts.len() as u32,
             })
             .collect();
 
         let instances_bytes = bytemuck::cast_slice(&instances[..]);
 
-        let instance_vbo = Arc::new(wm
-            .wgpu_state
-            .device
-            .create_buffer_init(
-                &BufferInitDescriptor {
-                    label: None,
-                    contents: instances_bytes,
-                    usage: wgpu::BufferUsages::VERTEX
-                }
-            ));
+        let instance_vbo = Arc::new(wm.wgpu_state.device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: None,
+                contents: instances_bytes,
+                usage: wgpu::BufferUsages::VERTEX,
+            },
+        ));
 
         let transform_buffer = wm
             .wgpu_state
@@ -561,27 +552,24 @@ impl EntityInstances {
 
         let pipelines = wm.render_pipeline_manager.load();
 
-        let transform_bind_group = wm
-            .wgpu_state
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: pipelines.bind_group_layouts.read().get("ssbo").unwrap(),
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: transform_buffer.as_entire_binding(),
-                }],
-            });
+        let transform_bind_group =
+            wm.wgpu_state
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: pipelines.bind_group_layouts.read().get("ssbo").unwrap(),
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: transform_buffer.as_entire_binding(),
+                    }],
+                });
 
-        *self.uploaded.write() = Some(
-            UploadedEntityInstances {
-                transform_ssbo: (Arc::new(transform_buffer), Arc::new(transform_bind_group)),
-                instance_vbo,
-                count: self.instances.len() as u32
-            }
-        );
+        *self.uploaded.write() = Some(UploadedEntityInstances {
+            transform_ssbo: (Arc::new(transform_buffer), Arc::new(transform_bind_group)),
+            instance_vbo,
+            count: self.instances.len() as u32,
+        });
     }
-
 }
 
 pub struct EntityInstanceTransforms {
@@ -605,8 +593,11 @@ impl EntityInstanceTransforms {
 
         // let mut index = 0;
         recurse_transforms(
-            cgmath::Matrix4::from_translation(cgmath::Vector3::new(self.position.0, self.position.1, self.position.2))
-            * cgmath::Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw)),
+            cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+                self.position.0,
+                self.position.1,
+                self.position.2,
+            )) * cgmath::Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw)),
             &entity.model_root,
             &mut vec,
             // &mut index,

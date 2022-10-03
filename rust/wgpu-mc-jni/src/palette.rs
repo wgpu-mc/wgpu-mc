@@ -1,10 +1,9 @@
-use jni::objects::{GlobalRef, JObject};
-use jni::sys::{jlong, jobject};
-use wgpu_mc::mc::Block;
+use core::fmt::Debug;
+use jni::objects::GlobalRef;
+use jni::sys::jobject;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use wgpu_mc::mc::block::BlockstateKey;
-use core::fmt::Debug;
 
 pub struct IdList {
     pub map: HashMap<i32, GlobalRef>,

@@ -1,30 +1,42 @@
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use futures::executor::block_on;
-use jni::{JNIEnv, objects::{JString, JValue}};
-use winit::{dpi::PhysicalSize, event::{ModifiersState, WindowEvent, Event, ElementState}, event_loop::ControlFlow};
+use jni::{
+    objects::{JString, JValue},
+    JNIEnv,
+};
+use winit::{
+    dpi::PhysicalSize,
+    event::{ElementState, Event, ModifiersState, WindowEvent},
+    event_loop::ControlFlow,
+};
 
-use crate::{THREAD_POOL, MinecraftRenderState, MC_STATE, WINDOW, WinitWindowWrapper, MinecraftResourceManagerAdapter, RENDERER, GL_PIPELINE, CHANNELS, RenderMessage, entity::ENTITY_ATLAS};
+use crate::{
+    entity::ENTITY_ATLAS, gl::GL_ALLOC, MinecraftRenderState, MinecraftResourceManagerAdapter,
+    RenderMessage, WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, THREAD_POOL,
+    WINDOW,
+};
+use arc_swap::ArcSwap;
 use rayon::ThreadPoolBuilder;
-use wgpu_mc::{WmRenderer, render::atlas::Atlas, render::pipeline::{debug_lines::DebugLinesPipeline, terrain::TerrainPipeline, WmPipeline}, texture::{BindableTexture, TextureSamplerView}};
 use std::thread;
 use wgpu_mc::wgpu;
-use arc_swap::{ArcSwap};
+use wgpu_mc::{
+    render::atlas::Atlas,
+    render::pipeline::{debug_lines::DebugLinesPipeline, terrain::TerrainPipeline, WmPipeline},
+    WmRenderer,
+};
 
-pub fn start_rendering(
-    env: JNIEnv,
-    title: JString
-) {
+pub fn start_rendering(env: JNIEnv, title: JString) {
     use winit::event_loop::EventLoop;
 
     let title: String = env.get_string(title).unwrap().into();
 
-    THREAD_POOL.set(
-        ThreadPoolBuilder::new()
-            .num_threads(0)
-            .build()
-            .unwrap()
-    ).unwrap();
+    THREAD_POOL
+        .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
+        .unwrap();
 
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
     #[cfg(target_os = "linux")]
@@ -47,9 +59,11 @@ pub fn start_rendering(
 
     WINDOW.set(window.clone()).unwrap();
 
-    MC_STATE.set(ArcSwap::new(Arc::new(MinecraftRenderState {
-        render_world: false,
-    }))).unwrap();
+    MC_STATE
+        .set(ArcSwap::new(Arc::new(MinecraftRenderState {
+            render_world: false,
+        })))
+        .unwrap();
 
     let wrapper = &WinitWindowWrapper { window: &window };
 
@@ -61,9 +75,13 @@ pub fn start_rendering(
 
     let wm = WmRenderer::new(wgpu_state, resource_provider);
 
-    RENDERER.set(wm.clone());
+    let _ = RENDERER.set(wm.clone());
 
-    wm.init(&[&DebugLinesPipeline, &TerrainPipeline, GL_PIPELINE.get().unwrap()]);
+    wm.init(&[
+        &DebugLinesPipeline,
+        &TerrainPipeline,
+        GL_PIPELINE.get().unwrap(),
+    ]);
 
     wm.mc.chunks.assemble_world_meshes(&wm);
 
@@ -71,7 +89,8 @@ pub fn start_rendering(
         "dev/birb/wgpu/render/Wgpu",
         ("dev/birb/wgpu/render/Wgpu", "INITIALIZED", "Z"),
         JValue::Bool(true.into()),
-    );
+    )
+    .unwrap();
 
     let mut current_modifiers = ModifiersState::empty();
 
@@ -99,20 +118,18 @@ pub fn start_rendering(
 
             let surface = wm.wgpu_state.surface.as_ref().unwrap();
             let texture = surface.get_current_texture().unwrap();
-            let view = texture.texture.create_view(
-                &wgpu::TextureViewDescriptor {
-                    label: None,
-                    format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                    dimension: Some(wgpu::TextureViewDimension::D2),
-                    aspect: Default::default(),
-                    base_mip_level: 0,
-                    mip_level_count: None,
-                    base_array_layer: 0,
-                    array_layer_count: None
-                }
-            );
+            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+                label: None,
+                format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                aspect: Default::default(),
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            });
 
-            let instant = Instant::now();
+            let _instant = Instant::now();
 
             wm.render(&pipelines, &view).unwrap();
             // println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
@@ -121,15 +138,22 @@ pub fn start_rendering(
 
             #[cfg(not(target_os = "macos"))]
             {
-                println!("gl alloc size: {} entries", GL_ALLOC.get().unwrap().read().len());
+                println!(
+                    "gl alloc size: {} entries",
+                    GL_ALLOC.get().unwrap().read().len()
+                );
                 thread::sleep(Duration::from_secs(1));
             }
         }
     });
 
-    ENTITY_ATLAS.set(
-        Arc::new(Atlas::new(&wm.wgpu_state, &wm.render_pipeline_manager.load(), false))
-    ).unwrap();
+    ENTITY_ATLAS
+        .set(Arc::new(Atlas::new(
+            &wm.wgpu_state,
+            &wm.render_pipeline_manager.load(),
+            false,
+        )))
+        .unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -150,11 +174,14 @@ pub fn start_rendering(
                             .get()
                             .unwrap()
                             .0
-                            .send(RenderMessage::Resized(physical_size.width, physical_size.height))
+                            .send(RenderMessage::Resized(
+                                physical_size.width,
+                                physical_size.height,
+                            ))
                             .unwrap();
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        let _ = wm.resize(wgpu_mc::WindowSize {
+                        wm.resize(wgpu_mc::WindowSize {
                             width: new_inner_size.width,
                             height: new_inner_size.height,
                         });
@@ -172,10 +199,10 @@ pub fn start_rendering(
                             .unwrap();
                     }
                     WindowEvent::MouseInput {
-                        device_id,
+                        device_id: _,
                         state,
                         button,
-                        modifiers,
+                        modifiers: _,
                     } => {
                         CHANNELS
                             .get()
@@ -193,9 +220,9 @@ pub fn start_rendering(
                             .unwrap();
                     }
                     WindowEvent::KeyboardInput {
-                        device_id,
+                        device_id: _,
                         input,
-                        is_synthetic,
+                        is_synthetic: _,
                     } => {
                         // input.scancode
                         match input.virtual_keycode {
@@ -223,7 +250,7 @@ pub fn start_rendering(
                 }
             }
             // Event::RedrawRequested(_) => {
-            
+
             // }
             _ => {}
         }

@@ -15,6 +15,7 @@ pub mod pipeline;
 pub static GL_ALLOC: OnceCell<RwLock<HashMap<i32, GlTexture>>> = OnceCell::new();
 pub static GL_COMMANDS: OnceCell<RwLock<Vec<GLCommand>>> = OnceCell::new();
 
+#[allow(unused_must_use)]
 pub fn init() {
     GL_ALLOC.set(RwLock::new(HashMap::new()));
     GL_COMMANDS.set(RwLock::new(Vec::new()));

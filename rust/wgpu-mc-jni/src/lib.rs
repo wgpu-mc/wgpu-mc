@@ -5,27 +5,24 @@
 extern crate core;
 
 use crate::entity::tmd_to_wm;
-use crate::gl::{GlTexture, GL_ALLOC};
+use crate::gl::GlTexture;
 use crate::palette::{IdList, JavaPalette};
 use arc_swap::ArcSwap;
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-use cgmath::{Deg, Matrix4, Point3, Vector3};
+use byteorder::{LittleEndian, ReadBytesExt};
+use cgmath::{Matrix4, Point3};
 use entity::TexturedModelData;
-use futures::task::UnsafeFutureObj;
-use wgpu_mc::mc::entity::Entity;
+
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
-use wgpu_mc::naga::proc::index;
-use wgpu_mc::render::atlas::Atlas;
-use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
+
 use core::slice;
-use std::mem::size_of;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use futures::executor::block_on;
+use std::mem::size_of;
+
 use gl::pipeline::{GLCommand, GlPipeline};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
-    _jobject, jboolean, jbyte, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong,
-    jlongArray, jobject, jstring, jsize, jshort,
+    jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray,
+    jobject, jsize, jstring,
 };
 use jni::{JNIEnv, JavaVM};
 use mc_varint::VarIntRead;
@@ -34,38 +31,36 @@ use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::env::var;
+
 use std::io::Cursor;
 use std::num::{NonZeroU32, NonZeroUsize};
-use std::ptr::drop_in_place;
-use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH, Duration};
-use std::{fs, mem, thread};
+
 use std::f32::consts::PI;
-use std::fmt::{Debug, Formatter};
-use std::ops::Shr;
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use std::fmt::Debug;
+use std::mem;
+use std::sync::Arc;
+use std::time::Instant;
+
+use rayon::ThreadPool;
 use wgpu::Extent3d;
-use wgpu_mc::mc::block::{BlockPos, ChunkBlockState, BlockstateKey};
+use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
-use wgpu_mc::mc::resource::{ResourceProvider, ResourcePath};
-use wgpu_mc::render::pipeline::terrain::{TerrainPipeline, BLOCK_ATLAS_NAME};
-use wgpu_mc::render::pipeline::WmPipeline;
-use wgpu_mc::texture::{TextureSamplerView, BindableTexture};
+use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
+use wgpu_mc::render::pipeline::terrain::BLOCK_ATLAS_NAME;
+use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
-use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, Event, ModifiersState, MouseButton, VirtualKeyCode, WindowEvent};
-use winit::event_loop::ControlFlow;
+use winit::dpi::PhysicalPosition;
+use winit::event::{ElementState, MouseButton};
 use winit::window::Window;
-use wgpu_mc::camera::Camera;
 
-
+mod entity;
 mod gl;
 mod palette;
-mod entity;
 mod renderer;
+
+#[allow(dead_code)]
 enum RenderMessage {
     SetTitle(String),
     Task(Box<dyn FnOnce() + Send + Sync>),
@@ -83,6 +78,7 @@ struct MinecraftRenderState {
     render_world: bool,
 }
 
+#[allow(dead_code)]
 struct MouseState {
     pub x: f64,
     pub y: f64,
@@ -110,7 +106,7 @@ struct ChunkHolder {
 #[derive(Debug)]
 struct MinecraftBlockstateProvider {
     pub chunks: RwLock<HashMap<(i32, i32), ChunkHolder>>,
-    pub air: BlockstateKey
+    pub air: BlockstateKey,
 }
 
 impl BlockStateProvider for MinecraftBlockstateProvider {
@@ -141,9 +137,9 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         let (_, block) = palette.get(palette_key as usize).unwrap();
 
         if *block == self.air {
-            return ChunkBlockState::Air;
+            ChunkBlockState::Air
         } else {
-            return ChunkBlockState::State(*block)
+            ChunkBlockState::State(*block)
         }
     }
 }
@@ -181,35 +177,30 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
                 "dev/birb/wgpu/rust/WgpuResourceProvider",
                 "getResource",
                 "(Ljava/lang/String;)[B",
-                &[
-                    JValue::Object(path.into())
-                ],
-            ).ok()?.l().ok()?;
+                &[JValue::Object(path.into())],
+            )
+            .ok()?
+            .l()
+            .ok()?;
 
         let elements = env
-            .get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack).ok()?;
+            .get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack)
+            .ok()?;
 
         let size = elements.size().ok()? as usize;
 
-        let mut vec = vec![0u8; size];
-        
-        Some(
-            Vec::from(
-                unsafe {
-                    std::slice::from_raw_parts(
-                        elements.as_ptr() as *const u8,
-                        size
-                    )
-                }
-            )
-        )
+        let _vec = vec![0u8; size];
+
+        Some(Vec::from(unsafe {
+            std::slice::from_raw_parts(elements.as_ptr() as *const u8, size)
+        }))
     }
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
 ) -> jstring {
     let renderer = RENDERER.get().unwrap();
     let backend = renderer.get_backend_description();
@@ -220,12 +211,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     block_state: JObject,
     block_name: JString,
-    state_key: JString
+    state_key: JString,
 ) {
-    let (tx, _) = CHANNELS.get_or_init(|| {
+    let (_tx, _) = CHANNELS.get_or_init(|| {
         let (tx, rx) = unbounded();
         (tx, rx)
     });
@@ -235,9 +226,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
     let block_name: String = env.get_string(block_name).unwrap().into();
     let state_key: String = env.get_string(state_key).unwrap().into();
 
-    let states = BLOCK_STATES.get_or_init(|| {
-        Mutex::new(Vec::new())
-    });
+    let states = BLOCK_STATES.get_or_init(|| Mutex::new(Vec::new()));
 
     states.lock().push((block_name, state_key, global_ref));
 }
@@ -245,7 +234,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     x: jint,
     z: jint,
     palettes: jlongArray,
@@ -285,66 +274,77 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .try_into()
         .unwrap();
 
-   let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| {
-        MinecraftBlockstateProvider { 
-            chunks: RwLock::new(HashMap::new()),
-            air: BlockstateKey {
-                block: wm.mc.block_manager.read().blocks.get_full("minecraft:air").unwrap().0 as u16,
-                augment: 0
-            }
-        }
+    let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| MinecraftBlockstateProvider {
+        chunks: RwLock::new(HashMap::new()),
+        air: BlockstateKey {
+            block: wm
+                .mc
+                .block_manager
+                .read()
+                .blocks
+                .get_full("minecraft:air")
+                .unwrap()
+                .0 as u16,
+            augment: 0,
+        },
     });
 
     let mut write = bsp.chunks.write();
 
     write.insert(
-        (x, z), 
-        ChunkHolder { 
+        (x, z),
+        ChunkHolder {
             sections: palettes.zip(*storages).map(|(palette_addr, storage_addr)| {
                 //If (in Java) the chunk storage class was not a PackedIntegerArray but an EmptyPaletteStorage, it won't have created a Rust
                 //version of the PackedIntegerArray and the jlong will default to 0, or null
-                if palette_addr == 0 || storage_addr == 0 { return None; }
+                if palette_addr == 0 || storage_addr == 0 {
+                    return None;
+                }
 
                 //SAFETY: Java will have called Java_dev_birb_wgpu_rust_WgpuNative_createPalette and Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage
                 //respectively to create these pointers. Rust will also have ownership of the data at the pointers at this point.
                 //The only thing that updates "live" later in Java is the JavaPalette, so we clone that here to keep ownership later
                 unsafe {
-                    Some(
-                        (
-                            Box::from_raw(palette_addr as *mut JavaPalette).clone(),
-                            Box::from_raw(storage_addr as *mut PackedIntegerArray)
-                        )
-                    )
+                    Some((
+                        Box::from_raw(palette_addr as *mut JavaPalette),
+                        Box::from_raw(storage_addr as *mut PackedIntegerArray),
+                    ))
                 }
-            })
-        }
+            }),
+        },
     );
 
     let chunk = Chunk {
         pos: (x, z),
-        baked: ArcSwap::new(Arc::new(None))
+        baked: ArcSwap::new(Arc::new(None)),
     };
 
-    wm.mc.chunks.loaded_chunks
+    wm.mc
+        .chunks
+        .loaded_chunks
         .write()
         .insert((x, z), ArcSwap::new(Arc::new(chunk)));
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     x: jint,
-    z: jint
+    z: jint,
 ) {
     THREAD_POOL.get().unwrap().spawn(move || {
         let wm = RENDERER.get().unwrap();
         let bm = wm.mc.block_manager.read();
 
-        let chunk = wm.mc.chunks.loaded_chunks
+        let chunk = wm
+            .mc
+            .chunks
+            .loaded_chunks
             .read()
             .get(&(x, z))
-            .unwrap().load();
+            .unwrap()
+            .load();
 
         let instant = Instant::now();
         chunk.bake(&bm, BLOCK_STATE_PROVIDER.get().unwrap());
@@ -356,14 +356,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
             Instant::now().duration_since(instant).as_millis(),
         );
 
-        wm.mc.chunks.assemble_world_meshes(&wm);
+        wm.mc.chunks.assemble_world_meshes(wm);
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlock(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     name: JString,
 ) {
     let name: String = env.get_string(name).unwrap().into();
@@ -386,7 +386,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
 ) {
     let wm = RENDERER.get().unwrap();
 
@@ -395,11 +395,25 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     {
         let blocks = BLOCKS.get().unwrap().lock();
 
-        let blockstates = blocks.iter().map(|identifier| {
-             (identifier.clone(), ResourcePath::try_from(&identifier[..]).unwrap().prepend("blockstates/").append(".json"))
-        }).collect::<Vec<_>>();
+        let blockstates = blocks
+            .iter()
+            .map(|identifier| {
+                (
+                    identifier.clone(),
+                    ResourcePath::try_from(&identifier[..])
+                        .unwrap()
+                        .prepend("blockstates/")
+                        .append(".json"),
+                )
+            })
+            .collect::<Vec<_>>();
 
-        wm.mc.bake_blocks(wm, blockstates.iter().map(|(string, resource)| (string, resource)));
+        wm.mc.bake_blocks(
+            wm,
+            blockstates
+                .iter()
+                .map(|(string, resource)| (string, resource)),
+        );
     }
 
     let states = BLOCK_STATES.get().unwrap().lock();
@@ -407,79 +421,91 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     let block_manager = wm.mc.block_manager.write();
     let mut mappings = Vec::new();
 
-    states.iter().for_each(|(block_name, state_key, global_ref)| {
-        let (id_key, _, wm_block) = block_manager.blocks.get_full(block_name).unwrap();
-    
-        let key_iter = if state_key != "" {
-            state_key
-                .split(",")
-                .filter_map(|kv_pair| {
-                    let mut split = kv_pair.split("=");
-                    if kv_pair == "" { return None; }
+    states
+        .iter()
+        .for_each(|(block_name, state_key, global_ref)| {
+            let (id_key, _, wm_block) = block_manager.blocks.get_full(block_name).unwrap();
 
-                    Some((
-                        split.next().unwrap(),
-                        match split.next().unwrap() {
-                            "true" => StateValue::Bool(true),
-                            "false" => StateValue::Bool(false),
-                            other => StateValue::String(other.into())
+            let key_iter = if !state_key.is_empty() {
+                state_key
+                    .split(',')
+                    .filter_map(|kv_pair| {
+                        let mut split = kv_pair.split('=');
+                        if kv_pair.is_empty() {
+                            return None;
                         }
-                    ))
-                })
-                .collect::<Vec<_>>()
-        } else {
-            vec![]
-        };
-    
-        let atlas = wm.mc.texture_manager.atlases.load().get(BLOCK_ATLAS_NAME).unwrap().load();
-    
-        // println!("{} {}", block_name, state_key);
 
-        let model = wm_block.get_model_by_key(
-            key_iter.iter().filter(|(a, _)| *a != "waterlogged").map(|(a,b)| (*a, b)), 
-            &*wm.mc.resource_provider, 
-            &atlas
-        );
-        let fallback_key = block_manager.blocks.get_full("minecraft:bedrock").unwrap();
+                        Some((
+                            split.next().unwrap(),
+                            match split.next().unwrap() {
+                                "true" => StateValue::Bool(true),
+                                "false" => StateValue::Bool(false),
+                                other => StateValue::String(other.into()),
+                            },
+                        ))
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![]
+            };
 
-        let key = match model {
-            Some((_, augment)) => {
-                BlockstateKey {
+            let atlas = wm
+                .mc
+                .texture_manager
+                .atlases
+                .load()
+                .get(BLOCK_ATLAS_NAME)
+                .unwrap()
+                .load();
+
+            // println!("{} {}", block_name, state_key);
+
+            let model = wm_block.get_model_by_key(
+                key_iter
+                    .iter()
+                    .filter(|(a, _)| *a != "waterlogged")
+                    .map(|(a, b)| (*a, b)),
+                &*wm.mc.resource_provider,
+                &atlas,
+            );
+            let fallback_key = block_manager.blocks.get_full("minecraft:bedrock").unwrap();
+
+            let key = match model {
+                Some((_, augment)) => BlockstateKey {
                     block: id_key as u16,
-                    augment
+                    augment,
+                },
+                None => {
+                    // println!("{}[{:?}]", block_name, key_iter);
+
+                    BlockstateKey {
+                        block: fallback_key.0 as u16,
+                        augment: 0,
+                    }
                 }
-            }
-            None => {
-                // println!("{}[{:?}]", block_name, key_iter);
+            };
 
-                BlockstateKey {
-                    block: fallback_key.0 as u16,
-                    augment: 0
-            }}
-        };
-    
-
-        mappings.push((key, global_ref));
-    });
-
-    mappings.iter()
-        .for_each(|(blockstate_key, global_ref)| {
-            env.call_static_method(
-                "dev/birb/wgpu/render/Wgpu",
-                "helperSetBlockStateIndex",
-                "(Ljava/lang/Object;I)V",
-                &[
-                    JValue::Object(global_ref.as_obj()),
-                    JValue::Int(blockstate_key.pack() as i32),
-                ],
-            ).unwrap();
+            mappings.push((key, global_ref));
         });
+
+    mappings.iter().for_each(|(blockstate_key, global_ref)| {
+        env.call_static_method(
+            "dev/birb/wgpu/render/Wgpu",
+            "helperSetBlockStateIndex",
+            "(Ljava/lang/Object;I)V",
+            &[
+                JValue::Object(global_ref.as_obj()),
+                JValue::Int(blockstate_key.pack() as i32),
+            ],
+        )
+        .unwrap();
+    });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
 ) {
     let (_, rx) = CHANNELS.get_or_init(|| {
         let (tx, rx) = unbounded();
@@ -524,9 +550,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
                 )
                 .unwrap();
             }
-            RenderMessage::Resized(width,height) => {
-                env.call_static_method("dev/birb/wgpu/render/Wgpu", "onResize", "(II)V", &[JValue::Int(width as i32), JValue::Int(height as i32)])
-                    .unwrap();
+            RenderMessage::Resized(width, height) => {
+                env.call_static_method(
+                    "dev/birb/wgpu/render/Wgpu",
+                    "onResize",
+                    "(II)V",
+                    &[JValue::Int(width as i32), JValue::Int(height as i32)],
+                )
+                .unwrap();
             }
             RenderMessage::KeyState(key, scancode, action, modifiers) => {
                 env.call_static_method(
@@ -555,6 +586,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
     }
 }
 
+#[allow(unused_must_use)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(_env: JNIEnv, _class: JClass) {
     gl::init();
@@ -620,6 +652,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
     bytes
 }
 
+#[allow(unused_must_use)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     env: JNIEnv,
@@ -638,7 +671,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     env: JNIEnv,
     _class: JClass,
 ) -> jobject {
-    let renderer = RENDERER.get().unwrap();
+    let _renderer = RENDERER.get().unwrap();
 
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[]).unwrap();
 
@@ -764,6 +797,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
     tx.send(RenderMessage::Task(Box::new(task))).unwrap();
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     _env: JNIEnv,
@@ -894,9 +928,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
     _env: JNIEnv,
     _class: JClass,
 ) -> jint {
-    RENDERER
-        .get()
-        .map_or(1280, |wm| wm.wgpu_state.surface_config.as_ref().unwrap().load().width as i32)
+    RENDERER.get().map_or(1280, |wm| {
+        wm.wgpu_state.surface_config.as_ref().unwrap().load().width as i32
+    })
 }
 
 #[no_mangle]
@@ -904,9 +938,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
     _env: JNIEnv,
     _class: JClass,
 ) -> jint {
-    RENDERER
-        .get()
-        .map_or(720, |wm| wm.wgpu_state.surface_config.as_ref().unwrap().load().height as i32)
+    RENDERER.get().map_or(720, |wm| {
+        wm.wgpu_state.surface_config.as_ref().unwrap().load().height as i32
+    })
 }
 
 #[no_mangle]
@@ -954,7 +988,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
 ) -> jstring {
     let video_mode = WINDOW
         .get()
@@ -996,7 +1030,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
     let mut converted = Vec::with_capacity(slice.len());
 
     for _ in 0..slice.len() {
-        use byteorder::ByteOrder;
         converted.push(cursor.read_f32::<LittleEndian>().unwrap());
     }
 
@@ -1079,33 +1112,36 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_scheduleChunkRebuild(
-    env: JNIEnv,
-    class: JClass,
-    x: jint,
-    z: jint,
+    _env: JNIEnv,
+    _class: JClass,
+    _x: jint,
+    _z: jint,
 ) {
-    let wm = RENDERER.get().unwrap();
+    let _wm = RENDERER.get().unwrap();
 
     // println!("Building chunk {},{}", x, z);
     // wm.mc.chunks.loaded_chunks.read().get(&(x,z)).unwrap().load().bake(&wm.mc.block_manager.read());
     // wm.mc.chunks.assemble_world_meshes(wm);
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPalette(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     idList: jlong,
 ) -> jlong {
-    let mut palette = Box::new(JavaPalette::new(NonZeroUsize::new(idList as usize).unwrap()));
+    let palette = Box::new(JavaPalette::new(
+        NonZeroUsize::new(idList as usize).unwrap(),
+    ));
 
     Box::leak(palette) as *mut JavaPalette as usize as jlong
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearPalette(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     palette_long: jlong,
 ) {
     let palette = (palette_long as usize) as *mut JavaPalette;
@@ -1115,8 +1151,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearPalette(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPalette(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     palette_long: jlong,
 ) {
     let palette = (palette_long as usize) as *mut JavaPalette;
@@ -1127,7 +1163,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPalette(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     palette_long: jlong,
     object: JObject,
     blockstate_index: jint,
@@ -1145,7 +1181,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteHasAny(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     palette_long: jlong,
     predicate: JObject,
 ) -> jint {
@@ -1172,8 +1208,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteHasAny(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteSize(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     palette_long: jlong,
 ) -> jint {
     let palette = (palette_long as usize) as *mut JavaPalette;
@@ -1183,8 +1219,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteSize(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPalette(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     palette_long: jlong,
 ) -> jlong {
     let palette = (palette_long as usize) as *mut JavaPalette;
@@ -1197,8 +1233,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPalette(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     palette_long: jlong,
     index: i32,
 ) -> jobject {
@@ -1208,17 +1244,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
     match palette.get(index as usize) {
         Some((global_ref, _)) => {
             return global_ref.as_obj().into_inner();
-        },
+        }
         None => {
-            panic!("Palette index {} was not occupied\nPalette:\n{:?}", index, palette);
-        },
+            panic!(
+                "Palette index {} was not occupied\nPalette:\n{:?}",
+                index, palette
+            );
+        }
     }
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     palette_long: jlong,
     array: jbyteArray,
     current_position: jint,
@@ -1259,12 +1298,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
     for i in 0..packet_len as usize {
         let var_int: i32 = cursor.read_var_int().unwrap().into();
 
-        let object = id_list.map.get(&var_int.into()).unwrap().clone();
+        let object = id_list.map.get(&var_int).unwrap().clone();
 
-        palette.add((object, BlockstateKey {
-            block: (blockstate_offsets[i] >> 16) as u16,
-            augment: (blockstate_offsets[i] & 0xffff) as u16
-        }));
+        palette.add((
+            object,
+            BlockstateKey {
+                block: (blockstate_offsets[i] >> 16) as u16,
+                augment: (blockstate_offsets[i] & 0xffff) as u16,
+            },
+        ));
     }
 
     //The amount of bytes read
@@ -1273,8 +1315,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createIdList(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
 ) -> jlong {
     let mut palette = Box::new(IdList::new());
 
@@ -1287,7 +1329,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createIdList(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_addIdListEntry(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     idlist_long: jlong,
     index: jint,
     object: JObject,
@@ -1312,7 +1354,7 @@ pub struct PackedIntegerArray {
     index_scale: i32,
     index_offset: i32,
     index_shift: i32,
-    size: i32
+    size: i32,
 }
 
 impl PackedIntegerArray {
@@ -1360,12 +1402,12 @@ impl PackedIntegerArray {
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGet(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     pia: jlong,
     x: jint,
     y: jint,
-    z: jint
+    z: jint,
 ) -> jint {
     let pia_ptr = unsafe { &mut *(pia as usize as *mut PackedIntegerArray) };
     pia_ptr.get(x, y, z)
@@ -1373,10 +1415,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGet(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     pia: jlong,
-    index: jint
+    index: jint,
 ) -> jint {
     let pia_ptr = unsafe { &mut *(pia as usize as *mut PackedIntegerArray) };
     pia_ptr.get_by_index(index)
@@ -1385,7 +1427,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     data: jlongArray,
     elements_per_long: jint,
     element_bits: jint,
@@ -1395,15 +1437,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     index_shift: jint,
     size: jint,
 ) -> jlong {
-    let copy = env.get_long_array_elements(data, ReleaseMode::NoCopyBack)
+    let copy = env
+        .get_long_array_elements(data, ReleaseMode::NoCopyBack)
         .unwrap();
 
     let mut packed_arr = Box::new(PackedIntegerArray {
-        data: Vec::from(
-            unsafe {
-                std::slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
-            }
-        ).into_boxed_slice(),
+        data: Vec::from(unsafe {
+            std::slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
+        })
+        .into_boxed_slice(),
         elements_per_long,
         element_bits,
         max_value,
@@ -1423,9 +1465,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
     env: JNIEnv,
-    class: JClass,
-    packed_integer_array: jlong,
-    palette: jlong
+    _class: JClass,
+    _packed_integer_array: jlong,
+    palette: jlong,
 ) {
     // let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
     let palette = unsafe { ((palette as usize) as *mut JavaPalette).as_ref().unwrap() };
@@ -1435,10 +1477,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
             "dev/birb/wgpu/render/Wgpu",
             "debug",
             "(Ljava/lang/Object;)V",
-            &[
-                JValue::Object(foo.0.as_obj()),
-            ],
-        ).unwrap();
+            &[JValue::Object(foo.0.as_obj())],
+        )
+        .unwrap();
     });
 
     // let wm = RENDERER.get().unwrap();
@@ -1470,36 +1511,45 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getRawStoragePointer(
-    env: JNIEnv,
-    class: JClass,
-    packed_integer_array: jlong
+    _env: JNIEnv,
+    _class: JClass,
+    packed_integer_array: jlong,
 ) -> jlong {
     let packed_integer_array_ptr = packed_integer_array as usize as *mut PackedIntegerArray;
-    (unsafe { &mut (&mut *packed_integer_array_ptr).data as *mut Box<[i64]> as usize }) as i64
+    (unsafe { &mut (*packed_integer_array_ptr).data as *mut Box<[i64]> as usize }) as i64
 }
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPaletteStorageData(
     env: JNIEnv,
-    class: JClass,
-    packed_integer_array: jlong
+    _class: JClass,
+    packed_integer_array: jlong,
 ) -> jlongArray {
     let packed_integer_array_ptr = packed_integer_array as usize as *mut PackedIntegerArray;
     let packed_integer_array = unsafe { packed_integer_array_ptr.as_ref().unwrap() };
-    let array = env.new_long_array(packed_integer_array.data.len() as jsize).unwrap();
-    let elements = env.get_long_array_elements(array, ReleaseMode::NoCopyBack).unwrap();
+    let array = env
+        .new_long_array(packed_integer_array.data.len() as jsize)
+        .unwrap();
+    let elements = env
+        .get_long_array_elements(array, ReleaseMode::NoCopyBack)
+        .unwrap();
 
     unsafe {
-        std::ptr::copy(packed_integer_array.data.as_ptr() as *const i64, elements.as_ptr(), packed_integer_array.data.len());
+        std::ptr::copy(
+            packed_integer_array.data.as_ptr() as *const i64,
+            elements.as_ptr(),
+            packed_integer_array.data.len(),
+        );
     }
 
     array
 }
 
+#[allow(unused_must_use)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPaletteStorage(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     storage: jlong,
 ) {
     unsafe {
@@ -1507,10 +1557,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPaletteStorage(
     }
 }
 
+#[allow(unused_must_use)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorPosition(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     x: f64,
     y: f64,
 ) {
@@ -1526,8 +1577,8 @@ const GLFW_CURSOR_DISABLED: i32 = 212995;
 /// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     mode: i32,
 ) {
     match mode {
@@ -1551,13 +1602,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
 
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
-    env: JNIEnv,
-    class: JClass,
+    _env: JNIEnv,
+    _class: JClass,
     x: jdouble,
-    y: jdouble,
+    _y: jdouble,
     z: jdouble,
     yaw: jfloat,
-    pitch: jfloat
+    pitch: jfloat,
 ) {
     let renderer = RENDERER.get().unwrap();
     if renderer.mc.camera_bind_group.load().is_none() {
@@ -1565,7 +1616,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
     }
 
     let mut camera = **renderer.mc.camera.load();
-    camera.position = Point3::new(x as f32, 200. , z as f32);
+    camera.position = Point3::new(x as f32, 200., z as f32);
     // camera.position = Point3::new(0.0, 200.0, 0.0);
     camera.yaw = (PI / 180.0) * yaw;
     camera.pitch = (PI / 180.0) * pitch;
@@ -1578,14 +1629,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntityModel(
     env: JNIEnv,
-    class: JClass,
-    json_jstring: JString
+    _class: JClass,
+    json_jstring: JString,
 ) {
-    let renderer = RENDERER.get().unwrap();
+    let _renderer = RENDERER.get().unwrap();
 
     let json_string: String = env.get_string(json_jstring).unwrap().into();
     let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
-    let entity_part = tmd_to_wm(&model_data.data.data);
+    let _entity_part = tmd_to_wm(&model_data.data.data);
     // println!("{:?}", entity);
     // let entity = Entity::new(entity_part.unwrap(), &renderer.wgpu_state, texture)
 }

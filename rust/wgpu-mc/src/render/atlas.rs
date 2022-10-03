@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+
 use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::texture::{TextureSamplerView, UV, BindableTexture};
 use bytemuck::{Pod, Zeroable};
@@ -124,9 +124,9 @@ impl Atlas {
 
         images.into_iter().for_each(|(name, slice)| {
             self.allocate_one(
-                &mut *image_buffer,
-                &mut *map,
-                &mut *allocator,
+                &mut image_buffer,
+                &mut map,
+                &mut allocator,
                 &mut animated_textures,
                 name,
                 slice.as_ref(),
@@ -221,7 +221,7 @@ impl Atlas {
                 &wm.render_pipeline_manager.load(),
                 TextureSamplerView::from_rgb_bytes(
                     &wm.wgpu_state,
-                    &self.image.read().as_raw(),
+                    self.image.read().as_raw(),
                     Extent3d {
                         width: size,
                         height: size,

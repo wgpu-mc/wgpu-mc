@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 use std::sync::Arc;
 use crate::mc::chunk::{
     BlockStateProvider, Chunk, WorldBuffers, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME,
@@ -163,7 +163,7 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
             let absolute_x = (chunk.pos.0*16) + x;
             let absolute_z = (chunk.pos.1*16) + z;
 
-            let section_index = y / (CHUNK_SECTION_HEIGHT as i16);
+            let _section_index = y / (CHUNK_SECTION_HEIGHT as i16);
 
             let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
 

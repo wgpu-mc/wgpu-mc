@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use cgmath::Matrix4;
-use futures::StreamExt;
 use once_cell::sync::OnceCell;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindGroupDescriptor, BindGroupEntry, RenderPass, RenderPipeline, VertexState};
@@ -12,12 +11,11 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, RenderPass, RenderPipeline, Vert
 use wgpu_mc::camera::UniformMatrixHelper;
 use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
-use wgpu_mc::texture::{TextureSamplerView, BindableTexture};
+use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::PipelineLayout;
 use wgpu_mc::{wgpu, WmRenderer};
 
-use crate::wgpu::{BlendComponent, BlendState};
 use crate::{gl, Extent3d};
 
 // #[rustfmt::skip]
@@ -28,6 +26,7 @@ use crate::{gl, Extent3d};
 //     0.0, 0.0, 0.5, 1.0,
 // );
 
+#[allow(dead_code)]
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -36,6 +35,7 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.0, 1.0,
 );
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum GLCommand {
     SetMatrix(Matrix4<f32>),
@@ -73,63 +73,81 @@ impl WmPipeline for GlPipeline {
         [
             (
                 "wgpu_mc_ogl:shaders/pos_col_float3".into(),
-                Box::new(WgslShader::init(
-                    &("wgpu_mc", "shaders/gui_col_pos.wgsl").into(),
-                    &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device,
-                    "fs_main".into(),
-                    "vs_main".into(),
-                ).unwrap()) as Box<dyn WmShader>,
+                Box::new(
+                    WgslShader::init(
+                        &("wgpu_mc", "shaders/gui_col_pos.wgsl").into(),
+                        &*wm.mc.resource_provider,
+                        &wm.wgpu_state.device,
+                        "fs_main".into(),
+                        "vs_main".into(),
+                    )
+                    .unwrap(),
+                ) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_col_uint".into(),
-                Box::new(WgslShader::init(
-                    &("wgpu_mc", "shaders/gui_col_pos_uint.wgsl").into(),
-                    &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device,
-                    "fs_main".into(),
-                    "vs_main".into(),
-                ).unwrap()) as Box<dyn WmShader>,
+                Box::new(
+                    WgslShader::init(
+                        &("wgpu_mc", "shaders/gui_col_pos_uint.wgsl").into(),
+                        &*wm.mc.resource_provider,
+                        &wm.wgpu_state.device,
+                        "fs_main".into(),
+                        "vs_main".into(),
+                    )
+                    .unwrap(),
+                ) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_tex".into(),
-                Box::new(WgslShader::init(
-                    &("wgpu_mc", "shaders/gui_uv_pos.wgsl").into(),
-                    &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device,
-                    "fs_main".into(),
-                    "vs_main".into(),
-                ).unwrap()) as Box<dyn WmShader>,
+                Box::new(
+                    WgslShader::init(
+                        &("wgpu_mc", "shaders/gui_uv_pos.wgsl").into(),
+                        &*wm.mc.resource_provider,
+                        &wm.wgpu_state.device,
+                        "fs_main".into(),
+                        "vs_main".into(),
+                    )
+                    .unwrap(),
+                ) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/clearcolor".into(),
-                Box::new(WgslShader::init(
-                    &("wgpu_mc", "shaders/clearcolor.wgsl").into(),
-                    &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device,
-                    "fs_main".into(),
-                    "vs_main".into(),
-                ).unwrap()) as Box<dyn WmShader>,
+                Box::new(
+                    WgslShader::init(
+                        &("wgpu_mc", "shaders/clearcolor.wgsl").into(),
+                        &*wm.mc.resource_provider,
+                        &wm.wgpu_state.device,
+                        "fs_main".into(),
+                        "vs_main".into(),
+                    )
+                    .unwrap(),
+                ) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_color_uv_light".into(),
-                Box::new(WgslShader::init(
-                    &("wgpu_mc", "shaders/gui_pos_color_uv_light.wgsl").into(),
-                    &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device,
-                    "fs_main".into(),
-                    "vs_main".into(),
-                ).unwrap()) as Box<dyn WmShader>,
+                Box::new(
+                    WgslShader::init(
+                        &("wgpu_mc", "shaders/gui_pos_color_uv_light.wgsl").into(),
+                        &*wm.mc.resource_provider,
+                        &wm.wgpu_state.device,
+                        "fs_main".into(),
+                        "vs_main".into(),
+                    )
+                    .unwrap(),
+                ) as Box<dyn WmShader>,
             ),
             (
                 "wgpu_mc_ogl:shaders/pos_texture_color".into(),
-                Box::new(WgslShader::init(
-                    &("wgpu_mc", "shaders/gui_pos_texture_color.wgsl").into(),
-                    &*wm.mc.resource_provider,
-                    &wm.wgpu_state.device,
-                    "fs_main".into(),
-                    "vs_main".into(),
-                ).unwrap()) as Box<dyn WmShader>,
+                Box::new(
+                    WgslShader::init(
+                        &("wgpu_mc", "shaders/gui_pos_texture_color.wgsl").into(),
+                        &*wm.mc.resource_provider,
+                        &wm.wgpu_state.device,
+                        "fs_main".into(),
+                        "vs_main".into(),
+                    )
+                    .unwrap(),
+                ) as Box<dyn WmShader>,
             ),
         ]
         .into_iter()
@@ -202,10 +220,10 @@ impl WmPipeline for GlPipeline {
                 wgpu::TextureFormat::Bgra8Unorm,
             )
             .unwrap();
-    
+
             Arc::new(BindableTexture::from_tsv(
                 &wm.wgpu_state,
-                &*pipeline_manager,
+                &pipeline_manager,
                 blank_tsv,
             ))
         });
@@ -708,7 +726,6 @@ impl WmPipeline for GlPipeline {
 
                     render_pass.set_bind_group(0, bg, &[]);
                 }
-                _ => {}
             };
         });
     }

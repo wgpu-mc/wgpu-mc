@@ -1,9 +1,12 @@
 use std::sync::Arc;
-use wgpu_mc::mc::chunk::BlockStateProvider;
-use wgpu_mc::mc::entity::{Cuboid, CuboidUV, EntityInstanceTransforms, EntityManager, Entity, EntityPart, PartTransform, EntityInstances};
+
+use wgpu_mc::mc::entity::{
+    Cuboid, CuboidUV, Entity, EntityInstanceTransforms, EntityInstances, EntityManager, EntityPart,
+    PartTransform,
+};
+use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::WmRenderer;
-use wgpu_mc::mc::resource::ResourcePath;
 
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     let _1 = 1.0 / (ATLAS_DIMENSIONS as f32);
@@ -25,7 +28,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                 roll: 0.0,
                 scale_x: 1.0,
                 scale_y: 1.0,
-                scale_z: 1.0
+                scale_z: 1.0,
             },
             cuboids: vec![Cuboid {
                 x: 0.0,
@@ -60,27 +63,25 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                         roll: 0.0,
                         scale_x: 1.0,
                         scale_y: 1.0,
-                        scale_z: 1.0
+                        scale_z: 1.0,
                     },
-                    cuboids: vec![
-                        Cuboid {
-                            x: 0.0,
-                            y: 0.0,
-                            z: 0.0,
-                            width: 16.0,
-                            height: 16.0,
-                            length: 16.0,
-                            textures: CuboidUV {
-                                north: ((_64, _16), (_64 + _16, _16 + _16)),
-                                east: ((_64, _16), (_64 + _16, _16 + _16)),
-                                south: ((_64, _16), (_64 + _16, _16 + _16)),
-                                west: ((_64, _16), (_64 + _16, _16 + _16)),
-                                up: ((_64, _16), (_64 + _16, _16 + _16)),
-                                down: ((_64, _16), (_64 + _16, _16 + _16))
-                            },
-                        }
-                    ],
-                    children: vec![]
+                    cuboids: vec![Cuboid {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        width: 16.0,
+                        height: 16.0,
+                        length: 16.0,
+                        textures: CuboidUV {
+                            north: ((_64, _16), (_64 + _16, _16 + _16)),
+                            east: ((_64, _16), (_64 + _16, _16 + _16)),
+                            south: ((_64, _16), (_64 + _16, _16 + _16)),
+                            west: ((_64, _16), (_64 + _16, _16 + _16)),
+                            up: ((_64, _16), (_64 + _16, _16 + _16)),
+                            down: ((_64, _16), (_64 + _16, _16 + _16)),
+                        },
+                    }],
+                    children: vec![],
                 },
                 EntityPart {
                     name: Arc::new("glass thing".to_string()),
@@ -96,27 +97,25 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                         roll: 0.0,
                         scale_x: 1.0,
                         scale_y: 1.0,
-                        scale_z: 1.0
+                        scale_z: 1.0,
                     },
-                    cuboids: vec![
-                        Cuboid {
-                            x: 0.0,
-                            y: 0.0,
-                            z: 0.0,
-                            width: 19.2,
-                            height: 19.2,
-                            length: 19.2,
-                            textures: CuboidUV {
-                                north: ((_16, 0.0), (_16 + _16, _16)),
-                                east: ((_16, 0.0), (_16 + _16, _16)),
-                                south: ((_16, 0.0), (_16 + _16, _16)),
-                                west: ((_16, 0.0), (_16 + _16, _16)),
-                                up: ((_16, 0.0), (_16 + _16, _16)),
-                                down: ((_16, 0.0), (_16 + _16, _16))
-                            },
-                        }
-                    ],
-                    children: vec![]
+                    cuboids: vec![Cuboid {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        width: 19.2,
+                        height: 19.2,
+                        length: 19.2,
+                        textures: CuboidUV {
+                            north: ((_16, 0.0), (_16 + _16, _16)),
+                            east: ((_16, 0.0), (_16 + _16, _16)),
+                            south: ((_16, 0.0), (_16 + _16, _16)),
+                            west: ((_16, 0.0), (_16 + _16, _16)),
+                            up: ((_16, 0.0), (_16 + _16, _16)),
+                            down: ((_16, 0.0), (_16 + _16, _16)),
+                        },
+                    }],
+                    children: vec![],
                 },
                 EntityPart {
                     name: Arc::new("glass thing 2".to_string()),
@@ -132,28 +131,26 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                         roll: 0.0,
                         scale_x: 1.0,
                         scale_y: 1.0,
-                        scale_z: 1.0
+                        scale_z: 1.0,
                     },
-                    cuboids: vec![
-                        Cuboid {
-                            x: 0.0,
-                            y: 0.0,
-                            z: 0.0,
-                            width: 19.2,
-                            height: 19.2,
-                            length: 19.2,
-                            textures: CuboidUV {
-                                north: ((_16, 0.0), (_16 + _16, _16)),
-                                east: ((_16, 0.0), (_16 + _16, _16)),
-                                south: ((_16, 0.0), (_16 + _16, _16)),
-                                west: ((_16, 0.0), (_16 + _16, _16)),
-                                up: ((_16, 0.0), (_16 + _16, _16)),
-                                down: ((_16, 0.0), (_16 + _16, _16))
-                            },
-                        }
-                    ],
-                    children: vec![]
-                }
+                    cuboids: vec![Cuboid {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        width: 19.2,
+                        height: 19.2,
+                        length: 19.2,
+                        textures: CuboidUV {
+                            north: ((_16, 0.0), (_16 + _16, _16)),
+                            east: ((_16, 0.0), (_16 + _16, _16)),
+                            south: ((_16, 0.0), (_16 + _16, _16)),
+                            west: ((_16, 0.0), (_16 + _16, _16)),
+                            up: ((_16, 0.0), (_16 + _16, _16)),
+                            down: ((_16, 0.0), (_16 + _16, _16)),
+                        },
+                    }],
+                    children: vec![],
+                },
             ],
         }
     };
@@ -162,24 +159,29 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     let alex_skin_resource = wm.mc.resource_provider.get_bytes(&alex_skin_ns).unwrap();
 
     //Create a new texture atlas
-    let test_entity_atlas = Atlas::new(&*wm.wgpu_state, &*wm.render_pipeline_manager.load_full(), false);
+    let test_entity_atlas = Atlas::new(
+        &wm.wgpu_state,
+        &wm.render_pipeline_manager.load_full(),
+        false,
+    );
 
     //Allocate the image with the alex_skin_ns variable as the key
-    test_entity_atlas.allocate([(&alex_skin_ns, &alex_skin_resource)], &*wm.mc.resource_provider);
+    test_entity_atlas.allocate(
+        [(&alex_skin_ns, &alex_skin_resource)],
+        &*wm.mc.resource_provider,
+    );
 
     //Uploads the atlas texture to the GPU
     test_entity_atlas.upload(wm);
 
     let entity_manager =
-        EntityManager::new(&*wm.wgpu_state, &wm.render_pipeline_manager.load_full());
+        EntityManager::new(&wm.wgpu_state, &wm.render_pipeline_manager.load_full());
 
-    let test_entity = Arc::new(
-        Entity::new(
-            entity_root,
-            &wm.wgpu_state,
-            test_entity_atlas.bindable_texture.load_full()
-        )
-    );
+    let test_entity = Arc::new(Entity::new(
+        entity_root,
+        &wm.wgpu_state,
+        test_entity_atlas.bindable_texture.load_full(),
+    ));
 
     {
         *entity_manager.player_texture_atlas.write() = test_entity_atlas;
@@ -192,25 +194,20 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
 
     let instances = EntityInstances::new(
         test_entity.clone(),
-        vec![
-            EntityInstanceTransforms {
-                position: (0.0, 0.0, 0.0),
-                looking_yaw: 0.0,
-                uv_offset: (0.0, 0.0),
-                part_transforms: vec![
-                    PartTransform::identity(),
-                    PartTransform::identity(),
-                    PartTransform::identity(),
-                    PartTransform::identity()
-                ]
-            }
-        ]
+        vec![EntityInstanceTransforms {
+            position: (0.0, 0.0, 0.0),
+            looking_yaw: 0.0,
+            uv_offset: (0.0, 0.0),
+            part_transforms: vec![
+                PartTransform::identity(),
+                PartTransform::identity(),
+                PartTransform::identity(),
+                PartTransform::identity(),
+            ],
+        }],
     );
 
     instances.upload(wm);
 
-    (
-        test_entity.clone(),
-        instances
-    )
+    (test_entity, instances)
 }

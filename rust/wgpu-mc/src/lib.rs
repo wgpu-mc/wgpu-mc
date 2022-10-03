@@ -58,7 +58,7 @@ use crate::mc::MinecraftState;
 use raw_window_handle::HasRawWindowHandle;
 
 use std::collections::HashMap;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, RenderPassDescriptor, TextureFormat, TextureViewDescriptor};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, RenderPassDescriptor};
 
 use crate::texture::TextureSamplerView;
 
@@ -70,7 +70,7 @@ use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
 use arc_swap::ArcSwap;
 
 use crate::render::atlas::Atlas;
-use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
+
 
 use crate::util::WmArena;
 
@@ -320,7 +320,7 @@ impl WmRenderer {
         );
     }
 
-    pub fn update_animated_textures(&self, subframe: u32) {
+    pub fn update_animated_textures(&self, _subframe: u32) {
         // self.upload_animated_block_buffer(
         //     self
         //     .mc
@@ -348,7 +348,7 @@ impl WmRenderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
                 color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &output_texture_view,
+                    view: output_texture_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {

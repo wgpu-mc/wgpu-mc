@@ -1,12 +1,12 @@
 use crate::mc::resource::ResourceProvider;
-use crate::render::atlas::{TextureManager, ATLAS_DIMENSIONS, Atlas};
-use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
+use crate::render::atlas::{ATLAS_DIMENSIONS, Atlas};
+
 use crate::texture::UV;
 use cgmath::{Matrix3, Vector3, Deg};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
 use bytemuck::{Pod, Zeroable};
-use parking_lot::RwLock;
+
 
 pub type BlockPos = (i32, u16, i32);
 
@@ -121,14 +121,14 @@ fn resolve_model(model: schemas::Model, resource_provider: &dyn ResourceProvider
     }).collect();
 
     let mut schema = ModelResolver::resolve_model(
-        [&model].into_iter().chain(parents.iter().map(|parent_borrow| parent_borrow))
+        [&model].into_iter().chain(parents.iter())
     );
 
     if let Some(textures) = &mut schema.textures {
         let copy = textures.clone();
 
         textures.iter_mut()
-            .for_each(|(key, texture)| {
+            .for_each(|(_key, texture)| {
                 if texture.reference().is_some() {
                     texture.0 = texture.resolve(&copy).unwrap().to_string();
                 }
@@ -192,14 +192,14 @@ impl ModelMesh {
                             .ok_or(
                                 MeshBakeError::UnresolvedResourcePath(model_resource_path)
                             )?
-                    ).map_err(|err| MeshBakeError::JsonError(err))?,
+                    ).map_err(MeshBakeError::JsonError)?,
                     resource_provider
                 );
 
                 match model.textures {
                     Some(textures) => {
                         //Make sure the textures in the model are fully resolved with no references
-                        match textures.iter().find(|(key, value)| value.reference().is_some()) {
+                        match textures.iter().find(|(_key, value)| value.reference().is_some()) {
                             Some(reference) => return Err(MeshBakeError::UnresolvedTextureReference(format!("key: {} value: {:?}", reference.0, reference.1))),
                             None => {},
                         }
@@ -260,8 +260,7 @@ impl ModelMesh {
                             get_atlas_uv(
                                 tex,
                                 block_atlas
-                            ).and_then(|uv| {
-                                Some((
+                            ).map(|uv| (
                                     //The default UV for this texture
                                     uv,
                                     //If this texture has an animation, get the offset, otherwise default to 0
@@ -269,15 +268,13 @@ impl ModelMesh {
                                         .get(&(&tex.texture.0).into())
                                         .unwrap_or(&0)
                                 ))
-                            })
                         );
         
                         let east = element.faces.get(&schemas::models::BlockFace::East).as_ref().and_then(|tex|        
                             get_atlas_uv(
                                 tex,
                                 block_atlas
-                            ).and_then(|uv| {
-                                Some((
+                            ).map(|uv| (
                                     //The default UV for this texture
                                     uv,
                                     //If this texture has an animation, get the offset, otherwise default to 0
@@ -285,15 +282,13 @@ impl ModelMesh {
                                         .get(&(&tex.texture.0).into())
                                         .unwrap_or(&0)
                                 ))
-                            })
                         );
         
                         let south = element.faces.get(&schemas::models::BlockFace::South).as_ref().and_then(|tex|        
                             get_atlas_uv(
                                 tex,
                                 block_atlas
-                            ).and_then(|uv| {
-                                Some((
+                            ).map(|uv| (
                                     //The default UV for this texture
                                     uv,
                                     //If this texture has an animation, get the offset, otherwise default to 0
@@ -301,15 +296,13 @@ impl ModelMesh {
                                         .get(&(&tex.texture.0).into())
                                         .unwrap_or(&0)
                                 ))
-                            })
                         );
         
                         let west = element.faces.get(&schemas::models::BlockFace::West).as_ref().and_then(|tex|        
                             get_atlas_uv(
                                 tex,
                                 block_atlas
-                            ).and_then(|uv| {
-                                Some((
+                            ).map(|uv| (
                                     //The default UV for this texture
                                     uv,
                                     //If this texture has an animation, get the offset, otherwise default to 0
@@ -317,15 +310,13 @@ impl ModelMesh {
                                         .get(&(&tex.texture.0).into())
                                         .unwrap_or(&0)
                                 ))
-                            })
                         );
         
                         let up = element.faces.get(&schemas::models::BlockFace::Up).as_ref().and_then(|tex|        
                             get_atlas_uv(
                                 tex,
                                 block_atlas
-                            ).and_then(|uv| {
-                                Some((
+                            ).map(|uv| (
                                     //The default UV for this texture
                                     uv,
                                     //If this texture has an animation, get the offset, otherwise default to 0
@@ -333,15 +324,13 @@ impl ModelMesh {
                                         .get(&(&tex.texture.0).into())
                                         .unwrap_or(&0)
                                 ))
-                            })
                         );
         
                         let down = element.faces.get(&schemas::models::BlockFace::Down).as_ref().and_then(|tex|        
                             get_atlas_uv(
                                 tex,
                                 block_atlas
-                            ).and_then(|uv| {
-                                Some((
+                            ).map(|uv| (
                                     //The default UV for this texture
                                     uv,
                                     //If this texture has an animation, get the offset, otherwise default to 0
@@ -349,7 +338,6 @@ impl ModelMesh {
                                         .get(&(&tex.texture.0).into())
                                         .unwrap_or(&0)
                                 ))
-                            })
                         );
         
                         let a = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0)).into();

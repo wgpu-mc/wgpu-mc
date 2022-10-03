@@ -1,15 +1,14 @@
-use crate::mc::block::{BlockPos, ChunkBlockState, BlockstateKey};
 use std::collections::HashMap;
-
-use crate::render::world::chunk::BakedChunkLayer;
-
-use arc_swap::ArcSwap;
-use parking_lot::RwLock;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
+use parking_lot::RwLock;
+
+use crate::mc::block::{BlockstateKey, ChunkBlockState};
 use crate::mc::BlockManager;
 use crate::render::pipeline::terrain::TerrainVertex;
+use crate::render::world::chunk::BakedChunkLayer;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -134,15 +133,9 @@ impl ChunkManager {
 
     pub fn bake_meshes<T: BlockStateProvider>(&self, wm: &WmRenderer, provider: &T) {
         let block_manager = wm.mc.block_manager.read();
-
-        use rayon::iter::ParallelIterator;
-        self.loaded_chunks
-            .read()
-            .iter()
-            .map(|(_pos, chunk)| {
-                chunk.load().bake(&block_manager, provider);
-            })
-            .collect::<Vec<_>>();
+        self.loaded_chunks.read().iter().for_each(|(_pos, chunk)| {
+            chunk.load().bake(&block_manager, provider);
+        });
     }
 
     pub fn assemble_world_meshes(&self, wm: &WmRenderer) {
@@ -163,8 +156,8 @@ impl ChunkManager {
                 Some(layers) => {
                     glass.extend(&layers.glass);
                     terrain.extend(&layers.terrain);
-                },
-                None => {},
+                }
+                None => {}
             };
         });
 

@@ -5,7 +5,7 @@ plugins {
 rust {
     command = "cargo"
 
-    environment = mapOf(Pair("RUSTUP_TOOLCHAIN", "nightly"))
+    environment = mapOf("RUSTUP_TOOLCHAIN" to "nightly")
 
     outputs = mapOf("" to System.mapLibraryName("wgpu_mc_jni"))
 
