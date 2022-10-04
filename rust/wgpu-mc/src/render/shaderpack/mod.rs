@@ -94,13 +94,25 @@ pub enum TypeResourceConfig {
         #[serde(default)]
         clear_after_frame: bool,
     },
-    Float {
+    F32 {
+        #[serde(default)]
+        range: [f32; 2],
+        value: f32,
+    },
+    F64 {
+        #[serde(default)]
         range: [f64; 2],
         value: f64,
     },
-    Int {
+    I64 {
+        #[serde(default)]
         range: [i64; 2],
         value: i64,
+    },
+    I32 {
+        #[serde(default)]
+        range: [i32; 2],
+        value: i32,
     },
     Mat3(Mat3ValueOrMult),
     Mat4(Mat4ValueOrMult),
@@ -186,6 +198,22 @@ resources:
       - [0.0, 1.0, 0.0, 0.0]
       - [0.0, 0.0, 1.0, 0.0]
       - [0.0, 0.0, 0.0, 1.0]
+  i32_test:
+    type: i32
+    value: 2
+  int_test:
+    type: i64
+    range: [0, 100]
+    value: 2
+  f32_test:
+    type: f32
+    range: [-1.0, 1.0]
+    value: 0.0
+  f64_test:
+    type: f64
+    range: [-1000.0, 1000.0]
+    value: 0.0
+    desc: This is a floating-point variable with 64 bits length
   model_view_mat4:
     type: mat4
     mult: [wm_model_mat4, wm_view_mat4]
