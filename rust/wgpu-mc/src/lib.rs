@@ -55,10 +55,10 @@ use crate::camera::UniformMatrixHelper;
 
 use crate::mc::MinecraftState;
 
-use raw_window_handle::HasRawWindowHandle;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 use std::collections::HashMap;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, RenderPassDescriptor};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, RenderPassDescriptor};
 
 use crate::texture::TextureSamplerView;
 
@@ -112,7 +112,7 @@ impl WmRenderer {
     ///
     /// This takes in a raw window handle and returns a [WgpuState], which is then used to
     /// initialize a [WmRenderer].
-    pub async fn init_wgpu<W: HasRawWindowHandle + HasWindowSize>(window: &W) -> WgpuState {
+    pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(window: &W) -> WgpuState {
         let size = window.get_window_size();
 
         //Vulkan works just fine, the issue is that using RenderDoc + Vulkan makes it hang on launch
@@ -150,6 +150,7 @@ impl WmRenderer {
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Mailbox,
+            alpha_mode: CompositeAlphaMode::Auto,
         };
 
         surface.configure(&device, &surface_config);
@@ -179,6 +180,8 @@ impl WmRenderer {
             },
             "depth texture",
         );
+
+        drop(surface_config);
 
         Self {
             wgpu_state: Arc::new(wgpu_state),
@@ -230,7 +233,7 @@ impl WmRenderer {
             return;
         }
 
-        let mut surface_config = (*self.wgpu_state.surface_config.as_ref().unwrap().load_full()).clone();
+        let mut surface_config = (*self.wgpu_state.surface_config.read().unwrap()).clone();
 
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
@@ -262,7 +265,7 @@ impl WmRenderer {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
-        let surface_config = self.wgpu_state.surface_config.as_ref().unwrap().load();
+        let surface_config = self.wgpu_state.surface_config.read().unwrap();
         camera.aspect = surface_config.width as f32 / surface_config.height as f32;
 
         let uniforms = UniformMatrixHelper {
@@ -348,7 +351,7 @@ impl WmRenderer {
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
-                color_attachments: &[wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: output_texture_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -360,7 +363,7 @@ impl WmRenderer {
                         }),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth_texture.view,
                     depth_ops: Some(wgpu::Operations {
