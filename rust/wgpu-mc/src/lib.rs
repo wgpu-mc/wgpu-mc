@@ -70,6 +70,7 @@ use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
 use arc_swap::ArcSwap;
 
 use crate::render::atlas::Atlas;
+use std::sync::RwLock;
 
 
 use crate::util::WmArena;
@@ -79,7 +80,7 @@ pub struct WgpuState {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub surface_config: Option<ArcSwap<wgpu::SurfaceConfiguration>>,
+    pub surface_config: RwLock<wgpu::SurfaceConfiguration>,
     pub size: Option<ArcSwap<WindowSize>>,
 }
 
@@ -158,7 +159,7 @@ impl WmRenderer {
             adapter,
             device,
             queue,
-            surface_config: Some(ArcSwap::new(Arc::new(surface_config))),
+            surface_config: RwLock::new(surface_config),
             size: Some(ArcSwap::new(Arc::new(size))),
         }
     }
@@ -167,7 +168,7 @@ impl WmRenderer {
         let pipelines = render::pipeline::RenderPipelineManager::new(resource_provider.clone());
 
         let mc = MinecraftState::new(resource_provider);
-        let surface_config = &wgpu_state.surface_config.as_ref().unwrap().load();
+        let surface_config = wgpu_state.surface_config.read().unwrap();
 
         let depth_texture = TextureSamplerView::create_depth_texture(
             &wgpu_state.device,
