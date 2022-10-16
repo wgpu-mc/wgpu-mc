@@ -19,7 +19,7 @@ use winit::window::Window;
 use std::sync::Arc;
 use wgpu_mc::mc::resource::ResourceProvider;
 
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
 
 use arc_swap::ArcSwap;
 
@@ -63,6 +63,12 @@ impl HasWindowSize for WinitWindowWrapper {
 unsafe impl HasRawWindowHandle for WinitWindowWrapper {
     fn raw_window_handle(&self) -> RawWindowHandle {
         self.window.raw_window_handle()
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WinitWindowWrapper {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        self.window.raw_display_handle()
     }
 }
 

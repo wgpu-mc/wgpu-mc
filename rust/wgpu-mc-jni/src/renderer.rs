@@ -22,6 +22,8 @@ use crate::{
 use arc_swap::ArcSwap;
 use rayon::ThreadPoolBuilder;
 use std::thread;
+use winit::event_loop::EventLoopBuilder;
+use winit::platform::unix::EventLoopBuilderExtUnix;
 use wgpu_mc::wgpu;
 use wgpu_mc::{
     render::atlas::Atlas,
@@ -38,11 +40,13 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
         .unwrap();
 
+
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
+    // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build
+    let mut event_loop = EventLoopBuilder::new();
     #[cfg(target_os = "linux")]
-    let event_loop: EventLoop<()> = winit::platform::unix::EventLoopExtUnix::new_any_thread();
-    #[cfg(not(target_os = "linux"))]
-    let event_loop: EventLoop<()> = EventLoop::new();
+    event_loop.with_any_thread(true);
+    let event_loop = event_loop.build();
 
     let window = Arc::new(
         winit::window::WindowBuilder::new()
