@@ -2,33 +2,33 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use std::thread;
 
+use arc_swap::ArcSwap;
 use futures::executor::block_on;
 use jni::{
-    objects::{JString, JValue},
     JNIEnv,
+    objects::{JString, JValue},
 };
+use rayon::ThreadPoolBuilder;
 use winit::{
     dpi::PhysicalSize,
     event::{ElementState, Event, ModifiersState, WindowEvent},
     event_loop::ControlFlow,
 };
-
-use crate::{
-    entity::ENTITY_ATLAS, gl::GL_ALLOC, MinecraftRenderState, MinecraftResourceManagerAdapter,
-    RenderMessage, WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, THREAD_POOL,
-    WINDOW,
-};
-use arc_swap::ArcSwap;
-use rayon::ThreadPoolBuilder;
-use std::thread;
 use winit::event_loop::EventLoopBuilder;
-use winit::platform::unix::EventLoopBuilderExtUnix;
-use wgpu_mc::wgpu;
+
 use wgpu_mc::{
     render::atlas::Atlas,
     render::pipeline::{debug_lines::DebugLinesPipeline, terrain::TerrainPipeline, WmPipeline},
     WmRenderer,
+};
+use wgpu_mc::wgpu;
+
+use crate::{
+    CHANNELS, entity::ENTITY_ATLAS, gl::GL_ALLOC, GL_PIPELINE,
+    MC_STATE, MinecraftRenderState, MinecraftResourceManagerAdapter, RENDERER, RenderMessage, THREAD_POOL, WINDOW,
+    WinitWindowWrapper,
 };
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
@@ -45,7 +45,10 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
     // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build
     let mut event_loop = EventLoopBuilder::new();
     #[cfg(target_os = "linux")]
-    event_loop.with_any_thread(true);
+    {
+        use winit::platform::unix::EventLoopBuilderExtUnix;
+        event_loop.with_any_thread(true);
+    }
     let event_loop = event_loop.build();
 
     let window = Arc::new(

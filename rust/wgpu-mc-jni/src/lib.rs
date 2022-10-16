@@ -1,5 +1,4 @@
 #![feature(once_cell)]
-#![feature(mixed_integer_ops)]
 #![feature(array_zip)]
 
 extern crate core;
