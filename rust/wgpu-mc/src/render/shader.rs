@@ -28,7 +28,7 @@ impl WgslShader {
 
         let shader_src = std::str::from_utf8(&shader_src).ok()?;
 
-        let module = device.create_shader_module(&ShaderModuleDescriptor {
+        let module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(Cow::from(shader_src)),
         });
@@ -72,7 +72,7 @@ impl GlslShader {
         let frag_src = std::str::from_utf8(&frag_src).unwrap();
         let vert_src = std::str::from_utf8(&vert_src).unwrap();
 
-        let frag_module = device.create_shader_module(&ShaderModuleDescriptor {
+        let frag_module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Glsl {
                 shader: Cow::from(frag_src),
@@ -81,7 +81,7 @@ impl GlslShader {
             },
         });
 
-        let vert_module = device.create_shader_module(&ShaderModuleDescriptor {
+        let vert_module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Glsl {
                 shader: Cow::from(vert_src),

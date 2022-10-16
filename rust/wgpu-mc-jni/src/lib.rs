@@ -1,5 +1,4 @@
 #![feature(once_cell)]
-#![feature(mixed_integer_ops)]
 #![feature(array_zip)]
 
 extern crate core;
@@ -28,7 +27,7 @@ use jni::{JNIEnv, JavaVM};
 use mc_varint::VarIntRead;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
@@ -53,7 +52,7 @@ use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
-use winit::window::Window;
+use winit::window::{CursorGrabMode, Window};
 
 mod entity;
 mod gl;
@@ -159,6 +158,12 @@ impl HasWindowSize for WinitWindowWrapper<'_> {
 unsafe impl HasRawWindowHandle for WinitWindowWrapper<'_> {
     fn raw_window_handle(&self) -> RawWindowHandle {
         self.window.raw_window_handle()
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WinitWindowWrapper<'_> {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        self.window.raw_display_handle()
     }
 }
 
@@ -929,7 +934,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
     _class: JClass,
 ) -> jint {
     RENDERER.get().map_or(1280, |wm| {
-        wm.wgpu_state.surface_config.as_ref().unwrap().load().width as i32
+        wm.wgpu_state.surface_config.read().unwrap().width as i32
     })
 }
 
@@ -939,7 +944,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
     _class: JClass,
 ) -> jint {
     RENDERER.get().map_or(720, |wm| {
-        wm.wgpu_state.surface_config.as_ref().unwrap().load().height as i32
+        wm.wgpu_state.surface_config.read().unwrap().height as i32
     })
 }
 
@@ -1002,7 +1007,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
         "{}x{}@{}:{}",
         video_mode.size().width,
         video_mode.size().height,
-        video_mode.refresh_rate(),
+        video_mode.refresh_rate_millihertz() / 1000,
         video_mode.bit_depth()
     ))
     .unwrap()
@@ -1583,15 +1588,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
 ) {
     match mode {
         GLFW_CURSOR_NORMAL => {
-            WINDOW.get().unwrap().set_cursor_grab(false).unwrap();
+            WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::None).unwrap();
             WINDOW.get().unwrap().set_cursor_visible(true);
         }
         GLFW_CURSOR_HIDDEN => {
-            WINDOW.get().unwrap().set_cursor_grab(false).unwrap();
+            WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::None).unwrap();
             WINDOW.get().unwrap().set_cursor_visible(false);
         }
         GLFW_CURSOR_DISABLED => {
-            WINDOW.get().unwrap().set_cursor_grab(true).unwrap();
+            WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::Confined)
+                .or_else(|_e| WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::Locked)).unwrap();
             WINDOW.get().unwrap().set_cursor_visible(false);
         }
         _ => {

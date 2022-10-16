@@ -287,11 +287,11 @@ impl WmPipeline for GlPipeline {
                         fragment: Some(wgpu::FragmentState {
                             module: pos_col_float3_shader.get_frag().0,
                             entry_point: pos_col_float3_shader.get_frag().1,
-                            targets: &[wgpu::ColorTargetState {
+                            targets: &[Some(wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
-                            }],
+                            })],
                         }),
                         multiview: None,
                     }),
@@ -343,11 +343,11 @@ impl WmPipeline for GlPipeline {
                         fragment: Some(wgpu::FragmentState {
                             module: pos_tex_shader.get_frag().0,
                             entry_point: pos_tex_shader.get_frag().1,
-                            targets: &[wgpu::ColorTargetState {
+                            targets: &[Some(wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
-                            }],
+                            })],
                         }),
                         multiview: None,
                     }),
@@ -399,11 +399,11 @@ impl WmPipeline for GlPipeline {
                         fragment: Some(wgpu::FragmentState {
                             module: pos_col_uint_shader.get_frag().0,
                             entry_point: pos_col_uint_shader.get_frag().1,
-                            targets: &[wgpu::ColorTargetState {
+                            targets: &[Some(wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
-                            }],
+                            })],
                         }),
                         multiview: None,
                     }),
@@ -455,11 +455,11 @@ impl WmPipeline for GlPipeline {
                         fragment: Some(wgpu::FragmentState {
                             module: clearcolor_shader.get_frag().0,
                             entry_point: clearcolor_shader.get_frag().1,
-                            targets: &[wgpu::ColorTargetState {
+                            targets: &[Some(wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
                                 blend: None,
                                 write_mask: Default::default(),
-                            }],
+                            })],
                         }),
                         multiview: None,
                     }),
@@ -521,11 +521,11 @@ impl WmPipeline for GlPipeline {
                         fragment: Some(wgpu::FragmentState {
                             module: pos_color_uv_light_shader.get_frag().0,
                             entry_point: pos_color_uv_light_shader.get_frag().1,
-                            targets: &[wgpu::ColorTargetState {
+                            targets: &[Some(wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
-                            }],
+                            })],
                         }),
                         multiview: None,
                     }),
@@ -582,11 +582,11 @@ impl WmPipeline for GlPipeline {
                         fragment: Some(wgpu::FragmentState {
                             module: pos_color_uv_light_shader.get_frag().0,
                             entry_point: pos_color_uv_light_shader.get_frag().1,
-                            targets: &[wgpu::ColorTargetState {
+                            targets: &[Some(wgpu::ColorTargetState {
                                 format: wgpu::TextureFormat::Bgra8Unorm,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                                 write_mask: Default::default(),
-                            }],
+                            })],
                         }),
                         multiview: None,
                     }),

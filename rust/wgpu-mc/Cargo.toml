@@ -7,11 +7,11 @@ edition = "2021"
 [dependencies]
 image = "0.23"
 cgmath = "0.17"
-wgpu = { version = "0.12.0", features = ["glsl"] }
-naga = "0.8.0"
+wgpu = { version = "0.14.0", features = ["glsl"] }
+naga = "0.10.0"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 anyhow = "1.0"
-winit = "0.26.0"
+winit = "0.27.4"
 serde = "1.0.123"
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
@@ -19,10 +19,10 @@ serde_yaml = "0.9.13"
 linked-hash-map = { version = "0.5.6", features = ["serde_impl"] }
 serde_derive = "1.0.145"
 guillotiere = "0.6.0"
-raw-window-handle = "0.4.2"
+raw-window-handle = "0.5.0"
 rayon = "1.5.2"
-dashmap = "4.0.2"
-parking_lot = "0.11.2"
+dashmap = "5.4.0"
+parking_lot = "0.12.1"
 arc-swap = "1.4.0"
 indexmap = { version = "1.7.0", features = ["std"] }
 multi-map = { git = "https://github.com/rust-embedded-community/multi-map.git" }
