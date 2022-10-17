@@ -3,7 +3,7 @@ struct VertexResult {
     @location(0) color: vec3<f32>,
 };
 
-@stage(vertex)
+@vertex
 fn vs_main(
     @location(0) pos_in: vec2<f32>,
     @location(1) color: vec3<f32>
