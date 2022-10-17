@@ -126,7 +126,7 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
 
         let storage_index = (y / 16) as usize;
 
-        let (palette, storage) = match &chunk.sections[storage_index as usize] {
+        let (palette, storage) = match &chunk.sections[storage_index] {
             Some(section) => section,
             None => return ChunkBlockState::Air,
         };
@@ -841,7 +841,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
         width as i64
     };
 
-    let src_row_size = row_width as usize * pixel_size as usize;
+    let src_row_size = row_width as usize * pixel_size;
 
     //GL_UNPACK_SKIP_PIXELS
     pixels += pixel_size * unpack_skip_pixels;
@@ -873,7 +873,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
 
         let gl_texture = alloc_write.get_mut(&texture_id).unwrap();
 
-        let dest_row_size = gl_texture.width as usize * pixel_size as usize;
+        let dest_row_size = gl_texture.width as usize * pixel_size;
 
         let mut pixel_offset = 0usize;
         for y in 0..height {
@@ -884,7 +884,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
                 (dest_row_size * (y + offsetY as usize)) + (offsetX as usize * pixel_size);
             let dest_end = dest_begin + src_row_size;
 
-            let dest_row_slice = &mut gl_texture.pixels[dest_begin as usize..dest_end as usize];
+            let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
             dest_row_slice.copy_from_slice(src_row_slice);
         }
 

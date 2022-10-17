@@ -103,8 +103,8 @@ pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
             .collect::<Option<Vec<Cuboid>>>()?,
         children: part
             .children
-            .iter()
-            .map(|(_, child)| tmd_to_wm(child))
+            .values()
+            .map(tmd_to_wm)
             .collect::<Option<Vec<EntityPart>>>()?,
     })
 }

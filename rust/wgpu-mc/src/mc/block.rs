@@ -189,9 +189,7 @@ impl ModelMesh {
                     serde_json::from_str(
                         //Get the model JSON
                         &resource_provider.get_string(&model_resource_path)
-                            .ok_or(
-                                MeshBakeError::UnresolvedResourcePath(model_resource_path)
-                            )?
+                            .ok_or_else(|| MeshBakeError::UnresolvedResourcePath(model_resource_path))?
                     ).map_err(MeshBakeError::JsonError)?,
                     resource_provider
                 );

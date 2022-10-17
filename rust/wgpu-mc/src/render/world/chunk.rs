@@ -266,9 +266,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             Some(north) => north_vertices.extend(north.iter().map(|v| {
                                 mapper(
                                     v,
-                                    (x as i32 + chunk_world_x) as f32,
+                                    (x + chunk_world_x) as f32,
                                     y as f32,
-                                    (z as i32 + chunk_world_z) as f32,
+                                    (z + chunk_world_z) as f32,
                                 )
                             })),
                         };
@@ -279,9 +279,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             Some(east) => east_vertices.extend(east.iter().map(|v| {
                                 mapper(
                                     v,
-                                    (x as i32 + chunk_world_x) as f32,
+                                    (x + chunk_world_x) as f32,
                                     y as f32,
-                                    (z as i32 + chunk_world_z) as f32,
+                                    (z + chunk_world_z) as f32,
                                 )
                             })),
                         };
@@ -292,9 +292,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             Some(south) => south_vertices.extend(south.iter().map(|v| {
                                 mapper(
                                     v,
-                                    (x as i32 + chunk_world_x) as f32,
+                                    (x + chunk_world_x) as f32,
                                     y as f32,
-                                    (z as i32 + chunk_world_z) as f32,
+                                    (z + chunk_world_z) as f32,
                                 )
                             })),
                         };
@@ -305,9 +305,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             Some(west) => west_vertices.extend(west.iter().map(|v| {
                                 mapper(
                                     v,
-                                    (x as i32 + chunk_world_x) as f32,
+                                    (x + chunk_world_x) as f32,
                                     y as f32,
-                                    (z as i32 + chunk_world_z) as f32,
+                                    (z + chunk_world_z) as f32,
                                 )
                             })),
                         };
@@ -318,9 +318,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             Some(up) => up_vertices.extend(up.iter().map(|v| {
                                 mapper(
                                     v,
-                                    (x as i32 + chunk_world_x) as f32,
+                                    (x + chunk_world_x) as f32,
                                     y as f32,
-                                    (z as i32 + chunk_world_z) as f32,
+                                    (z + chunk_world_z) as f32,
                                 )
                             })),
                         };
@@ -331,9 +331,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             Some(down) => down_vertices.extend(down.iter().map(|v| {
                                 mapper(
                                     v,
-                                    (x as i32 + chunk_world_x) as f32,
+                                    (x + chunk_world_x) as f32,
                                     y as f32,
-                                    (z as i32 + chunk_world_z) as f32,
+                                    (z + chunk_world_z) as f32,
                                 )
                             })),
                         };
@@ -358,9 +358,9 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
                             .map(|v| {
                                 mapper(
                                     v,
-                                    (x as i32 + chunk.pos.0) as f32,
+                                    (x + chunk.pos.0) as f32,
                                     y as f32,
-                                    (z as i32 + chunk.pos.1) as f32,
+                                    (z + chunk.pos.1) as f32,
                                 )
                             }),
                     );

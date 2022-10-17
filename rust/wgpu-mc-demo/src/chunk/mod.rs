@@ -1,13 +1,14 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Instant;
+
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk};
 use wgpu_mc::mc::MinecraftState;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::terrain::BLOCK_ATLAS_NAME;
-
 use wgpu_mc::WmRenderer;
+
 struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
@@ -52,7 +53,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         wm.mc.clone(),
         BlockstateKey {
             block: index as u16,
-            augment: fence_model.1 as u16,
+            augment: fence_model.1,
         },
     );
 

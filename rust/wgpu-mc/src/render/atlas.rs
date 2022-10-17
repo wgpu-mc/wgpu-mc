@@ -268,8 +268,8 @@ impl Atlas {
                 rows_per_image: NonZeroU32::new(size),
             },
             Extent3d {
-                width: size as u32,
-                height: size as u32,
+                width: size,
+                height: size,
                 depth_or_array_layers: 1,
             },
         );
