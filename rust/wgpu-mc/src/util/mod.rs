@@ -1,6 +1,5 @@
 use std::alloc::{alloc_zeroed, dealloc, Layout};
 use std::cmp::min;
-
 use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::ptr::drop_in_place;
@@ -75,11 +74,14 @@ impl<'a> WmArena<'a> {
         self.length += t_allocate_size;
 
         //Copy t into the memory location, and forget t
-        unsafe { std::ptr::copy(&mut t as *mut T, t_alloc_ptr, 1); }
+        unsafe {
+            std::ptr::copy(&mut t as *mut T, t_alloc_ptr, 1);
+        }
         std::mem::forget(t);
 
-        let drop_fn =
-            unsafe { std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*mut u8)>(drop_in_place::<T>) };
+        let drop_fn = unsafe {
+            std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*mut u8)>(drop_in_place::<T>)
+        };
 
         self.objects.push((t_alloc_ptr as *mut u8, drop_fn));
 
@@ -89,8 +91,8 @@ impl<'a> WmArena<'a> {
 
 impl<'a> Drop for WmArena<'a> {
     fn drop(&mut self) {
-        self.objects.iter().for_each(|(ptr, dealloc)| {
-            unsafe { dealloc(*ptr); }
+        self.objects.iter().for_each(|(ptr, dealloc)| unsafe {
+            dealloc(*ptr);
         });
 
         self.heaps.iter().for_each(|heap| unsafe {

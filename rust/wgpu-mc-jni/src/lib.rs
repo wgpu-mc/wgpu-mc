@@ -3,21 +3,22 @@
 
 extern crate core;
 
-use crate::entity::tmd_to_wm;
-use crate::gl::GlTexture;
-use crate::palette::{IdList, JavaPalette};
+use core::slice;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::f32::consts::PI;
+use std::fmt::Debug;
+use std::io::Cursor;
+use std::mem;
+use std::mem::size_of;
+use std::num::{NonZeroU32, NonZeroUsize};
+use std::sync::Arc;
+use std::time::Instant;
+
 use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::{Matrix4, Point3};
-use entity::TexturedModelData;
-
-use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
-
-use core::slice;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use std::mem::size_of;
-
-use gl::pipeline::{GLCommand, GlPipeline};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
     jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray,
@@ -27,32 +28,30 @@ use jni::{JNIEnv, JavaVM};
 use mc_varint::VarIntRead;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-
-use std::io::Cursor;
-use std::num::{NonZeroU32, NonZeroUsize};
-
-use std::f32::consts::PI;
-use std::fmt::Debug;
-use std::mem;
-use std::sync::Arc;
-use std::time::Instant;
-
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
+};
 use rayon::ThreadPool;
 use wgpu::Extent3d;
+use winit::dpi::PhysicalPosition;
+use winit::event::{ElementState, MouseButton};
+use winit::window::{CursorGrabMode, Window};
+
+use entity::TexturedModelData;
+use gl::pipeline::{GLCommand, GlPipeline};
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
+use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
-use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton};
-use winit::window::{CursorGrabMode, Window};
+
+use crate::entity::tmd_to_wm;
+use crate::gl::GlTexture;
+use crate::palette::{IdList, JavaPalette};
 
 mod entity;
 mod gl;
@@ -197,7 +196,7 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
         let _vec = vec![0u8; size];
 
         Some(Vec::from(unsafe {
-            std::slice::from_raw_parts(elements.as_ptr() as *const u8, size)
+            slice::from_raw_parts(elements.as_ptr() as *const u8, size)
         }))
     }
 }
@@ -256,7 +255,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .unwrap();
 
     let palette_elements = unsafe {
-        std::slice::from_raw_parts(
+        slice::from_raw_parts(
             palette_elements.as_ptr(),
             palette_elements.size().unwrap() as usize,
         )
@@ -267,7 +266,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .unwrap();
 
     let storage_elements = unsafe {
-        std::slice::from_raw_parts(
+        slice::from_raw_parts(
             storage_elements.as_ptr(),
             storage_elements.size().unwrap() as usize,
         )
@@ -633,7 +632,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
                 .unwrap();
 
             let slice: &[u8] = unsafe {
-                std::mem::transmute(std::slice::from_raw_parts(
+                mem::transmute(slice::from_raw_parts(
                     elements.as_ptr(),
                     bytes_read as usize,
                 ))
@@ -715,7 +714,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     _env: JNIEnv,
     _class: JClass,
 ) {
-    let mut commands = gl::GL_COMMANDS.get().unwrap().clone().write();
+    let mut commands = gl::GL_COMMANDS.get().unwrap().write();
 
     GL_PIPELINE
         .get()
@@ -754,7 +753,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
         let size = area as usize * 4;
 
         let data = if pixels_ptr != 0 {
-            Vec::from(unsafe { std::slice::from_raw_parts(pixels_ptr as *const u8, size) })
+            Vec::from(unsafe { slice::from_raw_parts(pixels_ptr as *const u8, size) })
         } else {
             vec![0; size]
         };
@@ -764,7 +763,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
         let tsv = TextureSamplerView::from_rgb_bytes(
             &wm.wgpu_state,
             &data[..],
-            wgpu::Extent3d {
+            Extent3d {
                 width: width as u32,
                 height: height as u32,
                 depth_or_array_layers: 1,
@@ -859,7 +858,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     assert_eq!(_type, 0x1401);
 
     let vec = unsafe {
-        Vec::from(std::slice::from_raw_parts(
+        Vec::from(slice::from_raw_parts(
             pixels as *mut u8,
             next_row_byte_offset * height,
         ))
@@ -1231,7 +1230,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPalette(
     let palette = (palette_long as usize) as *mut JavaPalette;
     let mut new_palette = Box::new(unsafe { palette.as_ref().unwrap().clone() });
     let new_palette_ptr = &mut *new_palette as *mut JavaPalette;
-    std::mem::forget(new_palette);
+    mem::forget(new_palette);
 
     new_palette_ptr as usize as jlong
 }
@@ -1284,14 +1283,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
     let id_list = unsafe { &*(palette.id_list.get() as *mut IdList) };
 
     let blockstate_offsets = unsafe {
-        std::slice::from_raw_parts(
+        slice::from_raw_parts(
             blockstate_offsets_array.as_ptr() as *mut i32,
             blockstate_offsets_array.size().unwrap() as usize,
         )
     };
 
     let vec = unsafe {
-        std::slice::from_raw_parts(
+        slice::from_raw_parts(
             array.as_ptr().offset(current_position as isize) as *mut u8,
             (array.size().unwrap() - current_position) as usize,
         )
@@ -1300,7 +1299,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
     let mut cursor = Cursor::new(vec);
     let packet_len: i32 = cursor.read_var_int().unwrap().into();
 
-    for i in 0..packet_len as usize {
+    for blockstate_offset in blockstate_offsets.iter().take(packet_len as usize) {
         let var_int: i32 = cursor.read_var_int().unwrap().into();
 
         let object = id_list.map.get(&var_int).unwrap().clone();
@@ -1308,8 +1307,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
         palette.add((
             object,
             BlockstateKey {
-                block: (blockstate_offsets[i] >> 16) as u16,
-                augment: (blockstate_offsets[i] & 0xffff) as u16,
+                block: (blockstate_offset >> 16) as u16,
+                augment: (blockstate_offset & 0xffff) as u16,
             },
         ));
     }
@@ -1448,7 +1447,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
 
     let mut packed_arr = Box::new(PackedIntegerArray {
         data: Vec::from(unsafe {
-            std::slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
+            slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
         })
         .into_boxed_slice(),
         elements_per_long,
@@ -1462,7 +1461,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
 
     let ptr = (&mut *packed_arr as *mut PackedIntegerArray) as usize;
 
-    std::mem::forget(packed_arr);
+    mem::forget(packed_arr);
 
     ptr as jlong
 }
@@ -1477,12 +1476,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
     // let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
     let palette = unsafe { ((palette as usize) as *mut JavaPalette).as_ref().unwrap() };
 
-    palette.store.iter().for_each(|foo| {
+    palette.store.iter().for_each(|item| {
         env.call_static_method(
             "dev/birb/wgpu/render/Wgpu",
             "debug",
             "(Ljava/lang/Object;)V",
-            &[JValue::Object(foo.0.as_obj())],
+            &[JValue::Object(item.0.as_obj())],
         )
         .unwrap();
     });
@@ -1588,16 +1587,33 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
 ) {
     match mode {
         GLFW_CURSOR_NORMAL => {
-            WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::None).unwrap();
+            WINDOW
+                .get()
+                .unwrap()
+                .set_cursor_grab(CursorGrabMode::None)
+                .unwrap();
             WINDOW.get().unwrap().set_cursor_visible(true);
         }
         GLFW_CURSOR_HIDDEN => {
-            WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::None).unwrap();
+            WINDOW
+                .get()
+                .unwrap()
+                .set_cursor_grab(CursorGrabMode::None)
+                .unwrap();
             WINDOW.get().unwrap().set_cursor_visible(false);
         }
         GLFW_CURSOR_DISABLED => {
-            WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::Confined)
-                .or_else(|_e| WINDOW.get().unwrap().set_cursor_grab(CursorGrabMode::Locked)).unwrap();
+            WINDOW
+                .get()
+                .unwrap()
+                .set_cursor_grab(CursorGrabMode::Confined)
+                .or_else(|_e| {
+                    WINDOW
+                        .get()
+                        .unwrap()
+                        .set_cursor_grab(CursorGrabMode::Locked)
+                })
+                .unwrap();
             WINDOW.get().unwrap().set_cursor_visible(false);
         }
         _ => {

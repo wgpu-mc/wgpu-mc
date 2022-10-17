@@ -1,10 +1,11 @@
+use std::collections::HashMap;
+
 use crate::render::pipeline::terrain::{TerrainVertex, BLOCK_ATLAS_NAME};
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
-use std::collections::HashMap;
 
 pub struct TransparentPipeline;
 
@@ -16,13 +17,16 @@ impl WmPipeline for TransparentPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/transparent".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/transparent.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/transparent.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()

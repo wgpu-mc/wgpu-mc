@@ -1,8 +1,10 @@
 use core::fmt::Debug;
-use jni::objects::GlobalRef;
-use jni::sys::jobject;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+
+use jni::objects::GlobalRef;
+use jni::sys::jobject;
+
 use wgpu_mc::mc::block::BlockstateKey;
 
 pub struct IdList {
@@ -60,7 +62,7 @@ impl JavaPalette {
     }
 
     pub fn get(&self, index: usize) -> Option<&(GlobalRef, BlockstateKey)> {
-        self.store.get(index).or(self.store.get(0))
+        self.store.get(index).or_else(|| self.store.get(0))
     }
 
     pub fn clear(&mut self) {

@@ -1,8 +1,9 @@
-use image::GenericImageView;
-
-use crate::{WgpuState, render::pipeline::RenderPipelineManager};
 use std::num::NonZeroU32;
+
+use image::GenericImageView;
 use wgpu::Extent3d;
+
+use crate::{render::pipeline::RenderPipelineManager, WgpuState};
 
 pub type TextureId = u32;
 pub type UV = ((f32, f32), (f32, f32));
@@ -29,11 +30,7 @@ impl TextureSamplerView {
     }
 
     #[must_use]
-    pub fn create_depth_texture(
-        device: &wgpu::Device,
-        size: wgpu::Extent3d,
-        label: &str,
-    ) -> Self {
+    pub fn create_depth_texture(device: &wgpu::Device, size: Extent3d, label: &str) -> Self {
         let desc = wgpu::TextureDescriptor {
             label: Some(label),
             size,
@@ -92,7 +89,7 @@ impl TextureSamplerView {
     pub fn from_rgb_bytes(
         wgpu_state: &WgpuState,
         bytes: &[u8],
-        size: wgpu::Extent3d,
+        size: Extent3d,
         label: Option<&str>,
         format: wgpu::TextureFormat,
     ) -> Result<Self, anyhow::Error> {
@@ -157,20 +154,22 @@ impl BindableTexture {
         pipelines: &RenderPipelineManager,
         texture: TextureSamplerView,
     ) -> Self {
-        let bind_group = wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: pipelines.bind_group_layouts.read().get("texture").unwrap(),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                }
-            ],
-        });
+        let bind_group = wgpu_state
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: pipelines.bind_group_layouts.read().get("texture").unwrap(),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                    },
+                ],
+            });
 
         Self {
             tsv: texture,

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -28,7 +27,7 @@ use crate::{gl, Extent3d};
 
 #[allow(dead_code)]
 #[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
     0.0, 0.0, 0.5, 0.5,
@@ -58,10 +57,6 @@ pub struct TextureUnit {
 pub struct GlPipeline {
     pub commands: ArcSwap<Vec<GLCommand>>,
     pub blank_texture: OnceCell<Arc<BindableTexture>>,
-}
-
-fn byte_buffer_to_short(bytes: &[u8]) -> Vec<u16> {
-    bytes.iter().map(|byte| *byte as u16).collect()
 }
 
 impl WmPipeline for GlPipeline {

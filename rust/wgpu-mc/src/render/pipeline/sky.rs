@@ -19,13 +19,16 @@ impl WmPipeline for SkyPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/sky".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/sky.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/sky.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()

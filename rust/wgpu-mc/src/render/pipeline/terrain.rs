@@ -1,11 +1,10 @@
-
+use std::collections::HashMap;
 
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
-use std::collections::HashMap;
 
 pub struct TerrainPipeline;
 
@@ -24,7 +23,6 @@ pub struct TerrainVertex {
 }
 
 impl TerrainVertex {
-
     const VAA: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
         0 => Float32x3,
         1 => Float32x2,
@@ -41,7 +39,7 @@ impl TerrainVertex {
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<TerrainVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::VAA
+            attributes: &Self::VAA,
         }
     }
 }
@@ -54,13 +52,16 @@ impl WmPipeline for TerrainPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/terrain".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/terrain.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/terrain.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()

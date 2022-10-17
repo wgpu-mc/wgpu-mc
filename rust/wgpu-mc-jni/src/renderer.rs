@@ -1,45 +1,42 @@
+use std::thread;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use std::thread;
 
 use arc_swap::ArcSwap;
 use futures::executor::block_on;
 use jni::{
-    JNIEnv,
     objects::{JString, JValue},
+    JNIEnv,
 };
 use rayon::ThreadPoolBuilder;
+use winit::event_loop::EventLoopBuilder;
 use winit::{
     dpi::PhysicalSize,
     event::{ElementState, Event, ModifiersState, WindowEvent},
     event_loop::ControlFlow,
 };
-use winit::event_loop::EventLoopBuilder;
 
+use wgpu_mc::wgpu;
 use wgpu_mc::{
     render::atlas::Atlas,
     render::pipeline::{debug_lines::DebugLinesPipeline, terrain::TerrainPipeline, WmPipeline},
     WmRenderer,
 };
-use wgpu_mc::wgpu;
 
 use crate::{
-    CHANNELS, entity::ENTITY_ATLAS, gl::GL_ALLOC, GL_PIPELINE,
-    MC_STATE, MinecraftRenderState, MinecraftResourceManagerAdapter, RENDERER, RenderMessage, THREAD_POOL, WINDOW,
-    WinitWindowWrapper,
+    entity::ENTITY_ATLAS, gl::GL_ALLOC, MinecraftRenderState, MinecraftResourceManagerAdapter,
+    RenderMessage, WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, THREAD_POOL,
+    WINDOW,
 };
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
-    use winit::event_loop::EventLoop;
-
     let title: String = env.get_string(title).unwrap().into();
 
     THREAD_POOL
         .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
         .unwrap();
-
 
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
     // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build
@@ -74,7 +71,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let wrapper = &WinitWindowWrapper { window: &window };
 
-    let wgpu_state = block_on(wgpu_mc::WmRenderer::init_wgpu(wrapper));
+    let wgpu_state = block_on(WmRenderer::init_wgpu(wrapper));
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap(),
@@ -196,7 +193,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                     WindowEvent::CursorMoved {
                         device_id: _,
                         position,
-                        modifiers: _,
+                        ..
                     } => {
                         CHANNELS
                             .get()
@@ -209,7 +206,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                         device_id: _,
                         state,
                         button,
-                        modifiers: _,
+                        ..
                     } => {
                         CHANNELS
                             .get()

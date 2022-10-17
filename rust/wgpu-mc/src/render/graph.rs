@@ -4,7 +4,6 @@ use serde::Deserialize;
 
 use super::pipeline::WmPipeline;
 
-
 fn hash_map() -> HashMap<String, u16> {
     HashMap::new()
 }
@@ -12,21 +11,21 @@ fn hash_map() -> HashMap<String, u16> {
 #[derive(Deserialize)]
 pub struct ShaderGraphPipelines {
     #[serde(default = "hash_map")]
-    pub uniforms: HashMap<String, u16>
+    pub uniforms: HashMap<String, u16>,
 }
 
 #[derive(Deserialize)]
 pub struct ShaderGraphPass {
     pub shader: String,
     pub textures: Vec<String>,
-    pub output: String
+    pub output: String,
 }
 
 #[derive(Deserialize)]
 pub struct ShaderGraph {
     pub color_space: String,
     pub pipelines: ShaderGraphPipelines,
-    pub passes: Vec<ShaderGraphPass>
+    pub passes: Vec<ShaderGraphPass>,
 }
 
 impl WmPipeline for ShaderGraph {
@@ -34,7 +33,10 @@ impl WmPipeline for ShaderGraph {
         todo!()
     }
 
-    fn provide_shaders(&self, _wm: &crate::WmRenderer) -> HashMap<String, Box<dyn super::shader::WmShader>> {
+    fn provide_shaders(
+        &self,
+        _wm: &crate::WmRenderer,
+    ) -> HashMap<String, Box<dyn super::shader::WmShader>> {
         todo!()
     }
 
@@ -42,12 +44,17 @@ impl WmPipeline for ShaderGraph {
         todo!()
     }
 
-    fn build_wgpu_pipeline_layouts(&self, _wm: &crate::WmRenderer)
-        -> HashMap<String, wgpu::PipelineLayout> {
+    fn build_wgpu_pipeline_layouts(
+        &self,
+        _wm: &crate::WmRenderer,
+    ) -> HashMap<String, wgpu::PipelineLayout> {
         todo!()
     }
 
-    fn build_wgpu_pipelines(&self, _wm: &crate::WmRenderer) -> HashMap<String, wgpu::RenderPipeline> {
+    fn build_wgpu_pipelines(
+        &self,
+        _wm: &crate::WmRenderer,
+    ) -> HashMap<String, wgpu::RenderPipeline> {
         todo!()
     }
 

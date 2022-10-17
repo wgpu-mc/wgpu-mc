@@ -1,58 +1,65 @@
-
-use crate::mc::resource::{ResourcePath, ResourceProvider};
-use crate::texture::{TextureSamplerView, UV, BindableTexture};
-use bytemuck::{Pod, Zeroable};
-use guillotiere::euclid::Size2D;
-use guillotiere::{AtlasAllocator};
-use image::imageops::overlay;
-use image::{GenericImageView, ImageBuffer, Rgba};
-use minecraft_assets::schemas;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::num::NonZeroU32;
-
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
+use bytemuck::{Pod, Zeroable};
+use guillotiere::euclid::Size2D;
+use guillotiere::AtlasAllocator;
+use image::imageops::overlay;
+use image::{GenericImageView, ImageBuffer, Rgba};
+use minecraft_assets::schemas;
 use parking_lot::RwLock;
 use wgpu::Extent3d;
 
+use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::render::pipeline::RenderPipelineManager;
+use crate::texture::{BindableTexture, TextureSamplerView, UV};
 use crate::{WgpuState, WmRenderer};
 
 pub const ATLAS_DIMENSIONS: u32 = 2048;
 
 ///A texture atlas. This is used in many places, most notably terrain and entity rendering.
-/// 
+///
 /// # Example
-/// 
-/// ```
-/// let wgpu_state: WgpuState;
-/// let pipelines: RenderPipelineManager;
-/// let resource_provider: Box<dyn ResourceProvider>;
-/// 
-/// let atlas = Atlas::new(&wgpu_state, &pipelines);
-/// 
+///
+///```ignore
+/// # use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
+/// # use wgpu_mc::render::atlas::Atlas;
+/// # use wgpu_mc::{WgpuState, WmRenderer};
+/// # use wgpu_mc::render::pipeline::RenderPipelineManager;
+///
+/// # let wgpu_state: WgpuState;
+/// # let wm_renderer: WmRenderer;
+/// # let pipelines: RenderPipelineManager;
+/// # let resource_provider: Box<dyn ResourceProvider>;
+///
+/// let atlas = Atlas::new(&wgpu_state, &pipelines, false);
+///
+/// let cobble = ResourcePath("minecraft:textures/block/cobblestone.json".into());
+/// let dirt = ResourcePath("minecraft:textures/block/dirt.json".into());
+///
 /// atlas.allocate(
 ///     [
-///         &(
-///             &"minecraft:textures/block/cobblestone.json".into(), 
-///             resource_provider.get_bytes("minecraft:textures/block/cobblestone.json").unwrap()
+///         (
+///             &cobble,
+///             &resource_provider.get_bytes(&cobble).unwrap()
 ///         ),
-///         &(
-///             &"minecraft:textures/block/dirt.json".into(), 
-///             resource_provider.get_bytes("minecraft:textures/block/dirt.json").unwrap()
+///         (
+///             &dirt,
+///             &resource_provider.get_bytes(&dirt).unwrap()
 ///         )
-///     ]
+///     ], &*resource_provider
 /// );
-/// 
-/// atlas.upload();
+///
+/// atlas.upload(&wm_renderer);
 /// ```
 pub struct Atlas {
     ///The image allocator which decides where images should go in the atlas texture
     pub allocator: RwLock<AtlasAllocator>,
     ///The atlas image buffer itself. This is what gets uploaded to the GPU
-    pub image: RwLock<image::ImageBuffer<Rgba<u8>, Vec<u8>>>,
+    pub image: RwLock<ImageBuffer<Rgba<u8>, Vec<u8>>>,
     ///The mapping of image [ResourcePath]s to UV coordinates
     pub uv_map: RwLock<HashMap<ResourcePath, UV>>,
     ///The representation of the [Atlas]'s image buffer on the GPU, which can be bound to a draw call
@@ -63,7 +70,7 @@ pub struct Atlas {
     pub animated_texture_offsets: RwLock<HashMap<ResourcePath, u32>>,
     pub resizes: bool,
     size: RwLock<u32>,
-    gpu_size: RwLock<u32>
+    gpu_size: RwLock<u32>,
 }
 
 impl Debug for Atlas {
@@ -92,28 +99,28 @@ impl Atlas {
         );
 
         Self {
-            allocator: RwLock::new(AtlasAllocator::new(Size2D::new(ATLAS_DIMENSIONS as i32, ATLAS_DIMENSIONS as i32))),
-            image: RwLock::new(ImageBuffer::new(
-                ATLAS_DIMENSIONS,
-                ATLAS_DIMENSIONS,
-            )),
+            allocator: RwLock::new(AtlasAllocator::new(Size2D::new(
+                ATLAS_DIMENSIONS as i32,
+                ATLAS_DIMENSIONS as i32,
+            ))),
+            image: RwLock::new(ImageBuffer::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
             uv_map: Default::default(),
             bindable_texture: ArcSwap::new(Arc::new(bindable_texture)),
             animated_textures: RwLock::new(Vec::new()),
             animated_texture_offsets: Default::default(),
             size: RwLock::new(ATLAS_DIMENSIONS),
             gpu_size: RwLock::new(ATLAS_DIMENSIONS),
-            resizes
+            resizes,
         }
     }
 
     ///Add multiple textures to the atlas. This automatically handles .mcmeta files when dealing with block textures
     pub fn allocate<'a, T>(
-        &self, 
+        &self,
         images: impl IntoIterator<Item = (&'a ResourcePath, &'a T)>,
-        resource_provider: &dyn ResourceProvider
-    )
-        where T: AsRef<[u8]> + 'a 
+        resource_provider: &dyn ResourceProvider,
+    ) where
+        T: AsRef<[u8]> + 'a,
     {
         let mut allocator = self.allocator.write();
         let mut image_buffer = self.image.write();
@@ -130,27 +137,28 @@ impl Atlas {
                 &mut animated_textures,
                 name,
                 slice.as_ref(),
-                resource_provider
+                resource_provider,
             );
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn allocate_one(
         &self,
-        image_buffer: &mut image::ImageBuffer<Rgba<u8>, Vec<u8>>,
+        image_buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
         map: &mut HashMap<ResourcePath, UV>,
-
         allocator: &mut AtlasAllocator,
-
         animated_textures: &mut Vec<schemas::texture::TextureAnimation>,
-
         path: &ResourcePath,
         image_bytes: &[u8],
-        resource_provider: &dyn ResourceProvider
+        resource_provider: &dyn ResourceProvider,
     ) {
         let image = image::load_from_memory(image_bytes).unwrap();
 
-        let allocation = match (allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)), self.resizes) {
+        let allocation = match (
+            allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)),
+            self.resizes,
+        ) {
             (Some(alloc), _) => alloc,
             (None, true) => {
                 let mut size = self.size.write();
@@ -161,14 +169,27 @@ impl Atlas {
                 drop(size);
 
                 allocator.grow(Size2D::new(new_size as i32, new_size as i32));
-                
+
                 let mut new_image = ImageBuffer::new(new_size, new_size);
-                overlay(&mut new_image, &image_buffer.view(0, 0, old_size, old_size), 0, 0);
+                overlay(
+                    &mut new_image,
+                    &image_buffer.view(0, 0, old_size, old_size),
+                    0,
+                    0,
+                );
                 *image_buffer = new_image;
-                
-                return self.allocate_one(image_buffer, map, allocator, animated_textures, path, image_bytes, resource_provider);
-            },
-            (None, false) => panic!("Atlas allocation failed: no more space")
+
+                return self.allocate_one(
+                    image_buffer,
+                    map,
+                    allocator,
+                    animated_textures,
+                    path,
+                    image_bytes,
+                    resource_provider,
+                );
+            }
+            (None, false) => panic!("Atlas allocation failed: no more space"),
         };
 
         overlay(
@@ -180,18 +201,14 @@ impl Atlas {
 
         let mcmeta_path = path.append(".mcmeta");
 
-        let mcmeta = resource_provider.get_string(&mcmeta_path).and_then(|string| {
-            serde_json::from_str::<schemas::texture::Texture>(&string).ok()
-        });
+        let mcmeta = resource_provider
+            .get_string(&mcmeta_path)
+            .and_then(|string| serde_json::from_str::<schemas::texture::Texture>(&string).ok());
 
-        match mcmeta {
-            Some(texture) => {
-                match texture.animation {
-                    Some(animation) => animated_textures.push(animation),
-                    _ => {},
-                }
-            },
-            _ => {},
+        if let Some(texture) = mcmeta {
+            if let Some(animation) = texture.animation {
+                animated_textures.push(animation)
+            }
         }
 
         map.insert(
@@ -248,13 +265,13 @@ impl Atlas {
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: NonZeroU32::new(4 * size),
-                rows_per_image: NonZeroU32::new(size)
+                rows_per_image: NonZeroU32::new(size),
             },
-            wgpu::Extent3d {
+            Extent3d {
                 width: size as u32,
                 height: size as u32,
-                depth_or_array_layers: 1
-            }
+                depth_or_array_layers: 1,
+            },
         );
 
         false
@@ -303,7 +320,7 @@ struct AnimatedUV {
     pub uv_1: [f32; 2],
     pub uv_2: [f32; 2],
     pub blend: f32,
-    pub padding: f32
+    pub padding: f32,
 }
 
 // impl AnimatedTexture {

@@ -1,12 +1,13 @@
-use crate::mc::resource::ResourceProvider;
-use crate::render::atlas::{ATLAS_DIMENSIONS, Atlas};
-
-use crate::texture::UV;
-use cgmath::{Matrix3, Vector3, Deg};
+use bytemuck::{Pod, Zeroable};
+use cgmath::{Deg, Matrix3, Vector3};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
-use bytemuck::{Pod, Zeroable};
 
+use crate::mc::resource::ResourceProvider;
+use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS};
+use crate::texture::UV;
+
+use super::resource::ResourcePath;
 
 pub type BlockPos = (i32, u16, i32);
 
@@ -15,31 +16,27 @@ pub struct BlockstateKey {
     ///An index into [BlockManager]
     pub block: u16,
     ///Used to quickly figure out which [ModelMesh] a [Block] should return without having to hash strings
-    pub augment: u16
+    pub augment: u16,
 }
 
 impl BlockstateKey {
-
     pub fn pack(&self) -> u32 {
         ((self.block as u32) << 16) | (self.augment as u32)
     }
-
 }
 
 impl From<(u16, u16)> for BlockstateKey {
     fn from(tuple: (u16, u16)) -> Self {
-        Self { block: tuple.0, augment: tuple.1 }
+        Self {
+            block: tuple.0,
+            augment: tuple.1,
+        }
     }
 }
 
 impl From<u32> for BlockstateKey {
     fn from(int: u32) -> Self {
-        Self::from(
-            (
-                (int >> 16) as u16,
-                (int & 0xffff) as u16
-            )
-        )
+        Self::from(((int >> 16) as u16, (int & 0xffff) as u16))
     }
 }
 
@@ -47,18 +44,14 @@ impl From<u32> for BlockstateKey {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ChunkBlockState {
     Air,
-    State(BlockstateKey)
+    State(BlockstateKey),
 }
 
 impl ChunkBlockState {
-
     pub fn is_air(&self) -> bool {
         matches!(self, Self::Air)
     }
-
 }
-
-use super::resource::ResourcePath;
 
 ///Represents a vertex in a block mesh, including an additional UV offset index for animated textures.
 #[repr(C)]
@@ -89,24 +82,36 @@ pub enum CubeOrComplexMesh {
     Complex(Vec<BlockModelFaces>),
 }
 
-fn recurse_model_parents(model: &schemas::Model, resource_provider: &dyn ResourceProvider, models: &mut Vec<ResourcePath>) {
+fn recurse_model_parents(
+    model: &schemas::Model,
+    resource_provider: &dyn ResourceProvider,
+    models: &mut Vec<ResourcePath>,
+) {
     match &model.parent {
         Some(parent_path_string) => {
-            let parent_path: ResourcePath = ResourcePath::from(parent_path_string).prepend("models/").append(".json");
+            let parent_path: ResourcePath = ResourcePath::from(parent_path_string)
+                .prepend("models/")
+                .append(".json");
             recurse_model_parents(
                 &serde_json::from_str(
-                    &resource_provider.get_string(&parent_path).expect(&parent_path.0)
-                ).unwrap(), 
-                resource_provider, 
-                models
+                    &resource_provider
+                        .get_string(&parent_path)
+                        .expect(&parent_path.0),
+                )
+                .unwrap(),
+                resource_provider,
+                models,
             );
             models.push(parent_path);
-        },
-        None => {},
+        }
+        None => {}
     }
 }
 
-fn resolve_model(model: schemas::Model, resource_provider: &dyn ResourceProvider) -> schemas::Model {
+fn resolve_model(
+    model: schemas::Model,
+    resource_provider: &dyn ResourceProvider,
+) -> schemas::Model {
     if model.parent.is_none() {
         return model;
     }
@@ -114,34 +119,29 @@ fn resolve_model(model: schemas::Model, resource_provider: &dyn ResourceProvider
     let mut parent_paths = Vec::new();
     recurse_model_parents(&model, resource_provider, &mut parent_paths);
 
-    let parents: Vec<schemas::Model> = parent_paths.iter().map(|parent_path| {
-        serde_json::from_str(
-            &resource_provider.get_string(parent_path).unwrap()
-        ).unwrap()
-    }).collect();
+    let parents: Vec<schemas::Model> = parent_paths
+        .iter()
+        .map(|parent_path| {
+            serde_json::from_str(&resource_provider.get_string(parent_path).unwrap()).unwrap()
+        })
+        .collect();
 
-    let mut schema = ModelResolver::resolve_model(
-        [&model].into_iter().chain(parents.iter())
-    );
+    let mut schema = ModelResolver::resolve_model([&model].into_iter().chain(parents.iter()));
 
     if let Some(textures) = &mut schema.textures {
         let copy = textures.clone();
 
-        textures.iter_mut()
-            .for_each(|(_key, texture)| {
-                if texture.reference().is_some() {
-                    texture.0 = texture.resolve(&copy).unwrap().to_string();
-                }
-            })
+        textures.iter_mut().for_each(|(_key, texture)| {
+            if texture.reference().is_some() {
+                texture.0 = texture.resolve(&copy).unwrap().to_string();
+            }
+        })
     }
 
     schema
 }
 
-fn get_atlas_uv(
-    face: &schemas::models::ElementFace,
-    block_atlas: &Atlas
-) -> Option<UV> {
+fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Option<UV> {
     let atlas_map = block_atlas.uv_map.read();
 
     let atlas_uv = atlas_map.get(&(&face.texture.0).into())?;
@@ -156,33 +156,33 @@ fn get_atlas_uv(
     Some(adjusted_uv)
 }
 pub struct RenderSettings {
-    pub opaque: bool
+    pub opaque: bool,
 }
 
 #[derive(Debug)]
 pub enum MeshBakeError {
     UnresolvedTextureReference(String),
     UnresolvedResourcePath(ResourcePath),
-    JsonError(serde_json::Error)
+    JsonError(serde_json::Error),
 }
 
 ///A block model which has been baked into a mesh and is ready for rendering
 #[derive(Debug)]
 pub struct ModelMesh {
-    pub models: Vec<(CubeOrComplexMesh, bool)>
+    pub models: Vec<(CubeOrComplexMesh, bool)>,
 }
 
 impl ModelMesh {
     pub fn bake<'a>(
         variants: impl IntoIterator<Item = &'a schemas::blockstates::Variant>,
         resource_provider: &dyn ResourceProvider,
-        block_atlas: &Atlas
+        block_atlas: &Atlas,
     ) -> Result<Self, MeshBakeError> {
         let models = variants.into_iter()
             .flat_map(|variant| variant.models())
             .map(|model_properties| {
                 let model_resource_path = ResourcePath::from(&model_properties.model).prepend("models/").append(".json");
-                
+
                 //Recursively resolve the model using it's parents if it has any
                 let model: schemas::Model = resolve_model(
                     //Parse the JSON into the model schema
@@ -196,45 +196,39 @@ impl ModelMesh {
                     resource_provider
                 );
 
-                match model.textures {
-                    Some(textures) => {
-                        //Make sure the textures in the model are fully resolved with no references
-                        match textures.iter().find(|(_key, value)| value.reference().is_some()) {
-                            Some(reference) => return Err(MeshBakeError::UnresolvedTextureReference(format!("key: {} value: {:?}", reference.0, reference.1))),
-                            None => {},
-                        }
+                if let Some(textures) = model.textures {
+                    //Make sure the textures in the model are fully resolved with no references
+                    if let Some(reference) = textures.iter().find(|(_key, value)| value.reference().is_some()) { return Err(MeshBakeError::UnresolvedTextureReference(format!("key: {} value: {:?}", reference.0, reference.1))) }
 
-                        let uv_map = block_atlas.uv_map.read();
+                    let uv_map = block_atlas.uv_map.read();
 
-                        let unallocated_textures: Vec<ResourcePath> = textures.iter()
-                            .filter_map(|(_, texture)| {
-                                let texture_id: ResourcePath = (&texture.0).into();
-                                if !uv_map.contains_key(&texture_id) {
-                                    //Block UV atlas doesn't contain a texture, so we add it
-                                    Some(texture_id)
-                                } else {
-                                    None
-                                }
-                            }).collect();
+                    let unallocated_textures: Vec<ResourcePath> = textures.iter()
+                        .filter_map(|(_, texture)| {
+                            let texture_id: ResourcePath = (&texture.0).into();
+                            if !uv_map.contains_key(&texture_id) {
+                                //Block UV atlas doesn't contain a texture, so we add it
+                                Some(texture_id)
+                            } else {
+                                None
+                            }
+                        }).collect();
 
-                        drop(uv_map);
+                    drop(uv_map);
 
-                        let unallocated_textures: Vec<(&ResourcePath, Vec<u8>)> = unallocated_textures
-                            .iter()
-                            .map(|path| (path, resource_provider.get_bytes(&path.prepend("textures/").append(".png")).unwrap()))
-                            .collect();
+                    let unallocated_textures: Vec<(&ResourcePath, Vec<u8>)> = unallocated_textures
+                        .iter()
+                        .map(|path| (path, resource_provider.get_bytes(&path.prepend("textures/").append(".png")).unwrap()))
+                        .collect();
 
-                        block_atlas.allocate(
-                            unallocated_textures.iter()
-                                .map(|(path, data)| (*path, data)),
-                            resource_provider
-                        );
-                    },
-                    None => {},
+                    block_atlas.allocate(
+                        unallocated_textures.iter()
+                            .map(|(path, data)| (*path, data)),
+                        resource_provider,
+                    );
                 };
 
                 let matrix = Matrix3::from_angle_y(Deg(model_properties.y as f32));
-    
+
                 let is_cube = model.elements.iter().len() == 1 && {
                     match model.elements.iter().flatten().next() {
                         Some(first) => {
@@ -248,98 +242,98 @@ impl ModelMesh {
                         None => false,
                     }
                 };
-    
+
                 let mut results = model
                     .elements
                     .iter()
                     .flatten()
                     .map(|element| {
                         //Face textures
-        
-                        let north = element.faces.get(&schemas::models::BlockFace::North).as_ref().and_then(|tex|        
+
+                        let north = element.faces.get(&schemas::models::BlockFace::North).as_ref().and_then(|tex|
                             get_atlas_uv(
                                 tex,
-                                block_atlas
+                                block_atlas,
                             ).map(|uv| (
-                                    //The default UV for this texture
-                                    uv,
-                                    //If this texture has an animation, get the offset, otherwise default to 0
-                                    *block_atlas.animated_texture_offsets.read()
-                                        .get(&(&tex.texture.0).into())
-                                        .unwrap_or(&0)
-                                ))
+                                //The default UV for this texture
+                                uv,
+                                //If this texture has an animation, get the offset, otherwise default to 0
+                                *block_atlas.animated_texture_offsets.read()
+                                    .get(&(&tex.texture.0).into())
+                                    .unwrap_or(&0)
+                            ))
                         );
-        
-                        let east = element.faces.get(&schemas::models::BlockFace::East).as_ref().and_then(|tex|        
+
+                        let east = element.faces.get(&schemas::models::BlockFace::East).as_ref().and_then(|tex|
                             get_atlas_uv(
                                 tex,
-                                block_atlas
+                                block_atlas,
                             ).map(|uv| (
-                                    //The default UV for this texture
-                                    uv,
-                                    //If this texture has an animation, get the offset, otherwise default to 0
-                                    *block_atlas.animated_texture_offsets.read()
-                                        .get(&(&tex.texture.0).into())
-                                        .unwrap_or(&0)
-                                ))
+                                //The default UV for this texture
+                                uv,
+                                //If this texture has an animation, get the offset, otherwise default to 0
+                                *block_atlas.animated_texture_offsets.read()
+                                    .get(&(&tex.texture.0).into())
+                                    .unwrap_or(&0)
+                            ))
                         );
-        
-                        let south = element.faces.get(&schemas::models::BlockFace::South).as_ref().and_then(|tex|        
+
+                        let south = element.faces.get(&schemas::models::BlockFace::South).as_ref().and_then(|tex|
                             get_atlas_uv(
                                 tex,
-                                block_atlas
+                                block_atlas,
                             ).map(|uv| (
-                                    //The default UV for this texture
-                                    uv,
-                                    //If this texture has an animation, get the offset, otherwise default to 0
-                                    *block_atlas.animated_texture_offsets.read()
-                                        .get(&(&tex.texture.0).into())
-                                        .unwrap_or(&0)
-                                ))
+                                //The default UV for this texture
+                                uv,
+                                //If this texture has an animation, get the offset, otherwise default to 0
+                                *block_atlas.animated_texture_offsets.read()
+                                    .get(&(&tex.texture.0).into())
+                                    .unwrap_or(&0)
+                            ))
                         );
-        
-                        let west = element.faces.get(&schemas::models::BlockFace::West).as_ref().and_then(|tex|        
+
+                        let west = element.faces.get(&schemas::models::BlockFace::West).as_ref().and_then(|tex|
                             get_atlas_uv(
                                 tex,
-                                block_atlas
+                                block_atlas,
                             ).map(|uv| (
-                                    //The default UV for this texture
-                                    uv,
-                                    //If this texture has an animation, get the offset, otherwise default to 0
-                                    *block_atlas.animated_texture_offsets.read()
-                                        .get(&(&tex.texture.0).into())
-                                        .unwrap_or(&0)
-                                ))
+                                //The default UV for this texture
+                                uv,
+                                //If this texture has an animation, get the offset, otherwise default to 0
+                                *block_atlas.animated_texture_offsets.read()
+                                    .get(&(&tex.texture.0).into())
+                                    .unwrap_or(&0)
+                            ))
                         );
-        
-                        let up = element.faces.get(&schemas::models::BlockFace::Up).as_ref().and_then(|tex|        
+
+                        let up = element.faces.get(&schemas::models::BlockFace::Up).as_ref().and_then(|tex|
                             get_atlas_uv(
                                 tex,
-                                block_atlas
+                                block_atlas,
                             ).map(|uv| (
-                                    //The default UV for this texture
-                                    uv,
-                                    //If this texture has an animation, get the offset, otherwise default to 0
-                                    *block_atlas.animated_texture_offsets.read()
-                                        .get(&(&tex.texture.0).into())
-                                        .unwrap_or(&0)
-                                ))
+                                //The default UV for this texture
+                                uv,
+                                //If this texture has an animation, get the offset, otherwise default to 0
+                                *block_atlas.animated_texture_offsets.read()
+                                    .get(&(&tex.texture.0).into())
+                                    .unwrap_or(&0)
+                            ))
                         );
-        
-                        let down = element.faces.get(&schemas::models::BlockFace::Down).as_ref().and_then(|tex|        
+
+                        let down = element.faces.get(&schemas::models::BlockFace::Down).as_ref().and_then(|tex|
                             get_atlas_uv(
                                 tex,
-                                block_atlas
+                                block_atlas,
                             ).map(|uv| (
-                                    //The default UV for this texture
-                                    uv,
-                                    //If this texture has an animation, get the offset, otherwise default to 0
-                                    *block_atlas.animated_texture_offsets.read()
-                                        .get(&(&tex.texture.0).into())
-                                        .unwrap_or(&0)
-                                ))
+                                //The default UV for this texture
+                                uv,
+                                //If this texture has an animation, get the offset, otherwise default to 0
+                                *block_atlas.animated_texture_offsets.read()
+                                    .get(&(&tex.texture.0).into())
+                                    .unwrap_or(&0)
+                            ))
                         );
-        
+
                         let a = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0)).into();
                         let b = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0)).into();
                         let c = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0)).into();
@@ -348,7 +342,7 @@ impl ModelMesh {
                         let f = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0)).into();
                         let g = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0)).into();
                         let h = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0)).into();
-        
+
                         #[rustfmt::skip]
                         let faces = BlockModelFaces {
                             south: south.map(|south| {[
@@ -400,10 +394,10 @@ impl ModelMesh {
                                 BlockMeshVertex { position: e, tex_coords: [down.0.1.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
                             ]}),
                         };
-        
+
                         Ok(faces)
                     }).collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>()?;
-        
+
                 //TODO
                 let has_transparency = false;
 
@@ -416,8 +410,6 @@ impl ModelMesh {
                 ))
             }).collect::<Result<Vec<_>, MeshBakeError>>()?;
 
-        Ok(Self {
-            models
-        })
+        Ok(Self { models })
     }
 }

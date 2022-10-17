@@ -1,38 +1,34 @@
-mod chunk;
-mod entity;
-
 extern crate wgpu_mc;
 
 use std::fs;
-
 use std::path::PathBuf;
-
+use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use wgpu_mc::mc::resource::ResourcePath;
 
+use arc_swap::ArcSwap;
 use futures::executor::block_on;
-use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
+};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 
-use std::sync::Arc;
-use wgpu_mc::mc::resource::ResourceProvider;
-
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
-
-use arc_swap::ArcSwap;
-
 use wgpu_mc::mc::entity::{EntityInstanceTransforms, PartTransform};
-
+use wgpu_mc::mc::resource::ResourcePath;
+use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
 use wgpu_mc::render::pipeline::sky::SkyPipeline;
 use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
 use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
+use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 
 use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
+
+mod chunk;
+mod entity;
 
 struct FsResourceProvider {
     pub asset_root: PathBuf,
@@ -113,7 +109,7 @@ fn main() {
 
     let blocks = {
         //Read all of the blockstates in the Minecraft datapack folder thingy
-        let blockstate_dir = std::fs::read_dir(blockstates_path).unwrap();
+        let blockstate_dir = fs::read_dir(blockstates_path).unwrap();
         // let mut model_map = HashMap::new();
         let _bm = wm.mc.block_manager.write();
 
@@ -168,7 +164,6 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
     wm.mc.chunks.assemble_world_meshes(&wm);
 
     let mut frame_start = Instant::now();
-    let mut frame_time = 1.0;
 
     let mut forward = 0.0;
 
@@ -259,7 +254,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                         / 50) as u32,
                 );
 
-                frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
+                let frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
                 spin += 0.5;
                 _frame += 1;

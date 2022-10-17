@@ -31,49 +31,41 @@ This is a trait that provides a block state key for a given coordinate.
 
 ## Entity Rendering
 
-To render entities, you need an entity model. wgpu-mc makes no assumptions about how entity models are defined, 
+To render entities, you need an entity model. wgpu-mc makes no assumptions about how entity models are defined,
 so it's up to you to provide them to wgpu-mc.
 
 See the [render::entity] module for an example of rendering an example entity.
-*/
+ */
 
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::iter;
+use std::sync::Arc;
+use std::sync::RwLock;
+
+use arc_swap::ArcSwap;
+pub use minecraft_assets;
+pub use naga;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use tracing::{span, Level};
+pub use wgpu;
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, RenderPassDescriptor,
+};
+
+use crate::camera::UniformMatrixHelper;
+use crate::mc::resource::ResourceProvider;
+use crate::mc::MinecraftState;
+use crate::render::atlas::Atlas;
+use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
+use crate::texture::TextureSamplerView;
+use crate::util::WmArena;
 
 pub mod camera;
 pub mod mc;
 pub mod render;
 pub mod texture;
 pub mod util;
-
-pub use naga;
-pub use wgpu;
-pub use minecraft_assets;
-
-use crate::camera::UniformMatrixHelper;
-
-use crate::mc::MinecraftState;
-
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-
-use std::collections::HashMap;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, RenderPassDescriptor};
-
-use crate::texture::TextureSamplerView;
-
-use std::sync::Arc;
-
-use crate::mc::resource::ResourceProvider;
-
-use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
-use arc_swap::ArcSwap;
-
-use crate::render::atlas::Atlas;
-use std::sync::RwLock;
-
-
-use crate::util::WmArena;
 
 pub struct WgpuState {
     pub surface: Option<wgpu::Surface>,
@@ -90,11 +82,11 @@ pub struct WgpuState {
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
 
-    pub depth_texture: Arc<ArcSwap<texture::TextureSamplerView>>,
+    pub depth_texture: Arc<ArcSwap<TextureSamplerView>>,
 
     pub render_pipeline_manager: Arc<ArcSwap<RenderPipelineManager>>,
 
-    pub mc: Arc<mc::MinecraftState>,
+    pub mc: Arc<MinecraftState>,
 }
 
 #[derive(Copy, Clone)]
@@ -112,7 +104,9 @@ impl WmRenderer {
     ///
     /// This takes in a raw window handle and returns a [WgpuState], which is then used to
     /// initialize a [WmRenderer].
-    pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(window: &W) -> WgpuState {
+    pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(
+        window: &W,
+    ) -> WgpuState {
         let size = window.get_window_size();
 
         //Vulkan works just fine, the issue is that using RenderDoc + Vulkan makes it hang on launch
@@ -140,7 +134,7 @@ impl WmRenderer {
                     limits: wgpu::Limits::default(),
                 },
                 None, // Trace path
-             )
+            )
             .await
             .unwrap();
 
@@ -166,7 +160,7 @@ impl WmRenderer {
     }
 
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
-        let pipelines = render::pipeline::RenderPipelineManager::new(resource_provider.clone());
+        let pipelines = RenderPipelineManager::new(resource_provider.clone());
 
         let mc = MinecraftState::new(resource_provider);
         let surface_config = wgpu_state.surface_config.read().unwrap();
@@ -176,7 +170,7 @@ impl WmRenderer {
             wgpu::Extent3d {
                 width: surface_config.width,
                 height: surface_config.height,
-                depth_or_array_layers: 1
+                depth_or_array_layers: 1,
             },
             "depth texture",
         );
@@ -208,7 +202,7 @@ impl WmRenderer {
                         Arc::new(ArcSwap::new(Arc::new(Atlas::new(
                             &self.wgpu_state,
                             &pipeline_manager,
-                            false
+                            false,
                         )))),
                     )
                 })
@@ -250,12 +244,12 @@ impl WmRenderer {
         self.mc.camera.store(Arc::new(new_camera));
 
         self.depth_texture
-            .store(Arc::new(texture::TextureSamplerView::create_depth_texture(
+            .store(Arc::new(TextureSamplerView::create_depth_texture(
                 &self.wgpu_state.device,
                 wgpu::Extent3d {
                     width: surface_config.width,
                     height: surface_config.height,
-                    depth_or_array_layers: 1
+                    depth_or_array_layers: 1,
                 },
                 "depth_texture",
             )));
@@ -293,28 +287,32 @@ impl WmRenderer {
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            let animated_block_bind_group = self
-                .wgpu_state
-                .device
-                .create_bind_group(&BindGroupDescriptor {
-                    label: None,
-                    layout: self
-                        .render_pipeline_manager
-                        .load()
-                        .bind_group_layouts
-                        .read()
-                        .get("ssbo")
-                        .unwrap(),
-                    entries: &[BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(
-                            animated_block_buffer.as_entire_buffer_binding(),
-                        ),
-                    }],
-                });
+            let animated_block_bind_group =
+                self.wgpu_state
+                    .device
+                    .create_bind_group(&BindGroupDescriptor {
+                        label: None,
+                        layout: self
+                            .render_pipeline_manager
+                            .load()
+                            .bind_group_layouts
+                            .read()
+                            .get("ssbo")
+                            .unwrap(),
+                        entries: &[BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(
+                                animated_block_buffer.as_entire_buffer_binding(),
+                            ),
+                        }],
+                    });
 
-            self.mc.animated_block_buffer.store(Arc::new(Some(animated_block_buffer)));
-            self.mc.animated_block_bind_group.store(Arc::new(Some(animated_block_bind_group)));
+            self.mc
+                .animated_block_buffer
+                .store(Arc::new(Some(animated_block_buffer)));
+            self.mc
+                .animated_block_bind_group
+                .store(Arc::new(Some(animated_block_bind_group)));
         }
 
         self.wgpu_state.queue.write_buffer(
@@ -335,7 +333,11 @@ impl WmRenderer {
         // );
     }
 
-    pub fn render(&self, wm_pipelines: &[&dyn WmPipeline], output_texture_view: &wgpu::TextureView) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(
+        &self,
+        wm_pipelines: &[&dyn WmPipeline],
+        output_texture_view: &wgpu::TextureView,
+    ) -> Result<(), wgpu::SurfaceError> {
         let _span_ = span!(Level::TRACE, "render").entered();
 
         let mut encoder =

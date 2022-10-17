@@ -1,11 +1,12 @@
-use crate::render::entity::{EntityVertex};
+use std::collections::HashMap;
+
+use crate::mc::entity::{EntityInstanceVBOEntry, EntityInstances};
+use crate::render::entity::EntityVertex;
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
-use std::collections::HashMap;
-use crate::mc::entity::{EntityInstances, EntityInstanceVBOEntry};
 
 pub struct EntityPipeline<'entities> {
     pub entities: &'entities [&'entities EntityInstances],
@@ -19,13 +20,16 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/entity".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/entity.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/entity.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
@@ -150,18 +154,10 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
             let entity = arena.alloc(instances.entity.clone());
 
             //Bind the transform SSBO
-            render_pass.set_bind_group(
-                0,
-                &uploaded.transform_ssbo.1,
-                &[],
-            );
+            render_pass.set_bind_group(0, &uploaded.transform_ssbo.1, &[]);
 
             //Bind the entity texture atlas
-            render_pass.set_bind_group(
-                1,
-                &entity.texture.bind_group,
-                &[],
-            );
+            render_pass.set_bind_group(1, &entity.texture.bind_group, &[]);
 
             //Bind projection matrix
             render_pass.set_bind_group(
@@ -172,14 +168,9 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                 &[],
             );
 
-            render_pass.set_vertex_buffer(
-                0,
-                entity.mesh
-                    .slice(..)
-            );
+            render_pass.set_vertex_buffer(0, entity.mesh.slice(..));
 
-            render_pass
-                .set_vertex_buffer(1, uploaded.instance_vbo.slice(..));
+            render_pass.set_vertex_buffer(1, uploaded.instance_vbo.slice(..));
 
             render_pass.draw(
                 0..instances.entity.vertices,

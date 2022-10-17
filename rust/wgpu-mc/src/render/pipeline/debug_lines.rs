@@ -1,16 +1,17 @@
-use crate::render::pipeline::WmPipeline;
-use crate::render::shader::{WgslShader, WmShader};
 use std::collections::HashMap;
+
+use bytemuck::{Pod, Zeroable};
+use cgmath::Rad;
 use wgpu::util::BufferInitDescriptor;
+use wgpu::{BindGroupDescriptor, BindGroupEntry};
 
 use crate::camera::UniformMatrixHelper;
+use crate::render::pipeline::WmPipeline;
+use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
 use crate::wgpu::util::DeviceExt;
 use crate::wgpu::{RenderPass, RenderPipeline, RenderPipelineDescriptor};
 use crate::WmRenderer;
-use bytemuck::{Pod, Zeroable};
-use cgmath::Rad;
-use wgpu::{BindGroupDescriptor, BindGroupEntry};
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
@@ -47,13 +48,16 @@ impl WmPipeline for DebugLinesPipeline {
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
         [(
             "wgpu_mc:shaders/debug_lines".into(),
-            Box::new(WgslShader::init(
-                &"wgpu_mc:shaders/debug_lines.wgsl".try_into().unwrap(),
-                &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
-                "fs_main".into(),
-                "vs_main".into(),
-            ).unwrap()) as Box<dyn WmShader>,
+            Box::new(
+                WgslShader::init(
+                    &"wgpu_mc:shaders/debug_lines.wgsl".try_into().unwrap(),
+                    &*wm.mc.resource_provider,
+                    &wm.wgpu_state.device,
+                    "fs_main".into(),
+                    "vs_main".into(),
+                )
+                .unwrap(),
+            ) as Box<dyn WmShader>,
         )]
         .into_iter()
         .collect()
