@@ -18,7 +18,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
     }
 
     fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>> {
-        [(
+        HashMap::from([(
             "wgpu_mc:shaders/entity".into(),
             Box::new(
                 WgslShader::init(
@@ -30,9 +30,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
                 )
                 .unwrap(),
             ) as Box<dyn WmShader>,
-        )]
-        .into_iter()
-        .collect()
+        )])
     }
 
     fn atlases(&self) -> &'static [&'static str] {
