@@ -12,6 +12,7 @@ use crate::mc::chunk::{
 };
 use crate::mc::BlockManager;
 use crate::WmRenderer;
+use get_size::GetSize;
 
 fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc<ModelMesh>> {
     let key = match state {
@@ -29,7 +30,7 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
 }
 
 #[derive(Debug)]
-pub struct BakedChunkLayer<T: Copy + Pod> {
+pub struct BakedChunkLayer<T: Copy + Pod + GetSize> {
     pub top: Vec<T>,
     pub bottom: Vec<T>,
     pub north: Vec<T>,
@@ -39,7 +40,14 @@ pub struct BakedChunkLayer<T: Copy + Pod> {
     pub nonstandard: Vec<T>,
 }
 
-impl<T: Copy + Pod> BakedChunkLayer<T> {
+impl<T: Copy + Pod + GetSize> GetSize for BakedChunkLayer<T> {
+    fn get_heap_size(&self) -> usize {
+        GetSize::get_size(&self.top) + GetSize::get_size(&self.bottom) + GetSize::get_size(&self.north) + GetSize::get_size(&self.east) + GetSize::get_size(&self.south) + GetSize::get_size(&self.west) + GetSize::get_size(&self.nonstandard)
+    }
+
+}
+
+impl<T: Copy + Pod + GetSize> BakedChunkLayer<T> {
     pub fn new() -> Self {
         Self {
             top: vec![],
@@ -377,11 +385,5 @@ impl<T: Copy + Pod> BakedChunkLayer<T> {
             west: west_vertices,
             nonstandard: other_vertices,
         }
-    }
-}
-
-impl<T: Copy + Pod> Default for BakedChunkLayer<T> {
-    fn default() -> Self {
-        Self::new()
     }
 }

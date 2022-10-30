@@ -10,6 +10,8 @@ use crate::mc::BlockManager;
 use crate::render::pipeline::terrain::TerrainVertex;
 use crate::render::world::chunk::BakedChunkLayer;
 
+use get_size::GetSize;
+
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
 pub const CHUNK_HEIGHT: usize = 384;
@@ -35,7 +37,7 @@ pub struct RenderLayers {
     pub grass: Box<[ChunkSection; CHUNK_SECTIONS_PER]>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, GetSize)]
 pub struct ChunkLayers {
     glass: BakedChunkLayer<TerrainVertex>,
     terrain: BakedChunkLayer<TerrainVertex>,
@@ -101,6 +103,14 @@ impl Chunk {
         self.baked
             .store(Arc::new(Some(ChunkLayers { glass, terrain })));
     }
+}
+
+impl GetSize for Chunk {
+
+    fn get_heap_size(&self) -> usize {
+        GetSize::get_size(&self.baked.load_full())
+    }
+
 }
 
 pub struct WorldBuffers {

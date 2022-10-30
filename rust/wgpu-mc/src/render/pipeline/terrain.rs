@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use get_size::GetSize;
 
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
@@ -11,7 +12,7 @@ pub struct TerrainPipeline;
 pub const BLOCK_ATLAS_NAME: &str = "wgpu_mc:atlases/block";
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, GetSize)]
 pub struct TerrainVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],

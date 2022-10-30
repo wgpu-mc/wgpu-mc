@@ -106,6 +106,10 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         let wm = wm_clone;
 
         loop {
+            let surface_state = wm.wgpu_state.surface.read();
+
+            let surface = surface_state.0.as_ref().unwrap();
+
             wm.upload_camera();
 
             let mc_state = MC_STATE.get().unwrap().load();
@@ -118,10 +122,9 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             } else {
                 pipelines.push(GL_PIPELINE.get().unwrap());
             }
-            // }
 
-            let surface = wm.wgpu_state.surface.as_ref().unwrap();
             let texture = surface.get_current_texture().unwrap();
+
             let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
                 format: Some(wgpu::TextureFormat::Bgra8Unorm),
@@ -136,18 +139,9 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             let _instant = Instant::now();
 
             wm.render(&pipelines, &view).unwrap();
-            // println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
+            // // println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
 
             texture.present();
-
-            #[cfg(not(target_os = "macos"))]
-            {
-                println!(
-                    "gl alloc size: {} entries",
-                    GL_ALLOC.get().unwrap().read().len()
-                );
-                thread::sleep(Duration::from_secs(1));
-            }
         }
     });
 

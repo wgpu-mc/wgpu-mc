@@ -41,11 +41,11 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;
 use std::sync::Arc;
-use std::sync::RwLock;
 
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
 pub use naga;
+use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use tracing::{span, Level};
 pub use wgpu;
@@ -68,11 +68,10 @@ pub mod texture;
 pub mod util;
 
 pub struct WgpuState {
-    pub surface: Option<wgpu::Surface>,
+    pub surface: RwLock<(Option<wgpu::Surface>, wgpu::SurfaceConfiguration)>,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub surface_config: RwLock<wgpu::SurfaceConfiguration>,
     pub size: Option<ArcSwap<WindowSize>>,
 }
 
@@ -81,11 +80,8 @@ pub struct WgpuState {
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
-
     pub depth_texture: Arc<ArcSwap<TextureSamplerView>>,
-
     pub render_pipeline_manager: Arc<ArcSwap<RenderPipelineManager>>,
-
     pub mc: Arc<MinecraftState>,
 }
 
@@ -109,11 +105,6 @@ impl WmRenderer {
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        //Vulkan works just fine, the issue is that using RenderDoc + Vulkan makes it hang on launch
-        //about 90% of the time. DX12 is much more stable
-        #[cfg(target_os = "windows")]
-        let instance = wgpu::Instance::new(wgpu::Backends::DX12);
-        #[cfg(not(target_os = "windows"))]
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
 
         let surface = unsafe { instance.create_surface(window) };
@@ -152,11 +143,10 @@ impl WmRenderer {
         surface.configure(&device, &surface_config);
 
         WgpuState {
-            surface: Some(surface),
+            surface: RwLock::new((Some(surface), surface_config)),
             adapter,
             device,
             queue,
-            surface_config: RwLock::new(surface_config),
             size: Some(ArcSwap::new(Arc::new(size))),
         }
     }
@@ -165,7 +155,7 @@ impl WmRenderer {
         let pipelines = RenderPipelineManager::new(resource_provider.clone());
 
         let mc = MinecraftState::new(resource_provider);
-        let surface_config = wgpu_state.surface_config.read().unwrap();
+        let surface_config = wgpu_state.surface.read().1.clone();
 
         let depth_texture = TextureSamplerView::create_depth_texture(
             &wgpu_state.device,
@@ -229,13 +219,17 @@ impl WmRenderer {
             return;
         }
 
-        let mut surface_config = (*self.wgpu_state.surface_config.read().unwrap()).clone();
+        let surface_state = self.wgpu_state
+            .surface
+            .write(); //Guarantee the Surface is not in use
+
+        let mut surface_config = surface_state.1.clone();
 
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
 
-        self.wgpu_state
-            .surface
+        surface_state
+            .0
             .as_ref()
             .unwrap()
             .configure(&self.wgpu_state.device, &surface_config);
@@ -261,7 +255,7 @@ impl WmRenderer {
         // self.camera_controller.update_camera(&mut self.camera);
         // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
-        let surface_config = self.wgpu_state.surface_config.read().unwrap();
+        let surface_config = &self.wgpu_state.surface.read().1;
         camera.aspect = surface_config.width as f32 / surface_config.height as f32;
 
         let uniforms = UniformMatrixHelper {
@@ -390,7 +384,7 @@ impl WmRenderer {
 
     pub fn get_backend_description(&self) -> String {
         format!(
-            "wgpu 0.12 ({:?})",
+            "wgpu 0.14 ({:?})",
             self.wgpu_state.adapter.get_info().backend
         )
     }

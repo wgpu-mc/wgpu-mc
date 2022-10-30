@@ -266,7 +266,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
                 wm.mc.camera.store(Arc::new(camera));
 
-                let surface = wm.wgpu_state.surface.as_ref().unwrap();
+                let surface_state = wm.wgpu_state.surface.read();
+                let surface = surface_state.0.as_ref().unwrap();
                 let texture = surface.get_current_texture().unwrap();
                 let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                     label: None,

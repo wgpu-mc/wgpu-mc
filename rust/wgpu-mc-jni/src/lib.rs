@@ -341,11 +341,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
         let wm = RENDERER.get().unwrap();
         let bm = wm.mc.block_manager.read();
 
-        let chunk = wm
-            .mc
-            .chunks
-            .loaded_chunks
-            .read()
+        let chunks = wm.mc.chunks.loaded_chunks.read();
+
+        let chunk = chunks
             .get(&(x, z))
             .unwrap()
             .load();
@@ -353,14 +351,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
         let instant = Instant::now();
         chunk.bake(&bm, BLOCK_STATE_PROVIDER.get().unwrap());
 
+        use get_size::GetSize;
+
+        let size: usize = chunks.iter().map(|(_, chunk)| GetSize::get_size(&**chunk.load())).sum();
+
         println!(
-            "Baked chunk (x={}, z={}) in {}ms",
+            "Baked chunk (x={}, z={}, of {}) in {}ms\nChunk heap size: {}MB",
             x,
             z,
+            chunks.len(),
             Instant::now().duration_since(instant).as_millis(),
+            size / 1_000_000
         );
 
-        wm.mc.chunks.assemble_world_meshes(wm);
+        // wm.mc.chunks.assemble_world_meshes(wm);
     });
 }
 
@@ -933,7 +937,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
     _class: JClass,
 ) -> jint {
     RENDERER.get().map_or(1280, |wm| {
-        wm.wgpu_state.surface_config.read().unwrap().width as i32
+        wm.wgpu_state.surface.read().1.width as i32
     })
 }
 
@@ -943,7 +947,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
     _class: JClass,
 ) -> jint {
     RENDERER.get().map_or(720, |wm| {
-        wm.wgpu_state.surface_config.read().unwrap().height as i32
+        wm.wgpu_state.surface.read().1.height as i32
     })
 }
 
@@ -1179,34 +1183,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
             env.new_global_ref(object).unwrap(),
             (blockstate_index as u32).into(),
         ))
-    }) as jint
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteHasAny(
-    env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-    predicate: JObject,
-) -> jint {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    //horribly slow. how nice
-    (unsafe {
-        palette
-            .as_ref()
-            .unwrap()
-            .has_any(&*Box::new(|object: jobject| {
-                env.call_method(
-                    predicate,
-                    "test",
-                    "(Ljava/lang/Object;)Z",
-                    &[JValue::Object(JObject::from(object))],
-                )
-                .unwrap()
-                .z()
-                .unwrap()
-            }))
     }) as jint
 }
 
