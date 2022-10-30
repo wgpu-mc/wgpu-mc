@@ -30,18 +30,15 @@ import java.util.function.Consumer;
 @Mixin(WorldChunk.class)
 public abstract class WorldChunkMixin {
 
-    @Shadow @Final private World world;
-
-    @Shadow public abstract BlockState getBlockState(BlockPos pos);
-
     @Inject(method = "loadFromPacket", at = @At("RETURN"))
     public void loadFromPacket(PacketByteBuf buf, NbtCompound nbt, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfo ci) {
         WmChunk chunk = new WmChunk((WorldChunk) (Object) this);
         try {
+            System.out.println("Uploading chunk");
             chunk.upload();
             chunk.bake();
         } catch(ClassCastException e) {
-
+            e.printStackTrace();
         }
     }
 

@@ -493,14 +493,7 @@ public class GlStateManagerMixin {
         if(pixels != null) {
             ptr = MemoryUtil.memAddress(pixels);
         }
-        // WgpuNative.texImage2D(
-        //         texId,
-        //         target,
-        //         level,
-        //         internalFormat,
-        //         width,
-        //         height, border, format, type, ptr
-        // );
+        WgpuNative.texImage2D(texId, target, level, internalFormat, width, height, border, format, type, ptr);
     }
 
     @Overwrite(remap = false)
@@ -517,22 +510,22 @@ public class GlStateManagerMixin {
         int unpack_alignment = GlWmState.pixelStore.getOrDefault(GL30.GL_UNPACK_ALIGNMENT, 4);
 
         if(width + offsetX <= texture.width && height + offsetY <= texture.height) {
-            // WgpuNative.subImage2D(
-            //     texId,
-            //     target,
-            //     level,
-            //     offsetX,
-            //     offsetY,
-            //     width,
-            //     height,
-            //     format,
-            //     type,
-            //     pixels,
-            //     unpack_row_length,
-            //     unpack_skip_pixels,
-            //     unpack_skip_rows,
-            //     unpack_alignment
-            // );
+             WgpuNative.subImage2D(
+                 texId,
+                 target,
+                 level,
+                 offsetX,
+                 offsetY,
+                 width,
+                 height,
+                 format,
+                 type,
+                 pixels,
+                 unpack_row_length,
+                 unpack_skip_pixels,
+                 unpack_skip_rows,
+                 unpack_alignment
+             );
         } else {
             throw new RuntimeException("Attempted to map a texture that was too large onto a smaller texture");
         }

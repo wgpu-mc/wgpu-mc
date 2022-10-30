@@ -293,30 +293,32 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         },
     });
 
-    let mut write = bsp.chunks.write();
+    {
+        let mut write = bsp.chunks.write();
 
-    write.insert(
-        (x, z),
-        ChunkHolder {
-            sections: palettes.zip(*storages).map(|(palette_addr, storage_addr)| {
-                //If (in Java) the chunk storage class was not a PackedIntegerArray but an EmptyPaletteStorage, it won't have created a Rust
-                //version of the PackedIntegerArray and the jlong will default to 0, or null
-                if palette_addr == 0 || storage_addr == 0 {
-                    return None;
-                }
+        write.insert(
+            (x, z),
+            ChunkHolder {
+                sections: palettes.zip(*storages).map(|(palette_addr, storage_addr)| {
+                    //If (in Java) the chunk storage class was not a PackedIntegerArray but an EmptyPaletteStorage, it won't have created a Rust
+                    //version of the PackedIntegerArray and the jlong will default to 0, or null
+                    if palette_addr == 0 || storage_addr == 0 {
+                        return None;
+                    }
 
-                //SAFETY: Java will have called Java_dev_birb_wgpu_rust_WgpuNative_createPalette and Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage
-                //respectively to create these pointers. Rust will also have ownership of the data at the pointers at this point.
-                //The only thing that updates "live" later in Java is the JavaPalette, so we clone that here to keep ownership later
-                unsafe {
-                    Some((
-                        Box::from_raw(palette_addr as *mut JavaPalette),
-                        Box::from_raw(storage_addr as *mut PackedIntegerArray),
-                    ))
-                }
-            }),
-        },
-    );
+                    //SAFETY: Java will have called Java_dev_birb_wgpu_rust_WgpuNative_createPalette and Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage
+                    //respectively to create these pointers. Rust will also have ownership of the data at the pointers at this point.
+                    //The only thing that updates "live" later in Java is the JavaPalette, so we clone that here to keep ownership later
+                    unsafe {
+                        Some((
+                            Box::from_raw(palette_addr as *mut JavaPalette),
+                            Box::from_raw(storage_addr as *mut PackedIntegerArray),
+                        ))
+                    }
+                }),
+            },
+        );
+    }
 
     let chunk = Chunk {
         pos: (x, z),
@@ -339,32 +341,32 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
 ) {
     THREAD_POOL.get().unwrap().spawn(move || {
         let wm = RENDERER.get().unwrap();
-        let bm = wm.mc.block_manager.read();
 
-        let chunks = wm.mc.chunks.loaded_chunks.read();
+        {
+            let bm = wm.mc.block_manager.read();
+            let chunks = wm.mc.chunks.loaded_chunks.read();
 
-        let chunk = chunks
-            .get(&(x, z))
-            .unwrap()
-            .load();
+            let chunk = chunks
+                .get(&(x, z))
+                .unwrap()
+                .load();
 
-        let instant = Instant::now();
-        chunk.bake(&bm, BLOCK_STATE_PROVIDER.get().unwrap());
+            let instant = Instant::now();
+            chunk.bake(&bm, BLOCK_STATE_PROVIDER.get().unwrap());
 
-        use get_size::GetSize;
+            use get_size::GetSize;
 
-        let size: usize = chunks.iter().map(|(_, chunk)| GetSize::get_size(&**chunk.load())).sum();
+            let size: usize = chunks.iter().map(|(_, chunk)| GetSize::get_size(&**chunk.load())).sum();
 
-        println!(
-            "Baked chunk (x={}, z={}, of {}) in {}ms\nChunk heap size: {}MB",
-            x,
-            z,
-            chunks.len(),
-            Instant::now().duration_since(instant).as_millis(),
-            size / 1_000_000
-        );
-
-        // wm.mc.chunks.assemble_world_meshes(wm);
+            println!(
+                "Baked chunk (x={}, z={}, of {}) in {}ms\nChunk heap size: {}MB",
+                x,
+                z,
+                chunks.len(),
+                Instant::now().duration_since(instant).as_millis(),
+                size / 1_000_000
+            );
+        }
     });
 }
 
@@ -705,12 +707,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
     _class: JClass,
     boolean: jboolean,
 ) {
-    MC_STATE
-        .get()
-        .unwrap()
-        .store(Arc::new(MinecraftRenderState {
-            render_world: boolean != 0,
-        }));
+    if let Some(render_state) = MC_STATE.get() {
+        render_state.store(Arc::new(MinecraftRenderState {
+            render_world: boolean != 0
+        }))
+    }
 }
 
 #[no_mangle]

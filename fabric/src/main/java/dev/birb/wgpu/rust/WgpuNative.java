@@ -30,7 +30,7 @@ public class WgpuNative {
         }
     }
 
-    private static HashMap<Object, Long> idLists = new HashMap<>();
+    private static final HashMap<Object, Long> idLists = new HashMap<>();
 
     /**
      * Loads a native library from the resources of this Jar
@@ -49,6 +49,7 @@ public class WgpuNative {
             InputStream is = WgpuNative.class.getClassLoader().getResourceAsStream("META-INF/natives/" + name);
             if (is == null) throw new ResourceNotFoundException(object, "Could not find lib " + name + " in jar");
 
+            System.out.println(object.getAbsolutePath());
             Files.copy(is, object.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
         System.load(object.getAbsolutePath());

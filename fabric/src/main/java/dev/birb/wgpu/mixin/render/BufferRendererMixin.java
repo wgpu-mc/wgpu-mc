@@ -30,60 +30,60 @@ public class BufferRendererMixin {
      */
     @Overwrite
     public static void draw(ByteBuffer buffer, VertexFormat.DrawMode drawMode, VertexFormat vertexFormat, int count, VertexFormat.IntType elementFormat, int vertexCount, boolean textured) {
-//         if(vertexFormat == VertexFormats.POSITION_COLOR) {
-//             if(vertexFormat.getElements().get(1).getDataType() == VertexFormatElement.DataType.UBYTE)
-//                 WgpuNative.wmUsePipeline(0);
-//             else if(vertexFormat.getElements().get(1).getDataType() == VertexFormatElement.DataType.FLOAT)
-//                 WgpuNative.wmUsePipeline(2);
-//             else return;
-//         } else if(vertexFormat == VertexFormats.POSITION_TEXTURE) {
-//             WgpuNative.wmUsePipeline(1);
-//             WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
-//         } else if(vertexFormat == VertexFormats.POSITION_COLOR_TEXTURE_LIGHT) {
-//             //Text rendering
-//             WgpuNative.wmUsePipeline(3);
-//             WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
-//         } else if(vertexFormat == VertexFormats.POSITION_TEXTURE_COLOR) {
-//             WgpuNative.wmUsePipeline(4);
-//             WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
-//         } else {
-//             return;
-//         }
+         if(vertexFormat == VertexFormats.POSITION_COLOR) {
+             if(vertexFormat.getElements().get(1).getDataType() == VertexFormatElement.DataType.UBYTE)
+                 WgpuNative.wmUsePipeline(0);
+             else if(vertexFormat.getElements().get(1).getDataType() == VertexFormatElement.DataType.FLOAT)
+                 WgpuNative.wmUsePipeline(2);
+             else return;
+         } else if(vertexFormat == VertexFormats.POSITION_TEXTURE) {
+             WgpuNative.wmUsePipeline(1);
+             WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
+         } else if(vertexFormat == VertexFormats.POSITION_COLOR_TEXTURE_LIGHT) {
+             //Text rendering
+             WgpuNative.wmUsePipeline(3);
+             WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
+         } else if(vertexFormat == VertexFormats.POSITION_TEXTURE_COLOR) {
+             WgpuNative.wmUsePipeline(4);
+             WgpuNative.attachTextureBindGroup(0, RenderSystem.getShaderTexture(0));
+         } else {
+             return;
+         }
 
-//         Matrix4f mat = RenderSystem.getProjectionMatrix();
-//         Matrix4f mat1 = RenderSystem.getModelViewMatrix();
+         Matrix4f mat = RenderSystem.getProjectionMatrix();
+         Matrix4f mat1 = RenderSystem.getModelViewMatrix();
 
-//         mat.multiply(mat1);
+         mat.multiply(mat1);
 
-//         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
-//         float[] out = new float[16];
-//         mat.writeColumnMajor(floatBuffer);
-//         floatBuffer.get(out);
-//         WgpuNative.setProjectionMatrix(out);
+         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
+         float[] out = new float[16];
+         mat.writeColumnMajor(floatBuffer);
+         floatBuffer.get(out);
+         WgpuNative.setProjectionMatrix(out);
 
-//         byte[] bytes = new byte[buffer.limit()];
-//         buffer.get(bytes);
+         byte[] bytes = new byte[buffer.limit()];
+         buffer.get(bytes);
 
-//         WgpuNative.setVertexBuffer(bytes);
+         WgpuNative.setVertexBuffer(bytes);
 
-//         if(drawMode == VertexFormat.DrawMode.QUADS) {
-// //            int[] quadIndices = new int[] {0, 1, 3, 1, 2, 3};
-//             int[] quadIndices = new int[count * 6];
+         if(drawMode == VertexFormat.DrawMode.QUADS) {
+ //            int[] quadIndices = new int[] {0, 1, 3, 1, 2, 3};
+             int[] quadIndices = new int[count * 6];
 
-//             for(int i=0;i<count;i++) {
-//                 quadIndices[(i * 6)] = i * 4;
-//                 quadIndices[(i * 6) + 1] = (i * 4) + 1;
-//                 quadIndices[(i * 6) + 2] = (i * 4) + 3;
-//                 quadIndices[(i * 6) + 3] = (i * 4) + 1;
-//                 quadIndices[(i * 6) + 4] = (i * 4) + 2;
-//                 quadIndices[(i * 6) + 5] = (i * 4) + 3;
-//             }
+             for(int i=0;i<count;i++) {
+                 quadIndices[(i * 6)] = i * 4;
+                 quadIndices[(i * 6) + 1] = (i * 4) + 1;
+                 quadIndices[(i * 6) + 2] = (i * 4) + 3;
+                 quadIndices[(i * 6) + 3] = (i * 4) + 1;
+                 quadIndices[(i * 6) + 4] = (i * 4) + 2;
+                 quadIndices[(i * 6) + 5] = (i * 4) + 3;
+             }
 
-//             WgpuNative.setIndexBuffer(quadIndices);
-//             WgpuNative.drawIndexed(count + (count / 2));
-//         } else if(drawMode == VertexFormat.DrawMode.TRIANGLES) {
-//             WgpuNative.draw(vertexCount);
-//         }
+             WgpuNative.setIndexBuffer(quadIndices);
+             WgpuNative.drawIndexed(count + (count / 2));
+         } else if(drawMode == VertexFormat.DrawMode.TRIANGLES) {
+             WgpuNative.draw(vertexCount);
+         }
 
     }
 

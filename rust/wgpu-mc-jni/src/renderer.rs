@@ -116,6 +116,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let mut pipelines = Vec::new();
             pipelines.push(&TerrainPipeline as &dyn WmPipeline);
+
             if mc_state.render_world {
                 // wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
                 pipelines.push(&DebugLinesPipeline as &dyn WmPipeline);

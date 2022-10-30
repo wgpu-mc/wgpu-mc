@@ -252,8 +252,6 @@ impl WmRenderer {
     }
 
     pub fn upload_camera(&self) {
-        // self.camera_controller.update_camera(&mut self.camera);
-        // self.mc.camera.update_view_proj(&self.camera);
         let mut camera = **self.mc.camera.load();
         let surface_config = &self.wgpu_state.surface.read().1;
         camera.aspect = surface_config.width as f32 / surface_config.height as f32;

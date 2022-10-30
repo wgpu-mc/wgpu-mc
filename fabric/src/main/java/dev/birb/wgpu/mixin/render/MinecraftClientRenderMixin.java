@@ -89,10 +89,8 @@ public abstract class MinecraftClientRenderMixin {
             WgpuNative.setCamera(client.player.getX() - (originX * 16.0f), client.player.getY(), client.player.getZ() - (originZ * 16.0f), client.player.renderYaw, client.player.renderPitch);
         }
 
-        if(Wgpu.INITIALIZED) {
-            WgpuNative.submitCommands();
-            WgpuNative.setWorldRenderState(MinecraftClient.getInstance().world != null);
-        }
+        WgpuNative.submitCommands();
+        WgpuNative.setWorldRenderState(MinecraftClient.getInstance().world != null);
     }
 
 }
