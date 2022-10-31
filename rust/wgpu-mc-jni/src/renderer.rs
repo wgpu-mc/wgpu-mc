@@ -106,10 +106,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         let wm = wm_clone;
 
         loop {
-            let surface_state = wm.wgpu_state.surface.read();
-
-            let surface = surface_state.0.as_ref().unwrap();
-
             wm.upload_camera();
 
             let mc_state = MC_STATE.get().unwrap().load();
@@ -123,6 +119,10 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             } else {
                 pipelines.push(GL_PIPELINE.get().unwrap());
             }
+
+            let surface_state = wm.wgpu_state.surface.read();
+
+            let surface = surface_state.0.as_ref().unwrap();
 
             let texture = surface.get_current_texture().unwrap();
 
