@@ -42,12 +42,18 @@ pub struct BakedChunkLayer<T: Copy + Pod + GetSize> {
 
 impl<T: Copy + Pod + GetSize> GetSize for BakedChunkLayer<T> {
     fn get_heap_size(&self) -> usize {
-        GetSize::get_size(&self.top) + GetSize::get_size(&self.bottom) + GetSize::get_size(&self.north) + GetSize::get_size(&self.east) + GetSize::get_size(&self.south) + GetSize::get_size(&self.west) + GetSize::get_size(&self.nonstandard)
+        GetSize::get_size(&self.top)
+            + GetSize::get_size(&self.bottom)
+            + GetSize::get_size(&self.north)
+            + GetSize::get_size(&self.east)
+            + GetSize::get_size(&self.south)
+            + GetSize::get_size(&self.west)
+            + GetSize::get_size(&self.nonstandard)
     }
-
 }
 
 impl<T: Copy + Pod + GetSize> BakedChunkLayer<T> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             top: vec![],

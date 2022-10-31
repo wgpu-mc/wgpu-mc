@@ -106,11 +106,9 @@ impl Chunk {
 }
 
 impl GetSize for Chunk {
-
     fn get_heap_size(&self) -> usize {
         GetSize::get_size(&self.baked.load_full())
     }
-
 }
 
 pub struct WorldBuffers {

@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use get_size::GetSize;
+use std::collections::HashMap;
 
 use crate::render::pipeline::WmPipeline;
 use crate::render::shader::{WgslShader, WmShader};
