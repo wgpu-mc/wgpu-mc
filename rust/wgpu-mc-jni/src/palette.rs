@@ -51,6 +51,7 @@ impl JavaPalette {
         self.store.push(element);
     }
 
+    #[allow(dead_code)]
     pub fn has_any(&self, predicate: &dyn Fn(jobject) -> bool) -> bool {
         self.store
             .iter()

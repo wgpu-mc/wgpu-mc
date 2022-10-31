@@ -1,8 +1,5 @@
 use std::thread;
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Instant};
 
 use arc_swap::ArcSwap;
 use futures::executor::block_on;
@@ -26,9 +23,8 @@ use wgpu_mc::{
 };
 
 use crate::{
-    entity::ENTITY_ATLAS, gl::GL_ALLOC, MinecraftRenderState, MinecraftResourceManagerAdapter,
-    RenderMessage, WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, THREAD_POOL,
-    WINDOW,
+    entity::ENTITY_ATLAS, MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage,
+    WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, THREAD_POOL, WINDOW,
 };
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
@@ -50,7 +46,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let window = Arc::new(
         winit::window::WindowBuilder::new()
-            .with_title(&title)
+            .with_title(title)
             .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
                 width: 1280,
                 height: 720,

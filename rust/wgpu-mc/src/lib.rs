@@ -167,8 +167,6 @@ impl WmRenderer {
             "depth texture",
         );
 
-        drop(surface_config);
-
         Self {
             wgpu_state: Arc::new(wgpu_state),
 
@@ -219,9 +217,7 @@ impl WmRenderer {
             return;
         }
 
-        let surface_state = self.wgpu_state
-            .surface
-            .write(); //Guarantee the Surface is not in use
+        let surface_state = self.wgpu_state.surface.write(); //Guarantee the Surface is not in use
 
         let mut surface_config = surface_state.1.clone();
 

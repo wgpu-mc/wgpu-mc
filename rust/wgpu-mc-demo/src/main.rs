@@ -39,7 +39,7 @@ impl ResourceProvider for FsResourceProvider {
     fn get_bytes(&self, id: &ResourcePath) -> Option<Vec<u8>> {
         let real_path = self.asset_root.join(id.0.replace(':', "/"));
 
-        fs::read(&real_path).ok()
+        fs::read(real_path).ok()
     }
 }
 

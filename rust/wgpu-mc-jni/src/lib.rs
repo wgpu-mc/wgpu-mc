@@ -346,17 +346,17 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
             let bm = wm.mc.block_manager.read();
             let chunks = wm.mc.chunks.loaded_chunks.read();
 
-            let chunk = chunks
-                .get(&(x, z))
-                .unwrap()
-                .load();
+            let chunk = chunks.get(&(x, z)).unwrap().load();
 
             let instant = Instant::now();
             chunk.bake(&bm, BLOCK_STATE_PROVIDER.get().unwrap());
 
             use get_size::GetSize;
 
-            let size: usize = chunks.iter().map(|(_, chunk)| GetSize::get_size(&**chunk.load())).sum();
+            let size: usize = chunks
+                .iter()
+                .map(|(_, chunk)| GetSize::get_size(&**chunk.load()))
+                .sum();
 
             println!(
                 "Baked chunk (x={}, z={}, of {}) in {}ms\nChunk heap size: {}MB",
@@ -709,7 +709,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
 ) {
     if let Some(render_state) = MC_STATE.get() {
         render_state.store(Arc::new(MinecraftRenderState {
-            render_world: boolean != 0
+            render_world: boolean != 0,
         }))
     }
 }
@@ -937,9 +937,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
     _env: JNIEnv,
     _class: JClass,
 ) -> jint {
-    RENDERER.get().map_or(1280, |wm| {
-        wm.wgpu_state.surface.read().1.width as i32
-    })
+    RENDERER
+        .get()
+        .map_or(1280, |wm| wm.wgpu_state.surface.read().1.width as i32)
 }
 
 #[no_mangle]
@@ -947,9 +947,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
     _env: JNIEnv,
     _class: JClass,
 ) -> jint {
-    RENDERER.get().map_or(720, |wm| {
-        wm.wgpu_state.surface.read().1.height as i32
-    })
+    RENDERER
+        .get()
+        .map_or(720, |wm| wm.wgpu_state.surface.read().1.height as i32)
 }
 
 #[no_mangle]
