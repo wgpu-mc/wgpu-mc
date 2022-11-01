@@ -29,7 +29,7 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BakedChunkLayer<T: Copy + Pod + GetSize> {
     pub top: Vec<T>,
     pub bottom: Vec<T>,
@@ -53,7 +53,6 @@ impl<T: Copy + Pod + GetSize> GetSize for BakedChunkLayer<T> {
 }
 
 impl<T: Copy + Pod + GetSize> BakedChunkLayer<T> {
-    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             top: vec![],
