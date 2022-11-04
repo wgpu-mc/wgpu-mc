@@ -2,11 +2,8 @@ package dev.birb.wgpu.mixin.core;
 
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
-import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.RunArgs;
-import net.minecraft.client.gui.screen.Screen;
-import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
@@ -49,6 +46,11 @@ public abstract class MinecraftClientCoreMixin {
     @Overwrite
     public boolean shouldRenderAsync() {
         return true;
+    }
+
+    @Inject(method = "<init>", at = @At(value = "HEAD"))
+    private static void headHook(RunArgs args, CallbackInfo ci) {
+        WgpuNative.sendRunDirectory(args.directories.runDir.getAbsolutePath());
     }
 
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/resource/ResourceReloadLogger;reload(Lnet/minecraft/client/resource/ResourceReloadLogger$ReloadReason;Ljava/util/List;)V", shift = At.Shift.AFTER))

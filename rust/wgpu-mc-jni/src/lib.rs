@@ -12,6 +12,7 @@ use std::io::Cursor;
 use std::mem;
 use std::mem::size_of;
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -57,6 +58,7 @@ mod entity;
 mod gl;
 mod palette;
 mod renderer;
+mod settings;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -95,6 +97,7 @@ static BLOCK_STATES: OnceCell<Mutex<Vec<(String, String, GlobalRef)>>> = OnceCel
 
 static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
+static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
 #[derive(Debug)]
 struct ChunkHolder {
@@ -199,6 +202,17 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
             slice::from_raw_parts(elements.as_ptr() as *const u8, size)
         }))
     }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
+    env: JNIEnv,
+    _class: JClass,
+    dir: JString,
+) {
+    let dir: String = env.get_string(dir).unwrap().into();
+    let path = PathBuf::from(dir);
+    RUN_DIRECTORY.set(path).unwrap();
 }
 
 #[no_mangle]
