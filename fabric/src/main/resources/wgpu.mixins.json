@@ -32,7 +32,8 @@
     "world.PaletteProviderMixin",
     "world.WorldChunkMixin",
     "accessors.PackedIntegerArrayAccessor",
-    "core.InputUtilMixin"
+    "core.InputUtilMixin",
+    "core.TextRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
