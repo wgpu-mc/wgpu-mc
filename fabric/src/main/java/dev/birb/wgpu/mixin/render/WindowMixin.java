@@ -8,6 +8,9 @@ import net.minecraft.client.util.Window;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.io.InputStream;
 import java.util.Optional;
@@ -32,6 +35,11 @@ public class WindowMixin {
     @Overwrite
     public void setRawMouseMotion(boolean rawMouseMotion) {
 
+    }
+
+    @Inject(method = "calculateScaleFactor", at = @At("RETURN"), cancellable = true)
+    public void calculateScaleFactor(int guiScale, boolean forceUnicodeFont, CallbackInfoReturnable<Integer> cir) {
+        cir.setReturnValue(guiScale);
     }
 
     /**
@@ -108,13 +116,12 @@ public class WindowMixin {
         return this.getHeight();
     }
 
-
     /**
      * @author wgpu-mc
      */
     @Overwrite
     public int getScaledWidth() {
-        return (int) ((double)this.getWidth() * this.scaleFactor);
+        return (int) ((double)this.getWidth() / this.scaleFactor);
     }
 
     /**
@@ -122,7 +129,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getScaledHeight() {
-        return (int) ((double)this.getHeight() * this.scaleFactor);
+        return (int) ((double)this.getHeight() / this.scaleFactor);
     }
 
     /**

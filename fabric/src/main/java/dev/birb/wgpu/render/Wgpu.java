@@ -56,15 +56,19 @@ public class Wgpu {
         WgpuNative.preInit();
     }
 
+    public static void linkRenderDoc() {
+        try {
+            System.loadLibrary("renderdoc");
+        } catch(UnsatisfiedLinkError e) {
+            LOGGER.debug("Error while loading RenderDoc:\n" + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
     public static void startRendering() {
         if (!INITIALIZED) {
-            try {
-                System.loadLibrary("renderdoc");
-            } catch(UnsatisfiedLinkError e) {
-                LOGGER.debug("Error while loading RenderDoc:\n" + e.getMessage());
-                e.printStackTrace();
-            }
-
+            linkRenderDoc();
             WgpuNative.startRendering("Minecraft");
         } else {
             throw new RuntimeException("wgpu-mc has already been initialized");
