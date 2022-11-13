@@ -2,23 +2,58 @@
 
 use std::path::{Path, PathBuf};
 
+use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
 use crate::RUN_DIRECTORY;
 
+static RENDERER_CONFIG_JSON: OnceCell<PathBuf> = OnceCell::new();
+
 /// Add your settings here. Only use the structs from this
 /// file, like StringSetting, FloatSetting and IntSetting,
-/// then add default values in the Default impl below.
-#[derive(Deserialize, Serialize)]
+/// then add an appropriate struct to SettingsInfo below,
+/// and a default value in the Default impl for this.
+#[derive(Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Settings {
+    pub vsync: BoolSetting,
     pub test_string: StringSetting,
     pub test_float: FloatSetting,
     pub test_int: IntSetting,
 }
 
-static CONFIG_PATH: OnceCell<PathBuf> = OnceCell::new();
+#[derive(Serialize)]
+pub struct SettingsInfo {
+    vsync: SettingInfo,
+    test_string: SettingInfo,
+    test_float: SettingInfo,
+    test_int: SettingInfo,
+}
+
+const SETTINGS_INFO: SettingsInfo = SettingsInfo {
+    vsync: SettingInfo {
+        desc: "Whether or not to sync the framerate to the display's framerate.\
+        May reduce screen tearing, on the cost of added latency.",
+        needs_restart: false,
+    },
+    test_string: SettingInfo {
+        desc: "test string - ignore this",
+        needs_restart: false,
+    },
+    test_float: SettingInfo {
+        desc: "test float - ignore this",
+        needs_restart: false,
+    },
+    test_int: SettingInfo {
+        desc: "test int - ignore this",
+        needs_restart: false,
+    },
+};
+
+lazy_static! {
+    static ref SETTINGS_INFO_JSON: String = serde_json::to_string(&SETTINGS_INFO).unwrap();
+}
 
 impl Settings {
     /// Loads the settings from disk, or returns the defaults.
@@ -35,7 +70,7 @@ impl Settings {
     }
 
     fn config_path_get_or_init<'a>() -> &'a PathBuf {
-        CONFIG_PATH.get_or_init(|| {
+        RENDERER_CONFIG_JSON.get_or_init(|| {
             let mut path = RUN_DIRECTORY.get().unwrap().clone();
             let path_from_dot_minecraft = Path::new("config/fabric/wgpu-mc-renderer.json");
             path.push(path_from_dot_minecraft);
@@ -60,103 +95,84 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            vsync: BoolSetting { value: true },
             test_string: StringSetting {
-                generic: GenericSetting {
-                    name: "testString".to_string(),
-                    desc: "my description for test string".to_string(),
-                    needs_reload: false,
-                },
-                value: "default_value_for_this".to_string(),
+                value: "".to_string(),
             },
             test_float: FloatSetting {
-                generic: GenericSetting {
-                    name: "testFloat".to_string(),
-                    desc: "my desc".to_string(),
-                    needs_reload: false,
-                },
-                min: 0.0,
-                max: 1.0,
-                value: 0.5,
+                min: Some(-1.0),
+                max: None,
+                value: 0.0,
             },
             test_int: IntSetting {
-                generic: GenericSetting {
-                    name: "test_int".to_string(),
-                    desc: "".to_string(),
-                    needs_reload: false,
-                },
-                min: -1,
-                max: 1,
+                min: Some(0),
+                max: Some(100),
                 value: 0,
             },
         }
     }
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct GenericSetting {
-    name: String,
-    desc: String,
-    needs_reload: bool,
+#[derive(Serialize, Deserialize)]
+pub struct SettingInfo {
+    desc: &'static str,
+    needs_restart: bool,
 }
 
-impl GenericSetting {
-    pub fn get_name(&self) -> &String {
-        &self.name
-    }
-
-    pub fn get_desc(&self) -> &String {
-        &self.desc
+impl SettingInfo {
+    pub fn get_desc(&self) -> &'static str {
+        self.desc
     }
 
     pub fn get_needs_reload(&self) -> bool {
-        self.needs_reload
+        self.needs_restart
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type", rename = "bool")]
+pub struct BoolSetting {
+    pub value: bool,
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename = "string")]
 pub struct StringSetting {
-    #[serde(flatten)]
-    generic: GenericSetting,
     pub value: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename = "float")]
 pub struct FloatSetting {
-    #[serde(flatten)]
-    generic: GenericSetting,
-    min: f64,
-    max: f64,
+    min: Option<f64>,
+    max: Option<f64>,
     pub value: f64,
 }
 
 impl FloatSetting {
-    pub fn get_min(&self) -> f64 {
+    pub fn get_min(&self) -> Option<f64> {
         self.min
     }
 
-    pub fn get_max(&self) -> f64 {
+    pub fn get_max(&self) -> Option<f64> {
         self.max
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename = "int")]
 pub struct IntSetting {
-    #[serde(flatten)]
-    generic: GenericSetting,
-    min: i64,
-    max: i64,
+    min: Option<i64>,
+    max: Option<i64>,
     pub value: i64,
 }
 
 impl IntSetting {
-    pub fn get_min(&self) -> i64 {
+    pub fn get_min(&self) -> Option<i64> {
         self.min
     }
 
-    pub fn get_max(&self) -> i64 {
+    pub fn get_max(&self) -> Option<i64> {
         self.max
     }
 }

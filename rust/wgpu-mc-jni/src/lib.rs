@@ -32,7 +32,7 @@ use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
-use rayon::ThreadPool;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
@@ -53,6 +53,7 @@ use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use crate::entity::tmd_to_wm;
 use crate::gl::GlTexture;
 use crate::palette::{IdList, JavaPalette};
+use crate::settings::Settings;
 
 mod entity;
 mod gl;
@@ -98,6 +99,7 @@ static BLOCK_STATES: OnceCell<Mutex<Vec<(String, String, GlobalRef)>>> = OnceCel
 static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
+static SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 #[derive(Debug)]
 struct ChunkHolder {
@@ -213,6 +215,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
     let dir: String = env.get_string(dir).unwrap().into();
     let path = PathBuf::from(dir);
     RUN_DIRECTORY.set(path).unwrap();
+
+    THREAD_POOL
+        .get()
+        .unwrap()
+        .install(|| SETTINGS.get_or_init(Settings::load_or_default));
 }
 
 #[no_mangle]
@@ -613,6 +620,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
 #[allow(unused_must_use)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(_env: JNIEnv, _class: JClass) {
+    THREAD_POOL
+        .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
+        .unwrap();
+
     gl::init();
 
     MOUSE_STATE.set(Arc::new(ArcSwap::new(Arc::new(MouseState {

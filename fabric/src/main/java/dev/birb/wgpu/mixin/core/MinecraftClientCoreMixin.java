@@ -48,11 +48,6 @@ public abstract class MinecraftClientCoreMixin {
         return true;
     }
 
-    @Inject(method = "<init>", at = @At(value = "HEAD"))
-    private static void headHook(RunArgs args, CallbackInfo ci) {
-        WgpuNative.sendRunDirectory(args.directories.runDir.getAbsolutePath());
-    }
-
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/resource/ResourceReloadLogger;reload(Lnet/minecraft/client/resource/ResourceReloadLogger$ReloadReason;Ljava/util/List;)V", shift = At.Shift.AFTER))
     public void injectWindowHook(RunArgs args, CallbackInfo ci) {
         //Register blocks
