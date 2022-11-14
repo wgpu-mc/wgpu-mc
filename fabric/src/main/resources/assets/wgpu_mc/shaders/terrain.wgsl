@@ -33,5 +33,8 @@ var t_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexResult) -> @location(0) vec4<f32> {
-    return textureSample(t_texture, t_sampler, in.tex_coords);
+    var normal_shading: f32 = (dot(vec3<f32>(0.0, 1.0, 1.0), in.normal) * 0.5) + 0.5;
+    var color = textureSample(t_texture, t_sampler, in.tex_coords);
+    // return vec4<f32>(color.r * normal_shading, color.g * normal_shading, color.b * normal_shading, color.a);
+    return color;
 }

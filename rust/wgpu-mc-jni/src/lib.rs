@@ -1408,7 +1408,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     env: JNIEnv,
-    _class: JClass,
+    class: JClass,
     data: jlongArray,
     elements_per_long: jint,
     element_bits: jint,
@@ -1418,13 +1418,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     index_shift: jint,
     size: jint,
 ) -> jlong {
-    let copy = env
-        .get_long_array_elements(data, ReleaseMode::NoCopyBack)
+    // let copy = env
+    //     .get_long_array_elements(data, ReleaseMode::NoCopyBack)
+    //     .unwrap();
+
+    let copy = env.get_primitive_array_critical(data, ReleaseMode::NoCopyBack)
         .unwrap();
 
     let mut packed_arr = Box::new(PackedIntegerArray {
         data: Vec::from(unsafe {
-            slice::from_raw_parts(copy.as_ptr(), copy.size().unwrap() as usize)
+            slice::from_raw_parts(copy.as_ptr() as *mut jlong, copy.size().unwrap() as usize)
         })
         .into_boxed_slice(),
         elements_per_long,
@@ -1435,6 +1438,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
         index_shift,
         size,
     });
+
+    // let mut packed_arr = Box::new(PackedIntegerArray {
+    //     data: Vec::from(unsafe {
+    //         slice::from_raw_parts(data_ptr, data_length as usize)
+    //     })
+    //     .into_boxed_slice(),
+    //     elements_per_long,
+    //     element_bits,
+    //     max_value,
+    //     index_scale,
+    //     index_offset,
+    //     index_shift,
+    //     size,
+    // });
 
     let ptr = (&mut *packed_arr as *mut PackedIntegerArray) as usize;
 

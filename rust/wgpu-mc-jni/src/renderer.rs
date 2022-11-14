@@ -1,5 +1,6 @@
 use std::thread;
 use std::{sync::Arc, time::Instant};
+use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use futures::executor::block_on;
@@ -97,6 +98,16 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
     println!("Starting event loop");
 
     let wm_clone = wm.clone();
+    let wm_clone_1 = wm.clone();
+
+    thread::spawn(move || {
+        let wm = wm_clone_1;
+        loop {
+            thread::sleep(Duration::from_secs(3));
+            wm.mc.chunks.assemble_world_meshes(&wm);
+            println!("assembled meshes");
+        }
+    });
 
     thread::spawn(move || {
         let wm = wm_clone;
