@@ -14,20 +14,23 @@ static RENDERER_CONFIG_JSON: OnceCell<PathBuf> = OnceCell::new();
 /// file, like StringSetting, FloatSetting and IntSetting,
 /// then add an appropriate struct to SettingsInfo below,
 /// and a default value in the Default impl for this.
+///
+/// TODO: handle the case of "json doesn't have every field",
+/// because that's what happens when adding a new setting
 #[derive(Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Settings {
     pub vsync: BoolSetting,
-    pub test_string: StringSetting,
-    pub test_float: FloatSetting,
+    // pub test_string: StringSetting,
+    // pub test_float: FloatSetting,
     pub test_int: IntSetting,
 }
 
 #[derive(Serialize)]
 pub struct SettingsInfo {
     vsync: SettingInfo,
-    test_string: SettingInfo,
-    test_float: SettingInfo,
+    // test_string: SettingInfo,
+    // test_float: SettingInfo,
     test_int: SettingInfo,
 }
 
@@ -37,14 +40,14 @@ const SETTINGS_INFO: SettingsInfo = SettingsInfo {
         May reduce screen tearing, on the cost of added latency.",
         needs_restart: false,
     },
-    test_string: SettingInfo {
-        desc: "test string - ignore this",
-        needs_restart: false,
-    },
-    test_float: SettingInfo {
-        desc: "test float - ignore this",
-        needs_restart: false,
-    },
+    // test_string: SettingInfo {
+    //     desc: "test string - ignore this",
+    //     needs_restart: false,
+    // },
+    // test_float: SettingInfo {
+    //     desc: "test float - ignore this",
+    //     needs_restart: false,
+    // },
     test_int: SettingInfo {
         desc: "test int - ignore this",
         needs_restart: false,
@@ -52,7 +55,7 @@ const SETTINGS_INFO: SettingsInfo = SettingsInfo {
 };
 
 lazy_static! {
-    static ref SETTINGS_INFO_JSON: String = serde_json::to_string(&SETTINGS_INFO).unwrap();
+    pub static ref SETTINGS_INFO_JSON: String = serde_json::to_string(&SETTINGS_INFO).unwrap();
 }
 
 impl Settings {
@@ -96,17 +99,19 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             vsync: BoolSetting { value: true },
-            test_string: StringSetting {
-                value: "".to_string(),
-            },
-            test_float: FloatSetting {
-                min: Some(-1.0),
-                max: None,
-                value: 0.0,
-            },
+            // test_string: StringSetting {
+            //     value: "".to_string(),
+            // },
+            // test_float: FloatSetting {
+            //     min: 70.0,
+            //     max: 120.0,
+            //     step: 2.5,
+            //     value: 90.0,
+            // },
             test_int: IntSetting {
-                min: Some(0),
-                max: Some(100),
+                min: 0,
+                max: 100,
+                step: 1,
                 value: 0,
             },
         }
@@ -135,44 +140,60 @@ pub struct BoolSetting {
     pub value: bool,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type", rename = "string")]
-pub struct StringSetting {
-    pub value: String,
-}
+// #[derive(Serialize, Deserialize)]
+// #[serde(tag = "type", rename = "string")]
+// pub struct StringSetting {
+//     pub value: String,
+// }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type", rename = "float")]
-pub struct FloatSetting {
-    min: Option<f64>,
-    max: Option<f64>,
-    pub value: f64,
-}
+// #[derive(Serialize, Deserialize)]
+// #[serde(tag = "type", rename = "float")]
+// pub struct FloatSetting {
+//     min: f64,
+//     max: f64,
+//     step: f64,
+//     pub value: f64,
+// }
 
-impl FloatSetting {
-    pub fn get_min(&self) -> Option<f64> {
-        self.min
-    }
+// impl FloatSetting {
+//     pub fn get_min(&self) -> f64 {
+//         self.min
+//     }
 
-    pub fn get_max(&self) -> Option<f64> {
-        self.max
-    }
-}
+//     pub fn get_step(&self) -> f64 {
+//         self.step
+//     }
+//
+//     pub fn get_max(&self) -> f64 {
+//         self.max
+//     }
+// }
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename = "int")]
 pub struct IntSetting {
-    min: Option<i64>,
-    max: Option<i64>,
-    pub value: i64,
+    min: i32,
+    max: i32,
+    step: i32,
+    pub value: i32,
 }
 
 impl IntSetting {
-    pub fn get_min(&self) -> Option<i64> {
+    pub fn get_min(&self) -> i32 {
         self.min
     }
 
-    pub fn get_max(&self) -> Option<i64> {
+    pub fn get_step(&self) -> i32 {
+        self.step
+    }
+
+    pub fn get_max(&self) -> i32 {
         self.max
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type", rename = "enum")]
+pub struct EnumSetting {
+    values: Vec<String>,
 }

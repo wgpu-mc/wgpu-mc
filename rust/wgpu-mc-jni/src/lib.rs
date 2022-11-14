@@ -99,7 +99,7 @@ static BLOCK_STATES: OnceCell<Mutex<Vec<(String, String, GlobalRef)>>> = OnceCel
 static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
-static SETTINGS: OnceCell<Settings> = OnceCell::new();
+static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 #[derive(Debug)]
 struct ChunkHolder {
@@ -207,6 +207,49 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 }
 
 #[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettingsStructure(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    println!(
+        "Getting SettingsInfo: {:?}",
+        crate::settings::SETTINGS_INFO_JSON.clone()
+    );
+    env.new_string(crate::settings::SETTINGS_INFO_JSON.clone())
+        .unwrap()
+        .into_inner()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettings(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let json = serde_json::to_string(&SETTINGS.read().as_ref().unwrap()).unwrap();
+    println!("Getting Settings: {:?}", json);
+    env.new_string(json).unwrap().into_inner()
+}
+
+/// Returns true if succeeded and false if not.
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendSettings(
+    env: JNIEnv,
+    _class: JClass,
+    settings: JString,
+) -> bool {
+    let json: String = env.get_string(settings).unwrap().into();
+    if let Ok(settings) = serde_json::from_str(json.as_str()) {
+        THREAD_POOL.get().unwrap().spawn(|| {
+            let mut guard = SETTINGS.write();
+            *guard = Some(settings);
+        });
+        true
+    } else {
+        false
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
     env: JNIEnv,
     _class: JClass,
@@ -216,10 +259,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
     let path = PathBuf::from(dir);
     RUN_DIRECTORY.set(path).unwrap();
 
-    THREAD_POOL
-        .get()
-        .unwrap()
-        .install(|| SETTINGS.get_or_init(Settings::load_or_default));
+    THREAD_POOL.get().unwrap().spawn(|| {
+        let mut write = SETTINGS.write();
+        *write = Some(Settings::load_or_default());
+    });
 }
 
 #[no_mangle]

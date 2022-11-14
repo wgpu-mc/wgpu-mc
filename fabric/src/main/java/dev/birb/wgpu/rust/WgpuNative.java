@@ -54,7 +54,16 @@ public class WgpuNative {
         System.load(object.getAbsolutePath());
     }
 
-    public static native int sendRunDirectory(String dir);
+    public static native String getSettingsStructure();
+
+    public static native String getSettings();
+
+    /**
+     * returns  true if the operation succeeded
+     */
+    public static native boolean sendSettings(String settings);
+
+    public static native void sendRunDirectory(String dir);
 
     public static native int getTextureId(String identifier);
 
