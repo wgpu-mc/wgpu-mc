@@ -112,7 +112,7 @@ public abstract class Option<T> {
 			switch (typeString) {
 				case "bool" -> {
 					boolean value = jsonObject.get("value").getAsJsonPrimitive().getAsBoolean();
-					return new BoolOption(Text.of(name), Text.of(structure.desc()), structure.needsRestart(),
+					return new BoolOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(),
 							() -> value, (bool) -> {
 					});
 				}
@@ -133,7 +133,7 @@ public abstract class Option<T> {
 					int max = jsonObject.get("max").getAsJsonPrimitive().getAsInt();
 					int step = jsonObject.get("step").getAsJsonPrimitive().getAsInt();
 
-					return new IntOption(Text.of(name), Text.of(structure.desc()), structure.needsRestart(), () -> value,
+					return new IntOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(), () -> value,
 							(i) -> {
 							}, min, max, step, IntOption.STANDARD_FORMATTER);
 				}
