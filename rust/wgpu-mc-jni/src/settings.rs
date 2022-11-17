@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 
 use crate::RUN_DIRECTORY;
 
@@ -120,17 +121,28 @@ impl Default for Settings {
 
 #[derive(Serialize, Deserialize)]
 pub struct SettingInfo {
-    desc: &'static str,
-    needs_restart: bool,
+    pub desc: &'static str,
+    pub needs_restart: bool,
 }
 
-impl SettingInfo {
-    pub fn get_desc(&self) -> &'static str {
-        self.desc
-    }
+/// T should only be a c-like enum (no fields on variants),
+/// mostly because I'm not sure what will happen when you put in anything else.
+#[derive(Serialize, Deserialize)]
+pub struct EnumSettingInfo<T: IntoEnumIterator + Into<&'static str>> {
+    pub desc: &'static str,
+    pub needs_restart: bool,
+    variants: Vec<&'static str>,
+    _marker: std::marker::PhantomData<T>,
+}
 
-    pub fn get_needs_reload(&self) -> bool {
-        self.needs_restart
+impl<T: IntoEnumIterator + Into<&'static str>> EnumSettingInfo<T> {
+    pub fn new(desc: &'static str, needs_restart: bool) -> EnumSettingInfo<T> {
+        EnumSettingInfo {
+            desc,
+            needs_restart,
+            variants: T::iter().map(|e| e.into()).collect(),
+            _marker: Default::default(),
+        }
     }
 }
 
@@ -140,6 +152,7 @@ pub struct BoolSetting {
     pub value: bool,
 }
 
+// TODO: Add java code for this
 // #[derive(Serialize, Deserialize)]
 // #[serde(tag = "type", rename = "string")]
 // pub struct StringSetting {
@@ -192,8 +205,17 @@ impl IntSetting {
     }
 }
 
+/// In order to get the string this represents, use the appropriate [`EnumSettingInfo`] in
+/// SETTINGS_INFO.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename = "enum")]
 pub struct EnumSetting {
-    values: Vec<String>,
+    pub selected: usize,
+}
+
+impl EnumSetting {
+    /// If you know which type the setting has, then just get the variant with this.
+    pub fn get_variant<T: IntoEnumIterator>(&self) -> T {
+        T::iter().nth(self.selected).unwrap()
+    }
 }
