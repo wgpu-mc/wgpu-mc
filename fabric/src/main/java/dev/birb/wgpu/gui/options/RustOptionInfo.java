@@ -1,9 +1,19 @@
 package dev.birb.wgpu.gui.options;
 
 public class RustOptionInfo {
-    public String text;
-    public String desc;
-    public boolean needsRestart;
+    private String text;
+    private String desc;
+    private boolean needsRestart;
+    private String[] variants = new String[]{};
+
+    public String[] getVariants() {
+        return variants;
+    }
+
+    public void setVariants(String[] variants) {
+        this.variants = variants;
+    }
+
 
     public String getText() {
         return text;

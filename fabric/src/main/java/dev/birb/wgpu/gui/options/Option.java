@@ -102,6 +102,7 @@ public abstract class Option<T> {
 	}
 
 	public static class OptionSerializerDeserializer implements JsonDeserializer<List<Option<?>>>, JsonSerializer<List<Option<?>>> {
+
 		private static Option<?> deserializeOption(JsonObject jsonObject, String name)
 				throws JsonParseException, IllegalStateException {
 			var structure = OptionPages.SETTINGS_STRUCTURE.get(name);
@@ -115,17 +116,16 @@ public abstract class Option<T> {
 							() -> value, (bool) -> {
 					});
 				}
-//				case "string" -> {
-//					String value = jsonObject.get("value").getAsJsonPrimitive().getAsString();
-//					// TODO: StringOption
-//				}
-//				case "float" -> {
-//					double value = jsonObject.get("value").getAsJsonPrimitive().getAsDouble();
-//					double min = null;
-//					var min_primitive = jsonObject.get("min").getAsJsonPrimitive();
-//					if ()
-//					// TODO: FloatOption
-//				}
+				case "float" -> {
+					double value = jsonObject.get("value").getAsJsonPrimitive().getAsDouble();
+					double min = jsonObject.get("min").getAsJsonPrimitive().getAsDouble();
+					double max = jsonObject.get("max").getAsJsonPrimitive().getAsDouble();
+					double step = jsonObject.get("step").getAsJsonPrimitive().getAsDouble();
+
+					return new FloatOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(), () -> value,
+							(i) -> {
+							}, min, max, step, FloatOption.STANDARD_FORMATTER);
+				}
 				case "int" -> {
 					int value = jsonObject.get("value").getAsJsonPrimitive().getAsInt();
 					int min = jsonObject.get("min").getAsJsonPrimitive().getAsInt();
@@ -136,9 +136,12 @@ public abstract class Option<T> {
 							(i) -> {
 							}, min, max, step, IntOption.STANDARD_FORMATTER);
 				}
-//				case "enum" -> {
-//
-//				}
+				case "enum" -> {
+					int selected = jsonObject.get("selected").getAsJsonPrimitive().getAsInt();
+					return new TextEnumOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(),
+							() -> selected, (i) -> {
+					}, structure.getVariants());
+				}
 				default -> throw new JsonParseException("Unexpected value: " + typeString);
 			}
 		}
@@ -183,12 +186,18 @@ public abstract class Option<T> {
 				root.addProperty("min", intOption.min);
 				root.addProperty("max", intOption.max);
 				root.addProperty("step", intOption.step);
+			} else if (option instanceof TextEnumOption textEnumOption) {
+				root.addProperty("selected", textEnumOption.get());
+			} else if (option instanceof FloatOption floatOption) {
+				root.addProperty("type", "float");
+				root.addProperty("value", floatOption.get());
+				root.addProperty("min", floatOption.min);
+				root.addProperty("max", floatOption.max);
+				root.addProperty("step", floatOption.step);
 			} else if (option instanceof EnumOption<?>) {
 				throw new IllegalStateException("There should be no EnumOption here!");
 			}
 			return root;
 		}
 	}
-
-
 }

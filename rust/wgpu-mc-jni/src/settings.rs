@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
+use strum_macros::{EnumIter, IntoStaticStr};
 
 use crate::RUN_DIRECTORY;
 
@@ -22,41 +23,37 @@ static RENDERER_CONFIG_JSON: OnceCell<PathBuf> = OnceCell::new();
 #[non_exhaustive]
 pub struct Settings {
     pub vsync: BoolSetting,
-    // pub test_string: StringSetting,
-    // pub test_float: FloatSetting,
+    pub test_enum: EnumSetting,
+    pub test_float: FloatSetting,
     pub test_int: IntSetting,
 }
 
 #[derive(Serialize)]
 pub struct SettingsInfo {
     vsync: SettingInfo,
-    // test_string: SettingInfo,
-    // test_float: SettingInfo,
+    test_enum: EnumSettingInfo<TestEnumSetting>,
+    test_float: SettingInfo,
     test_int: SettingInfo,
 }
 
-const SETTINGS_INFO: SettingsInfo = SettingsInfo {
-    vsync: SettingInfo {
-        desc: "Whether or not to sync the framerate to the display's framerate.\
-        May reduce screen tearing, on the cost of added latency.",
-        needs_restart: false,
-    },
-    // test_string: SettingInfo {
-    //     desc: "test string - ignore this",
-    //     needs_restart: false,
-    // },
-    // test_float: SettingInfo {
-    //     desc: "test float - ignore this",
-    //     needs_restart: false,
-    // },
-    test_int: SettingInfo {
-        desc: "test int - ignore this",
-        needs_restart: false,
-    },
-};
-
 lazy_static! {
-    pub static ref SETTINGS_INFO_JSON: String = serde_json::to_string(&SETTINGS_INFO).unwrap();
+    pub static ref SETTINGS_INFO: SettingsInfo = SettingsInfo {
+        vsync: SettingInfo {
+            desc: "Whether or not to sync the framerate to the display's framerate.\
+            May reduce screen tearing, on the cost of added latency.",
+            needs_restart: false,
+        },
+        test_enum: EnumSettingInfo::new("", true,),
+        test_float: SettingInfo {
+            desc: "test float - ignore this",
+            needs_restart: false,
+        },
+        test_int: SettingInfo {
+            desc: "test int - ignore this",
+            needs_restart: false,
+        },
+    };
+    pub static ref SETTINGS_INFO_JSON: String = serde_json::to_string(&*SETTINGS_INFO).unwrap();
 }
 
 impl Settings {
@@ -100,15 +97,13 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             vsync: BoolSetting { value: true },
-            // test_string: StringSetting {
-            //     value: "".to_string(),
-            // },
-            // test_float: FloatSetting {
-            //     min: 70.0,
-            //     max: 120.0,
-            //     step: 2.5,
-            //     value: 90.0,
-            // },
+            test_enum: EnumSetting::from_variant(TestEnumSetting::Off),
+            test_float: FloatSetting {
+                min: 70.0,
+                max: 120.0,
+                step: 2.5,
+                value: 90.0,
+            },
             test_int: IntSetting {
                 min: 0,
                 max: 100,
@@ -132,6 +127,7 @@ pub struct EnumSettingInfo<T: IntoEnumIterator + Into<&'static str>> {
     pub desc: &'static str,
     pub needs_restart: bool,
     variants: Vec<&'static str>,
+    #[serde(skip_serializing)]
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -152,35 +148,28 @@ pub struct BoolSetting {
     pub value: bool,
 }
 
-// TODO: Add java code for this
-// #[derive(Serialize, Deserialize)]
-// #[serde(tag = "type", rename = "string")]
-// pub struct StringSetting {
-//     pub value: String,
-// }
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type", rename = "float")]
+pub struct FloatSetting {
+    min: f64,
+    max: f64,
+    step: f64,
+    pub value: f64,
+}
 
-// #[derive(Serialize, Deserialize)]
-// #[serde(tag = "type", rename = "float")]
-// pub struct FloatSetting {
-//     min: f64,
-//     max: f64,
-//     step: f64,
-//     pub value: f64,
-// }
+impl FloatSetting {
+    pub fn get_min(&self) -> f64 {
+        self.min
+    }
 
-// impl FloatSetting {
-//     pub fn get_min(&self) -> f64 {
-//         self.min
-//     }
+    pub fn get_step(&self) -> f64 {
+        self.step
+    }
 
-//     pub fn get_step(&self) -> f64 {
-//         self.step
-//     }
-//
-//     pub fn get_max(&self) -> f64 {
-//         self.max
-//     }
-// }
+    pub fn get_max(&self) -> f64 {
+        self.max
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename = "int")]
@@ -214,8 +203,21 @@ pub struct EnumSetting {
 }
 
 impl EnumSetting {
+    pub fn from_variant<T: IntoEnumIterator + Eq>(variant: T) -> EnumSetting {
+        EnumSetting {
+            selected: T::iter().position(|item| item == variant).unwrap(),
+        }
+    }
     /// If you know which type the setting has, then just get the variant with this.
     pub fn get_variant<T: IntoEnumIterator>(&self) -> T {
         T::iter().nth(self.selected).unwrap()
     }
+}
+
+#[derive(EnumIter, IntoStaticStr, Eq, PartialEq)]
+enum TestEnumSetting {
+    One,
+    Two,
+    Three,
+    Off,
 }

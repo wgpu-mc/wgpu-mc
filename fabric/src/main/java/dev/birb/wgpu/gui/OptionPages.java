@@ -181,8 +181,6 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 
 		List<Option<?>> options = GSON.fromJson(rustSettings, SETTINGS_TYPE_TOKEN.getType());
 
-		System.out.println("Deserialized these options: " + options);
-
 		for (var option : options) {
 			page.add(option);
 		}
@@ -305,7 +303,6 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 			if (Objects.equals(this.name.asString(), "Electrum")) {
 				var options = groups.stream().flatMap(Collection::stream).toList();
 				var json = GSON.toJson(options, SETTINGS_TYPE_TOKEN.getType());
-				System.out.println("Applying options: " + json);
 				WgpuNative.sendSettings(json);
 			} else {
 				for (List<Option<?>> group : groups) {
