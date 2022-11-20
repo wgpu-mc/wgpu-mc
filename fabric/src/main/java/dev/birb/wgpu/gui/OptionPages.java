@@ -22,9 +22,11 @@ import net.minecraft.text.TranslatableText;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class OptionPages implements Iterable<OptionPages.Page> {
 	private static final TypeToken<Map<String, RustOptionInfo>> SETTINGS_STRUCTURE_TYPE_TOKEN = new TypeToken<>() {
@@ -32,7 +34,7 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 	private static final TypeToken<List<Option<?>>> SETTINGS_TYPE_TOKEN = new TypeToken<>() {
 	};
 	private static final Gson GSON = new GsonBuilder()
-			.registerTypeAdapter(SETTINGS_TYPE_TOKEN.getType(), new Option.OptionDeserializer())
+			.registerTypeAdapter(SETTINGS_TYPE_TOKEN.getType(), new Option.OptionSerializerDeserializer())
 			.create();
 	public static final Map<String, RustOptionInfo> SETTINGS_STRUCTURE = GSON.fromJson(
 			WgpuNative.getSettingsStructure(),
@@ -179,17 +181,11 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 
 		List<Option<?>> options = GSON.fromJson(rustSettings, SETTINGS_TYPE_TOKEN.getType());
 
-//		Map<String, JsonObject> settingsMap = GSON.fromJson(rustSettings,
-//				new TypeToken<Map<String, JsonObject>>() {}.getType());
-//
-//		for (var entry : SETTINGS_STRUCTURE.entrySet()) {
-//			var name = entry.getKey();
-//			var settingInfo = entry.getValue();
-//			var setting = settingsMap.get(name);
-//			if (setting == null)
-//				return page;
-//		}
+		System.out.println("Deserialized these options: " + options);
 
+		for (var option : options) {
+			page.add(option);
+		}
 
 		return page;
 	}
@@ -306,8 +302,16 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 		}
 
 		public void apply() {
-			for (List<Option<?>> group : groups) {
-				for (Option<?> option : group) option.apply();
+			if (Objects.equals(this.name.asString(), "Electrum")) {
+				var options = groups.stream().flatMap(Collection::stream).toList();
+				var json = GSON.toJson(options, SETTINGS_TYPE_TOKEN.getType());
+				System.out.println("Applying options: " + json);
+				WgpuNative.sendSettings(json);
+			} else {
+				for (List<Option<?>> group : groups) {
+					for (Option<?> option : group) option.apply();
+				}
+
 			}
 		}
 

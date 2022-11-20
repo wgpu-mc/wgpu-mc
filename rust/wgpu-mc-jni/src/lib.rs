@@ -226,7 +226,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettings(
     _class: JClass,
 ) -> jstring {
     let json = serde_json::to_string(&SETTINGS.read().as_ref().unwrap()).unwrap();
-    println!("Getting Settings: {:?}", json);
+    println!("Getting Settings: {}", json);
     env.new_string(json).unwrap().into_inner()
 }
 
@@ -238,6 +238,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendSettings(
     settings: JString,
 ) -> bool {
     let json: String = env.get_string(settings).unwrap().into();
+    println!("Setting settings: {:?}", json.as_str());
     if let Ok(settings) = serde_json::from_str(json.as_str()) {
         THREAD_POOL.get().unwrap().spawn(|| {
             let mut guard = SETTINGS.write();

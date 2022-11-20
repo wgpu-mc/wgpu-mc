@@ -5,6 +5,8 @@ import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
 import dev.birb.wgpu.gui.OptionPages;
 import dev.birb.wgpu.gui.widgets.Widget;
 import net.minecraft.text.MutableText;
@@ -99,11 +101,8 @@ public abstract class Option<T> {
 		public abstract Option<T> build();
 	}
 
-	/**
-	 * This needs to be implemented for List<Option> because we need to get
-	 */
-	public static class OptionDeserializer implements JsonDeserializer<List<Option<?>>> {
-		private static Option<?> parse_option(JsonObject jsonObject, String name)
+	public static class OptionSerializerDeserializer implements JsonDeserializer<List<Option<?>>>, JsonSerializer<List<Option<?>>> {
+		private static Option<?> deserializeOption(JsonObject jsonObject, String name)
 				throws JsonParseException, IllegalStateException {
 			var structure = OptionPages.SETTINGS_STRUCTURE.get(name);
 			var type = jsonObject.get("type");
@@ -151,7 +150,7 @@ public abstract class Option<T> {
 				var options = new ArrayList<Option<?>>();
 				for (var entry : jsonObject.entrySet()) {
 					try {
-						options.add(parse_option(entry.getValue().getAsJsonObject(), entry.getKey()));
+						options.add(deserializeOption(entry.getValue().getAsJsonObject(), entry.getKey()));
 					} catch (IllegalStateException e) {
 						throw new JsonParseException(e);
 					}
@@ -161,5 +160,35 @@ public abstract class Option<T> {
 				throw new JsonParseException("Tried to deserialize to List<Option<?>>, found a json element that's not an option");
 			}
 		}
+
+		@Override
+		public JsonElement serialize(List<Option<?>> src, Type typeOfSrc, JsonSerializationContext context) {
+			JsonObject root = new JsonObject();
+
+			for (Option<?> option : src) {
+				root.add(option.name.asString(), serializeOption(option));
+			}
+
+			return root;
+		}
+
+		private JsonObject serializeOption(Option<?> option) {
+			JsonObject root = new JsonObject();
+			if (option instanceof BoolOption boolOption) {
+				root.addProperty("type", "bool");
+				root.addProperty("value", boolOption.get());
+			} else if (option instanceof IntOption intOption) {
+				root.addProperty("type", "int");
+				root.addProperty("value", intOption.get());
+				root.addProperty("min", intOption.min);
+				root.addProperty("max", intOption.max);
+				root.addProperty("step", intOption.step);
+			} else if (option instanceof EnumOption<?>) {
+				throw new IllegalStateException("There should be no EnumOption here!");
+			}
+			return root;
+		}
 	}
+
+
 }
