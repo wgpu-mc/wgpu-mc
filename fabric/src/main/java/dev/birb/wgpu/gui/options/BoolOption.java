@@ -8,9 +8,9 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class BoolOption extends Option<Boolean> {
-    private BoolOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Boolean> getter, Consumer<Boolean> setter) {
-        super(name, tooltip, requiresRestart, getter, setter);
-    }
+    public BoolOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Boolean> getter, Consumer<Boolean> setter) {
+		super(name, tooltip, requiresRestart, getter, setter);
+	}
 
     @Override
     public Widget createWidget(int x, int y, int width) {

@@ -2,10 +2,8 @@ package dev.birb.wgpu.mixin.core;
 
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
-import net.fabricmc.loader.impl.launch.knot.KnotClient;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.main.Main;
-import org.checkerframework.checker.units.qual.A;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,6 +13,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Main.class)
 public class MainMixin {
 
+    private static boolean directorySent = false;
+
     @Inject(method = "main", at = @At("HEAD"))
     private static void preInit(String[] args, CallbackInfo ci) {
         Wgpu.preInit("Minecraft");
@@ -22,11 +22,16 @@ public class MainMixin {
 
     @Redirect(method = "main", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/MinecraftClient;isRunning()Z"))
     private static boolean redirectIsRunning(MinecraftClient instance) {
+        if (!directorySent) {
+            WgpuNative.sendRunDirectory(instance.runDirectory.getAbsolutePath());
+            directorySent = true;
+        }
+
         //Block until the game is initialized enough for wgpu-mc to kick in
-        while(!Wgpu.MAY_INITIALIZE) {
+        while (!Wgpu.MAY_INITIALIZE) {
             try {
                 Thread.sleep(50);
-            } catch(InterruptedException e) {
+            } catch (InterruptedException e) {
                 Thread.interrupted();
             }
         }

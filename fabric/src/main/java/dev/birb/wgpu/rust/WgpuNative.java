@@ -4,7 +4,6 @@ package dev.birb.wgpu.rust;
 
 //import net.minecraft.world.chunk.ChunkSection;
 
-import net.minecraft.block.BlockState;
 import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.util.collection.IndexedIterable;
 
@@ -54,6 +53,17 @@ public class WgpuNative {
         }
         System.load(object.getAbsolutePath());
     }
+
+    public static native String getSettingsStructure();
+
+    public static native String getSettings();
+
+    /**
+     * returns  true if the operation succeeded
+     */
+    public static native boolean sendSettings(String settings);
+
+    public static native void sendRunDirectory(String dir);
 
     public static native int getTextureId(String identifier);
 

@@ -3,14 +3,14 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
+use get_size::GetSize;
 use parking_lot::RwLock;
 
 use crate::mc::block::{BlockstateKey, ChunkBlockState};
 use crate::mc::BlockManager;
 use crate::render::pipeline::terrain::TerrainVertex;
 use crate::render::world::chunk::BakedChunkLayer;
-
-use get_size::GetSize;
+use crate::WmRenderer;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -19,8 +19,6 @@ pub const CHUNK_VOLUME: usize = CHUNK_AREA * CHUNK_HEIGHT;
 pub const CHUNK_SECTION_HEIGHT: usize = 1;
 pub const CHUNK_SECTIONS_PER: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
-
-use crate::WmRenderer;
 
 pub type ChunkPos = (i32, i32);
 

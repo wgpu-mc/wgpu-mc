@@ -12,6 +12,7 @@ use std::io::Cursor;
 use std::mem;
 use std::mem::size_of;
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -31,7 +32,7 @@ use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
-use rayon::ThreadPool;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
@@ -52,11 +53,13 @@ use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use crate::entity::tmd_to_wm;
 use crate::gl::GlTexture;
 use crate::palette::{IdList, JavaPalette};
+use crate::settings::Settings;
 
 mod entity;
 mod gl;
 mod palette;
 mod renderer;
+mod settings;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -95,6 +98,8 @@ static BLOCK_STATES: OnceCell<Mutex<Vec<(String, String, GlobalRef)>>> = OnceCel
 
 static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
+static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
+static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 #[derive(Debug)]
 struct ChunkHolder {
@@ -199,6 +204,60 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
             slice::from_raw_parts(elements.as_ptr() as *const u8, size)
         }))
     }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettingsStructure(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    env.new_string(crate::settings::SETTINGS_INFO_JSON.clone())
+        .unwrap()
+        .into_inner()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettings(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let json = serde_json::to_string(&SETTINGS.read().as_ref().unwrap()).unwrap();
+    env.new_string(json).unwrap().into_inner()
+}
+
+/// Returns true if succeeded and false if not.
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendSettings(
+    env: JNIEnv,
+    _class: JClass,
+    settings: JString,
+) -> bool {
+    let json: String = env.get_string(settings).unwrap().into();
+    if let Ok(settings) = serde_json::from_str(json.as_str()) {
+        THREAD_POOL.get().unwrap().spawn(|| {
+            let mut guard = SETTINGS.write();
+            *guard = Some(settings);
+        });
+        true
+    } else {
+        false
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
+    env: JNIEnv,
+    _class: JClass,
+    dir: JString,
+) {
+    let dir: String = env.get_string(dir).unwrap().into();
+    let path = PathBuf::from(dir);
+    RUN_DIRECTORY.set(path).unwrap();
+
+    THREAD_POOL.get().unwrap().spawn(|| {
+        let mut write = SETTINGS.write();
+        *write = Some(Settings::load_or_default());
+    });
 }
 
 #[no_mangle]
@@ -599,6 +658,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
 #[allow(unused_must_use)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(_env: JNIEnv, _class: JClass) {
+    THREAD_POOL
+        .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
+        .unwrap();
+
     gl::init();
 
     MOUSE_STATE.set(Arc::new(ArcSwap::new(Arc::new(MouseState {

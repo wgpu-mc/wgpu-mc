@@ -8,7 +8,6 @@ use jni::{
     objects::{JString, JValue},
     JNIEnv,
 };
-use rayon::ThreadPoolBuilder;
 use winit::event_loop::EventLoopBuilder;
 use winit::{
     dpi::PhysicalSize,
@@ -25,15 +24,11 @@ use wgpu_mc::{
 
 use crate::{
     entity::ENTITY_ATLAS, MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage,
-    WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, THREAD_POOL, WINDOW,
+    WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, WINDOW,
 };
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
     let title: String = env.get_string(title).unwrap().into();
-
-    THREAD_POOL
-        .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
-        .unwrap();
 
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
     // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build

@@ -10,18 +10,20 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class IntOption extends Option<Integer> {
-    public final Function<Integer, Text> formatter;
-    public final int min, max;
-    public final int step;
 
-    private IntOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Integer> getter, Consumer<Integer> setter, int min, int max, int step, Function<Integer, Text> formatter) {
-        super(name, tooltip, requiresRestart, getter, setter);
+	public static Function<Integer, Text> STANDARD_FORMATTER = integer -> new LiteralText(String.valueOf(integer));
+	public final Function<Integer, Text> formatter;
+	public final int min, max;
+	public final int step;
 
-        this.formatter = formatter;
-        this.min = min;
-        this.max = max;
-        this.step = step;
-    }
+	public IntOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Integer> getter, Consumer<Integer> setter, int min, int max, int step, Function<Integer, Text> formatter) {
+		super(name, tooltip, requiresRestart, getter, setter);
+
+		this.formatter = formatter;
+		this.min = min;
+		this.max = max;
+		this.step = step;
+	}
 
     @Override
     public Widget createWidget(int x, int y, int width) {
@@ -29,8 +31,8 @@ public class IntOption extends Option<Integer> {
     }
 
     public static class Builder extends Option.Builder<Builder, Integer> {
-        private Function<Integer, Text> formatter = integer -> new LiteralText(String.valueOf(integer));
-        private int min, max;
+		private Function<Integer, Text> formatter = STANDARD_FORMATTER;
+		private int min, max;
         private int step = 1;
 
         public Builder setFormatter(Function<Integer, Text> formatter) {
