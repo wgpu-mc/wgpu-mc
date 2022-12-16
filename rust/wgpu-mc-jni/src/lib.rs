@@ -1471,7 +1471,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     env: JNIEnv,
-    class: JClass,
+    _class: JClass,
     data: jlongArray,
     elements_per_long: jint,
     element_bits: jint,
@@ -1485,7 +1485,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     //     .get_long_array_elements(data, ReleaseMode::NoCopyBack)
     //     .unwrap();
 
-    let copy = env.get_primitive_array_critical(data, ReleaseMode::NoCopyBack)
+    let copy = env
+        .get_primitive_array_critical(data, ReleaseMode::NoCopyBack)
         .unwrap();
 
     let mut packed_arr = Box::new(PackedIntegerArray {

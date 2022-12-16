@@ -1,6 +1,6 @@
 use std::thread;
-use std::{sync::Arc, time::Instant};
 use std::time::Duration;
+use std::{sync::Arc, time::Instant};
 
 use arc_swap::ArcSwap;
 use futures::executor::block_on;
