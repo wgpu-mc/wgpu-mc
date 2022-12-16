@@ -167,13 +167,15 @@ pub enum UniformVisibility {
 
 #[cfg(test)]
 mod tests {
-    use super::ShaderPackConfig;
-    use serde::Deserialize;
     use std::fmt::Debug;
+
+    use serde::Deserialize;
+
+    use super::ShaderPackConfig;
 
     fn deserialize_and_print_error<'a, T: Debug + Deserialize<'a>>(input: &'a str) {
         let config: Result<T, _> = serde_yaml::from_str(input);
-        println!("{:?}", config);
+        println!("{config:?}");
         if let Err(err) = config {
             if let Some(loc) = err.location() {
                 let lines: Vec<&str> = input.lines().collect();

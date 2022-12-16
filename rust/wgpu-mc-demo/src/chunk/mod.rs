@@ -47,7 +47,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         )
         .unwrap();
 
-    println!("{:?}", fence_model);
+    println!("{fence_model:?}");
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),
