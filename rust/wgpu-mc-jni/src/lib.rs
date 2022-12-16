@@ -810,7 +810,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
 ) {
     let _pixel_size = match format {
         0x1908 | 0x80E1 => 4,
-        _ => panic!("Unknown format {:x}", format),
+        _ => panic!("Unknown format {format:x}"),
     };
 
     //For when the renderer is initialized
@@ -899,7 +899,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
 
     let pixel_size = match format {
         0x1908 | 0x80E1 => 4,
-        _ => panic!("Unknown format {:x}", format),
+        _ => panic!("Unknown format {format:x}"),
     };
 
     //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
@@ -1290,10 +1290,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
             return global_ref.as_obj().into_inner();
         }
         None => {
-            panic!(
-                "Palette index {} was not occupied\nPalette:\n{:?}",
-                index, palette
-            );
+            panic!("Palette index {index} was not occupied\nPalette:\n{palette:?}");
         }
     }
 }

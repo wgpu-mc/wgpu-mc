@@ -84,10 +84,7 @@ impl Settings {
 
         let str = serde_json::to_string_pretty(self).unwrap();
         std::fs::write(config_path, str).unwrap_or_else(|_| {
-            panic!(
-                "Couldn't write wgpu-mc-renderer.json (config) to {:?}",
-                config_path
-            )
+            panic!("Couldn't write wgpu-mc-renderer.json (config) to {config_path:?}")
         });
         true
     }
