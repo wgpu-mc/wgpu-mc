@@ -23,7 +23,7 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
     jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray,
-    jobject, jsize, jstring,
+    jobject, jstring,
 };
 use jni::{JNIEnv, JavaVM};
 use mc_varint::VarIntRead;
@@ -33,6 +33,7 @@ use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
+use slab::Slab;
 use wgpu::Extent3d;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
@@ -53,11 +54,13 @@ use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use crate::entity::tmd_to_wm;
 use crate::gl::GlTexture;
 use crate::palette::{IdList, JavaPalette};
+use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
 
 mod entity;
 mod gl;
 mod palette;
+mod pia;
 mod renderer;
 mod settings;
 
@@ -662,6 +665,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(_env: JNIEnv, 
         .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
         .unwrap();
 
+    pia::PIA_STORAGE
+        .set(RwLock::new(Slab::with_capacity(2048)))
+        .unwrap();
+
     gl::init();
 
     MOUSE_STATE.set(Arc::new(ArcSwap::new(Arc::new(MouseState {
@@ -1196,164 +1203,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_scheduleChunkRebuild(
     // wm.mc.chunks.assemble_world_meshes(wm);
 }
 
-#[allow(non_snake_case)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    idList: jlong,
-) -> jlong {
-    let palette = Box::new(JavaPalette::new(
-        NonZeroUsize::new(idList as usize).unwrap(),
-    ));
-
-    Box::leak(palette) as *mut JavaPalette as usize as jlong
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    unsafe { palette.as_mut().unwrap().clear() };
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    unsafe { Box::from_raw(palette) };
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
-    env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-    object: JObject,
-    blockstate_index: jint,
-) -> jint {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    (unsafe {
-        palette.as_mut().unwrap().index((
-            env.new_global_ref(object).unwrap(),
-            (blockstate_index as u32).into(),
-        ))
-    }) as jint
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteSize(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) -> jint {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    (unsafe { palette.as_ref().unwrap().size() }) as jint
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) -> jlong {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-    let mut new_palette = Box::new(unsafe { palette.as_ref().unwrap().clone() });
-    let new_palette_ptr = &mut *new_palette as *mut JavaPalette;
-    mem::forget(new_palette);
-
-    new_palette_ptr as usize as jlong
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-    index: i32,
-) -> jobject {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-    let palette = unsafe { palette.as_ref().expect("Palette pointer was null") };
-
-    match palette.get(index as usize) {
-        Some((global_ref, _)) => {
-            return global_ref.as_obj().into_inner();
-        }
-        None => {
-            panic!("Palette index {index} was not occupied\nPalette:\n{palette:?}");
-        }
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
-    env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-    array: jbyteArray,
-    current_position: jint,
-    blockstate_offsets: jlongArray,
-) -> jint {
-    let palette = unsafe {
-        ((palette_long as usize) as *mut JavaPalette)
-            .as_mut()
-            .unwrap()
-    };
-    let array = env
-        .get_byte_array_elements(array, ReleaseMode::NoCopyBack)
-        .unwrap();
-
-    let blockstate_offsets_array = env
-        .get_int_array_elements(blockstate_offsets, ReleaseMode::NoCopyBack)
-        .unwrap();
-
-    let id_list = unsafe { &*(palette.id_list.get() as *mut IdList) };
-
-    let blockstate_offsets = unsafe {
-        slice::from_raw_parts(
-            blockstate_offsets_array.as_ptr() as *mut i32,
-            blockstate_offsets_array.size().unwrap() as usize,
-        )
-    };
-
-    let vec = unsafe {
-        slice::from_raw_parts(
-            array.as_ptr().offset(current_position as isize) as *mut u8,
-            (array.size().unwrap() - current_position) as usize,
-        )
-    };
-
-    let mut cursor = Cursor::new(vec);
-    let packet_len: i32 = cursor.read_var_int().unwrap().into();
-
-    for blockstate_offset in blockstate_offsets.iter().take(packet_len as usize) {
-        let var_int: i32 = cursor.read_var_int().unwrap().into();
-
-        let object = id_list.map.get(&var_int).unwrap().clone();
-
-        palette.add((
-            object,
-            BlockstateKey {
-                block: (blockstate_offset >> 16) as u16,
-                augment: (blockstate_offset & 0xffff) as u16,
-            },
-        ));
-    }
-
-    //The amount of bytes read
-    cursor.position() as jint
-}
-
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createIdList(
     _env: JNIEnv,
@@ -1384,236 +1233,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_addIdListEntry(
             .map
             .insert(index, env.new_global_ref(object).unwrap())
     };
-}
-
-#[derive(Debug)]
-pub struct PackedIntegerArray {
-    data: Box<[i64]>,
-    elements_per_long: i32,
-    element_bits: i32,
-    max_value: i64,
-    index_scale: i32,
-    index_offset: i32,
-    index_shift: i32,
-    size: i32,
-}
-
-impl PackedIntegerArray {
-    pub fn get(&self, x: i32, y: i32, z: i32) -> i32 {
-        let x = x & 0xf;
-        let y = y & 0xf;
-        let z = z & 0xf;
-
-        self.get_by_index((((y << 4) | z) << 4) | x)
-    }
-
-    pub fn debug_pointer(&self, index: i32) -> usize {
-        assert!(index < self.size, "index: {}, size: {}", index, self.size);
-
-        let i: i32 = self.compute_storage_index(index);
-
-        unsafe { self.data.as_ptr().offset(i as isize) as usize }
-    }
-
-    pub fn get_by_index(&self, index: i32) -> i32 {
-        assert!(index < self.size, "index: {}, size: {}", index, self.size);
-
-        let i: i32 = self.compute_storage_index(index);
-
-        let ptr = unsafe { self.data.as_ptr().offset(i as isize) };
-
-        let l: i64 = unsafe { ptr.read_volatile() };
-        // let l: i64 = i64::from_be_bytes(self.data[i as usize].to_ne_bytes());
-        // let l: i64 = self.data[i as usize];
-
-        // (index - i * this.elementsPerLong) * this.elementBits
-        let j: i32 = (index - (i * self.elements_per_long)) * self.element_bits;
-        ((l >> j) & self.max_value) as i32
-    }
-
-    pub fn compute_storage_index(&self, index: i32) -> i32 {
-        let l = self.index_scale as u32 as i64;
-        let m = self.index_offset as u32 as i64;
-
-        // println!("l {} m {} idxs {}", l, m, self.index_shift);
-
-        (((((index as i64) * l) + m) >> 32) >> self.index_shift) as i32
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGet(
-    _env: JNIEnv,
-    _class: JClass,
-    pia: jlong,
-    x: jint,
-    y: jint,
-    z: jint,
-) -> jint {
-    let pia_ptr = unsafe { &mut *(pia as usize as *mut PackedIntegerArray) };
-    pia_ptr.get(x, y, z)
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
-    _env: JNIEnv,
-    _class: JClass,
-    pia: jlong,
-    index: jint,
-) -> jint {
-    let pia_ptr = unsafe { &mut *(pia as usize as *mut PackedIntegerArray) };
-    pia_ptr.get_by_index(index)
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
-    env: JNIEnv,
-    _class: JClass,
-    data: jlongArray,
-    elements_per_long: jint,
-    element_bits: jint,
-    max_value: jlong,
-    index_scale: jint,
-    index_offset: jint,
-    index_shift: jint,
-    size: jint,
-) -> jlong {
-    // let copy = env
-    //     .get_long_array_elements(data, ReleaseMode::NoCopyBack)
-    //     .unwrap();
-
-    let copy = env
-        .get_primitive_array_critical(data, ReleaseMode::NoCopyBack)
-        .unwrap();
-
-    let mut packed_arr = Box::new(PackedIntegerArray {
-        data: Vec::from(unsafe {
-            slice::from_raw_parts(copy.as_ptr() as *mut jlong, copy.size().unwrap() as usize)
-        })
-        .into_boxed_slice(),
-        elements_per_long,
-        element_bits,
-        max_value,
-        index_scale,
-        index_offset,
-        index_shift,
-        size,
-    });
-
-    // let mut packed_arr = Box::new(PackedIntegerArray {
-    //     data: Vec::from(unsafe {
-    //         slice::from_raw_parts(data_ptr, data_length as usize)
-    //     })
-    //     .into_boxed_slice(),
-    //     elements_per_long,
-    //     element_bits,
-    //     max_value,
-    //     index_scale,
-    //     index_offset,
-    //     index_shift,
-    //     size,
-    // });
-
-    let ptr = (&mut *packed_arr as *mut PackedIntegerArray) as usize;
-
-    mem::forget(packed_arr);
-
-    ptr as jlong
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
-    env: JNIEnv,
-    _class: JClass,
-    _packed_integer_array: jlong,
-    palette: jlong,
-) {
-    // let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
-    let palette = unsafe { ((palette as usize) as *mut JavaPalette).as_ref().unwrap() };
-
-    palette.store.iter().for_each(|item| {
-        env.call_static_method(
-            "dev/birb/wgpu/render/Wgpu",
-            "debug",
-            "(Ljava/lang/Object;)V",
-            &[JValue::Object(item.0.as_obj())],
-        )
-        .unwrap();
-    });
-
-    // let wm = RENDERER.get().unwrap();
-    // let bm = wm.mc.block_manager.read();
-    //
-    // // println!("{:?}", palette.indices);
-    //
-    // (0..10).for_each(|id| {
-    //     let key = array.get_by_index(id);
-    //     match palette.get(key as usize) {
-    //         Some((_, blockstate_key)) => {
-    //             let (name, _) = bm.blocks.get_index(blockstate_key.block as usize).unwrap();
-    //             println!("{}", name);
-    //         },
-    //         None => {},
-    //     }
-    // });
-    // println!(
-    //     "array val index: {} computed: {} ptr: {} raw read: {} val: {}\n{:?}",
-    //     index,
-    //     array.compute_storage_index(index),
-    //     array.debug_pointer(index),
-    //     unsafe { (array.debug_pointer(index) as *mut i64).read_volatile() },
-    //     array.get_by_index(index),
-    //     array
-    // );
-    // dbg!(array.index_offset, array.index_scale, array.index_shift, array.element_bits, array.size, array.element_bits, array.elements_per_long);
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getRawStoragePointer(
-    _env: JNIEnv,
-    _class: JClass,
-    packed_integer_array: jlong,
-) -> jlong {
-    let packed_integer_array_ptr = packed_integer_array as usize as *mut PackedIntegerArray;
-    (unsafe { &mut (*packed_integer_array_ptr).data as *mut Box<[i64]> as usize }) as i64
-}
-
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPaletteStorageData(
-    env: JNIEnv,
-    _class: JClass,
-    packed_integer_array: jlong,
-) -> jlongArray {
-    let packed_integer_array_ptr = packed_integer_array as usize as *mut PackedIntegerArray;
-    let packed_integer_array = unsafe { packed_integer_array_ptr.as_ref().unwrap() };
-    let array = env
-        .new_long_array(packed_integer_array.data.len() as jsize)
-        .unwrap();
-    let elements = env
-        .get_long_array_elements(array, ReleaseMode::NoCopyBack)
-        .unwrap();
-
-    unsafe {
-        std::ptr::copy(
-            packed_integer_array.data.as_ptr() as *const i64,
-            elements.as_ptr(),
-            packed_integer_array.data.len(),
-        );
-    }
-
-    array
-}
-
-#[allow(unused_must_use)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPaletteStorage(
-    _env: JNIEnv,
-    _class: JClass,
-    storage: jlong,
-) {
-    unsafe {
-        Box::from_raw((storage as usize) as *mut PackedIntegerArray);
-    }
 }
 
 #[allow(unused_must_use)]

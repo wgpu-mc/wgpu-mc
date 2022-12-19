@@ -32,6 +32,7 @@ serde = { version = "1.0.145", features = ["derive"] }
 get-size = { version = "0.1.1" }
 tracing = "0.1.31"
 tracing-timing = "0.6.0"
+slab = "0.4.7"
 
 [lib]
 crate-type = ["cdylib"]

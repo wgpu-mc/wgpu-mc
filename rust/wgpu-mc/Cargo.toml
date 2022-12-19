@@ -24,7 +24,7 @@ rayon = "1.5.2"
 dashmap = "5.4.0"
 parking_lot = "0.12.1"
 arc-swap = "1.4.0"
-indexmap = { version = "1.7.0", features = ["std"] }
+indexmap = { version = "1.9.2", features = ["std"] }
 multi-map = { git = "https://github.com/rust-embedded-community/multi-map.git" }
 tracing = "0.1.31"
 tracing-timing = "0.6.0"
