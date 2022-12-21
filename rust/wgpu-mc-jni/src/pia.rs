@@ -3,11 +3,12 @@ use std::slice;
 use jni::objects::{JClass, ReleaseMode};
 use jni::sys::{jint, jlong, jlongArray};
 use jni::JNIEnv;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use slab::Slab;
 
-pub static PIA_STORAGE: OnceCell<RwLock<Slab<PackedIntegerArray>>> = OnceCell::new();
+static PIA_STORAGE: Lazy<RwLock<Slab<PackedIntegerArray>>> =
+    Lazy::new(|| RwLock::new(Slab::with_capacity(2048)));
 
 #[derive(Debug)]
 pub struct PackedIntegerArray {
@@ -28,14 +29,6 @@ impl PackedIntegerArray {
         let z = z & 0xf;
 
         self.get_by_index((((y << 4) | z) << 4) | x)
-    }
-
-    pub fn debug_pointer(&self, index: i32) -> usize {
-        assert!(index < self.size, "index: {}, size: {}", index, self.size);
-
-        let i: i32 = self.compute_storage_index(index);
-
-        unsafe { self.data.as_ptr().offset(i as isize) as usize }
     }
 
     pub fn get_by_index(&self, index: i32) -> i32 {
@@ -99,7 +92,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
         size,
     };
 
-    let mut storage = PIA_STORAGE.get().unwrap().write();
+    let mut storage = PIA_STORAGE.write();
     storage.insert(packed_arr) as jlong
 }
 
@@ -110,7 +103,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPaletteStorage(
     _class: JClass,
     storage: jlong,
 ) {
-    let mut storage_access = PIA_STORAGE.get().unwrap().write();
+    let mut storage_access = PIA_STORAGE.write();
     storage_access.remove(storage as usize);
 }
 
@@ -123,7 +116,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGet(
     y: jint,
     z: jint,
 ) -> jint {
-    let storage = PIA_STORAGE.get().unwrap().read();
+    let storage = PIA_STORAGE.read();
     let pia = storage.get(pia as usize).unwrap();
     pia.get(x, y, z)
 }
@@ -135,7 +128,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
     pia: jlong,
     index: jint,
 ) -> jint {
-    let storage = PIA_STORAGE.get().unwrap().read();
+    let storage = PIA_STORAGE.read();
     let pia = storage.get(pia as usize).unwrap();
     pia.get_by_index(index)
 }

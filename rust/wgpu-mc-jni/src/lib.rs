@@ -11,7 +11,7 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::mem;
 use std::mem::size_of;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -26,14 +26,12 @@ use jni::sys::{
     jobject, jstring,
 };
 use jni::{JNIEnv, JavaVM};
-use mc_varint::VarIntRead;
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
-use slab::Slab;
 use wgpu::Extent3d;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
@@ -88,20 +86,46 @@ struct MouseState {
     pub y: f64,
 }
 
-static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
-static CHANNELS: OnceCell<(Sender<RenderMessage>, Receiver<RenderMessage>)> = OnceCell::new();
-static MC_STATE: OnceCell<ArcSwap<MinecraftRenderState>> = OnceCell::new();
-static MOUSE_STATE: OnceCell<Arc<ArcSwap<MouseState>>> = OnceCell::new();
-static GL_PIPELINE: OnceCell<GlPipeline> = OnceCell::new();
-static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
-static THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
-
-static BLOCKS: OnceCell<Mutex<Vec<String>>> = OnceCell::new();
-static BLOCK_STATES: OnceCell<Mutex<Vec<(String, String, GlobalRef)>>> = OnceCell::new();
-
-static BLOCK_STATE_PROVIDER: OnceCell<MinecraftBlockstateProvider> = OnceCell::new();
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
+static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
+static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
+
+static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
+static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
+    ArcSwap::new(Arc::new(MinecraftRenderState {
+        render_world: false,
+    }))
+});
+#[allow(dead_code)]
+static MOUSE_STATE: Lazy<Arc<ArcSwap<MouseState>>> =
+    Lazy::new(|| Arc::new(ArcSwap::new(Arc::new(MouseState { x: 0.0, y: 0.0 }))));
+static GL_PIPELINE: Lazy<GlPipeline> = Lazy::new(|| GlPipeline {
+    commands: ArcSwap::new(Arc::new(Vec::new())),
+    blank_texture: OnceCell::new(),
+});
+static THREAD_POOL: Lazy<ThreadPool> =
+    Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
+static BLOCK_STATE_PROVIDER: Lazy<MinecraftBlockstateProvider> =
+    Lazy::new(|| MinecraftBlockstateProvider {
+        chunks: RwLock::new(HashMap::new()),
+        air: BlockstateKey {
+            block: RENDERER
+                .get()
+                .unwrap()
+                .mc
+                .block_manager
+                .read()
+                .blocks
+                .get_full("minecraft:air")
+                .unwrap()
+                .0 as u16,
+            augment: 0,
+        },
+    });
+
+static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::new());
 static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 #[derive(Debug)]
@@ -149,6 +173,7 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         }
     }
 }
+
 struct WinitWindowWrapper<'a> {
     window: &'a Window,
 }
@@ -237,7 +262,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendSettings(
 ) -> bool {
     let json: String = env.get_string(settings).unwrap().into();
     if let Ok(settings) = serde_json::from_str(json.as_str()) {
-        THREAD_POOL.get().unwrap().spawn(|| {
+        THREAD_POOL.spawn(|| {
             let mut guard = SETTINGS.write();
             *guard = Some(settings);
         });
@@ -257,7 +282,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
     let path = PathBuf::from(dir);
     RUN_DIRECTORY.set(path).unwrap();
 
-    THREAD_POOL.get().unwrap().spawn(|| {
+    THREAD_POOL.spawn(|| {
         let mut write = SETTINGS.write();
         *write = Some(Settings::load_or_default());
     });
@@ -282,19 +307,14 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
     block_name: JString,
     state_key: JString,
 ) {
-    let (_tx, _) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = unbounded();
-        (tx, rx)
-    });
-
     let global_ref = env.new_global_ref(block_state).unwrap();
 
     let block_name: String = env.get_string(block_name).unwrap().into();
     let state_key: String = env.get_string(state_key).unwrap().into();
 
-    let states = BLOCK_STATES.get_or_init(|| Mutex::new(Vec::new()));
-
-    states.lock().push((block_name, state_key, global_ref));
+    BLOCK_STATES
+        .lock()
+        .push((block_name, state_key, global_ref));
 }
 
 #[no_mangle]
@@ -306,8 +326,6 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
     palettes: jlongArray,
     storages: jlongArray,
 ) {
-    let wm = RENDERER.get().unwrap();
-
     let palette_elements = env
         .get_long_array_elements(palettes, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -340,23 +358,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .try_into()
         .unwrap();
 
-    let bsp = BLOCK_STATE_PROVIDER.get_or_init(|| MinecraftBlockstateProvider {
-        chunks: RwLock::new(HashMap::new()),
-        air: BlockstateKey {
-            block: wm
-                .mc
-                .block_manager
-                .read()
-                .blocks
-                .get_full("minecraft:air")
-                .unwrap()
-                .0 as u16,
-            augment: 0,
-        },
-    });
-
     {
-        let mut write = bsp.chunks.write();
+        let mut write = BLOCK_STATE_PROVIDER.chunks.write();
 
         write.insert(
             (x, z),
@@ -387,7 +390,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         baked: ArcSwap::new(Arc::new(None)),
     };
 
-    wm.mc
+    RENDERER
+        .get()
+        .unwrap()
+        .mc
         .chunks
         .loaded_chunks
         .write()
@@ -401,7 +407,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
     x: jint,
     z: jint,
 ) {
-    THREAD_POOL.get().unwrap().spawn(move || {
+    THREAD_POOL.spawn(move || {
         let wm = RENDERER.get().unwrap();
 
         {
@@ -411,7 +417,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
             let chunk = chunks.get(&(x, z)).unwrap().load();
 
             let instant = Instant::now();
-            chunk.bake(&bm, BLOCK_STATE_PROVIDER.get().unwrap());
+            chunk.bake(&bm, &*BLOCK_STATE_PROVIDER);
 
             use get_size::GetSize;
 
@@ -440,10 +446,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlock(
 ) {
     let name: String = env.get_string(name).unwrap().into();
 
-    BLOCKS
-        .get_or_init(|| Mutex::new(Vec::new()))
-        .lock()
-        .push(name);
+    BLOCKS.lock().push(name);
 }
 
 #[no_mangle]
@@ -465,7 +468,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     println!("baking blocks");
 
     {
-        let blocks = BLOCKS.get().unwrap().lock();
+        let blocks = BLOCKS.lock();
 
         let blockstates = blocks
             .iter()
@@ -488,7 +491,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
         );
     }
 
-    let states = BLOCK_STATES.get().unwrap().lock();
+    let states = BLOCK_STATES.lock();
 
     let block_manager = wm.mc.block_manager.write();
     let mut mappings = Vec::new();
@@ -579,10 +582,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
     env: JNIEnv,
     _class: JClass,
 ) {
-    let (_, rx) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = unbounded();
-        (tx, rx)
-    });
+    let rx = &CHANNELS.1;
 
     //Wait until wgpu-mc is initialized
     while RENDERER.get().is_none() {}
@@ -661,28 +661,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
 #[allow(unused_must_use)]
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(_env: JNIEnv, _class: JClass) {
-    THREAD_POOL
-        .set(ThreadPoolBuilder::new().num_threads(0).build().unwrap())
-        .unwrap();
-
-    pia::PIA_STORAGE
-        .set(RwLock::new(Slab::with_capacity(2048)))
-        .unwrap();
-
     gl::init();
-
-    MOUSE_STATE.set(Arc::new(ArcSwap::new(Arc::new(MouseState {
-        x: 0.0,
-        y: 0.0,
-    }))));
-    GL_PIPELINE.set(GlPipeline {
-        commands: ArcSwap::new(Arc::new(Vec::new())),
-        blank_texture: OnceCell::new(),
-    });
-    CHANNELS.get_or_init(|| {
-        let (tx, rx) = unbounded();
-        (tx, rx)
-    });
 }
 
 #[no_mangle]
@@ -739,7 +718,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     _class: JClass,
     jtitle: JString,
 ) {
-    let (tx, _) = CHANNELS.get().unwrap();
+    let tx = &CHANNELS.0;
 
     let title: String = env.get_string(jtitle).unwrap().into();
 
@@ -777,11 +756,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
     _class: JClass,
     boolean: jboolean,
 ) {
-    if let Some(render_state) = MC_STATE.get() {
-        render_state.store(Arc::new(MinecraftRenderState {
-            render_world: boolean != 0,
-        }))
-    }
+    MC_STATE.store(Arc::new(MinecraftRenderState {
+        render_world: boolean != 0,
+    }));
 }
 
 #[no_mangle]
@@ -791,11 +768,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
 ) {
     let mut commands = gl::GL_COMMANDS.get().unwrap().write();
 
-    GL_PIPELINE
-        .get()
-        .unwrap()
-        .commands
-        .store(Arc::new(commands.clone()));
+    GL_PIPELINE.commands.store(Arc::new(commands.clone()));
 
     commands.clear();
 }
@@ -868,10 +841,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
         }
     };
 
-    let (tx, _) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = unbounded();
-        (tx, rx)
-    });
+    let tx = &CHANNELS.0;
 
     tx.send(RenderMessage::Task(Box::new(task))).unwrap();
 }
@@ -985,10 +955,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
         );
     };
 
-    let (tx, _) = CHANNELS.get_or_init(|| {
-        let (tx, rx) = unbounded();
-        (tx, rx)
-    });
+    let tx = &CHANNELS.0;
 
     tx.send(RenderMessage::Task(Box::new(task))).unwrap();
 }
@@ -1252,6 +1219,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorPosition(
 const GLFW_CURSOR_NORMAL: i32 = 212993;
 const GLFW_CURSOR_HIDDEN: i32 = 212994;
 const GLFW_CURSOR_DISABLED: i32 = 212995;
+
 /// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
 #[no_mangle]
 pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
