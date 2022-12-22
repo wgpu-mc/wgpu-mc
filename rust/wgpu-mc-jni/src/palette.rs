@@ -2,14 +2,20 @@ use core::fmt::Debug;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::num::NonZeroUsize;
-use std::{mem, slice};
+use std::slice;
 
 use jni::objects::{GlobalRef, JClass, JObject, JValue, ReleaseMode};
 use jni::sys::{jbyteArray, jint, jlong, jlongArray, jobject};
 use jni::JNIEnv;
 use mc_varint::VarIntRead;
+use once_cell::sync::Lazy;
+use parking_lot::RwLock;
+use slab::Slab;
 
 use wgpu_mc::mc::block::BlockstateKey;
+
+static PALETTE_STORAGE: Lazy<RwLock<Slab<JavaPalette>>> =
+    Lazy::new(|| RwLock::new(Slab::with_capacity(4096)));
 
 pub struct IdList {
     pub map: HashMap<i32, GlobalRef>,
@@ -93,11 +99,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPalette(
     _class: JClass,
     idList: jlong,
 ) -> jlong {
-    let palette = Box::new(JavaPalette::new(
-        NonZeroUsize::new(idList as usize).unwrap(),
-    ));
-
-    Box::leak(palette) as *mut JavaPalette as usize as jlong
+    let palette = JavaPalette::new(NonZeroUsize::new(idList as usize).unwrap());
+    PALETTE_STORAGE.write().insert(palette) as jlong
 }
 
 #[no_mangle]
@@ -106,9 +109,9 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearPalette(
     _class: JClass,
     palette_long: jlong,
 ) {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    unsafe { palette.as_mut().unwrap().clear() };
+    let mut storage_access = PALETTE_STORAGE.write();
+    let palette = storage_access.get_mut(palette_long as usize).unwrap();
+    palette.clear();
 }
 
 #[no_mangle]
@@ -117,9 +120,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPalette(
     _class: JClass,
     palette_long: jlong,
 ) {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    unsafe { Box::from_raw(palette) };
+    PALETTE_STORAGE.write().remove(palette_long as usize);
 }
 
 #[no_mangle]
@@ -130,14 +131,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
     object: JObject,
     blockstate_index: jint,
 ) -> jint {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    (unsafe {
-        palette.as_mut().unwrap().index((
-            env.new_global_ref(object).unwrap(),
-            (blockstate_index as u32).into(),
-        ))
-    }) as jint
+    let mut storage_access = PALETTE_STORAGE.write();
+    let palette = storage_access.get_mut(palette_long as usize).unwrap();
+    palette.index((
+        env.new_global_ref(object).unwrap(),
+        (blockstate_index as u32).into(),
+    )) as jint
 }
 
 #[no_mangle]
@@ -146,9 +145,11 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteSize(
     _class: JClass,
     palette_long: jlong,
 ) -> jint {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-
-    (unsafe { palette.as_ref().unwrap().size() }) as jint
+    PALETTE_STORAGE
+        .read()
+        .get(palette_long as usize)
+        .unwrap()
+        .size() as jint
 }
 
 #[no_mangle]
@@ -157,12 +158,10 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPalette(
     _class: JClass,
     palette_long: jlong,
 ) -> jlong {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-    let mut new_palette = Box::new(unsafe { palette.as_ref().unwrap().clone() });
-    let new_palette_ptr = &mut *new_palette as *mut JavaPalette;
-    mem::forget(new_palette);
-
-    new_palette_ptr as usize as jlong
+    let mut storage_access = PALETTE_STORAGE.write();
+    let palette = storage_access.get(palette_long as usize).unwrap();
+    let new_palette = palette.clone();
+    storage_access.insert(new_palette) as jlong
 }
 
 #[no_mangle]
@@ -172,8 +171,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
     palette_long: jlong,
     index: i32,
 ) -> jobject {
-    let palette = (palette_long as usize) as *mut JavaPalette;
-    let palette = unsafe { palette.as_ref().expect("Palette pointer was null") };
+    let storage_access = PALETTE_STORAGE.read();
+    let palette = storage_access.get(palette_long as usize).unwrap();
 
     match palette.get(index as usize) {
         Some((global_ref, _)) => {
@@ -194,11 +193,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
     current_position: jint,
     blockstate_offsets: jlongArray,
 ) -> jint {
-    let palette = unsafe {
-        ((palette_long as usize) as *mut JavaPalette)
-            .as_mut()
-            .unwrap()
-    };
+    let mut storage_access = PALETTE_STORAGE.write();
+    let palette = storage_access.get_mut(palette_long as usize).unwrap();
     let array = env
         .get_byte_array_elements(array, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -251,9 +247,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
     _packed_integer_array: jlong,
     palette: jlong,
 ) {
-    // let array = unsafe { ((packed_integer_array as usize) as *mut PackedIntegerArray).as_ref().unwrap() };
-    let palette = unsafe { ((palette as usize) as *mut JavaPalette).as_ref().unwrap() };
-
+    let storage_access = PALETTE_STORAGE.read();
+    let palette = storage_access.get(palette as usize).unwrap();
     palette.store.iter().for_each(|item| {
         env.call_static_method(
             "dev/birb/wgpu/render/Wgpu",
@@ -263,30 +258,4 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
         )
         .unwrap();
     });
-
-    // let wm = RENDERER.get().unwrap();
-    // let bm = wm.mc.block_manager.read();
-    //
-    // // println!("{:?}", palette.indices);
-    //
-    // (0..10).for_each(|id| {
-    //     let key = array.get_by_index(id);
-    //     match palette.get(key as usize) {
-    //         Some((_, blockstate_key)) => {
-    //             let (name, _) = bm.blocks.get_index(blockstate_key.block as usize).unwrap();
-    //             println!("{}", name);
-    //         },
-    //         None => {},
-    //     }
-    // });
-    // println!(
-    //     "array val index: {} computed: {} ptr: {} raw read: {} val: {}\n{:?}",
-    //     index,
-    //     array.compute_storage_index(index),
-    //     array.debug_pointer(index),
-    //     unsafe { (array.debug_pointer(index) as *mut i64).read_volatile() },
-    //     array.get_by_index(index),
-    //     array
-    // );
-    // dbg!(array.index_offset, array.index_scale, array.index_shift, array.element_bits, array.size, array.element_bits, array.elements_per_long);
 }
