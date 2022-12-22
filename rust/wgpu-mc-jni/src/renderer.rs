@@ -56,7 +56,10 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let wrapper = &WinitWindowWrapper { window: &window };
 
-    let wgpu_state = block_on(WmRenderer::init_wgpu(wrapper));
+    let wgpu_state = block_on(WmRenderer::init_wgpu(
+        wrapper,
+        super::SETTINGS.read().as_ref().unwrap().vsync.value,
+    ));
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap(),

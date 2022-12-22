@@ -126,7 +126,7 @@ static BLOCK_STATE_PROVIDER: Lazy<MinecraftBlockstateProvider> =
 
 static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::new());
-static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
+pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 #[derive(Debug)]
 struct ChunkHolder {

@@ -14,12 +14,12 @@ static RENDERER_CONFIG_JSON: OnceCell<PathBuf> = OnceCell::new();
 
 /// Add your settings here. Only use the structs from this
 /// file, like StringSetting, FloatSetting and IntSetting,
-/// then add an appropriate struct to SettingsInfo below,
+/// then add an appropriate field to SettingsInfo below,
 /// and a default value in the Default impl for this.
 ///
 /// TODO: handle the case of "json doesn't have every field",
 /// because that's what happens when adding a new setting
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[non_exhaustive]
 pub struct Settings {
     pub vsync: BoolSetting,
@@ -41,7 +41,7 @@ lazy_static! {
         vsync: SettingInfo {
             desc: "Whether or not to sync the framerate to the display's framerate.\
             May reduce screen tearing, on the cost of added latency.",
-            needs_restart: false,
+            needs_restart: true,
         },
         test_enum: EnumSettingInfo::new("", true,),
         test_float: SettingInfo {
@@ -60,14 +60,16 @@ impl Settings {
     /// Loads the settings from disk, or returns the defaults.
     pub fn load_or_default() -> Settings {
         let config_path = Self::config_path_get_or_init();
-        if config_path.exists() {
+        let setting = if config_path.exists() {
             let contents = std::fs::read_to_string(config_path).unwrap_or_default();
             serde_json::from_str(&contents).unwrap_or_default()
         } else {
             let default = Settings::default();
             default.write();
             default
-        }
+        };
+        println!("Loaded settings: {setting:?}");
+        setting
     }
 
     fn config_path_get_or_init<'a>() -> &'a PathBuf {
@@ -139,13 +141,13 @@ impl<T: IntoEnumIterator + Into<&'static str>> EnumSettingInfo<T> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename = "bool")]
 pub struct BoolSetting {
     pub value: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename = "float")]
 pub struct FloatSetting {
     min: f64,
@@ -168,7 +170,7 @@ impl FloatSetting {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename = "int")]
 pub struct IntSetting {
     min: i32,
@@ -191,9 +193,7 @@ impl IntSetting {
     }
 }
 
-/// In order to get the string this represents, use the appropriate [`EnumSettingInfo`] in
-/// SETTINGS_INFO.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename = "enum")]
 pub struct EnumSetting {
     pub selected: usize,
