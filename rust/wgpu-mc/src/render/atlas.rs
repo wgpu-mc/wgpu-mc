@@ -5,18 +5,18 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
-use guillotiere::AtlasAllocator;
 use guillotiere::euclid::Size2D;
-use image::{GenericImageView, ImageBuffer, Rgba};
+use guillotiere::AtlasAllocator;
 use image::imageops::overlay;
+use image::{GenericImageView, ImageBuffer, Rgba};
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
 use wgpu::Extent3d;
 
-use crate::{WgpuState, WmRenderer};
 use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::render::pipeline::RenderPipelineManager;
 use crate::texture::{BindableTexture, TextureSamplerView, UV};
+use crate::{WgpuState, WmRenderer};
 
 pub const ATLAS_DIMENSIONS: u32 = 2048;
 
