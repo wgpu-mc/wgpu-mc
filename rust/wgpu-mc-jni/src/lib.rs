@@ -221,7 +221,7 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
             .ok()?;
 
         let elements = env
-            .get_byte_array_elements(bytes.into_inner(), ReleaseMode::NoCopyBack)
+            .get_byte_array_elements(bytes.into_raw(), ReleaseMode::NoCopyBack)
             .ok()?;
 
         let size = elements.size().ok()? as usize;
@@ -241,7 +241,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettingsStructure(
 ) -> jstring {
     env.new_string(crate::settings::SETTINGS_INFO_JSON.clone())
         .unwrap()
-        .into_inner()
+        .into_raw()
 }
 
 #[no_mangle]
@@ -250,7 +250,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettings(
     _class: JClass,
 ) -> jstring {
     let json = serde_json::to_string(&SETTINGS.read().as_ref().unwrap()).unwrap();
-    env.new_string(json).unwrap().into_inner()
+    env.new_string(json).unwrap().into_raw()
 }
 
 /// Returns true if succeeded and false if not.
@@ -296,7 +296,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
     let renderer = RENDERER.get().unwrap();
     let backend = renderer.get_backend_description();
 
-    env.new_string(backend).unwrap().into_inner()
+    env.new_string(backend).unwrap().into_raw()
 }
 
 #[no_mangle]
@@ -675,7 +675,12 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
 
     loop {
         let bytes_read = env
-            .call_method(input_stream, "read", "([B)I", &[array.into()])
+            .call_method(
+                input_stream,
+                "read",
+                "([B)I",
+                &[unsafe { JObject::from_raw(array) }.into()],
+            )
             .unwrap()
             .i()
             .unwrap();
@@ -747,7 +752,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     // });
     // println!("Uploaded blocks to java HashMap in {}ms", Instant::now().duration_since(instant).as_millis());
 
-    block_hashmap.into_inner()
+    block_hashmap.into_raw()
 }
 
 #[no_mangle]
@@ -1052,7 +1057,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
         video_mode.bit_depth()
     ))
     .unwrap()
-    .into_inner()
+    .into_raw()
 }
 
 #[no_mangle]

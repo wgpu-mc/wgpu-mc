@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 crate-root = "0.1.3"
 futures = "0.3"
-jni = "0.19.0"
+jni = "0.20.0"
 raw-window-handle = "0.5.0"
 wgpu-mc = { path = "../wgpu-mc" }
 winit = "0.27.4"
@@ -19,7 +19,7 @@ strum_macros = "0.24"
 parking_lot = "0.12.1"
 arc-swap = "1.4.0"
 bumpalo = "3.8.0"
-cgmath = "0.17"
+cgmath = "0.18.0"
 bytemuck = { version = "1.4", features = ["derive"] }
 dashmap = "5.4.0"
 once_cell = "1.9.0"

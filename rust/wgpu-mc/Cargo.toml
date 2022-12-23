@@ -5,11 +5,11 @@ authors = ["birb"]
 edition = "2021"
 
 [dependencies]
-image = "0.23"
-cgmath = "0.17"
+image = "0.24"
+cgmath = "0.18"
 wgpu = { version = "0.14.0", features = ["glsl"] }
 naga = "0.10.0"
-bytemuck = { version = "1.4", features = [ "derive" ] }
+bytemuck = { version = "1.4", features = ["derive"] }
 anyhow = "1.0"
 winit = "0.27.4"
 serde = "1.0.123"
@@ -28,7 +28,7 @@ indexmap = { version = "1.9.2", features = ["std"] }
 multi-map = { git = "https://github.com/rust-embedded-community/multi-map.git" }
 tracing = "0.1.31"
 tracing-timing = "0.6.0"
-serde_with = "1.13.0"
+serde_with = "2.1.0"
 web-sys = "0.3.53"
 minecraft-assets = { git = "https://github.com/wgpu-mc/minecraft-assets.git" }
 get-size = { version = "0.1.1", features = ["derive"] }

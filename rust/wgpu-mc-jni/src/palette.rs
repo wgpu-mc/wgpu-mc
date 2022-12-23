@@ -65,7 +65,7 @@ impl JavaPalette {
     pub fn has_any(&self, predicate: &dyn Fn(jobject) -> bool) -> bool {
         self.store
             .iter()
-            .any(|(global_ref, _)| predicate(global_ref.as_obj().into_inner()))
+            .any(|(global_ref, _)| predicate(global_ref.as_obj().into_raw()))
     }
 
     pub fn size(&self) -> usize {
@@ -176,7 +176,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
 
     match palette.get(index as usize) {
         Some((global_ref, _)) => {
-            return global_ref.as_obj().into_inner();
+            return global_ref.as_obj().into_raw();
         }
         None => {
             panic!("Palette index {index} was not occupied\nPalette:\n{palette:?}");
