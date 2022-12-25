@@ -26,6 +26,7 @@ use jni::sys::{
     jobject, jstring,
 };
 use jni::{JNIEnv, JavaVM};
+use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{
@@ -234,32 +235,22 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
     }
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettingsStructure(
-    env: JNIEnv,
-    _class: JClass,
-) -> jstring {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getSettingsStructure(env: JNIEnv, _class: JClass) -> jstring {
     env.new_string(crate::settings::SETTINGS_INFO_JSON.clone())
         .unwrap()
         .into_raw()
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getSettings(
-    env: JNIEnv,
-    _class: JClass,
-) -> jstring {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getSettings(env: JNIEnv, _class: JClass) -> jstring {
     let json = serde_json::to_string(&SETTINGS.read().as_ref().unwrap()).unwrap();
     env.new_string(json).unwrap().into_raw()
 }
 
 /// Returns true if succeeded and false if not.
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendSettings(
-    env: JNIEnv,
-    _class: JClass,
-    settings: JString,
-) -> bool {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn sendSettings(env: JNIEnv, _class: JClass, settings: JString) -> bool {
     let json: String = env.get_string(settings).unwrap().into();
     if let Ok(settings) = serde_json::from_str(json.as_str()) {
         THREAD_POOL.spawn(|| {
@@ -272,12 +263,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendSettings(
     }
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
-    env: JNIEnv,
-    _class: JClass,
-    dir: JString,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn sendRunDirectory(env: JNIEnv, _class: JClass, dir: JString) {
     let dir: String = env.get_string(dir).unwrap().into();
     let path = PathBuf::from(dir);
     RUN_DIRECTORY.set(path).unwrap();
@@ -288,19 +275,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_sendRunDirectory(
     });
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getBackend(
-    env: JNIEnv,
-    _class: JClass,
-) -> jstring {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getBackend(env: JNIEnv, _class: JClass) -> jstring {
     let renderer = RENDERER.get().unwrap();
     let backend = renderer.get_backend_description();
 
     env.new_string(backend).unwrap().into_raw()
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn registerBlockState(
     env: JNIEnv,
     _class: JClass,
     block_state: JObject,
@@ -317,8 +301,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlockState(
         .push((block_name, state_key, global_ref));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn createChunk(
     env: JNIEnv,
     _class: JClass,
     x: jint,
@@ -371,7 +355,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
                         return None;
                     }
 
-                    //SAFETY: Java will have called Java_dev_birb_wgpu_rust_WgpuNative_createPalette and Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage
+                    //SAFETY: Java will have called createPalette and createPaletteStorage
                     //respectively to create these pointers. Rust will also have ownership of the data at the pointers at this point.
                     //The only thing that updates "live" later in Java is the JavaPalette, so we clone that here to keep ownership later
                     unsafe {
@@ -400,13 +384,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
         .insert((x, z), ArcSwap::new(Arc::new(chunk)));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
-    _env: JNIEnv,
-    _class: JClass,
-    x: jint,
-    z: jint,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
     THREAD_POOL.spawn(move || {
         let wm = RENDERER.get().unwrap();
 
@@ -438,31 +417,20 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeChunk(
     });
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerBlock(
-    env: JNIEnv,
-    _class: JClass,
-    name: JString,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn registerBlock(env: JNIEnv, _class: JClass, name: JString) {
     let name: String = env.get_string(name).unwrap().into();
 
     BLOCKS.lock().push(name);
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_startRendering(
-    env: JNIEnv,
-    _class: JClass,
-    title: JString,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) {
     renderer::start_rendering(env, title);
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
-    env: JNIEnv,
-    _class: JClass,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
     let wm = RENDERER.get().unwrap();
 
     println!("baking blocks");
@@ -577,11 +545,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_cacheBlockStates(
     });
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
-    env: JNIEnv,
-    _class: JClass,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn runHelperThread(env: JNIEnv, _class: JClass) {
     let rx = &CHANNELS.1;
 
     //Wait until wgpu-mc is initialized
@@ -659,17 +624,13 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_runHelperThread(
 }
 
 #[allow(unused_must_use)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_preInit(_env: JNIEnv, _class: JClass) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn preInit(_env: JNIEnv, _class: JClass) {
     gl::init();
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
-    env: JNIEnv,
-    _class: JClass,
-    input_stream: JObject,
-) -> jbyteArray {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn digestInputStream(env: JNIEnv, _class: JClass, input_stream: JObject) -> jbyteArray {
     let mut vec = Vec::with_capacity(1024);
     let array = env.new_byte_array(1024).unwrap();
 
@@ -717,12 +678,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_digestInputStream(
 }
 
 #[allow(unused_must_use)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
-    env: JNIEnv,
-    _class: JClass,
-    jtitle: JString,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn updateWindowTitle(env: JNIEnv, _class: JClass, jtitle: JString) {
     let tx = &CHANNELS.0;
 
     let title: String = env.get_string(jtitle).unwrap().into();
@@ -730,11 +687,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_updateWindowTitle(
     tx.send(RenderMessage::SetTitle(title));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
-    env: JNIEnv,
-    _class: JClass,
-) -> jobject {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bakeBlockModels(env: JNIEnv, _class: JClass) -> jobject {
     let _renderer = RENDERER.get().unwrap();
 
     let block_hashmap = env.new_object("java/util/HashMap", "()V", &[]).unwrap();
@@ -755,22 +709,15 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_bakeBlockModels(
     block_hashmap.into_raw()
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setWorldRenderState(
-    _env: JNIEnv,
-    _class: JClass,
-    boolean: jboolean,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setWorldRenderState(_env: JNIEnv, _class: JClass, boolean: jboolean) {
     MC_STATE.store(Arc::new(MinecraftRenderState {
         render_world: boolean != 0,
     }));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
-    _env: JNIEnv,
-    _class: JClass,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn submitCommands(_env: JNIEnv, _class: JClass) {
     let mut commands = gl::GL_COMMANDS.get().unwrap().write();
 
     GL_PIPELINE.commands.store(Arc::new(commands.clone()));
@@ -778,8 +725,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_submitCommands(
     commands.clear();
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn texImage2D(
     _env: JNIEnv,
     _class: JClass,
     texture_id: jint,
@@ -852,8 +799,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn subImage2D(
     _env: JNIEnv,
     _class: JClass,
     texture_id: jint,
@@ -965,43 +912,28 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_subImage2D(
     tx.send(RenderMessage::Task(Box::new(task))).unwrap();
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getMaxTextureSize(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jint {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getMaxTextureSize(_env: JNIEnv, _class: JClass) -> jint {
     let wm = RENDERER.get().unwrap();
     wm.wgpu_state.adapter.limits().max_texture_dimension_2d as i32
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowWidth(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jint {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getWindowWidth(_env: JNIEnv, _class: JClass) -> jint {
     RENDERER
         .get()
         .map_or(1280, |wm| wm.wgpu_state.surface.read().1.width as i32)
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getWindowHeight(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jint {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getWindowHeight(_env: JNIEnv, _class: JClass) -> jint {
     RENDERER
         .get()
         .map_or(720, |wm| wm.wgpu_state.surface.read().1.height as i32)
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
-    _env: JNIEnv,
-    _class: JClass,
-    r: jfloat,
-    g: jfloat,
-    b: jfloat,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn clearColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat) {
     gl::GL_COMMANDS
         .get()
         .unwrap()
@@ -1009,13 +941,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearColor(
         .push(GLCommand::ClearColor(r, g, b));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_attachTextureBindGroup(
-    _env: JNIEnv,
-    _class: JClass,
-    slot: jint,
-    id: jint,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn attachTextureBindGroup(_env: JNIEnv, _class: JClass, slot: jint, id: jint) {
     gl::GL_COMMANDS
         .get()
         .unwrap()
@@ -1023,12 +950,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_attachTextureBindGroup
         .push(GLCommand::AttachTexture(slot, id));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
-    _env: JNIEnv,
-    _class: JClass,
-    pipeline: jint,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn wmUsePipeline(_env: JNIEnv, _class: JClass, pipeline: jint) {
     gl::GL_COMMANDS
         .get()
         .unwrap()
@@ -1036,11 +959,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_wmUsePipeline(
         .push(GLCommand::UsePipeline(pipeline as usize));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
-    env: JNIEnv,
-    _class: JClass,
-) -> jstring {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getVideoMode(env: JNIEnv, _class: JClass) -> jstring {
     let video_mode = WINDOW
         .get()
         .unwrap()
@@ -1060,12 +980,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_getVideoMode(
     .into_raw()
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
-    env: JNIEnv,
-    _class: JClass,
-    float_array: jfloatArray,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setProjectionMatrix(env: JNIEnv, _class: JClass, float_array: jfloatArray) {
     let elements = env
         .get_float_array_elements(float_array, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -1095,12 +1011,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setProjectionMatrix(
         .push(GLCommand::SetMatrix(matrix));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawIndexed(
-    _env: JNIEnv,
-    _class: JClass,
-    count: jint,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn drawIndexed(_env: JNIEnv, _class: JClass, count: jint) {
     gl::GL_COMMANDS
         .get()
         .unwrap()
@@ -1108,12 +1020,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_drawIndexed(
         .push(GLCommand::DrawIndexed(count as u32));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setVertexBuffer(
-    env: JNIEnv,
-    _class: JClass,
-    byte_array: jbyteArray,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setVertexBuffer(env: JNIEnv, _class: JClass, byte_array: jbyteArray) {
     let mut bytes = vec![0; env.get_array_length(byte_array).unwrap() as usize];
     env.get_byte_array_region(byte_array, 0, &mut bytes[..])
         .unwrap();
@@ -1137,12 +1045,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setVertexBuffer(
         ))));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
-    env: JNIEnv,
-    _class: JClass,
-    int_array: jintArray,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: jintArray) {
     let elements = env
         .get_int_array_elements(int_array, ReleaseMode::NoCopyBack)
         .unwrap();
@@ -1161,13 +1065,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setIndexBuffer(
         .push(GLCommand::SetIndexBuffer(Vec::from(slice)));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_scheduleChunkRebuild(
-    _env: JNIEnv,
-    _class: JClass,
-    _x: jint,
-    _z: jint,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn scheduleChunkRebuild(_env: JNIEnv, _class: JClass, _x: jint, _z: jint) {
     let _wm = RENDERER.get().unwrap();
 
     // println!("Building chunk {},{}", x, z);
@@ -1175,11 +1074,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_scheduleChunkRebuild(
     // wm.mc.chunks.assemble_world_meshes(wm);
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createIdList(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jlong {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn createIdList(_env: JNIEnv, _class: JClass) -> jlong {
     let mut palette = Box::new(IdList::new());
 
     let ptr = ((&mut *palette as *mut IdList) as usize) as jlong;
@@ -1188,8 +1084,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createIdList(
     ptr
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_addIdListEntry(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn addIdListEntry(
     env: JNIEnv,
     _class: JClass,
     idlist_long: jlong,
@@ -1208,13 +1104,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_addIdListEntry(
 }
 
 #[allow(unused_must_use)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorPosition(
-    _env: JNIEnv,
-    _class: JClass,
-    x: f64,
-    y: f64,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setCursorPosition(_env: JNIEnv, _class: JClass, x: f64, y: f64) {
     WINDOW
         .get()
         .unwrap()
@@ -1226,12 +1117,8 @@ const GLFW_CURSOR_HIDDEN: i32 = 212994;
 const GLFW_CURSOR_DISABLED: i32 = 212995;
 
 /// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
-    _env: JNIEnv,
-    _class: JClass,
-    mode: i32,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
     match mode {
         GLFW_CURSOR_NORMAL => {
             WINDOW
@@ -1269,8 +1156,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCursorMode(
     }
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setCamera(
     _env: JNIEnv,
     _class: JClass,
     x: jdouble,
@@ -1295,12 +1182,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_setCamera(
     renderer.upload_camera();
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_registerEntityModel(
-    env: JNIEnv,
-    _class: JClass,
-    json_jstring: JString,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn registerEntityModel(env: JNIEnv, _class: JClass, json_jstring: JString) {
     let _renderer = RENDERER.get().unwrap();
 
     let json_string: String = env.get_string(json_jstring).unwrap().into();

@@ -1,9 +1,5 @@
 package dev.birb.wgpu.rust;
 
-//import net.minecraft.util.Identifier;
-
-//import net.minecraft.world.chunk.ChunkSection;
-
 import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.util.collection.IndexedIterable;
 

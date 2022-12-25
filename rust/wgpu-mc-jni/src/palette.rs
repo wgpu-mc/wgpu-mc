@@ -7,6 +7,7 @@ use std::slice;
 use jni::objects::{GlobalRef, JClass, JObject, JValue, ReleaseMode};
 use jni::sys::{jbyteArray, jint, jlong, jlongArray, jobject};
 use jni::JNIEnv;
+use jni_fn::jni_fn;
 use mc_varint::VarIntRead;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
@@ -92,39 +93,26 @@ impl Debug for JavaPalette {
     }
 }
 
-#[allow(non_snake_case)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    idList: jlong,
-) -> jlong {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn createPalette(_env: JNIEnv, _class: JClass, idList: jlong) -> jlong {
     let palette = JavaPalette::new(NonZeroUsize::new(idList as usize).unwrap());
     PALETTE_STORAGE.write().insert(palette) as jlong
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_clearPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn clearPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) {
     let mut storage_access = PALETTE_STORAGE.write();
     let palette = storage_access.get_mut(palette_long as usize).unwrap();
     palette.clear();
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn destroyPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) {
     PALETTE_STORAGE.write().remove(palette_long as usize);
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn paletteIndex(
     env: JNIEnv,
     _class: JClass,
     palette_long: jlong,
@@ -139,12 +127,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteIndex(
     )) as jint
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteSize(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) -> jint {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn paletteSize(_env: JNIEnv, _class: JClass, palette_long: jlong) -> jint {
     PALETTE_STORAGE
         .read()
         .get(palette_long as usize)
@@ -152,25 +136,16 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteSize(
         .size() as jint
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_copyPalette(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-) -> jlong {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn copyPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) -> jlong {
     let mut storage_access = PALETTE_STORAGE.write();
     let palette = storage_access.get(palette_long as usize).unwrap();
     let new_palette = palette.clone();
     storage_access.insert(new_palette) as jlong
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
-    _env: JNIEnv,
-    _class: JClass,
-    palette_long: jlong,
-    index: i32,
-) -> jobject {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn paletteGet(_env: JNIEnv, _class: JClass, palette_long: jlong, index: i32) -> jobject {
     let storage_access = PALETTE_STORAGE.read();
     let palette = storage_access.get(palette_long as usize).unwrap();
 
@@ -184,8 +159,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteGet(
     }
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn paletteReadPacket(
     env: JNIEnv,
     _class: JClass,
     palette_long: jlong,
@@ -240,13 +215,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_paletteReadPacket(
     cursor.position() as jint
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_debugPalette(
-    env: JNIEnv,
-    _class: JClass,
-    _packed_integer_array: jlong,
-    palette: jlong,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn debugPalette(env: JNIEnv, _class: JClass, _packed_integer_array: jlong, palette: jlong) {
     let storage_access = PALETTE_STORAGE.read();
     let palette = storage_access.get(palette as usize).unwrap();
     palette.store.iter().for_each(|item| {

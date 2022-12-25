@@ -3,6 +3,7 @@ use std::slice;
 use jni::objects::{JClass, ReleaseMode};
 use jni::sys::{jint, jlong, jlongArray};
 use jni::JNIEnv;
+use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use slab::Slab;
@@ -57,8 +58,8 @@ impl PackedIntegerArray {
     }
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn createPaletteStorage(
     env: JNIEnv,
     _class: JClass,
     data: jlongArray,
@@ -97,37 +98,21 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
 }
 
 #[allow(unused_must_use)]
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_destroyPaletteStorage(
-    _env: JNIEnv,
-    _class: JClass,
-    storage: jlong,
-) {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn destroyPaletteStorage(_env: JNIEnv, _class: JClass, storage: jlong) {
     let mut storage_access = PIA_STORAGE.write();
     storage_access.remove(storage as usize);
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGet(
-    _env: JNIEnv,
-    _class: JClass,
-    pia: jlong,
-    x: jint,
-    y: jint,
-    z: jint,
-) -> jint {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn piaGet(_env: JNIEnv, _class: JClass, pia: jlong, x: jint, y: jint, z: jint) -> jint {
     let storage = PIA_STORAGE.read();
     let pia = storage.get(pia as usize).unwrap();
     pia.get(x, y, z)
 }
 
-#[no_mangle]
-pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_piaGetByIndex(
-    _env: JNIEnv,
-    _class: JClass,
-    pia: jlong,
-    index: jint,
-) -> jint {
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn piaGetByIndex(_env: JNIEnv, _class: JClass, pia: jlong, index: jint) -> jint {
     let storage = PIA_STORAGE.read();
     let pia = storage.get(pia as usize).unwrap();
     pia.get_by_index(index)
