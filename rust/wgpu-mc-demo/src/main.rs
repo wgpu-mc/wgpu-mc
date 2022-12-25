@@ -1,11 +1,14 @@
 extern crate wgpu_mc;
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use arc_swap::access::{Access, DynAccess};
 
 use arc_swap::ArcSwap;
+use bytemuck::Pod;
 use futures::executor::block_on;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
@@ -20,9 +23,14 @@ use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
 use wgpu_mc::render::pipeline::entity::EntityPipeline;
 use wgpu_mc::render::pipeline::sky::SkyPipeline;
-use wgpu_mc::render::pipeline::terrain::TerrainPipeline;
+use wgpu_mc::render::pipeline::terrain::{TerrainPipeline, Vertex};
 use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
 use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
+use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
+use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::render::compute::{merge_chunks, upload_chunk_offsets};
+use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, CommandEncoderDescriptor, ComputePassDescriptor, Maintain, MaintainBase, MapMode};
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
@@ -69,6 +77,8 @@ unsafe impl HasRawDisplayHandle for WinitWindowWrapper {
 }
 
 fn main() {
+    env_logger::init();
+
     let event_loop = EventLoop::new();
     let title = "wgpu-mc test";
     let window = winit::window::WindowBuilder::new()
@@ -147,21 +157,46 @@ fn main() {
     begin_rendering(event_loop, window, wm);
 }
 
+pub struct TerrainLayer;
+
+impl RenderLayer for TerrainLayer {
+    fn filter(&self) -> fn(BlockstateKey) -> bool {
+        |_| true
+    }
+
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
+        |vert, x, y, z| {
+            Vertex {
+                position: [x, y, z],
+                tex_coords: vert.tex_coords,
+                lightmap_coords: [0.0, 0.0],
+                normal: vert.normal,
+                color: [1.0, 1.0, 1.0, 1.0],
+                tangent: [0.0, 0.0, 0.0, 0.0],
+                uv_offset: vert.animation_uv_offset,
+            }
+        }
+    }
+
+    fn name(&self) -> &str {
+        "all"
+    }
+}
+
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
+
+
     let (_entity, mut instances) = describe_entity(&wm);
 
     let chunk = make_chunks(&wm);
 
-    {
-        wm.mc
-            .chunks
-            .loaded_chunks
-            .write()
-            .insert((0, 0), ArcSwap::new(Arc::new(chunk)));
-    }
-
-    // wm.mc.chunks.bake_meshes(&wm, provider);
-    wm.mc.chunks.assemble_world_meshes(&wm);
+    // {
+    //     wm.mc
+    //         .chunks
+    //         .loaded_chunks
+    //         .write()
+    //         .insert((0, 0), ArcSwap::new(Arc::new(chunk)));
+    // }
 
     let mut frame_start = Instant::now();
 
@@ -170,6 +205,11 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
     let mut spin: f32 = 0.0;
 
     let mut _frame: u32 = 0;
+
+    wm.pipelines.load_full().chunk_layers.store(Arc::new(vec![Box::new(TerrainLayer)]));
+
+    let merged = merge_chunks(&wm, &[&chunk]);
+    let offsets = upload_chunk_offsets(&wm, &merged.get("terrain").unwrap().1);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -282,93 +322,13 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
                 let _ = wm.render(
                     &[
-                        // &SkyPipeline,
                         &TerrainPipeline,
-                        // &GrassPipeline,
-                        // &TransparentPipeline,
-                        &EntityPipeline {
-                            entities: &[&instances],
-                        },
                         &DebugLinesPipeline,
                     ],
                     &view,
                 );
 
                 texture.present();
-
-                instances.instances = (0..1)
-                    .map(|id| {
-                        EntityInstanceTransforms {
-                            // position: ((id / 10) as f32 * 5.0, 0.0, (id % 10) as f32 * 5.0),
-                            position: (0.0, 0.0, 0.0),
-                            looking_yaw: 0.0,
-                            uv_offset: (0.0, 0.0),
-                            part_transforms: vec![
-                                PartTransform {
-                                    x: 0.0,
-                                    y: 1.0,
-                                    z: 0.0,
-                                    pivot_x: 0.0,
-                                    pivot_y: 0.0,
-                                    pivot_z: 0.0,
-                                    yaw: 0.0,
-                                    pitch: 0.0,
-                                    roll: 0.0,
-                                    scale_x: 1.0,
-                                    scale_y: 1.0,
-                                    scale_z: 1.0,
-                                },
-                                PartTransform {
-                                    x: 0.0,
-                                    y: ((spin / 20.0).sin() * 0.5),
-                                    // y: 0.0,
-                                    z: 0.0,
-                                    pivot_x: 0.5,
-                                    pivot_y: 0.5,
-                                    pivot_z: 0.5,
-                                    yaw: spin + 30.0 + (id as f32 + 5.0),
-                                    pitch: spin + 30.0 + (id as f32 + 5.0),
-                                    roll: spin + 30.0 + (id as f32 + 5.0),
-                                    scale_x: 1.0,
-                                    scale_y: 1.0,
-                                    scale_z: 1.0,
-                                },
-                                PartTransform {
-                                    x: 0.0,
-                                    y: ((spin / 20.0).sin() * 0.5),
-                                    // y: 0.0,
-                                    z: 0.0,
-                                    pivot_x: 0.6,
-                                    pivot_y: 0.6,
-                                    pivot_z: 0.6,
-                                    yaw: spin + (id as f32 + 5.0),
-                                    pitch: spin + (id as f32 + 5.0),
-                                    roll: spin + (id as f32 + 5.0),
-                                    scale_x: 1.0,
-                                    scale_y: 1.0,
-                                    scale_z: 1.0,
-                                },
-                                PartTransform {
-                                    x: 0.0,
-                                    y: ((spin / 20.0).sin() * 0.5),
-                                    // y: 0.0,
-                                    z: 0.0,
-                                    pivot_x: 0.6,
-                                    pivot_y: 0.6,
-                                    pivot_z: 0.6,
-                                    yaw: spin + 10.0 + (id as f32 + 5.0),
-                                    pitch: spin + 50.0 + (id as f32 + 5.0),
-                                    roll: spin + 150.0 + (id as f32 + 5.0),
-                                    scale_x: 1.0,
-                                    scale_y: 1.0,
-                                    scale_z: 1.0,
-                                },
-                            ],
-                        }
-                    })
-                    .collect();
-
-                instances.upload(&wm);
 
                 frame_start = Instant::now();
             }

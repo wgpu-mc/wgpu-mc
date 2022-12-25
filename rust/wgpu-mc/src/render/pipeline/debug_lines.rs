@@ -71,7 +71,7 @@ impl WmPipeline for DebugLinesPipeline {
         &self,
         wm: &WmRenderer,
     ) -> HashMap<String, wgpu::PipelineLayout> {
-        let pipeline_manager = wm.render_pipeline_manager.load_full();
+        let pipeline_manager = wm.pipelines.load_full();
         let layouts = &pipeline_manager.bind_group_layouts.read();
 
         let mut map = HashMap::new();
@@ -91,7 +91,7 @@ impl WmPipeline for DebugLinesPipeline {
     }
 
     fn build_wgpu_pipelines(&self, wm: &WmRenderer) -> HashMap<String, RenderPipeline> {
-        let pipeline_manager = wm.render_pipeline_manager.load_full();
+        let pipeline_manager = wm.pipelines.load_full();
         let layouts = &pipeline_manager.pipeline_layouts.load_full();
         let shader_map = pipeline_manager.shader_map.read();
         let shader = shader_map.get("wgpu_mc:shaders/debug_lines").unwrap();
@@ -156,7 +156,7 @@ impl WmPipeline for DebugLinesPipeline {
         render_pass: &'c mut RenderPass<'d>,
         arena: &'c mut WmArena<'e>,
     ) {
-        let pipeline_manager = wm.render_pipeline_manager.load();
+        let pipeline_manager = wm.pipelines.load();
         let render_pipelines = pipeline_manager.render_pipelines.load();
 
         render_pass.set_pipeline(
@@ -199,7 +199,7 @@ impl WmPipeline for DebugLinesPipeline {
                 .create_bind_group(&BindGroupDescriptor {
                     label: None,
                     layout: wm
-                        .render_pipeline_manager
+                        .pipelines
                         .load_full()
                         .bind_group_layouts
                         .read()

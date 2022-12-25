@@ -14,7 +14,7 @@ use parking_lot::RwLock;
 use wgpu::Extent3d;
 
 use crate::mc::resource::{ResourcePath, ResourceProvider};
-use crate::render::pipeline::RenderPipelineManager;
+use crate::render::pipeline::WmPipelines;
 use crate::texture::{BindableTexture, TextureSamplerView, UV};
 use crate::{WgpuState, WmRenderer};
 
@@ -80,7 +80,7 @@ impl Debug for Atlas {
 }
 
 impl Atlas {
-    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager, resizes: bool) -> Self {
+    pub fn new(wgpu_state: &WgpuState, pipelines: &WmPipelines, resizes: bool) -> Self {
         let bindable_texture = BindableTexture::from_tsv(
             wgpu_state,
             pipelines,
@@ -235,7 +235,7 @@ impl Atlas {
 
             let bindable_texture = BindableTexture::from_tsv(
                 &wm.wgpu_state,
-                &wm.render_pipeline_manager.load(),
+                &wm.pipelines.load(),
                 TextureSamplerView::from_rgb_bytes(
                     &wm.wgpu_state,
                     self.image.read().as_raw(),

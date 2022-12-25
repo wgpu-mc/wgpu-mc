@@ -6,12 +6,13 @@ pub mod transparent;
 // pub mod skybox;
 
 use crate::render::shader::WmShader;
-use wgpu::{BindGroupLayout, PipelineLayout, SamplerBindingType};
+use wgpu::{BindGroupLayout, ComputePipeline, PipelineLayout, SamplerBindingType};
 
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use crate::mc::chunk::{RenderLayer, RenderLayers};
 
 use crate::WmRenderer;
 
@@ -23,15 +24,7 @@ use crate::wgpu::RenderPipeline;
 pub trait WmPipeline {
     fn name(&self) -> &'static str;
 
-    fn provide_shaders(&self, wm: &WmRenderer) -> HashMap<String, Box<dyn WmShader>>;
-
-    ///Names of the atlases this pipeline will create
-    fn atlases(&self) -> &'static [&'static str];
-
-    fn build_wgpu_pipeline_layouts(&self, wm: &WmRenderer)
-        -> HashMap<String, wgpu::PipelineLayout>;
-
-    fn build_wgpu_pipelines(&self, wm: &WmRenderer) -> HashMap<String, wgpu::RenderPipeline>;
+    fn init(&self, wm: &WmRenderer);
 
     fn render<
         'pipeline: 'render_pass,
@@ -48,16 +41,19 @@ pub trait WmPipeline {
     );
 }
 
-pub struct RenderPipelineManager {
+pub struct WmPipelines {
     pub pipeline_layouts: ArcSwap<HashMap<String, Arc<PipelineLayout>>>,
     pub render_pipelines: ArcSwap<HashMap<String, Arc<RenderPipeline>>>,
+    pub compute_pipelines: ArcSwap<HashMap<String, Arc<ComputePipeline>>>,
+
+    pub chunk_layers: ArcSwap<Vec<Box<dyn RenderLayer>>>,
 
     pub shader_map: RwLock<HashMap<String, Box<dyn WmShader>>>,
     pub bind_group_layouts: RwLock<HashMap<String, BindGroupLayout>>,
     pub resource_provider: Arc<dyn ResourceProvider>,
 }
 
-impl RenderPipelineManager {
+impl WmPipelines {
     fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindGroupLayout> {
         [
             (
@@ -130,9 +126,25 @@ impl RenderPipelineManager {
                     label: None,
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                }),
+            ),
+            (
+                "ssbo_mut".into(),
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -198,6 +210,8 @@ impl RenderPipelineManager {
             resource_provider,
             bind_group_layouts: RwLock::new(HashMap::new()),
             shader_map: RwLock::new(HashMap::new()),
+            compute_pipelines: ArcSwap::new(Arc::new(HashMap::new())),
+            chunk_layers: ArcSwap::new(Arc::new(vec![])),
         }
     }
 

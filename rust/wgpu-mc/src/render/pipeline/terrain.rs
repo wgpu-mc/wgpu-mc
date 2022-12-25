@@ -13,7 +13,7 @@ pub const BLOCK_ATLAS_NAME: &str = "wgpu_mc:atlases/block";
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, GetSize)]
-pub struct TerrainVertex {
+pub struct Vertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub lightmap_coords: [f32; 2],
@@ -23,7 +23,7 @@ pub struct TerrainVertex {
     pub uv_offset: u32,
 }
 
-impl TerrainVertex {
+impl Vertex {
     const VAA: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
         0 => Float32x3,
         1 => Float32x2,
@@ -38,7 +38,7 @@ impl TerrainVertex {
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<TerrainVertex>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &Self::VAA,
         }
@@ -76,7 +76,7 @@ impl WmPipeline for TerrainPipeline {
         &self,
         wm: &WmRenderer,
     ) -> HashMap<String, wgpu::PipelineLayout> {
-        let pipeline_manager = wm.render_pipeline_manager.load_full();
+        let pipeline_manager = wm.pipelines.load_full();
         let layouts = &pipeline_manager.bind_group_layouts.read();
 
         let mut map = HashMap::new();
@@ -101,7 +101,7 @@ impl WmPipeline for TerrainPipeline {
     }
 
     fn build_wgpu_pipelines(&self, wm: &WmRenderer) -> HashMap<String, RenderPipeline> {
-        let pipeline_manager = wm.render_pipeline_manager.load_full();
+        let pipeline_manager = wm.pipelines.load_full();
         let layouts = &pipeline_manager.pipeline_layouts.load_full();
         let shader_map = pipeline_manager.shader_map.read();
         let shader = shader_map.get("wgpu_mc:shaders/terrain").unwrap();
@@ -118,7 +118,7 @@ impl WmPipeline for TerrainPipeline {
                     vertex: wgpu::VertexState {
                         module: shader.get_vert().0,
                         entry_point: shader.get_vert().1,
-                        buffers: &[TerrainVertex::desc()],
+                        buffers: &[Vertex::desc()],
                     },
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -166,7 +166,7 @@ impl WmPipeline for TerrainPipeline {
         render_pass: &'c mut RenderPass<'d>,
         arena: &'c mut WmArena<'e>,
     ) {
-        let pipeline_manager = wm.render_pipeline_manager.load();
+        let pipeline_manager = wm.pipelines.load();
         let render_pipelines = pipeline_manager.render_pipelines.load();
 
         render_pass.set_pipeline(

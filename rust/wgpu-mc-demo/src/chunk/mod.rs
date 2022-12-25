@@ -38,22 +38,20 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, fence) = bm.blocks.get_full("minecraft:oak_fence").unwrap();
-    let fence_model = fence
-        .get_model_by_key(
-            [("north", &StateValue::Bool(true))],
-            &*wm.mc.resource_provider,
-            &atlas,
-        )
-        .unwrap();
-
-    println!("{:?}", fence_model);
+    let (index, _, fence) = bm.blocks.get_full("minecraft:stone").unwrap();
+    // let fence_model = fence
+    //     .get_model_by_key(
+    //         [("north", &StateValue::Bool(true))],
+    //         &*wm.mc.resource_provider,
+    //         &atlas,
+    //     )
+    //     .unwrap();
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),
         BlockstateKey {
             block: index as u16,
-            augment: fence_model.1,
+            augment: 0,
         },
     );
 

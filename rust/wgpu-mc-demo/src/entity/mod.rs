@@ -162,7 +162,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     //Create a new texture atlas
     let test_entity_atlas = Atlas::new(
         &wm.wgpu_state,
-        &wm.render_pipeline_manager.load_full(),
+        &wm.pipelines.load_full(),
         false,
     );
 
@@ -176,7 +176,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     test_entity_atlas.upload(wm);
 
     let entity_manager =
-        EntityManager::new(&wm.wgpu_state, &wm.render_pipeline_manager.load_full());
+        EntityManager::new(&wm.wgpu_state, &wm.pipelines.load_full());
 
     let test_entity = Arc::new(Entity::new(
         entity_root,

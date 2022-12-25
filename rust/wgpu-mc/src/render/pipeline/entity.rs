@@ -41,7 +41,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
         &self,
         wm: &WmRenderer,
     ) -> HashMap<String, wgpu::PipelineLayout> {
-        let pipeline_manager = wm.render_pipeline_manager.load_full();
+        let pipeline_manager = wm.pipelines.load_full();
         let layouts = &pipeline_manager.bind_group_layouts.read();
 
         let mut map = HashMap::new();
@@ -65,7 +65,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
     }
 
     fn build_wgpu_pipelines(&self, wm: &WmRenderer) -> HashMap<String, RenderPipeline> {
-        let pipeline_manager = wm.render_pipeline_manager.load_full();
+        let pipeline_manager = wm.pipelines.load_full();
         let layouts = &pipeline_manager.pipeline_layouts.load_full();
         let shader_map = pipeline_manager.shader_map.read();
         let shader = shader_map.get("wgpu_mc:shaders/entity").unwrap();
@@ -133,7 +133,7 @@ impl<'frames> WmPipeline for EntityPipeline<'frames> {
     ) {
         render_pass.set_pipeline(
             arena.alloc(
-                wm.render_pipeline_manager
+                wm.pipelines
                     .load()
                     .render_pipelines
                     .load()

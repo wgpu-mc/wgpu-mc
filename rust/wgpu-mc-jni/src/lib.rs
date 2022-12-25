@@ -381,7 +381,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createChunk(
 
     let chunk = Chunk {
         pos: (x, z),
-        baked: ArcSwap::new(Arc::new(None)),
+        baked_layers: ArcSwap::new(Arc::new(None)),
     };
 
     wm.mc
@@ -846,7 +846,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
         .unwrap();
 
         let bindable =
-            BindableTexture::from_tsv(&wm.wgpu_state, &wm.render_pipeline_manager.load(), tsv);
+            BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load(), tsv);
 
         {
             gl::GL_ALLOC.get().unwrap().write().insert(

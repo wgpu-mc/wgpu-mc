@@ -146,7 +146,7 @@ impl WmPipeline for GlPipeline {
     }
 
     fn build_wgpu_pipeline_layouts(&self, wm: &WmRenderer) -> HashMap<String, PipelineLayout> {
-        let pipeline_manager = wm.render_pipeline_manager.load();
+        let pipeline_manager = wm.pipelines.load();
         let layouts = pipeline_manager.bind_group_layouts.read();
 
         [
@@ -189,7 +189,7 @@ impl WmPipeline for GlPipeline {
     }
 
     fn build_wgpu_pipelines(&self, wm: &WmRenderer) -> HashMap<String, RenderPipeline> {
-        let pipeline_manager = wm.render_pipeline_manager.load();
+        let pipeline_manager = wm.pipelines.load();
         let layouts = pipeline_manager.pipeline_layouts.load();
         let shaders = pipeline_manager.shader_map.read();
 
@@ -588,7 +588,7 @@ impl WmPipeline for GlPipeline {
         render_pass: &'c mut RenderPass<'d>,
         arena: &'c mut WmArena<'e>,
     ) {
-        let pipeline_manager = wm.render_pipeline_manager.load();
+        let pipeline_manager = wm.pipelines.load();
         let gl_alloc = gl::GL_ALLOC.get().unwrap().read();
 
         let commands = self.commands.load();

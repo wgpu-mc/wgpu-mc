@@ -1,9 +1,11 @@
 use std::num::NonZeroU32;
+use std::sync::Arc;
+use arc_swap::ArcSwap;
 
 use image::GenericImageView;
 use wgpu::Extent3d;
 
-use crate::{render::pipeline::RenderPipelineManager, WgpuState};
+use crate::{render::pipeline::WmPipelines, WgpuState};
 
 pub type TextureId = u32;
 pub type UV = ((f32, f32), (f32, f32));
@@ -15,6 +17,7 @@ pub struct TextureSamplerView {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
+    pub format: wgpu::TextureFormat,
 }
 
 impl TextureSamplerView {
@@ -27,41 +30,6 @@ impl TextureSamplerView {
     ) -> Result<Self, anyhow::Error> {
         let img = image::load_from_memory(bytes)?;
         Self::from_image(wgpu_state, &img, Some(label))
-    }
-
-    #[must_use]
-    pub fn create_depth_texture(device: &wgpu::Device, size: Extent3d, label: &str) -> Self {
-        let desc = wgpu::TextureDescriptor {
-            label: Some(label),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        };
-        let texture = device.create_texture(&desc);
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            // 4.
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual), // 5.
-            lod_min_clamp: -100.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
-
-        Self {
-            texture,
-            view,
-            sampler,
-        }
     }
 
     pub fn from_image(
@@ -136,8 +104,15 @@ impl TextureSamplerView {
             texture,
             view,
             sampler,
+            format,
         })
     }
+}
+
+///Texture that will be automatically resized by wgpu-mc to fit the framebuffer
+#[derive(Clone)]
+pub struct TextureHandle {
+    pub bindable_texture: Arc<ArcSwap<BindableTexture>>
 }
 
 ///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
@@ -151,7 +126,7 @@ impl BindableTexture {
     #[must_use]
     pub fn from_tsv(
         wgpu_state: &WgpuState,
-        pipelines: &RenderPipelineManager,
+        pipelines: &WmPipelines,
         texture: TextureSamplerView,
     ) -> Self {
         let bind_group = wgpu_state

@@ -204,7 +204,7 @@ impl MinecraftState {
             .create_bind_group(&BindGroupDescriptor {
                 label: None,
                 layout: wm
-                    .render_pipeline_manager
+                    .pipelines
                     .load()
                     .bind_group_layouts
                     .read()

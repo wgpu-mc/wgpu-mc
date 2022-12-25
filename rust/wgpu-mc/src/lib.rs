@@ -49,16 +49,15 @@ use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use tracing::{span, Level};
 pub use wgpu;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, RenderPassDescriptor,
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d, RenderPassDescriptor, Texture};
 
 use crate::camera::UniformMatrixHelper;
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::pipeline::{RenderPipelineManager, WmPipeline};
-use crate::texture::TextureSamplerView;
+use crate::render::compute::initialize_pipelines;
+use crate::render::pipeline::{WmPipelines, WmPipeline};
+use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
 use crate::util::WmArena;
 
 pub mod camera;
@@ -80,8 +79,8 @@ pub struct WgpuState {
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
-    pub depth_texture: Arc<ArcSwap<TextureSamplerView>>,
-    pub render_pipeline_manager: Arc<ArcSwap<RenderPipelineManager>>,
+    pub texture_handles: RwLock<HashMap<String, TextureHandle>>,
+    pub pipelines: Arc<ArcSwap<WmPipelines>>,
     pub mc: Arc<MinecraftState>,
 }
 
@@ -105,7 +104,7 @@ impl WmRenderer {
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
@@ -152,7 +151,7 @@ impl WmRenderer {
     }
 
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
-        let pipelines = RenderPipelineManager::new(resource_provider.clone());
+        let pipelines = WmPipelines::new(resource_provider.clone());
 
         let mc = MinecraftState::new(resource_provider);
         let surface_config = wgpu_state.surface.read().1.clone();
@@ -170,8 +169,8 @@ impl WmRenderer {
         Self {
             wgpu_state: Arc::new(wgpu_state),
 
-            depth_texture: Arc::new(ArcSwap::new(Arc::new(depth_texture))),
-            render_pipeline_manager: Arc::new(ArcSwap::new(Arc::new(pipelines))),
+            texture_handles: RwLock::new(HashMap::new()),
+            pipelines: Arc::new(ArcSwap::new(Arc::new(pipelines))),
             mc: Arc::new(mc),
         }
     }
@@ -179,7 +178,7 @@ impl WmRenderer {
     pub fn init(&self, pipelines: &[&dyn WmPipeline]) {
         self.init_pipeline_manager(pipelines);
 
-        let pipeline_manager = self.render_pipeline_manager.load();
+        let pipeline_manager = self.pipelines.load();
 
         let atlas_map: HashMap<_, _> = pipelines
             .iter()
@@ -202,14 +201,42 @@ impl WmRenderer {
         self.mc.texture_manager.atlases.store(Arc::new(atlas_map));
 
         self.init_mc();
+
+        initialize_pipelines(&self);
+
+        self.create_texture_handle("framebuffer_depth".into(), wgpu::TextureFormat::Depth32Float);
     }
 
     fn init_pipeline_manager(&self, pipelines: &[&dyn WmPipeline]) {
-        self.render_pipeline_manager.load().init(self, pipelines);
+        self.pipelines.load().init(self, pipelines);
     }
 
     fn init_mc(&self) {
         self.mc.init_camera(self);
+    }
+
+    pub fn create_texture_handle(&self, name: String, format: wgpu::TextureFormat) -> TextureHandle {
+        let surface = self.wgpu_state.surface.read();
+        let config = &surface.1;
+
+        let tsv = TextureSamplerView::from_rgb_bytes(&self.wgpu_state, &vec![0u8; (config.width * config.height * (format.describe().block_size as u32)) as usize], Extent3d {
+            width: config.width,
+            height: config.height,
+            depth_or_array_layers: 1,
+        }, None, format).unwrap();
+
+        let handle = TextureHandle {
+            bindable_texture: Arc::new(ArcSwap::new(Arc::new(BindableTexture::from_tsv(&self.wgpu_state, &**self.pipelines.load(), tsv))))
+        };
+
+        let mut handles = self.texture_handles.write();
+        if handles.contains_key(&name) {
+            handles.get(&name).unwrap().bindable_texture.store(handle.bindable_texture.load_full());
+        } else {
+            handles.insert(name, handle.clone());
+        }
+
+        handle
     }
 
     pub fn resize(&self, new_size: WindowSize) {
@@ -235,16 +262,15 @@ impl WmRenderer {
         new_camera.aspect = surface_config.width as f32 / surface_config.height as f32;
         self.mc.camera.store(Arc::new(new_camera));
 
-        self.depth_texture
-            .store(Arc::new(TextureSamplerView::create_depth_texture(
-                &self.wgpu_state.device,
-                wgpu::Extent3d {
-                    width: surface_config.width,
-                    height: surface_config.height,
-                    depth_or_array_layers: 1,
-                },
-                "depth_texture",
-            )));
+        let handles = {
+            self.texture_handles.read().clone()
+        };
+
+        handles.iter().for_each(|(name, handle)| {
+            let texture = handle.bindable_texture.load();
+
+            self.create_texture_handle(name.clone(), texture.tsv.format);
+        });
     }
 
     pub fn upload_camera(&self) {
@@ -283,7 +309,7 @@ impl WmRenderer {
                     .create_bind_group(&BindGroupDescriptor {
                         label: None,
                         layout: self
-                            .render_pipeline_manager
+                            .pipelines
                             .load()
                             .bind_group_layouts
                             .read()

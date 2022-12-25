@@ -4,7 +4,7 @@ use crate::render::atlas::Atlas;
 use crate::texture::{BindableTexture, UV};
 
 use crate::render::entity::EntityVertex;
-use crate::render::pipeline::RenderPipelineManager;
+use crate::render::pipeline::WmPipelines;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{WgpuState, WmRenderer};
 use arc_swap::ArcSwap;
@@ -25,7 +25,7 @@ pub struct EntityManager {
 }
 
 impl EntityManager {
-    pub fn new(wgpu_state: &WgpuState, pipelines: &RenderPipelineManager) -> Self {
+    pub fn new(wgpu_state: &WgpuState, pipelines: &WmPipelines) -> Self {
         Self {
             mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines, false)),
             //TODO: support resizing the atlas
@@ -550,7 +550,7 @@ impl EntityInstances {
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             });
 
-        let pipelines = wm.render_pipeline_manager.load();
+        let pipelines = wm.pipelines.load();
 
         let transform_bind_group =
             wm.wgpu_state

@@ -3,8 +3,52 @@ use std::cmp::min;
 use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::ptr::drop_in_place;
+use wgpu::{BindGroupDescriptor, BindGroupEntry};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use crate::WmRenderer;
 
 const ALIGN: usize = 8;
+
+pub struct SSBO {
+    pub buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup
+}
+
+impl SSBO {
+
+    pub fn new(wm: &WmRenderer, data: &[u8], usage: wgpu::BufferUsages, mutable: bool) -> Self {
+        let pipelines = wm.pipelines.load();
+        let layouts = pipelines.bind_group_layouts.read();
+        let layout = layouts.get(if mutable {
+            "ssbo_mut"
+        } else {
+            "ssbo"
+        }).unwrap();
+
+        let buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: data,
+            usage
+        });
+
+        let bind_group = wm.wgpu_state.device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }
+            ],
+        });
+
+        Self {
+            buffer,
+            bind_group,
+        }
+    }
+
+}
 
 type WmArenaObject = (*mut u8, unsafe fn(*mut u8));
 ///Untyped arena for render passes

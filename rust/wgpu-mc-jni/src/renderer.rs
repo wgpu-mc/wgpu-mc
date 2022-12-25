@@ -151,7 +151,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
     ENTITY_ATLAS
         .set(Arc::new(Atlas::new(
             &wm.wgpu_state,
-            &wm.render_pipeline_manager.load(),
+            &wm.pipelines.load(),
             false,
         )))
         .unwrap();

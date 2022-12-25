@@ -6,8 +6,8 @@ pub const CONFIG_VERSION: &str = "v0.0.1";
 /// (major, minor, patch)
 pub const CONFIG_VERSION_TRIPLE: (u32, u32, u32) = (0, 0, 1);
 
-pub type Mat3 = [[f64; 3]; 3];
-pub type Mat4 = [[f64; 4]; 4];
+pub type Mat3 = [[f32; 3]; 3];
+pub type Mat4 = [[f32; 4]; 4];
 
 #[derive(Deserialize, Debug)]
 pub struct ShaderPackConfig {
@@ -74,6 +74,11 @@ pub struct CommonResourceConfig {
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TypeResourceConfig {
+    Blob {
+        src: String,
+        #[serde(default)]
+        size: usize
+    },
     #[serde(rename = "texture_3d")]
     Texture3d {
         #[serde(default)]
@@ -138,7 +143,7 @@ pub struct PipelinesConfig {
     pub pipelines: LinkedHashMap<String, PipelineConfig>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Hash)]
 pub struct PipelineConfig {
     pub geometry: String,
 
