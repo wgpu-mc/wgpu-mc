@@ -37,12 +37,6 @@ public class WindowMixin {
 
     }
 
-    @Inject(method = "calculateScaleFactor", at = @At("RETURN")/*,cancellable = true*/)
-    public void calculateScaleFactor(int guiScale, boolean forceUnicodeFont, CallbackInfoReturnable<Integer> cir) {
-        //this causes a div/0 error **sometimes????**
-        //cir.setReturnValue(guiScale);
-    }
-
     /**
      * @author wgpu-mc
      */
