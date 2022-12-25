@@ -37,9 +37,10 @@ public class WindowMixin {
 
     }
 
-    @Inject(method = "calculateScaleFactor", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "calculateScaleFactor", at = @At("RETURN")/*,cancellable = true*/)
     public void calculateScaleFactor(int guiScale, boolean forceUnicodeFont, CallbackInfoReturnable<Integer> cir) {
-        cir.setReturnValue(guiScale);
+        //this causes a div/0 error **sometimes????**
+        //cir.setReturnValue(guiScale);
     }
 
     /**
