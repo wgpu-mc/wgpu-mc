@@ -20,9 +20,7 @@ impl UniformStorage {
     pub fn new(wm: &WmRenderer, data: &[u8], usage: wgpu::BufferUsages, layout_name: &str) -> Self {
         let pipelines = wm.pipelines.load();
         let layouts = pipelines.bind_group_layouts.read();
-        let layout = layouts
-            .get(layout_name)
-            .unwrap();
+        let layout = layouts.get(layout_name).unwrap();
 
         let buffer = wm
             .wgpu_state

@@ -24,14 +24,14 @@ use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
+use wgpu_mc::render::shaderpack::Mat4ValueOrMult;
+use wgpu_mc::util::UniformStorage;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{
     BindGroupDescriptor, BindGroupEntry, CommandEncoderDescriptor, ComputePassDescriptor, Maintain,
     MaintainBase, MapMode,
 };
 use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
-use wgpu_mc::render::shaderpack::Mat4ValueOrMult;
-use wgpu_mc::util::UniformStorage;
 
 use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
@@ -161,7 +161,11 @@ impl RenderLayer for TerrainLayer {
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
         |vert, x, y, z| Vertex {
-            position: [vert.position[0] + x, vert.position[1] + y, vert.position[2] + z],
+            position: [
+                vert.position[0] + x,
+                vert.position[1] + y,
+                vert.position[2] + z,
+            ],
             tex_coords: vert.tex_coords,
             lightmap_coords: [0.0, 0.0],
             normal: vert.normal,

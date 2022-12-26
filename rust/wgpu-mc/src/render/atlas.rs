@@ -96,7 +96,7 @@ impl Atlas {
                 wgpu::TextureFormat::Rgba8Unorm,
             )
             .unwrap(),
-            false
+            false,
         );
 
         Self {
@@ -249,7 +249,7 @@ impl Atlas {
                     wgpu::TextureFormat::Rgba8Unorm,
                 )
                 .unwrap(),
-                false
+                false,
             );
 
             self.bindable_texture.store(Arc::new(bindable_texture));

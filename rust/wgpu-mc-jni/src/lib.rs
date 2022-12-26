@@ -3,6 +3,7 @@
 
 extern crate core;
 
+use arc_swap::access::Access;
 use core::slice;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -15,7 +16,6 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use arc_swap::access::Access;
 
 use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -45,11 +45,11 @@ use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
+use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
-use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 
 use crate::entity::tmd_to_wm;
 use crate::gl::GlTexture;
@@ -394,7 +394,12 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
             let chunk = chunks.get(&[x, z]).unwrap().load();
 
             let instant = Instant::now();
-            chunk.bake(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &*BLOCK_STATE_PROVIDER);
+            chunk.bake(
+                wm,
+                &wm.pipelines.load_full().chunk_layers.load(),
+                &bm,
+                &*BLOCK_STATE_PROVIDER,
+            );
 
             use get_size::GetSize;
 
@@ -769,7 +774,8 @@ pub fn texImage2D(
         )
         .unwrap();
 
-        let bindable = BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
+        let bindable =
+            BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
 
         {
             gl::GL_ALLOC.get().unwrap().write().insert(

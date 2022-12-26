@@ -130,13 +130,17 @@ impl BindableTexture {
         wgpu_state: &WgpuState,
         pipelines: &WmPipelines,
         texture: TextureSamplerView,
-        depth: bool
+        depth: bool,
     ) -> Self {
         let bind_group = wgpu_state
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: pipelines.bind_group_layouts.read().get(if depth { "texture_depth" } else { "texture" }).unwrap(),
+                layout: pipelines
+                    .bind_group_layouts
+                    .read()
+                    .get(if depth { "texture_depth" } else { "texture" })
+                    .unwrap(),
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,

@@ -231,8 +231,8 @@ impl WmRenderer {
                 &self.wgpu_state,
                 &**self.pipelines.load(),
                 tsv,
-                matches!(format, wgpu::TextureFormat::Depth32Float
-            ))))),
+                matches!(format, wgpu::TextureFormat::Depth32Float),
+            )))),
         };
 
         let mut handles = self.texture_handles.write();

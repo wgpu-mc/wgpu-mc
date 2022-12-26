@@ -1,20 +1,20 @@
+use arc_swap::ArcSwap;
 use bytemuck::Pod;
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use parking_lot::RwLock;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
-use arc_swap::ArcSwap;
 
 use crate::mc::resource::ResourcePath;
-use crate::render::pipeline::{BLOCK_ATLAS, Vertex};
+use crate::render::pipeline::{Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
 use crate::render::shaderpack::{
     LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, ShaderPackConfig,
     ShorthandResourceConfig, TypeResourceConfig,
 };
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
-use crate::util::{WmArena, UniformStorage};
+use crate::util::{UniformStorage, WmArena};
 use crate::WmRenderer;
 use serde::Deserialize;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -93,7 +93,7 @@ fn mat4_update(
 
 pub enum TextureResource {
     Handle(TextureHandle),
-    Bindable(Arc<ArcSwap<BindableTexture>>)
+    Bindable(Arc<ArcSwap<BindableTexture>>),
 }
 
 pub enum ResourceInternal {
@@ -132,14 +132,25 @@ impl ShaderGraph {
     pub fn init(&mut self, wm: &WmRenderer) {
         let mut resources = HashMap::new();
 
-        let block_atlas = wm.mc.texture_manager.atlases.load().get(BLOCK_ATLAS).unwrap().load();
+        let block_atlas = wm
+            .mc
+            .texture_manager
+            .atlases
+            .load()
+            .get(BLOCK_ATLAS)
+            .unwrap()
+            .load();
 
-        resources.insert("wm_texture_atlas_blocks".into(), CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Texture(TextureResource::Bindable(
-                block_atlas.bindable_texture.clone()
-            ), false)),
-        });
+        resources.insert(
+            "wm_texture_atlas_blocks".into(),
+            CustomResource {
+                update: None,
+                data: Arc::new(ResourceInternal::Texture(
+                    TextureResource::Bindable(block_atlas.bindable_texture.clone()),
+                    false,
+                )),
+            },
+        );
 
         for (resource_id, definition) in &self.pack.resources.resources {
             let resource_id = resource_id.clone();
@@ -230,21 +241,37 @@ impl ShaderGraph {
                         if src.len() > 0 {
                             todo!()
                         } else {
-                            let handle = wm.create_texture_handle(resource_id.clone(), TextureFormat::Bgra8Unorm);
-                            resources.insert(resource_id, CustomResource {
-                                update: None,
-                                data: Arc::new(ResourceInternal::Texture(TextureResource::Handle(handle), false)),
-                            });
+                            let handle = wm.create_texture_handle(
+                                resource_id.clone(),
+                                TextureFormat::Bgra8Unorm,
+                            );
+                            resources.insert(
+                                resource_id,
+                                CustomResource {
+                                    update: None,
+                                    data: Arc::new(ResourceInternal::Texture(
+                                        TextureResource::Handle(handle),
+                                        false,
+                                    )),
+                                },
+                            );
                         }
                     }
-                    TypeResourceConfig::TextureDepth {
-                        clear_after_frame,
-                    } => {
-                        let handle = wm.create_texture_handle(resource_id.clone(), TextureFormat::Depth32Float);
-                        resources.insert(resource_id, CustomResource {
-                            update: None,
-                            data: Arc::new(ResourceInternal::Texture(TextureResource::Handle(handle), true)),
-                        });
+                    TypeResourceConfig::TextureDepth { clear_after_frame } => {
+                        let handle = wm.create_texture_handle(
+                            resource_id.clone(),
+                            TextureFormat::Depth32Float,
+                        );
+                        resources.insert(
+                            resource_id,
+                            CustomResource {
+                                update: None,
+                                data: Arc::new(ResourceInternal::Texture(
+                                    TextureResource::Handle(handle),
+                                    true,
+                                )),
+                            },
+                        );
                     }
                     TypeResourceConfig::F32 { value, .. } => {
                         let ssbo = UniformStorage::new(
@@ -398,10 +425,18 @@ impl ShaderGraph {
                                     .uniforms
                                     .iter()
                                     .map(|(index, uniform)| {
-                                        match &*resources.get(&uniform.resource).expect(&uniform.resource).data {
-                                            ResourceInternal::Texture(_, depth) => {
-                                                layouts.get(if *depth { "texture_depth" } else { "texture" }).unwrap()
-                                            }
+                                        match &*resources
+                                            .get(&uniform.resource)
+                                            .expect(&uniform.resource)
+                                            .data
+                                        {
+                                            ResourceInternal::Texture(_, depth) => layouts
+                                                .get(if *depth {
+                                                    "texture_depth"
+                                                } else {
+                                                    "texture"
+                                                })
+                                                .unwrap(),
                                             ResourceInternal::Mat3(..)
                                             | ResourceInternal::Mat4(..) => {
                                                 layouts.get("matrix").unwrap()
@@ -495,12 +530,12 @@ impl ShaderGraph {
             .device
             .create_command_encoder(&CommandEncoderDescriptor { label: None });
 
-        self.resources.iter().for_each(|(_, resource)| {
-            match resource.update {
+        self.resources
+            .iter()
+            .for_each(|(_, resource)| match resource.update {
                 None => {}
-                Some(func) => func(resource, wm, &self.resources)
-            }
-        });
+                Some(func) => func(resource, wm, &self.resources),
+            });
 
         //Reuse any RenderPasses wherever possible
         let mut last_config = None;
@@ -509,98 +544,177 @@ impl ShaderGraph {
 
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
-        self.pack.pipelines.pipelines.iter().for_each(|(name, config)| {
-            if last_config != Some(config) {
-                let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &config.output.iter().map(|texture_name| {
-                        let resource_definition = self.pack.resources.resources.get(texture_name);
+        self.pack
+            .pipelines
+            .pipelines
+            .iter()
+            .for_each(|(name, config)| {
+                if last_config != Some(config) {
+                    let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                        label: None,
+                        color_attachments: &config
+                            .output
+                            .iter()
+                            .map(|texture_name| {
+                                let resource_definition =
+                                    self.pack.resources.resources.get(texture_name);
 
-                        //TODO: If the texture resource is defined as being cleared after each frame. Should use a HashMap to replace the should_clear_depth variable
-                        let clear = match resource_definition {
-                            Some(&ShorthandResourceConfig::Longhand(LonghandResourceConfig { typed: TypeResourceConfig::Texture2d { clear_after_frame: true, .. }, .. })) => true,
-                            _ => false
-                        };
+                                //TODO: If the texture resource is defined as being cleared after each frame. Should use a HashMap to replace the should_clear_depth variable
+                                let clear = match resource_definition {
+                                    Some(&ShorthandResourceConfig::Longhand(
+                                        LonghandResourceConfig {
+                                            typed:
+                                                TypeResourceConfig::Texture2d {
+                                                    clear_after_frame: true,
+                                                    ..
+                                                },
+                                            ..
+                                        },
+                                    )) => true,
+                                    _ => false,
+                                };
 
-                        Some(RenderPassColorAttachment {
-                            view: match &texture_name[..] {
-                                "wm_framebuffer_texture" => output_texture,
-                                name => &arena.alloc(texture_handles.get(name).unwrap().bindable_texture.load()).tsv.view
-                            },
-                            resolve_target: None,
-                            ops: Operations {
-                                load: LoadOp::Load,
-                                store: true,
-                            },
-                        })
-                    }).collect::<Vec<_>>(),
-                    depth_stencil_attachment: config.depth.as_ref().map(|depth_texture| {
-                        let will_clear_depth = should_clear_depth;
-                        should_clear_depth = false;
-
-                        RenderPassDepthStencilAttachment {
-                            view: &arena.alloc(texture_handles.get(depth_texture).unwrap().bindable_texture.load()).tsv.view,
-                            depth_ops: Some(Operations {
-                                // load: if will_clear_depth { LoadOp::Clear(1.0) } else { LoadOp::Load },
-                                load: LoadOp::Clear(1.0),
-                                store: will_clear_depth,
-                            }),
-                            stencil_ops: None,
-                        }
-                    }),
-                });
-
-                render_pass.set_pipeline(self.pipelines.get(name).unwrap());
-
-                match &config.geometry[..] {
-                    "wm_geo_terrain" => {
-                        let layers = wm.pipelines.load().chunk_layers.load();
-                        let chunks = wm.mc.chunks.loaded_chunks.read();
-
-                        for layer in &**layers {
-                            for (pos, chunk_swap) in &*chunks {
-                                let chunk = arena.alloc(chunk_swap.load());
-                                let (chunk_vbo, verts) = arena.alloc(chunk.baked_layers.read()).get(layer.name()).unwrap();
-
-                                render_pass.set_vertex_buffer(0, chunk_vbo.slice(..));
-
-                                for (index, uniform) in &config.uniforms {
-                                    let bind_group = match &*self.resources.get(&uniform.resource).unwrap().data {
-                                        ResourceInternal::Texture(handle, _) => {
-                                            match handle {
-                                                TextureResource::Handle(handle) => &arena.alloc(handle.bindable_texture.load()).bind_group,
-                                                TextureResource::Bindable(bindable) => &arena.alloc(bindable.load()).bind_group
-                                            }
+                                Some(RenderPassColorAttachment {
+                                    view: match &texture_name[..] {
+                                        "wm_framebuffer_texture" => output_texture,
+                                        name => {
+                                            &arena
+                                                .alloc(
+                                                    texture_handles
+                                                        .get(name)
+                                                        .unwrap()
+                                                        .bindable_texture
+                                                        .load(),
+                                                )
+                                                .tsv
+                                                .view
                                         }
-                                        ResourceInternal::Blob(UniformStorage { bind_group, .. }) => {
-                                            bind_group
-                                        }
-                                        ResourceInternal::Mat3((_, _, UniformStorage { bind_group, .. }))
-                                        | ResourceInternal::Mat4((_, _, UniformStorage { bind_group, .. })) => {
-                                            bind_group
-                                        }
-                                        ResourceInternal::F32((_, UniformStorage { bind_group, .. }))
-                                        | ResourceInternal::F64((_, UniformStorage { bind_group, .. }))
-                                        | ResourceInternal::U32((_, UniformStorage { bind_group, .. }))
-                                        | ResourceInternal::I32((_, UniformStorage { bind_group, .. }))
-                                        | ResourceInternal::I64((_, UniformStorage { bind_group, .. })) => bind_group
-                                    };
+                                    },
+                                    resolve_target: None,
+                                    ops: Operations {
+                                        load: LoadOp::Load,
+                                        store: true,
+                                    },
+                                })
+                            })
+                            .collect::<Vec<_>>(),
+                        depth_stencil_attachment: config.depth.as_ref().map(|depth_texture| {
+                            let will_clear_depth = should_clear_depth;
+                            should_clear_depth = false;
 
-                                    render_pass.set_bind_group(*index as u32, bind_group, &[]);
+                            RenderPassDepthStencilAttachment {
+                                view: &arena
+                                    .alloc(
+                                        texture_handles
+                                            .get(depth_texture)
+                                            .unwrap()
+                                            .bindable_texture
+                                            .load(),
+                                    )
+                                    .tsv
+                                    .view,
+                                depth_ops: Some(Operations {
+                                    // load: if will_clear_depth { LoadOp::Clear(1.0) } else { LoadOp::Load },
+                                    load: LoadOp::Clear(1.0),
+                                    store: will_clear_depth,
+                                }),
+                                stencil_ops: None,
+                            }
+                        }),
+                    });
+
+                    render_pass.set_pipeline(self.pipelines.get(name).unwrap());
+
+                    match &config.geometry[..] {
+                        "wm_geo_terrain" => {
+                            let layers = wm.pipelines.load().chunk_layers.load();
+                            let chunks = wm.mc.chunks.loaded_chunks.read();
+
+                            for layer in &**layers {
+                                for (pos, chunk_swap) in &*chunks {
+                                    let chunk = arena.alloc(chunk_swap.load());
+                                    let (chunk_vbo, verts) = arena
+                                        .alloc(chunk.baked_layers.read())
+                                        .get(layer.name())
+                                        .unwrap();
+
+                                    render_pass.set_vertex_buffer(0, chunk_vbo.slice(..));
+
+                                    for (index, uniform) in &config.uniforms {
+                                        let bind_group = match &*self
+                                            .resources
+                                            .get(&uniform.resource)
+                                            .unwrap()
+                                            .data
+                                        {
+                                            ResourceInternal::Texture(handle, _) => match handle {
+                                                TextureResource::Handle(handle) => {
+                                                    &arena
+                                                        .alloc(handle.bindable_texture.load())
+                                                        .bind_group
+                                                }
+                                                TextureResource::Bindable(bindable) => {
+                                                    &arena.alloc(bindable.load()).bind_group
+                                                }
+                                            },
+                                            ResourceInternal::Blob(UniformStorage {
+                                                bind_group,
+                                                ..
+                                            }) => bind_group,
+                                            ResourceInternal::Mat3((
+                                                _,
+                                                _,
+                                                UniformStorage { bind_group, .. },
+                                            ))
+                                            | ResourceInternal::Mat4((
+                                                _,
+                                                _,
+                                                UniformStorage { bind_group, .. },
+                                            )) => bind_group,
+                                            ResourceInternal::F32((
+                                                _,
+                                                UniformStorage { bind_group, .. },
+                                            ))
+                                            | ResourceInternal::F64((
+                                                _,
+                                                UniformStorage { bind_group, .. },
+                                            ))
+                                            | ResourceInternal::U32((
+                                                _,
+                                                UniformStorage { bind_group, .. },
+                                            ))
+                                            | ResourceInternal::I32((
+                                                _,
+                                                UniformStorage { bind_group, .. },
+                                            ))
+                                            | ResourceInternal::I64((
+                                                _,
+                                                UniformStorage { bind_group, .. },
+                                            )) => bind_group,
+                                        };
+
+                                        render_pass.set_bind_group(*index as u32, bind_group, &[]);
+                                    }
+
+                                    render_pass.set_push_constants(
+                                        ShaderStages::VERTEX,
+                                        0,
+                                        bytemuck::cast_slice(&chunk.pos),
+                                    );
+                                    render_pass.draw(0..verts.len() as u32, 0..1);
                                 }
-
-                                render_pass.set_push_constants(ShaderStages::VERTEX, 0, bytemuck::cast_slice(&chunk.pos));
-                                render_pass.draw(0..verts.len() as u32, 0..1);
                             }
                         }
-                    },
-                    "wm_geo_entities" | "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox" | "wm_geo_quad" => todo!("Specific geometry not yet implemented"),
-                    _ => panic!("Unknown geometry {}", config.geometry)
-                };
-            }
+                        "wm_geo_entities" | "wm_geo_transparent" | "wm_geo_fluid"
+                        | "wm_geo_skybox" | "wm_geo_quad" => {
+                            todo!("Specific geometry not yet implemented")
+                        }
+                        _ => panic!("Unknown geometry {}", config.geometry),
+                    };
+                }
 
-            last_config = Some(config);
-        });
+                last_config = Some(config);
+            });
 
         wm.wgpu_state.queue.submit([encoder.finish()]);
     }

@@ -6,8 +6,8 @@ use arc_swap::ArcSwap;
 use get_size::GetSize;
 use parking_lot::RwLock;
 use rayon::iter::IntoParallelRefIterator;
-use wgpu::BufferUsages;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::BufferUsages;
 
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState};
 use crate::mc::BlockManager;
@@ -82,8 +82,7 @@ impl Chunk {
                 (
                     layer.name().into(),
                     (
-                        wm
-                            .wgpu_state
+                        wm.wgpu_state
                             .device
                             .create_buffer_init(&BufferInitDescriptor {
                                 label: None,
