@@ -48,7 +48,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         },
     );
 
-    let chunk = Chunk::new([0, 0], wm);
+    let chunk = Chunk::new([0, 0]);
     let time = Instant::now();
 
     let pipelines = wm.pipelines.load();

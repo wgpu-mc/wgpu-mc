@@ -39,7 +39,7 @@ pub trait BlockStateProvider: Send + Sync + Debug {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
 }
 
-pub trait RenderLayer {
+pub trait RenderLayer: Send + Sync {
     fn filter(&self) -> fn(BlockstateKey) -> bool;
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex;
@@ -54,7 +54,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new(pos: ChunkPos, wm: &WmRenderer) -> Self {
+    pub fn new(pos: ChunkPos) -> Self {
         Self {
             pos,
             baked_layers: Default::default(),

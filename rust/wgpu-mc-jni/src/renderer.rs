@@ -67,8 +67,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     wm.init();
 
-    wm.mc.chunks.assemble_world_meshes(&wm);
-
     env.set_static_field(
         "dev/birb/wgpu/render/Wgpu",
         ("dev/birb/wgpu/render/Wgpu", "INITIALIZED", "Z"),
@@ -84,31 +82,12 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
     let wm_clone_1 = wm.clone();
 
     thread::spawn(move || {
-        let wm = wm_clone_1;
-        loop {
-            thread::sleep(Duration::from_secs(3));
-            wm.mc.chunks.assemble_world_meshes(&wm);
-            println!("assembled meshes");
-        }
-    });
-
-    thread::spawn(move || {
         let wm = wm_clone;
 
         loop {
             wm.upload_camera();
 
             let mc_state = MC_STATE.load();
-
-            let mut pipelines = Vec::new();
-            pipelines.push(&TerrainPipeline as &dyn WmPipeline);
-
-            if mc_state.render_world {
-                // wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
-                pipelines.push(&DebugLinesPipeline as &dyn WmPipeline);
-            } else {
-                pipelines.push(&*GL_PIPELINE);
-            }
 
             let surface_state = wm.wgpu_state.surface.read();
 
@@ -129,8 +108,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let _instant = Instant::now();
 
-            wm.render(&pipelines, &view).unwrap();
-            // // println!("Frametime: {}ms", Instant::now().duration_since(instant).as_millis());
+            // wm.render().unwrap();
 
             texture.present();
         }

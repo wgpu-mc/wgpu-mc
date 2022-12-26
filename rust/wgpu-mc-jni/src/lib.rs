@@ -15,6 +15,7 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+use arc_swap::access::Access;
 
 use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -48,6 +49,7 @@ use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
+use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 
 use crate::entity::tmd_to_wm;
 use crate::gl::GlTexture;
@@ -368,10 +370,7 @@ pub fn createChunk(
         );
     }
 
-    let chunk = Chunk {
-        pos: (x, z),
-        baked_layers: ArcSwap::new(Arc::new(None)),
-    };
+    let chunk = Chunk::new([x, z]);
 
     RENDERER
         .get()
@@ -380,7 +379,7 @@ pub fn createChunk(
         .chunks
         .loaded_chunks
         .write()
-        .insert((x, z), ArcSwap::new(Arc::new(chunk)));
+        .insert([x, z], ArcSwap::new(Arc::new(chunk)));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -392,25 +391,19 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
             let bm = wm.mc.block_manager.read();
             let chunks = wm.mc.chunks.loaded_chunks.read();
 
-            let chunk = chunks.get(&(x, z)).unwrap().load();
+            let chunk = chunks.get(&[x, z]).unwrap().load();
 
             let instant = Instant::now();
-            chunk.bake(&bm, &*BLOCK_STATE_PROVIDER);
+            chunk.bake(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &*BLOCK_STATE_PROVIDER);
 
             use get_size::GetSize;
 
-            let size: usize = chunks
-                .iter()
-                .map(|(_, chunk)| GetSize::get_size(&**chunk.load()))
-                .sum();
-
             println!(
-                "Baked chunk (x={}, z={}, of {}) in {}ms\nChunk heap size: {}MB",
+                "Baked chunk (x={}, z={}, of {}) in {}ms",
                 x,
                 z,
                 chunks.len(),
-                Instant::now().duration_since(instant).as_millis(),
-                size / 1_000_000
+                Instant::now().duration_since(instant).as_millis()
             );
         }
     });
@@ -496,9 +489,9 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
                 .texture_manager
                 .atlases
                 .load()
-                .get(BLOCK_ATLAS_NAME)
+                .get(BLOCK_ATLAS)
                 .unwrap()
-                .load();
+                .load_full();
 
             // println!("{} {}", block_name, state_key);
 
@@ -776,7 +769,7 @@ pub fn texImage2D(
         )
         .unwrap();
 
-        let bindable = BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load(), tsv);
+        let bindable = BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
 
         {
             gl::GL_ALLOC.get().unwrap().write().insert(
