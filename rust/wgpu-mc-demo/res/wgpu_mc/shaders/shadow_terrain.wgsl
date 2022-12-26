@@ -28,8 +28,7 @@ struct VertexResult {
     @location(0) tex_coords: vec2<f32>,
     @location(1) tex_coords2: vec2<f32>,
     @location(2) blend: f32,
-    @location(3) normal: vec3<f32>,
-//    @location(4) screen_pos: vec4<f32>
+    @location(3) normal: vec3<f32>
 };
 
 @vertex
@@ -39,8 +38,6 @@ fn vert(
     @location(2) normal: vec3<f32>,
     @location(6) uv_offset: u32
 ) -> VertexResult {
-    // var uv = uv_offsets.uvs[uv_offset];
-
     var vr: VertexResult;
 
     var world_pos = pos_in + vec3<f32>(f32(chunk_offset.x) * 16.0, 0.0, f32(chunk_offset.z) * 16.0);
@@ -49,38 +46,13 @@ fn vert(
     vr.tex_coords = tex_coords;
     vr.tex_coords2 = tex_coords;
     vr.blend = 1.0;
-    // vr.tex_coords = tex_coords + uv.uv1;
-    // vr.tex_coords2 = tex_coords + uv.uv2;
-    // vr.blend = uv.blend;
+
     vr.normal = normal;
-//    vr.screen_pos =
 
     return vr;
 }
 
-@group(1) @binding(0)
-var t_texture: texture_2d<f32>;
-
-@group(1) @binding(1)
-var t_sampler: sampler;
-
-@group(2) @binding(0)
-var shadow_texture: texture_depth_2d;
-
-@group(2) @binding(1)
-var shadow_sampler: sampler;
-
 @fragment
-fn frag(
-    in: VertexResult
-) -> @location(0) vec4<f32> {
-    let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
-    let col2 = textureSample(t_texture, t_sampler, in.tex_coords2);
-
-    let col = mix(col1, col2, in.blend);
-
-    let depthCol = textureSample(shadow_texture, shadow_sampler, in.pos.xy);
-//    var col = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-
-    return in.pos;
+fn frag(in: VertexResult) -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0);
 }

@@ -1,18 +1,13 @@
 pub mod debug_lines;
-pub mod entity;
-pub mod sky;
-pub mod terrain;
-pub mod transparent;
-// pub mod skybox;
 
 use crate::render::shader::WmShader;
 use wgpu::{BindGroupLayout, ComputePipeline, PipelineLayout, SamplerBindingType};
 
+use crate::mc::chunk::RenderLayer;
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::mc::chunk::{RenderLayer, RenderLayers};
 
 use crate::WmRenderer;
 
@@ -21,24 +16,42 @@ use crate::mc::resource::ResourceProvider;
 use crate::util::WmArena;
 
 use crate::wgpu::RenderPipeline;
-pub trait WmPipeline {
-    fn name(&self) -> &'static str;
 
-    fn init(&self, wm: &WmRenderer);
+pub const BLOCK_ATLAS: &str = "wgpu_mc:atlases/block";
+pub const ENTITY_ATLAS: &str = "wgpu_mc:atlases/entity";
 
-    fn render<
-        'pipeline: 'render_pass,
-        'wm,
-        'pass_borrow,
-        'render_pass: 'pass_borrow,
-        'arena: 'pass_borrow + 'render_pass,
-    >(
-        &'pipeline self,
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
+    pub lightmap_coords: [f32; 2],
+    pub normal: [f32; 4],
+    pub color: [f32; 4],
+    pub tangent: [f32; 4],
+    pub uv_offset: u32,
+}
 
-        wm: &'wm WmRenderer,
-        render_pass: &'pass_borrow mut wgpu::RenderPass<'render_pass>,
-        arena: &'pass_borrow mut WmArena<'arena>,
-    );
+impl Vertex {
+    const VAA: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x2,
+        2 => Float32x2,
+        3 => Float32x4,
+        4 => Float32x4,
+        5 => Float32x4,
+        6 => Uint32
+    ];
+
+    #[must_use]
+    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::VAA,
+        }
+    }
 }
 
 pub struct WmPipelines {
@@ -70,6 +83,30 @@ impl WmPipelines {
                         },
                         count: None,
                     }],
+                }),
+            ),
+            (
+                "texture_depth".into(),
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Depth Texture Descriptor"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Depth,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
                 }),
             ),
             (
@@ -153,9 +190,9 @@ impl WmPipelines {
                 }),
             ),
             (
-                "matrix4".into(),
+                "matrix".into(),
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Mat4x4<f32> Bind Group Layout"),
+                    label: Some("Matrix Bind Group Layout"),
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
@@ -173,36 +210,6 @@ impl WmPipelines {
         .collect()
     }
 
-    pub fn build_shaders(
-        wm: &WmRenderer,
-        wm_pipelines: &[&dyn WmPipeline],
-    ) -> HashMap<String, Box<dyn WmShader>> {
-        wm_pipelines
-            .iter()
-            .flat_map(|wm_pipeline| wm_pipeline.provide_shaders(wm))
-            .collect()
-    }
-
-    pub fn build_pipeline_layouts(
-        wm: &WmRenderer,
-        wm_pipelines: &[&dyn WmPipeline],
-    ) -> HashMap<String, PipelineLayout> {
-        wm_pipelines
-            .iter()
-            .flat_map(|wm_pipeline| wm_pipeline.build_wgpu_pipeline_layouts(wm))
-            .collect()
-    }
-
-    pub fn build_pipelines(
-        wm: &WmRenderer,
-        wm_pipelines: &[&dyn WmPipeline],
-    ) -> HashMap<String, RenderPipeline> {
-        wm_pipelines
-            .iter()
-            .flat_map(|wm_pipeline| wm_pipeline.build_wgpu_pipelines(wm))
-            .collect()
-    }
-
     pub fn new(resource_provider: Arc<dyn ResourceProvider>) -> Self {
         Self {
             pipeline_layouts: ArcSwap::new(Arc::new(HashMap::new())),
@@ -215,31 +222,11 @@ impl WmPipelines {
         }
     }
 
-    pub fn init(&self, wm: &WmRenderer, wm_pipelines: &[&dyn WmPipeline]) {
+    pub fn init(&self, wm: &WmRenderer) {
         {
             self.bind_group_layouts
                 .write()
                 .extend(Self::create_bind_group_layouts(&wm.wgpu_state.device).into_iter())
         }
-
-        let pipeline_layouts = Self::build_pipeline_layouts(wm, wm_pipelines)
-            .into_iter()
-            .map(|(name, layout)| (name, Arc::new(layout)))
-            .collect();
-
-        self.pipeline_layouts.store(Arc::new(pipeline_layouts));
-
-        let shaders = Self::build_shaders(wm, wm_pipelines);
-
-        {
-            *self.shader_map.write() = shaders;
-        }
-
-        let pipelines = Self::build_pipelines(wm, wm_pipelines)
-            .into_iter()
-            .map(|(name, layout)| (name, Arc::new(layout)))
-            .collect();
-
-        self.render_pipelines.store(Arc::new(pipelines));
     }
 }

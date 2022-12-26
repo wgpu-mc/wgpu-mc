@@ -20,6 +20,7 @@ rayon = "1.5.1"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 env_logger = "0.10.0"
 log = "0.4.17"
+serde_yaml = "0.9.13"
 
 [build-dependencies]
 anyhow = "1.0"

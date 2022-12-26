@@ -63,7 +63,7 @@ pub struct Atlas {
     ///The mapping of image [ResourcePath]s to UV coordinates
     pub uv_map: RwLock<HashMap<ResourcePath, UV>>,
     ///The representation of the [Atlas]'s image buffer on the GPU, which can be bound to a draw call
-    pub bindable_texture: ArcSwap<BindableTexture>,
+    pub bindable_texture: Arc<ArcSwap<BindableTexture>>,
     ///Not every [Atlas] is used for block textures, but the ones that are store the information for each animated texture here
     pub animated_textures: RwLock<Vec<schemas::texture::TextureAnimation>>,
     ///
@@ -96,6 +96,7 @@ impl Atlas {
                 wgpu::TextureFormat::Rgba8Unorm,
             )
             .unwrap(),
+            false
         );
 
         Self {
@@ -105,7 +106,7 @@ impl Atlas {
             ))),
             image: RwLock::new(ImageBuffer::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
             uv_map: Default::default(),
-            bindable_texture: ArcSwap::new(Arc::new(bindable_texture)),
+            bindable_texture: Arc::new(ArcSwap::new(Arc::new(bindable_texture))),
             animated_textures: RwLock::new(Vec::new()),
             animated_texture_offsets: Default::default(),
             size: RwLock::new(ATLAS_DIMENSIONS),
@@ -248,6 +249,7 @@ impl Atlas {
                     wgpu::TextureFormat::Rgba8Unorm,
                 )
                 .unwrap(),
+                false
             );
 
             self.bindable_texture.store(Arc::new(bindable_texture));

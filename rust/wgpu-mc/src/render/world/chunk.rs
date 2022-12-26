@@ -8,8 +8,7 @@ use crate::mc::block::{
     BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
 };
 use crate::mc::chunk::{
-    BlockStateProvider, Chunk, WorldBuffers, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME,
-    CHUNK_WIDTH,
+    BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME, CHUNK_WIDTH,
 };
 use crate::mc::BlockManager;
 use crate::WmRenderer;
@@ -29,7 +28,12 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
     )
 }
 
-pub fn bake<T, Provider: BlockStateProvider, Filter: Fn(BlockstateKey) -> bool, Mapper: Fn(&BlockMeshVertex, f32, f32, f32) -> T>(
+pub fn bake<
+    T,
+    Provider: BlockStateProvider,
+    Filter: Fn(BlockstateKey) -> bool,
+    Mapper: Fn(&BlockMeshVertex, f32, f32, f32) -> T,
+>(
     block_manager: &BlockManager,
     chunk: &Chunk,
     mapper: Mapper,
@@ -44,8 +48,8 @@ pub fn bake<T, Provider: BlockStateProvider, Filter: Fn(BlockstateKey) -> bool, 
         let y = (block_index / CHUNK_AREA) as i16;
         let z = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
 
-        let absolute_x = (chunk.pos.0 * 16) + x;
-        let absolute_z = (chunk.pos.1 * 16) + z;
+        let absolute_x = (chunk.pos[0] * 16) + x;
+        let absolute_z = (chunk.pos[1] * 16) + z;
 
         let _section_index = y / (CHUNK_SECTION_HEIGHT as i16);
 
@@ -145,84 +149,54 @@ pub fn bake<T, Provider: BlockStateProvider, Filter: Fn(BlockstateKey) -> bool, 
                 if render_north {
                     match &model.north {
                         None => {}
-                        Some(north) => vertices.extend(north.iter().map(|v| {
-                            mapper(
-                                v,
-                                x as f32,
-                                y as f32,
-                                z as f32
-                            )
-                        })),
+                        Some(north) => vertices.extend(
+                            north
+                                .iter()
+                                .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                        ),
                     };
                 }
                 if render_east {
                     match &model.east {
                         None => {}
-                        Some(east) => vertices.extend(east.iter().map(|v| {
-                            mapper(
-                                v,
-                                x as f32,
-                                y as f32,
-                                z as f32,
-                            )
-                        })),
+                        Some(east) => vertices
+                            .extend(east.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
                     };
                 }
                 if render_south {
                     match &model.south {
                         None => {}
-                        Some(south) => vertices.extend(south.iter().map(|v| {
-                            mapper(
-                                v,
-                                x as f32,
-                                y as f32,
-                                z as f32,
-                            )
-                        })),
+                        Some(south) => vertices.extend(
+                            south
+                                .iter()
+                                .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                        ),
                     };
                 }
                 if render_west {
                     match &model.west {
                         None => {}
-                        Some(west) => vertices.extend(west.iter().map(|v| {
-                            mapper(
-                                v,
-                                x as f32,
-                                y as f32,
-                                z as f32,
-                            )
-                        })),
+                        Some(west) => vertices
+                            .extend(west.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
                     };
                 }
                 if render_up {
                     match &model.up {
                         None => {}
-                        Some(up) => vertices.extend(up.iter().map(|v| {
-                            mapper(
-                                v,
-                                x as f32,
-                                y as f32,
-                                z as f32,
-                            )
-                        })),
+                        Some(up) => vertices
+                            .extend(up.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
                     };
                 }
                 if render_down {
                     match &model.down {
                         None => {}
-                        Some(down) => vertices.extend(down.iter().map(|v| {
-                            mapper(
-                                v,
-                                x as f32,
-                                y as f32,
-                                z as f32,
-                            )
-                        })),
+                        Some(down) => vertices
+                            .extend(down.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
                     };
                 }
             }
             CubeOrComplexMesh::Complex(model) => {
-                other_vertices.extend(
+                vertices.extend(
                     model
                         .iter()
                         .flat_map(|faces| {
@@ -237,14 +211,7 @@ pub fn bake<T, Provider: BlockStateProvider, Filter: Fn(BlockstateKey) -> bool, 
                         })
                         .flatten()
                         .flatten()
-                        .map(|v| {
-                            mapper(
-                                v,
-                                x as f32,
-                                y as f32,
-                                z as f32,
-                            )
-                        }),
+                        .map(|v| mapper(v, x as f32, y as f32, z as f32)),
                 );
             }
         }

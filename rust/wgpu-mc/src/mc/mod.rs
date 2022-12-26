@@ -5,6 +5,7 @@ use arc_swap::ArcSwap;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
+use rayon::iter::IntoParallelIterator;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
@@ -12,7 +13,7 @@ use crate::mc::chunk::ChunkManager;
 use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
-use crate::render::pipeline::terrain::BLOCK_ATLAS_NAME;
+use crate::render::pipeline::BLOCK_ATLAS;
 use crate::WmRenderer;
 
 use self::block::ModelMesh;
@@ -208,7 +209,7 @@ impl MinecraftState {
                     .load()
                     .bind_group_layouts
                     .read()
-                    .get("matrix4")
+                    .get("matrix")
                     .unwrap(),
                 entries: &[BindGroupEntry {
                     binding: 0,
@@ -250,7 +251,7 @@ impl MinecraftState {
             .texture_manager
             .atlases
             .load()
-            .get(BLOCK_ATLAS_NAME)
+            .get(BLOCK_ATLAS)
             .unwrap()
             .load();
 

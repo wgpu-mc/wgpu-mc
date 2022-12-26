@@ -8,7 +8,6 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindGroupDescriptor, BindGroupEntry, RenderPass, RenderPipeline, VertexState};
 
 use wgpu_mc::camera::UniformMatrixHelper;
-use wgpu_mc::render::pipeline::WmPipeline;
 use wgpu_mc::render::shader::{WgslShader, WmShader};
 use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::util::WmArena;

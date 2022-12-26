@@ -1,0 +1,32 @@
+version: "0.0.1"
+support: wgsl
+resources:
+  mvp_mat4:
+    type: mat4
+    mult: [wm_model_mat4, wm_view_mat4, wm_projection_mat4]
+  shadow_depth:
+    type: texture_depth
+  shadow_col:
+    type: texture_2d
+  shadow_ortho_mat4:
+    type: mat4
+    value: [[1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]]
+pipelines:
+  shadow_terrain:
+    geometry: wm_geo_terrain
+    depth: shadow_depth
+    output: []
+    uniforms:
+      0:
+        resource: mvp_mat4
+  terrain:
+    geometry: wm_geo_terrain
+    depth: wm_framebuffer_depth
+    output: [wm_framebuffer_texture]
+    uniforms:
+      0:
+        resource: mvp_mat4
+      1:
+        resource: wm_texture_atlas_blocks
+      2:
+        resource: shadow_depth

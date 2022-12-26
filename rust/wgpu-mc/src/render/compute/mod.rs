@@ -6,5 +6,5 @@ pub struct ChunkOffset {
     start: u32,
     len: u32,
     x: f32,
-    z: f32
+    z: f32,
 }

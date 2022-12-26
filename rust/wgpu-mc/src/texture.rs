@@ -1,6 +1,6 @@
+use arc_swap::ArcSwap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use arc_swap::ArcSwap;
 
 use image::GenericImageView;
 use wgpu::Extent3d;
@@ -73,21 +73,23 @@ impl TextureSamplerView {
                 | wgpu::TextureUsages::TEXTURE_BINDING,
         });
 
-        wgpu_state.queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            bytes,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: NonZeroU32::new(size.width * 4),
-                rows_per_image: NonZeroU32::new(size.height),
-            },
-            size,
-        );
+        if bytes.len() > 0 {
+            wgpu_state.queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                bytes,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: NonZeroU32::new(size.width * 4),
+                    rows_per_image: NonZeroU32::new(size.height),
+                },
+                size,
+            );
+        }
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = wgpu_state.device.create_sampler(&wgpu::SamplerDescriptor {
@@ -112,7 +114,7 @@ impl TextureSamplerView {
 ///Texture that will be automatically resized by wgpu-mc to fit the framebuffer
 #[derive(Clone)]
 pub struct TextureHandle {
-    pub bindable_texture: Arc<ArcSwap<BindableTexture>>
+    pub bindable_texture: Arc<ArcSwap<BindableTexture>>,
 }
 
 ///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
@@ -128,12 +130,13 @@ impl BindableTexture {
         wgpu_state: &WgpuState,
         pipelines: &WmPipelines,
         texture: TextureSamplerView,
+        depth: bool
     ) -> Self {
         let bind_group = wgpu_state
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: pipelines.bind_group_layouts.read().get("texture").unwrap(),
+                layout: pipelines.bind_group_layouts.read().get(if depth { "texture_depth" } else { "texture" }).unwrap(),
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,

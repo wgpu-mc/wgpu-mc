@@ -7,13 +7,14 @@ use get_size::GetSize;
 use parking_lot::RwLock;
 use rayon::iter::IntoParallelRefIterator;
 use wgpu::BufferUsages;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState};
 use crate::mc::BlockManager;
-use crate::render::pipeline::terrain::Vertex;
+use crate::render::pipeline::Vertex;
 use crate::render::world::chunk;
-use crate::render::world::chunk::{bake, BakedChunkLayer};
-use crate::util::SSBO;
+use crate::render::world::chunk::bake;
+use crate::util::UniformStorage;
 use crate::WmRenderer;
 
 pub const CHUNK_WIDTH: usize = 16;
@@ -39,45 +40,63 @@ pub trait BlockStateProvider: Send + Sync + Debug {
 }
 
 pub trait RenderLayer {
-
     fn filter(&self) -> fn(BlockstateKey) -> bool;
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex;
 
     fn name(&self) -> &str;
-
 }
 
 #[derive(Debug)]
 pub struct Chunk {
     pub pos: ChunkPos,
-    pub pos_buffer: SSBO,
-    pub baked_layers: RwLock<HashMap<String, (SSBO, Vec<Vertex>)>>,
+    pub baked_layers: RwLock<HashMap<String, (wgpu::Buffer, Vec<Vertex>)>>,
 }
 
 impl Chunk {
     pub fn new(pos: ChunkPos, wm: &WmRenderer) -> Self {
         Self {
             pos,
-            pos_buffer: SSBO::new(wm, bytemuck::cast_slice(&pos), BufferUsages::STORAGE, false),
             baked_layers: Default::default(),
         }
     }
 
-    pub fn bake<T: BlockStateProvider>(&self, wm: &WmRenderer, layers: &[Box<dyn RenderLayer>], block_manager: &BlockManager, provider: &T, ) {
-        let baked_layers = layers.par_iter().map(|layer| {
-            let verts = bake(block_manager, &self, layer.mapper(), layer.filter(), provider);
+    pub fn bake<T: BlockStateProvider>(
+        &self,
+        wm: &WmRenderer,
+        layers: &[Box<dyn RenderLayer>],
+        block_manager: &BlockManager,
+        provider: &T,
+    ) {
+        let baked_layers = layers
+            .iter()
+            .map(|layer| {
+                let verts = bake(
+                    block_manager,
+                    &self,
+                    layer.mapper(),
+                    layer.filter(),
+                    provider,
+                );
 
-            (layer.name().into(), (SSBO::new(wm, bytemuck::cast_slice(&verts), BufferUsages::VERTEX, false)))
-        }).collect();
+                (
+                    layer.name().into(),
+                    (
+                        wm
+                            .wgpu_state
+                            .device
+                            .create_buffer_init(&BufferInitDescriptor {
+                                label: None,
+                                contents: bytemuck::cast_slice(&verts),
+                                usage: BufferUsages::VERTEX,
+                            }),
+                        verts,
+                    ),
+                )
+            })
+            .collect();
 
         *self.baked_layers.write() = baked_layers;
-    }
-}
-
-impl GetSize for Chunk {
-    fn get_heap_size(&self) -> usize {
-        GetSize::get_size(&self.baked_layers.load_full())
     }
 }
 

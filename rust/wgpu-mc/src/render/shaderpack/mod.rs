@@ -77,7 +77,7 @@ pub enum TypeResourceConfig {
     Blob {
         src: String,
         #[serde(default)]
-        size: usize
+        size: usize,
     },
     #[serde(rename = "texture_3d")]
     Texture3d {
@@ -93,9 +93,8 @@ pub enum TypeResourceConfig {
         #[serde(default)]
         clear_after_frame: bool,
     },
+    #[serde(rename = "texture_depth")]
     TextureDepth {
-        #[serde(default)]
-        src: String,
         #[serde(default)]
         clear_after_frame: bool,
     },
@@ -123,14 +122,14 @@ pub enum TypeResourceConfig {
     Mat4(Mat4ValueOrMult),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Mat3ValueOrMult {
     Value { value: Mat3 },
     Mult { mult: Vec<String> },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Mat4ValueOrMult {
     Value { value: Mat4 },
@@ -143,27 +142,33 @@ pub struct PipelinesConfig {
     pub pipelines: LinkedHashMap<String, PipelineConfig>,
 }
 
-#[derive(Deserialize, Debug, Clone, Hash)]
+fn blend_default() -> String {
+    "alpha_blending".into()
+}
+
+#[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PipelineConfig {
     pub geometry: String,
 
     #[serde(default)]
     pub output: Vec<String>,
 
-    #[serde(default)]
-    pub depth: String,
+    pub depth: Option<String>,
 
     #[serde(default)]
     pub uniforms: LinkedHashMap<u64, Uniform>,
+
+    #[serde(default = "blend_default")]
+    pub blending: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Uniform {
     pub resource: String,
-    pub visibility: Vec<UniformVisibility>,
+    // pub visibility: Vec<UniformVisibility>,
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum UniformVisibility {
     Vert,

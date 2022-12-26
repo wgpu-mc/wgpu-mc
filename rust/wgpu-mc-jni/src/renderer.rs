@@ -1,6 +1,6 @@
 use std::thread;
-use std::{sync::Arc, time::Instant};
 use std::time::Duration;
+use std::{sync::Arc, time::Instant};
 
 use arc_swap::ArcSwap;
 use futures::executor::block_on;
@@ -16,11 +16,7 @@ use winit::{
 };
 
 use wgpu_mc::wgpu;
-use wgpu_mc::{
-    render::atlas::Atlas,
-    render::pipeline::{debug_lines::DebugLinesPipeline, terrain::TerrainPipeline, WmPipeline},
-    WmRenderer,
-};
+use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
 use crate::{
     entity::ENTITY_ATLAS, MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage,
@@ -73,11 +69,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let _ = RENDERER.set(wm.clone());
 
-    wm.init(&[
-        &DebugLinesPipeline,
-        &TerrainPipeline,
-        GL_PIPELINE.get().unwrap(),
-    ]);
+    wm.init();
 
     wm.mc.chunks.assemble_world_meshes(&wm);
 

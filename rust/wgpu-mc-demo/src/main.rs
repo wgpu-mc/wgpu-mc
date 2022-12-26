@@ -1,11 +1,11 @@
 extern crate wgpu_mc;
 
+use arc_swap::access::{Access, DynAccess};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use arc_swap::access::{Access, DynAccess};
 
 use arc_swap::ArcSwap;
 use bytemuck::Pod;
@@ -17,20 +17,21 @@ use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCo
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 
+use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
+use wgpu_mc::mc::chunk::RenderLayer;
 use wgpu_mc::mc::entity::{EntityInstanceTransforms, PartTransform};
 use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::mc::resource::ResourceProvider;
-use wgpu_mc::render::pipeline::debug_lines::DebugLinesPipeline;
-use wgpu_mc::render::pipeline::entity::EntityPipeline;
-use wgpu_mc::render::pipeline::sky::SkyPipeline;
-use wgpu_mc::render::pipeline::terrain::{TerrainPipeline, Vertex};
-use wgpu_mc::render::pipeline::transparent::TransparentPipeline;
-use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
-use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
-use wgpu_mc::mc::chunk::RenderLayer;
-use wgpu_mc::render::compute::{merge_chunks, upload_chunk_offsets};
-use wgpu_mc::wgpu::{BindGroupDescriptor, BindGroupEntry, CommandEncoderDescriptor, ComputePassDescriptor, Maintain, MaintainBase, MapMode};
+use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
+use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu_mc::wgpu::{
+    BindGroupDescriptor, BindGroupEntry, CommandEncoderDescriptor, ComputePassDescriptor, Maintain,
+    MaintainBase, MapMode,
+};
+use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
+use wgpu_mc::render::shaderpack::Mat4ValueOrMult;
+use wgpu_mc::util::UniformStorage;
 
 use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
@@ -107,13 +108,7 @@ fn main() {
 
     let wm = WmRenderer::new(wgpu_state, rsp);
 
-    wm.init(&[
-        &EntityPipeline { entities: &[] },
-        &TerrainPipeline,
-        &SkyPipeline,
-        &TransparentPipeline,
-        &DebugLinesPipeline,
-    ]);
+    wm.init();
 
     let blockstates_path = _mc_root.join("blockstates");
 
@@ -165,16 +160,14 @@ impl RenderLayer for TerrainLayer {
     }
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        |vert, x, y, z| {
-            Vertex {
-                position: [x, y, z],
-                tex_coords: vert.tex_coords,
-                lightmap_coords: [0.0, 0.0],
-                normal: vert.normal,
-                color: [1.0, 1.0, 1.0, 1.0],
-                tangent: [0.0, 0.0, 0.0, 0.0],
-                uv_offset: vert.animation_uv_offset,
-            }
+        |vert, x, y, z| Vertex {
+            position: [vert.position[0] + x, vert.position[1] + y, vert.position[2] + z],
+            tex_coords: vert.tex_coords,
+            lightmap_coords: [0.0, 0.0],
+            normal: vert.normal,
+            color: [1.0, 1.0, 1.0, 1.0],
+            tangent: [0.0, 0.0, 0.0, 0.0],
+            uv_offset: vert.animation_uv_offset,
         }
     }
 
@@ -184,19 +177,22 @@ impl RenderLayer for TerrainLayer {
 }
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
-
-
     let (_entity, mut instances) = describe_entity(&wm);
+
+    wm.pipelines
+        .load_full()
+        .chunk_layers
+        .store(Arc::new(vec![Box::new(TerrainLayer)]));
 
     let chunk = make_chunks(&wm);
 
-    // {
-    //     wm.mc
-    //         .chunks
-    //         .loaded_chunks
-    //         .write()
-    //         .insert((0, 0), ArcSwap::new(Arc::new(chunk)));
-    // }
+    {
+        wm.mc
+            .chunks
+            .loaded_chunks
+            .write()
+            .insert([0, 0], ArcSwap::new(Arc::new(chunk)));
+    }
 
     let mut frame_start = Instant::now();
 
@@ -206,10 +202,16 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
     let mut _frame: u32 = 0;
 
-    wm.pipelines.load_full().chunk_layers.store(Arc::new(vec![Box::new(TerrainLayer)]));
+    let pack = serde_yaml::from_str(
+        &wm.mc
+            .resource_provider
+            .get_string(&ResourcePath("wgpu_mc:graph.yaml".into()))
+            .unwrap(),
+    )
+    .unwrap();
+    let mut graph = ShaderGraph::new(pack);
 
-    let merged = merge_chunks(&wm, &[&chunk]);
-    let offsets = upload_chunk_offsets(&wm, &merged.get("terrain").unwrap().1);
+    graph.init(&wm);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -286,14 +288,6 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
             Event::RedrawRequested(_) => {
                 wm.upload_camera();
 
-                wm.update_animated_textures(
-                    (SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis()
-                        / 50) as u32,
-                );
-
                 let frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
                 spin += 0.5;
@@ -320,13 +314,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                     array_layer_count: None,
                 });
 
-                let _ = wm.render(
-                    &[
-                        &TerrainPipeline,
-                        &DebugLinesPipeline,
-                    ],
-                    &view,
-                );
+                let _ = wm.render(&graph, &view);
 
                 texture.present();
 

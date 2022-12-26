@@ -44,7 +44,6 @@ use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
-use wgpu_mc::render::pipeline::terrain::BLOCK_ATLAS_NAME;
 use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
@@ -845,8 +844,7 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_texImage2D(
         )
         .unwrap();
 
-        let bindable =
-            BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load(), tsv);
+        let bindable = BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load(), tsv);
 
         {
             gl::GL_ALLOC.get().unwrap().write().insert(
@@ -1485,7 +1483,8 @@ pub extern "system" fn Java_dev_birb_wgpu_rust_WgpuNative_createPaletteStorage(
     //     .get_long_array_elements(data, ReleaseMode::NoCopyBack)
     //     .unwrap();
 
-    let copy = env.get_primitive_array_critical(data, ReleaseMode::NoCopyBack)
+    let copy = env
+        .get_primitive_array_critical(data, ReleaseMode::NoCopyBack)
         .unwrap();
 
     let mut packed_arr = Box::new(PackedIntegerArray {

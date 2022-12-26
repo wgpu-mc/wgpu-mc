@@ -160,11 +160,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     let alex_skin_resource = wm.mc.resource_provider.get_bytes(&alex_skin_ns).unwrap();
 
     //Create a new texture atlas
-    let test_entity_atlas = Atlas::new(
-        &wm.wgpu_state,
-        &wm.pipelines.load_full(),
-        false,
-    );
+    let test_entity_atlas = Atlas::new(&wm.wgpu_state, &wm.pipelines.load_full(), false);
 
     //Allocate the image with the alex_skin_ns variable as the key
     test_entity_atlas.allocate(
@@ -175,8 +171,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     //Uploads the atlas texture to the GPU
     test_entity_atlas.upload(wm);
 
-    let entity_manager =
-        EntityManager::new(&wm.wgpu_state, &wm.pipelines.load_full());
+    let entity_manager = EntityManager::new(&wm.wgpu_state, &wm.pipelines.load_full());
 
     let test_entity = Arc::new(Entity::new(
         entity_root,

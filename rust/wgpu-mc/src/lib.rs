@@ -49,14 +49,18 @@ use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use tracing::{span, Level};
 pub use wgpu;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d, RenderPassDescriptor, Texture};
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
+    RenderPassDescriptor, Texture,
+};
 
 use crate::camera::UniformMatrixHelper;
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::compute::initialize_pipelines;
-use crate::render::pipeline::{WmPipelines, WmPipeline};
+use crate::render::graph::ShaderGraph;
+use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
+use crate::render::shaderpack::ShaderPackConfig;
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
 use crate::util::WmArena;
 
@@ -79,7 +83,7 @@ pub struct WgpuState {
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
-    pub texture_handles: RwLock<HashMap<String, TextureHandle>>,
+    pub texture_handles: Arc<RwLock<HashMap<String, TextureHandle>>>,
     pub pipelines: Arc<ArcSwap<WmPipelines>>,
     pub mc: Arc<MinecraftState>,
 }
@@ -104,7 +108,7 @@ impl WmRenderer {
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
@@ -116,12 +120,17 @@ impl WmRenderer {
             .await
             .unwrap();
 
+        let mut limits = wgpu::Limits::default();
+        limits.max_push_constant_size = 128;
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::default() | wgpu::Features::DEPTH_CLIP_CONTROL,
-                    limits: wgpu::Limits::default(),
+                    features: wgpu::Features::default()
+                        | wgpu::Features::DEPTH_CLIP_CONTROL
+                        | wgpu::Features::PUSH_CONSTANTS,
+                    limits,
                 },
                 None, // Trace path
             )
@@ -154,84 +163,80 @@ impl WmRenderer {
         let pipelines = WmPipelines::new(resource_provider.clone());
 
         let mc = MinecraftState::new(resource_provider);
-        let surface_config = wgpu_state.surface.read().1.clone();
-
-        let depth_texture = TextureSamplerView::create_depth_texture(
-            &wgpu_state.device,
-            wgpu::Extent3d {
-                width: surface_config.width,
-                height: surface_config.height,
-                depth_or_array_layers: 1,
-            },
-            "depth texture",
-        );
 
         Self {
             wgpu_state: Arc::new(wgpu_state),
 
-            texture_handles: RwLock::new(HashMap::new()),
+            texture_handles: Arc::new(RwLock::new(HashMap::new())),
             pipelines: Arc::new(ArcSwap::new(Arc::new(pipelines))),
             mc: Arc::new(mc),
         }
     }
 
-    pub fn init(&self, pipelines: &[&dyn WmPipeline]) {
-        self.init_pipeline_manager(pipelines);
+    pub fn init(&self) {
+        let pipelines = self.pipelines.load();
+        pipelines.init(self);
 
-        let pipeline_manager = self.pipelines.load();
-
-        let atlas_map: HashMap<_, _> = pipelines
+        let atlases = [BLOCK_ATLAS, ENTITY_ATLAS]
             .iter()
-            .flat_map(|&pipeline| {
-                let atlases = pipeline.atlases();
-
-                atlases.iter().map(|&atlas_name| {
-                    (
-                        String::from(atlas_name),
-                        Arc::new(ArcSwap::new(Arc::new(Atlas::new(
-                            &self.wgpu_state,
-                            &pipeline_manager,
-                            false,
-                        )))),
-                    )
-                })
+            .map(|&name| {
+                (
+                    name.into(),
+                    Arc::new(ArcSwap::new(Arc::new(Atlas::new(
+                        &self.wgpu_state,
+                        &pipelines,
+                        false,
+                    )))),
+                )
             })
             .collect();
 
-        self.mc.texture_manager.atlases.store(Arc::new(atlas_map));
-
-        self.init_mc();
-
-        initialize_pipelines(&self);
-
-        self.create_texture_handle("framebuffer_depth".into(), wgpu::TextureFormat::Depth32Float);
-    }
-
-    fn init_pipeline_manager(&self, pipelines: &[&dyn WmPipeline]) {
-        self.pipelines.load().init(self, pipelines);
-    }
-
-    fn init_mc(&self) {
+        self.mc.texture_manager.atlases.store(Arc::new(atlases));
         self.mc.init_camera(self);
+
+        self.create_texture_handle(
+            "wm_framebuffer_depth".into(),
+            wgpu::TextureFormat::Depth32Float,
+        );
     }
 
-    pub fn create_texture_handle(&self, name: String, format: wgpu::TextureFormat) -> TextureHandle {
+    pub fn create_texture_handle(
+        &self,
+        name: String,
+        format: wgpu::TextureFormat,
+    ) -> TextureHandle {
         let surface = self.wgpu_state.surface.read();
         let config = &surface.1;
 
-        let tsv = TextureSamplerView::from_rgb_bytes(&self.wgpu_state, &vec![0u8; (config.width * config.height * (format.describe().block_size as u32)) as usize], Extent3d {
-            width: config.width,
-            height: config.height,
-            depth_or_array_layers: 1,
-        }, None, format).unwrap();
+        let tsv = TextureSamplerView::from_rgb_bytes(
+            &self.wgpu_state,
+            &[],
+            Extent3d {
+                width: config.width,
+                height: config.height,
+                depth_or_array_layers: 1,
+            },
+            None,
+            format,
+        )
+        .unwrap();
 
         let handle = TextureHandle {
-            bindable_texture: Arc::new(ArcSwap::new(Arc::new(BindableTexture::from_tsv(&self.wgpu_state, &**self.pipelines.load(), tsv))))
+            bindable_texture: Arc::new(ArcSwap::new(Arc::new(BindableTexture::from_tsv(
+                &self.wgpu_state,
+                &**self.pipelines.load(),
+                tsv,
+                matches!(format, wgpu::TextureFormat::Depth32Float
+            ))))),
         };
 
         let mut handles = self.texture_handles.write();
         if handles.contains_key(&name) {
-            handles.get(&name).unwrap().bindable_texture.store(handle.bindable_texture.load_full());
+            handles
+                .get(&name)
+                .unwrap()
+                .bindable_texture
+                .store(handle.bindable_texture.load_full());
         } else {
             handles.insert(name, handle.clone());
         }
@@ -262,9 +267,9 @@ impl WmRenderer {
         new_camera.aspect = surface_config.width as f32 / surface_config.height as f32;
         self.mc.camera.store(Arc::new(new_camera));
 
-        let handles = {
-            self.texture_handles.read().clone()
-        };
+        let handles = { self.texture_handles.read().clone() };
+
+        drop(surface_state);
 
         handles.iter().for_each(|(name, handle)| {
             let texture = handle.bindable_texture.load();
@@ -338,66 +343,12 @@ impl WmRenderer {
         );
     }
 
-    pub fn update_animated_textures(&self, _subframe: u32) {
-        // self.upload_animated_block_buffer(
-        //     self
-        //     .mc
-        //     .texture_manager.atlases
-        //     .load_full()
-        //     .get(BLOCK_ATLAS_NAME)
-        //     .unwrap().load_full().update_textures(subframe)
-        // );
-    }
-
     pub fn render(
         &self,
-        wm_pipelines: &[&dyn WmPipeline],
+        graph: &ShaderGraph,
         output_texture_view: &wgpu::TextureView,
     ) -> Result<(), wgpu::SurfaceError> {
-        let _span_ = span!(Level::TRACE, "render").entered();
-
-        let mut encoder =
-            self.wgpu_state
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                });
-
-        let depth_texture = self.depth_texture.load();
-        let mut arena = WmArena::new(8000);
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: output_texture_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-            });
-
-            for &wm_pipeline in wm_pipelines {
-                wm_pipeline.render(self, &mut render_pass, &mut arena);
-            }
-        }
-
-        self.wgpu_state.queue.submit(iter::once(encoder.finish()));
+        graph.render(self, output_texture_view);
 
         Ok(())
     }
