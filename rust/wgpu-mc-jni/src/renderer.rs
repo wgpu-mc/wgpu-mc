@@ -2,7 +2,6 @@ use std::thread;
 use std::time::Duration;
 use std::{sync::Arc, time::Instant};
 
-use arc_swap::ArcSwap;
 use futures::executor::block_on;
 use jni::{
     objects::{JString, JValue},
@@ -19,8 +18,8 @@ use wgpu_mc::wgpu;
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
 use crate::{
-    entity::ENTITY_ATLAS, MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage,
-    WinitWindowWrapper, CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, WINDOW,
+    entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
+    CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, WINDOW,
 };
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
@@ -51,15 +50,12 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     WINDOW.set(window.clone()).unwrap();
 
-    MC_STATE
-        .set(ArcSwap::new(Arc::new(MinecraftRenderState {
-            render_world: false,
-        })))
-        .unwrap();
-
     let wrapper = &WinitWindowWrapper { window: &window };
 
-    let wgpu_state = block_on(WmRenderer::init_wgpu(wrapper));
+    let wgpu_state = block_on(WmRenderer::init_wgpu(
+        wrapper,
+        super::SETTINGS.read().as_ref().unwrap().vsync.value,
+    ));
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap(),
@@ -102,7 +98,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         loop {
             wm.upload_camera();
 
-            let mc_state = MC_STATE.get().unwrap().load();
+            let mc_state = MC_STATE.load();
 
             let mut pipelines = Vec::new();
             pipelines.push(&TerrainPipeline as &dyn WmPipeline);
@@ -111,7 +107,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                 // wm.update_animated_textures((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() / 50) as u32);
                 pipelines.push(&DebugLinesPipeline as &dyn WmPipeline);
             } else {
-                pipelines.push(GL_PIPELINE.get().unwrap());
+                pipelines.push(&*GL_PIPELINE);
             }
 
             let surface_state = wm.wgpu_state.surface.read();
@@ -164,8 +160,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                             height: physical_size.height,
                         });
                         CHANNELS
-                            .get()
-                            .unwrap()
                             .0
                             .send(RenderMessage::Resized(
                                 physical_size.width,
@@ -185,8 +179,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                         ..
                     } => {
                         CHANNELS
-                            .get()
-                            .unwrap()
                             .0
                             .send(RenderMessage::MouseMove(position.x, position.y))
                             .unwrap();
@@ -198,16 +190,12 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                         ..
                     } => {
                         CHANNELS
-                            .get()
-                            .unwrap()
                             .0
                             .send(RenderMessage::MouseState(*state, *button))
                             .unwrap();
                     }
                     WindowEvent::ReceivedCharacter(c) => {
                         CHANNELS
-                            .get()
-                            .unwrap()
                             .0
                             .send(RenderMessage::CharTyped(*c, current_modifiers.bits()))
                             .unwrap();
@@ -221,8 +209,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                         match input.virtual_keycode {
                             None => {}
                             Some(keycode) => CHANNELS
-                                .get()
-                                .unwrap()
                                 .0
                                 .send(RenderMessage::KeyState(
                                     keycode as u32,

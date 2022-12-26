@@ -32,8 +32,8 @@ impl From<&str> for ResourcePath {
         let split = string.split(':').collect::<Vec<&str>>();
 
         match (split.first(), split.get(1)) {
-            (Some(path), None) => Self(format!("minecraft:{}", path)),
-            (Some(namespace), Some(path)) => Self(format!("{}:{}", namespace, path)),
+            (Some(path), None) => Self(format!("minecraft:{path}")),
+            (Some(namespace), Some(path)) => Self(format!("{namespace}:{path}")),
             _ => Self("".into()),
         }
     }
@@ -45,8 +45,8 @@ impl From<&String> for ResourcePath {
         let split = string.split(':').collect::<Vec<&str>>();
 
         match (split.first(), split.get(1)) {
-            (Some(path), None) => Self(format!("minecraft:{}", path)),
-            (Some(namespace), Some(path)) => Self(format!("{}:{}", namespace, path)),
+            (Some(path), None) => Self(format!("minecraft:{path}")),
+            (Some(namespace), Some(path)) => Self(format!("{namespace}:{path}")),
             _ => Self("".into()),
         }
     }
@@ -58,7 +58,7 @@ impl From<String> for ResourcePath {
         let split = string.split(':').collect::<Vec<&str>>();
 
         match (split.first(), split.get(1)) {
-            (Some(path), None) => Self(format!("minecraft:{}", path)),
+            (Some(path), None) => Self(format!("minecraft:{path}")),
             (Some(_namespace), Some(_path)) => Self(string),
             _ => Self("".into()),
         }

@@ -16,10 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let temp_path = PathBuf::from("./tmp/mc-jar-cache");
 
     if !resources_root.is_dir() {
-        println!(
-            "building assets, because {:?} does not exist yet",
-            resources_root
-        );
+        println!("building assets, because {resources_root:?} does not exist yet");
         fs_extra::dir::create_all(&resources_root_tmp, true)?;
 
         if !temp_path.is_dir() {

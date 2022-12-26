@@ -174,7 +174,7 @@ impl Atlas {
                 let mut new_image = ImageBuffer::new(new_size, new_size);
                 overlay(
                     &mut new_image,
-                    &image_buffer.view(0, 0, old_size, old_size),
+                    &*image_buffer.view(0, 0, old_size, old_size),
                     0,
                     0,
                 );
@@ -196,8 +196,8 @@ impl Atlas {
         overlay(
             image_buffer,
             &image,
-            allocation.rectangle.min.x as u32,
-            allocation.rectangle.min.y as u32,
+            allocation.rectangle.min.x as i64,
+            allocation.rectangle.min.y as i64,
         );
 
         let mcmeta_path = path.append(".mcmeta");

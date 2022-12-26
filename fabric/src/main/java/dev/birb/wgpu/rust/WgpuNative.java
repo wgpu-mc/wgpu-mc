@@ -1,9 +1,5 @@
 package dev.birb.wgpu.rust;
 
-//import net.minecraft.util.Identifier;
-
-//import net.minecraft.world.chunk.ChunkSection;
-
 import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.util.collection.IndexedIterable;
 
@@ -13,7 +9,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
-import java.util.function.Predicate;
 
 public class WgpuNative {
 
@@ -129,10 +124,6 @@ public class WgpuNative {
 
     public static native int paletteIndex(long ptr, Object object, int index);
 
-    public static native long getRawStoragePointer(long paletteStorage);
-
-    public static native boolean paletteHasAny(long ptr, Predicate<?> predicate);
-
     public static native Object paletteGet(long ptr, int id);
 
     public static native long copyPalette(long rustPalettePointer);
@@ -181,8 +172,6 @@ public class WgpuNative {
     public static native void setCamera(double x, double y, double z, float renderYaw, float renderPitch);
 
     public static native void bakeChunk(int x, int z);
-
-    public static native long[] copyPaletteStorageData(long paletteStorage);
 
     public static native int piaGet(long ptr, int x, int y, int z);
 

@@ -105,6 +105,7 @@ impl WmRenderer {
     /// initialize a [WmRenderer].
     pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(
         window: &W,
+        vsync: bool,
     ) -> WgpuState {
         let size = window.get_window_size();
 
@@ -142,7 +143,11 @@ impl WmRenderer {
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode: if vsync {
+                wgpu::PresentMode::AutoVsync
+            } else {
+                wgpu::PresentMode::AutoNoVsync
+            },
             // TODO: implement vsync setting
             // if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync },
             alpha_mode: CompositeAlphaMode::Auto,

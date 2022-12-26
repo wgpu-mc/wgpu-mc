@@ -2,10 +2,10 @@ use cgmath::{Point3, Vector3};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {
-    pub position: cgmath::Point3<f32>,
+    pub position: Point3<f32>,
     pub yaw: f32,
     pub pitch: f32,
-    pub up: cgmath::Vector3<f32>,
+    pub up: Vector3<f32>,
     pub aspect: f32,
     pub fovy: f32,
     pub znear: f32,
@@ -27,7 +27,7 @@ impl Camera {
         }
     }
 
-    pub fn get_direction(&self) -> cgmath::Vector3<f32> {
+    pub fn get_direction(&self) -> Vector3<f32> {
         Vector3::new(
             self.yaw.cos() * (1.0 - self.pitch.sin().abs()),
             self.pitch.sin(),
@@ -37,8 +37,11 @@ impl Camera {
 
     #[must_use]
     pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
-        let view =
-            cgmath::Matrix4::look_at(self.position, self.position + self.get_direction(), self.up);
+        let view = cgmath::Matrix4::look_at_rh(
+            self.position,
+            self.position + self.get_direction(),
+            self.up,
+        );
 
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
         proj * view

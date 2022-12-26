@@ -39,13 +39,6 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .load();
 
     let (index, _, fence) = bm.blocks.get_full("minecraft:stone").unwrap();
-    // let fence_model = fence
-    //     .get_model_by_key(
-    //         [("north", &StateValue::Bool(true))],
-    //         &*wm.mc.resource_provider,
-    //         &atlas,
-    //     )
-    //     .unwrap();
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),
