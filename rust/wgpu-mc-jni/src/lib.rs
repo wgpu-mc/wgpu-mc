@@ -403,7 +403,7 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
 
             use get_size::GetSize;
 
-            println!(
+            log::info!(
                 "Baked chunk (x={}, z={}, of {}) in {}ms",
                 x,
                 z,
@@ -430,7 +430,7 @@ pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) {
 pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
     let wm = RENDERER.get().unwrap();
 
-    println!("baking blocks");
+    log::trace!("baking blocks");
 
     {
         let blocks = BLOCKS.lock();
@@ -498,8 +498,6 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
                 .unwrap()
                 .load_full();
 
-            // println!("{} {}", block_name, state_key);
-
             let model = wm_block.get_model_by_key(
                 key_iter
                     .iter()
@@ -516,8 +514,6 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
                     augment,
                 },
                 None => {
-                    // println!("{}[{:?}]", block_name, key_iter);
-
                     BlockstateKey {
                         block: fallback_key.0 as u16,
                         augment: 0,
@@ -623,6 +619,7 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn preInit(_env: JNIEnv, _class: JClass) {
+    env_logger::init();
     gl::init();
 }
 
@@ -682,28 +679,6 @@ pub fn updateWindowTitle(env: JNIEnv, _class: JClass, jtitle: JString) {
     let title: String = env.get_string(jtitle).unwrap().into();
 
     tx.send(RenderMessage::SetTitle(title));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bakeBlockModels(env: JNIEnv, _class: JClass) -> jobject {
-    let _renderer = RENDERER.get().unwrap();
-
-    let block_hashmap = env.new_object("java/util/HashMap", "()V", &[]).unwrap();
-
-    // let instant = Instant::now();
-    // renderer.mc.block_manager.read().baked_block_variants.iter().for_each(|(identifier, (key, _))| {
-    //     let _integer = env.new_object("java/lang/Integer", "(I)V", &[
-    //         JValue::Int(*key as i32)
-    //     ]).unwrap();
-    //
-    //     env.call_method(block_hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", &[
-    //         JValue::Object(env.new_string(identifier.to_string()).unwrap().into()),
-    //         JValue::Object(_integer)
-    //     ]).unwrap();
-    // });
-    // println!("Uploaded blocks to java HashMap in {}ms", Instant::now().duration_since(instant).as_millis());
-
-    block_hashmap.into_raw()
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1063,15 +1038,6 @@ pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: jintArray) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn scheduleChunkRebuild(_env: JNIEnv, _class: JClass, _x: jint, _z: jint) {
-    let _wm = RENDERER.get().unwrap();
-
-    // println!("Building chunk {},{}", x, z);
-    // wm.mc.chunks.loaded_chunks.read().get(&(x,z)).unwrap().load().bake(&wm.mc.block_manager.read());
-    // wm.mc.chunks.assemble_world_meshes(wm);
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn createIdList(_env: JNIEnv, _class: JClass) -> jlong {
     let mut palette = Box::new(IdList::new());
 
@@ -1148,7 +1114,7 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
             WINDOW.get().unwrap().set_cursor_visible(false);
         }
         _ => {
-            println!("Set cursor mode had an invalid mode.")
+            log::warn!("Set cursor mode had an invalid mode.")
         }
     }
 }
@@ -1186,6 +1152,4 @@ pub fn registerEntityModel(env: JNIEnv, _class: JClass, json_jstring: JString) {
     let json_string: String = env.get_string(json_jstring).unwrap().into();
     let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
     let _entity_part = tmd_to_wm(&model_data.data.data);
-    // println!("{:?}", entity);
-    // let entity = Entity::new(entity_part.unwrap(), &renderer.wgpu_state, texture)
 }

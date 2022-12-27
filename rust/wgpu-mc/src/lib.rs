@@ -107,8 +107,6 @@ impl WmRenderer {
         window: &W,
         vsync: bool,
     ) -> WgpuState {
-        env_logger::init();
-
         let size = window.get_window_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);

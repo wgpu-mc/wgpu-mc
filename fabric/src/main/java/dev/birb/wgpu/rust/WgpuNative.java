@@ -76,8 +76,6 @@ public class WgpuNative {
 
     public static native String getBackend();
 
-    public static native HashMap<String, Integer> bakeBlockModels();
-
     public static native void setWorldRenderState(boolean render);
 
     public static native void texImage2D(int textureId, int target, int level, int internalFormat, int width, int height, int border, int format, int _type, long pixels_ptr);
@@ -115,8 +113,6 @@ public class WgpuNative {
     public static native void runHelperThread();
 
     public static native String getVideoMode();
-
-    public static native void scheduleChunkRebuild(int x, int z);
 
     public static native long createPalette(long idList);
 

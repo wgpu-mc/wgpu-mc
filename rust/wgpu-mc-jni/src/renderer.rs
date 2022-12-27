@@ -46,7 +46,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             .unwrap(),
     );
 
-    println!("Opened window");
+    log::info!("Opened window");
 
     WINDOW.set(window.clone()).unwrap();
 
@@ -76,7 +76,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let mut current_modifiers = ModifiersState::empty();
 
-    println!("Starting event loop");
+    log::trace!("Starting event loop");
 
     let wm_clone = wm.clone();
     let wm_clone_1 = wm.clone();
