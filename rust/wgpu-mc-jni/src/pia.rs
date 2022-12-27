@@ -51,9 +51,6 @@ impl PackedIntegerArray {
     pub fn compute_storage_index(&self, index: i32) -> i32 {
         let l = self.index_scale as u32 as i64;
         let m = self.index_offset as u32 as i64;
-
-        // println!("l {} m {} idxs {}", l, m, self.index_shift);
-
         (((((index as i64) * l) + m) >> 32) >> self.index_shift) as i32
     }
 }
