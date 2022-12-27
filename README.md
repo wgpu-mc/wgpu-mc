@@ -14,14 +14,16 @@ https://matrix.to/#/#wgpu-mc:matrix.org
 
 #### Goals
 
-wgpu-mc is a standalone rendering engine for Minecraft-compatible projects. It's also a
-replacement to Blaze3D using Fabric and the JNI to interface the two. 
+wgpu-mc is a standalone, mostly-batteries-included rendering engine written in Rust.
+Electrum is a fabric mod that integrates wgpu-mc with Minecraft.
 
 #### Current status
 
-The project is currently under active development. Quite a few important features have been implemented,
-but not all of them. Feature parity with Blaze3D is the main goal at the moment, along with getting world rendering working
-with Java Edition.
+Both the engine and Electrum are both currently under active development.
+wgpu-mc is fairly mature, while Electrum needs more development. The whole project is 
+WIP, so something may work one day then be rewritten the next.
+Terrain rendering works somewhat, while entities are still entirely un-integrated in Electrum.
+A publicly testable release of the mod should be out Soonish.
 
 #### WIP and Completed Features
 
@@ -31,25 +33,25 @@ Engine
   - [x] Multipart
   - [x] Variants
 - [x] Terrain rendering
+- - [ ] Translucency sorting
+- - [ ] Frustum culling compute shader
 - [x] Skybox support
 - [x] Instanced Entity Rendering
 - [x] Animated textures
 - [x] Particles
-- [ ] Lighting
+- [x] Advanced data-driven shader pipeline support
 
 Minecraft
 
 - [x] Disable Blaze3d
 - [x] GUI rendering (text rendering is mangled but otherwise it works)
 - [x] Terrain rendering
-    - [ ] Lightmap and AO integration
-    - [ ] Translucency sorting
+    - [ ] Lighting integration
     - [ ] Chunk updates
 - [ ] Integrate entities
 - [ ] Item rendering
 - [ ] Implement the Fabric Rendering API (Electrum)
 - [ ] Particles
-- [ ] Advanced shader pipeline support
 
 Pie in the sky
 
