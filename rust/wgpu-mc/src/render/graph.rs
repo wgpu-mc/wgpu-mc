@@ -1,8 +1,6 @@
 use arc_swap::ArcSwap;
-use bytemuck::Pod;
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use parking_lot::RwLock;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -13,15 +11,12 @@ use crate::render::shaderpack::{
     LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, ShaderPackConfig,
     ShorthandResourceConfig, TypeResourceConfig,
 };
-use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
+use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{UniformStorage, WmArena};
 use crate::WmRenderer;
-use serde::Deserialize;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferUsages, Color, ColorTargetState,
-    CommandEncoderDescriptor, DepthStencilState, FragmentState, LoadOp, Operations,
-    PipelineLayoutDescriptor, PushConstantRange, RenderPassColorAttachment,
+    BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState,
+    LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPassColorAttachment,
     RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline,
     RenderPipelineDescriptor, ShaderStages, TextureFormat, VertexState,
 };
@@ -100,7 +95,7 @@ pub enum ResourceInternal {
     Texture(TextureResource, bool),
     Blob(UniformStorage),
     Mat3((Mat3ValueOrMult, RwLock<Matrix3<f32>>, UniformStorage)),
-    Mat4(((Mat4ValueOrMult, RwLock<Matrix4<f32>>, UniformStorage))),
+    Mat4((Mat4ValueOrMult, RwLock<Matrix4<f32>>, UniformStorage)),
     F32((f32, UniformStorage)),
     F64((f64, UniformStorage)),
     U32((u32, UniformStorage)),
@@ -108,9 +103,10 @@ pub enum ResourceInternal {
     I64((i64, UniformStorage)),
 }
 
+type ResourceMap = HashMap<String, CustomResource>;
 pub struct CustomResource {
     //If this resource is updated each frame, this is what needs to be called
-    pub update: Option<fn(&Self, &WmRenderer, &HashMap<String, CustomResource>)>,
+    pub update: Option<fn(&Self, &WmRenderer, &ResourceMap)>,
     pub data: Arc<ResourceInternal>,
 }
 
@@ -234,11 +230,8 @@ impl ShaderGraph {
                 }
                 ShorthandResourceConfig::Longhand(longhand) => match &longhand.typed {
                     TypeResourceConfig::Texture3d { .. } => todo!(),
-                    TypeResourceConfig::Texture2d {
-                        src,
-                        clear_after_frame,
-                    } => {
-                        if src.len() > 0 {
+                    TypeResourceConfig::Texture2d { src, .. } => {
+                        if !src.is_empty() {
                             todo!()
                         } else {
                             let handle = wm.create_texture_handle(
@@ -257,7 +250,7 @@ impl ShaderGraph {
                             );
                         }
                     }
-                    TypeResourceConfig::TextureDepth { clear_after_frame } => {
+                    TypeResourceConfig::TextureDepth { .. } => {
                         let handle = wm.create_texture_handle(
                             resource_id.clone(),
                             TextureFormat::Depth32Float,
@@ -424,7 +417,7 @@ impl ShaderGraph {
                                 bind_group_layouts: &definition
                                     .uniforms
                                     .iter()
-                                    .map(|(index, uniform)| {
+                                    .map(|(_, uniform)| {
                                         match &*resources
                                             .get(&uniform.resource)
                                             .expect(&uniform.resource)
@@ -454,7 +447,7 @@ impl ShaderGraph {
                                     .collect::<Vec<_>>(),
                                 push_constant_ranges: if &definition.geometry == "wm_geo_terrain" {
                                     &[PushConstantRange {
-                                        stages: wgpu::ShaderStages::VERTEX,
+                                        stages: ShaderStages::VERTEX,
                                         range: 0..8,
                                     }]
                                 } else {
@@ -493,7 +486,7 @@ impl ShaderGraph {
                                     targets: &definition
                                         .output
                                         .iter()
-                                        .map(|target_texture| {
+                                        .map(|_| {
                                             Some(ColorTargetState {
                                             format: TextureFormat::Bgra8Unorm,
                                             blend: Some(match &definition.blending[..] {
@@ -523,7 +516,7 @@ impl ShaderGraph {
     }
 
     pub fn render(&self, wm: &WmRenderer, output_texture: &wgpu::TextureView) {
-        let mut arena = WmArena::new(1024);
+        let arena = WmArena::new(1024);
 
         let mut encoder = wm
             .wgpu_state
@@ -560,19 +553,18 @@ impl ShaderGraph {
                                     self.pack.resources.resources.get(texture_name);
 
                                 //TODO: If the texture resource is defined as being cleared after each frame. Should use a HashMap to replace the should_clear_depth variable
-                                let clear = match resource_definition {
+                                let _clear = matches!(
+                                    resource_definition,
                                     Some(&ShorthandResourceConfig::Longhand(
                                         LonghandResourceConfig {
-                                            typed:
-                                                TypeResourceConfig::Texture2d {
-                                                    clear_after_frame: true,
-                                                    ..
-                                                },
+                                            typed: TypeResourceConfig::Texture2d {
+                                                clear_after_frame: true,
+                                                ..
+                                            },
                                             ..
                                         },
-                                    )) => true,
-                                    _ => false,
-                                };
+                                    ))
+                                );
 
                                 Some(RenderPassColorAttachment {
                                     view: match &texture_name[..] {
@@ -631,7 +623,7 @@ impl ShaderGraph {
                             let chunks = wm.mc.chunks.loaded_chunks.read();
 
                             for layer in &**layers {
-                                for (pos, chunk_swap) in &*chunks {
+                                for chunk_swap in (*chunks).values() {
                                     let chunk = arena.alloc(chunk_swap.load());
                                     let (chunk_vbo, verts) = arena
                                         .alloc(chunk.baked_layers.read())

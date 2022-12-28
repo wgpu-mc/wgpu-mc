@@ -73,7 +73,7 @@ impl TextureSamplerView {
                 | wgpu::TextureUsages::TEXTURE_BINDING,
         });
 
-        if bytes.len() > 0 {
+        if !bytes.is_empty() {
             wgpu_state.queue.write_texture(
                 wgpu::ImageCopyTexture {
                     texture: &texture,

@@ -39,7 +39,6 @@ See the [render::entity] module for an example of rendering an example entity.
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::iter;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -47,12 +46,8 @@ pub use minecraft_assets;
 pub use naga;
 use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-use tracing::{span, Level};
 pub use wgpu;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
-    RenderPassDescriptor, Texture,
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d};
 
 use crate::camera::UniformMatrixHelper;
 use crate::mc::resource::ResourceProvider;
@@ -60,9 +55,7 @@ use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
 use crate::render::graph::ShaderGraph;
 use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
-use crate::render::shaderpack::ShaderPackConfig;
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
-use crate::util::WmArena;
 
 pub mod camera;
 pub mod mc;
@@ -121,8 +114,10 @@ impl WmRenderer {
             .await
             .unwrap();
 
-        let mut limits = wgpu::Limits::default();
-        limits.max_push_constant_size = 128;
+        let limits = wgpu::Limits {
+            max_push_constant_size: 128,
+            ..Default::default()
+        };
 
         let (device, queue) = adapter
             .request_device(
@@ -229,22 +224,18 @@ impl WmRenderer {
         let handle = TextureHandle {
             bindable_texture: Arc::new(ArcSwap::new(Arc::new(BindableTexture::from_tsv(
                 &self.wgpu_state,
-                &**self.pipelines.load(),
+                &self.pipelines.load(),
                 tsv,
                 matches!(format, wgpu::TextureFormat::Depth32Float),
             )))),
         };
 
         let mut handles = self.texture_handles.write();
-        if handles.contains_key(&name) {
-            handles
-                .get(&name)
-                .unwrap()
-                .bindable_texture
-                .store(handle.bindable_texture.load_full());
-        } else {
-            handles.insert(name, handle.clone());
-        }
+        handles
+            .entry(name)
+            .or_insert(handle.clone())
+            .bindable_texture
+            .store(handle.bindable_texture.load_full());
 
         handle
     }

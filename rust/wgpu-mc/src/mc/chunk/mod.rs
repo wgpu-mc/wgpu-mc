@@ -1,20 +1,15 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use get_size::GetSize;
 use parking_lot::RwLock;
-use rayon::iter::IntoParallelRefIterator;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::BufferUsages;
 
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState};
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
-use crate::render::world::chunk;
 use crate::render::world::chunk::bake;
-use crate::util::UniformStorage;
 use crate::WmRenderer;
 
 pub const CHUNK_WIDTH: usize = 16;
@@ -73,7 +68,7 @@ impl Chunk {
             .map(|layer| {
                 let verts = bake(
                     block_manager,
-                    &self,
+                    self,
                     layer.mapper(),
                     layer.filter(),
                     provider,
