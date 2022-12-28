@@ -4,18 +4,35 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::mc::chunk::Chunk;
 use crate::mc::resource::ResourcePath;
 use crate::render::pipeline::{Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
-use crate::render::shaderpack::{LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig, ShorthandResourceConfig, TypeResourceConfig};
+use crate::render::shaderpack::{
+    LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig,
+    ShorthandResourceConfig, TypeResourceConfig,
+};
 use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{UniformStorage, WmArena};
 use crate::WmRenderer;
-use wgpu::{BindGroup, BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState, LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
-use crate::mc::chunk::Chunk;
+use wgpu::{
+    BindGroup, BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState,
+    FragmentState, LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass,
+    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+    RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
+    VertexBufferLayout, VertexState,
+};
 
-pub type GeometryCallback<'arena: 'pass, 'pass> =
-    Box<dyn Fn(&WmRenderer, &mut RenderPass<'pass>, &ShaderGraph, &PipelineConfig, &HashMap<&String, &'pass CustomResource>, &WmArena<'arena>)>;
+pub type GeometryCallback<'arena: 'pass, 'pass> = Box<
+    dyn Fn(
+        &WmRenderer,
+        &mut RenderPass<'pass>,
+        &ShaderGraph,
+        &PipelineConfig,
+        &HashMap<&String, &'pass CustomResource>,
+        &WmArena<'arena>,
+    ),
+>;
 
 fn mat3_update(
     resource: &CustomResource,
@@ -123,7 +140,12 @@ impl ShaderGraph {
         }
     }
 
-    pub fn init(&mut self, wm: &WmRenderer, resource_types: Option<&HashMap<String, String>>, mut additional_geometry: Option<HashMap<String, wgpu::VertexBufferLayout>>) {
+    pub fn init(
+        &mut self,
+        wm: &WmRenderer,
+        resource_types: Option<&HashMap<String, String>>,
+        mut additional_geometry: Option<HashMap<String, wgpu::VertexBufferLayout>>,
+    ) {
         let mut resources = HashMap::new();
 
         let block_atlas = wm
@@ -442,7 +464,15 @@ impl ShaderGraph {
                                                 }
                                             }
                                         } else {
-                                            layouts.get(resource_types.as_ref().unwrap().get(uniform).unwrap()).unwrap()
+                                            layouts
+                                                .get(
+                                                    resource_types
+                                                        .as_ref()
+                                                        .unwrap()
+                                                        .get(uniform)
+                                                        .unwrap(),
+                                                )
+                                                .unwrap()
                                         }
                                     })
                                     .collect::<Vec<_>>(),
@@ -475,12 +505,16 @@ impl ShaderGraph {
                                     buffers: &[match &definition.geometry[..] {
                                         "wm_geo_terrain" => Vertex::desc(),
                                         _ => {
-                                            if let Some(additional_geometry) = &mut additional_geometry {
-                                                additional_geometry.remove(&definition.geometry).unwrap()
+                                            if let Some(additional_geometry) =
+                                                &mut additional_geometry
+                                            {
+                                                additional_geometry
+                                                    .remove(&definition.geometry)
+                                                    .unwrap()
                                             } else {
                                                 unimplemented!("Unknown geometry");
                                             }
-                                        },
+                                        }
                                     }],
                                 },
                                 primitive: Default::default(),
@@ -664,15 +698,20 @@ impl ShaderGraph {
                                     .unwrap();
 
                                 bind_uniforms(config, &resources, &arena, &mut render_pass);
-                                set_push_constants(config, &mut render_pass, Some(&chunk), surface_config);
+                                set_push_constants(
+                                    config,
+                                    &mut render_pass,
+                                    Some(&chunk),
+                                    surface_config,
+                                );
 
                                 render_pass.set_vertex_buffer(0, chunk_vbo.slice(..));
                                 render_pass.draw(0..verts.len() as u32, 0..1);
                             }
                         }
                     }
-                    "wm_geo_entities" | "wm_geo_transparent" | "wm_geo_fluid"
-                    | "wm_geo_skybox" | "wm_geo_quad" => {
+                    "wm_geo_entities" | "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox"
+                    | "wm_geo_quad" => {
                         todo!("Specific geometry not yet implemented")
                     }
                     _ => {
@@ -719,9 +758,16 @@ pub fn bind_uniforms<'resources: 'pass, 'arena: 'pass, 'arena_objects: 'pass, 'p
     }
 }
 
-pub fn set_push_constants(pipeline: &PipelineConfig, render_pass: &mut RenderPass, chunk: Option<&Chunk>, surface_config: &SurfaceConfiguration) {
-    pipeline.push_constants.iter().for_each(|(offset, resource)| {
-        match &resource[..] {
+pub fn set_push_constants(
+    pipeline: &PipelineConfig,
+    render_pass: &mut RenderPass,
+    chunk: Option<&Chunk>,
+    surface_config: &SurfaceConfiguration,
+) {
+    pipeline
+        .push_constants
+        .iter()
+        .for_each(|(offset, resource)| match &resource[..] {
             "wm_pc_framebuffer_size" => {
                 render_pass.set_push_constants(
                     ShaderStages::FRAGMENT,
@@ -732,15 +778,11 @@ pub fn set_push_constants(pipeline: &PipelineConfig, render_pass: &mut RenderPas
                     ]),
                 );
             }
-            "wm_pc_chunk_position" => render_pass
-                .set_push_constants(
-                    ShaderStages::VERTEX,
-                    *offset as u32,
-                    bytemuck::cast_slice(&chunk.unwrap().pos),
-                ),
-            _ => unimplemented!(
-                "Unknown push constant resource value"
+            "wm_pc_chunk_position" => render_pass.set_push_constants(
+                ShaderStages::VERTEX,
+                *offset as u32,
+                bytemuck::cast_slice(&chunk.unwrap().pos),
             ),
-        }
-    });
+            _ => unimplemented!("Unknown push constant resource value"),
+        });
 }

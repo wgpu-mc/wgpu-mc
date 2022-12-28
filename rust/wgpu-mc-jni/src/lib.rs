@@ -51,7 +51,7 @@ use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
 use crate::entity::tmd_to_wm;
-use crate::gl::{GL_COMMANDS, GLCommand, GlTexture, GL_ALLOC};
+use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::palette::{IdList, JavaPalette};
 use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
@@ -1012,10 +1012,7 @@ pub fn setProjectionMatrix(env: JNIEnv, _class: JClass, float_array: jfloatArray
 
     let matrix = Matrix4::from(slice_4x4) * Matrix4::from_nonuniform_scale(1.0, 1.0, 0.0);
 
-    gl::GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::SetMatrix(matrix));
+    gl::GL_COMMANDS.write().0.push(GLCommand::SetMatrix(matrix));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

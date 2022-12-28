@@ -1,8 +1,8 @@
 use std::collections::HashMap;
+use std::mem::size_of;
 use std::thread;
 use std::time::Duration;
 use std::{sync::Arc, time::Instant};
-use std::mem::size_of;
 
 use futures::executor::block_on;
 use jni::{
@@ -21,11 +21,11 @@ use wgpu_mc::render::shaderpack::ShaderPackConfig;
 use wgpu_mc::wgpu;
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
+use crate::gl::{electrum_gui_callback, ElectrumVertex};
 use crate::{
     entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
     CHANNELS, MC_STATE, RENDERER, WINDOW,
 };
-use crate::gl::{electrum_gui_callback, ElectrumVertex};
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
     let title: String = env.get_string(title).unwrap().into();
@@ -96,11 +96,14 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let mut geometry = HashMap::new();
 
-    geometry.insert("wm_geo_electrum_gui".into(), wgpu::VertexBufferLayout {
-        array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &ElectrumVertex::VAO,
-    });
+    geometry.insert(
+        "wm_geo_electrum_gui".into(),
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &ElectrumVertex::VAO,
+        },
+    );
 
     shader_graph.init(&wm, Some(&types), Some(geometry));
 
@@ -139,7 +142,8 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             geometry.insert(&key, &callback);
 
-            wm.render(&shader_graph, Some(&resources), Some(&geometry), &view).unwrap();
+            wm.render(&shader_graph, Some(&resources), Some(&geometry), &view)
+                .unwrap();
 
             texture.present();
         }

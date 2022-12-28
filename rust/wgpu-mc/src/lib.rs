@@ -355,7 +355,12 @@ impl WmRenderer {
         additional_geometry: Option<&HashMap<&String, &GeometryCallback>>,
         output_texture_view: &wgpu::TextureView,
     ) -> Result<(), wgpu::SurfaceError> {
-        graph.render(self, output_texture_view, additional_resources, additional_geometry);
+        graph.render(
+            self,
+            output_texture_view,
+            additional_resources,
+            additional_geometry,
+        );
 
         Ok(())
     }
