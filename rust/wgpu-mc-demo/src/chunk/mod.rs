@@ -5,7 +5,7 @@ use std::time::Instant;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk};
 use wgpu_mc::mc::MinecraftState;
-use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
+
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
 
@@ -29,7 +29,7 @@ impl Debug for SimpleBlockstateProvider {
 
 pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let bm = wm.mc.block_manager.read();
-    let atlas = wm
+    let _atlas = wm
         .mc
         .texture_manager
         .atlases
@@ -38,7 +38,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, fence) = bm.blocks.get_full("minecraft:stone").unwrap();
+    let (index, _, _fence) = bm.blocks.get_full("minecraft:stone").unwrap();
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),

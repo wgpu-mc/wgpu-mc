@@ -3,7 +3,6 @@
 
 extern crate core;
 
-use arc_swap::access::Access;
 use core::slice;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -23,8 +22,7 @@ use cgmath::{Matrix4, Point3};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
-    jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray,
-    jobject, jstring,
+    jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jstring,
 };
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
@@ -79,7 +77,7 @@ enum RenderMessage {
 #[derive(Debug)]
 struct MinecraftRenderState {
     //draw_queue: Vec<>,
-    render_world: bool,
+    _render_world: bool,
 }
 
 #[allow(dead_code)]
@@ -96,7 +94,7 @@ static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
 static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
     ArcSwap::new(Arc::new(MinecraftRenderState {
-        render_world: false,
+        _render_world: false,
     }))
 });
 #[allow(dead_code)]
@@ -401,8 +399,6 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
                 &*BLOCK_STATE_PROVIDER,
             );
 
-            use get_size::GetSize;
-
             log::info!(
                 "Baked chunk (x={}, z={}, of {}) in {}ms",
                 x,
@@ -513,12 +509,10 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
                     block: id_key as u16,
                     augment,
                 },
-                None => {
-                    BlockstateKey {
-                        block: fallback_key.0 as u16,
-                        augment: 0,
-                    }
-                }
+                None => BlockstateKey {
+                    block: fallback_key.0 as u16,
+                    augment: 0,
+                },
             };
 
             mappings.push((key, global_ref));
@@ -684,7 +678,7 @@ pub fn updateWindowTitle(env: JNIEnv, _class: JClass, jtitle: JString) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setWorldRenderState(_env: JNIEnv, _class: JClass, boolean: jboolean) {
     MC_STATE.store(Arc::new(MinecraftRenderState {
-        render_world: boolean != 0,
+        _render_world: boolean != 0,
     }));
 }
 

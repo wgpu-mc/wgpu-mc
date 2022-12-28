@@ -1,5 +1,4 @@
 use std::thread;
-use std::time::Duration;
 use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
@@ -19,7 +18,7 @@ use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
 use crate::{
     entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
-    CHANNELS, GL_PIPELINE, MC_STATE, RENDERER, WINDOW,
+    CHANNELS, MC_STATE, RENDERER, WINDOW,
 };
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
@@ -79,7 +78,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
     log::trace!("Starting event loop");
 
     let wm_clone = wm.clone();
-    let wm_clone_1 = wm.clone();
 
     thread::spawn(move || {
         let wm = wm_clone;
@@ -87,7 +85,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         loop {
             wm.upload_camera();
 
-            let mc_state = MC_STATE.load();
+            let _mc_state = MC_STATE.load();
 
             let surface_state = wm.wgpu_state.surface.read();
 
@@ -95,7 +93,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let texture = surface.get_current_texture().unwrap();
 
-            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+            let _view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
                 format: Some(wgpu::TextureFormat::Bgra8Unorm),
                 dimension: Some(wgpu::TextureViewDimension::D2),

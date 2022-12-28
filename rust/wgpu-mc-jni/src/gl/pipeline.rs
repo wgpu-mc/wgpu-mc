@@ -1,20 +1,10 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use cgmath::Matrix4;
 use once_cell::sync::OnceCell;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroupDescriptor, BindGroupEntry, RenderPass, RenderPipeline, VertexState};
 
-use wgpu_mc::camera::UniformMatrixHelper;
-use wgpu_mc::render::shader::{WgslShader, WmShader};
-use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
-use wgpu_mc::util::WmArena;
-use wgpu_mc::wgpu::PipelineLayout;
-use wgpu_mc::{wgpu, WmRenderer};
-
-use crate::{gl, Extent3d};
+use wgpu_mc::texture::BindableTexture;
 
 #[allow(dead_code)]
 #[rustfmt::skip]

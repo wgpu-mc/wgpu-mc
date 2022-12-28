@@ -13,8 +13,6 @@ use crate::WmRenderer;
 
 use crate::mc::resource::ResourceProvider;
 
-use crate::util::WmArena;
-
 use crate::wgpu::RenderPipeline;
 
 pub const BLOCK_ATLAS: &str = "wgpu_mc:atlases/block";

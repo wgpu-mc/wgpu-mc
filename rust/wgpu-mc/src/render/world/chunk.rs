@@ -1,9 +1,5 @@
 use std::sync::Arc;
 
-use bytemuck::Pod;
-use get_size::GetSize;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-
 use crate::mc::block::{
     BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
 };
@@ -11,7 +7,6 @@ use crate::mc::chunk::{
     BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME, CHUNK_WIDTH,
 };
 use crate::mc::BlockManager;
-use crate::WmRenderer;
 
 fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc<ModelMesh>> {
     let key = match state {

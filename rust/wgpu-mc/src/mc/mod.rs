@@ -5,7 +5,6 @@ use arc_swap::ArcSwap;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
-use rayon::iter::IntoParallelIterator;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::camera::{Camera, UniformMatrixHelper};
