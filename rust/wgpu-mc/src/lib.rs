@@ -58,7 +58,7 @@ use crate::camera::UniformMatrixHelper;
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::graph::ShaderGraph;
+use crate::render::graph::{CustomResource, GeometryCallback, ShaderGraph};
 use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
 use crate::render::shaderpack::ShaderPackConfig;
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
@@ -351,9 +351,11 @@ impl WmRenderer {
     pub fn render(
         &self,
         graph: &ShaderGraph,
+        additional_resources: Option<&HashMap<&String, &CustomResource>>,
+        additional_geometry: Option<&HashMap<&String, &GeometryCallback>>,
         output_texture_view: &wgpu::TextureView,
     ) -> Result<(), wgpu::SurfaceError> {
-        graph.render(self, output_texture_view);
+        graph.render(self, output_texture_view, additional_resources, additional_geometry);
 
         Ok(())
     }

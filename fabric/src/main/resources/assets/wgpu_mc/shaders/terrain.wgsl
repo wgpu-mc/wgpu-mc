@@ -2,39 +2,82 @@ struct CameraUniform {
     view_proj: mat4x4<f32>
 };
 
-@group(1) @binding(0)
+struct UV {
+    uv1: vec2<f32>,
+    uv2: vec2<f32>,
+    blend: f32,
+    padding: f32
+};
+
+struct UVs {
+    uvs: array<UV>
+};
+
+struct ChunkOffset {
+    x: i32,
+    z: i32
+}
+
+struct PushConstants {
+    chunk_x: i32,
+    chunk_z: i32,
+    fb_width: f32,
+    fb_height: f32
+}
+
+var<push_constant> push_constants: PushConstants;
+
+@group(0) @binding(0)
 var<uniform> camera_uniform: CameraUniform;
+
+@group(3) @binding(0)
+var<uniform> inverse_camera_uniform: CameraUniform;
 
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
-    @location(1) normal: vec3<f32>
+    @location(1) tex_coords2: vec2<f32>,
+    @location(2) blend: f32,
+    @location(3) normal: vec3<f32>
+//    @location(4) screen_pos: vec4<f32>
 };
 
 @vertex
-fn vs_main(
+fn vert(
     @location(0) pos_in: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
-    @location(2) normal: vec3<f32>
+    @location(2) normal: vec3<f32>,
+    @location(6) uv_offset: u32
 ) -> VertexResult {
+    // var uv = uv_offsets.uvs[uv_offset];
+
     var vr: VertexResult;
-    vr.pos = camera_uniform.view_proj * vec4<f32>(pos_in, 1.0);
+
+    var world_pos = pos_in + vec3<f32>(f32(push_constants.chunk_x) * 16.0, 0.0, f32(push_constants.chunk_z) * 16.0);
+
+    vr.pos = camera_uniform.view_proj * vec4<f32>(world_pos, 1.0);
     vr.tex_coords = tex_coords;
+    vr.tex_coords2 = tex_coords;
+    vr.blend = 1.0;
     vr.normal = normal;
 
     return vr;
 }
 
-@group(0) @binding(0)
+@group(1) @binding(0)
 var t_texture: texture_2d<f32>;
 
-@group(0) @binding(1)
+@group(1) @binding(1)
 var t_sampler: sampler;
 
 @fragment
-fn fs_main(in: VertexResult) -> @location(0) vec4<f32> {
-    var normal_shading: f32 = (dot(vec3<f32>(0.0, 1.0, 1.0), in.normal) * 0.5) + 0.5;
-    var color = textureSample(t_texture, t_sampler, in.tex_coords);
-    // return vec4<f32>(color.r * normal_shading, color.g * normal_shading, color.b * normal_shading, color.a);
-    return color;
+fn frag(
+    in: VertexResult
+) -> @location(0) vec4<f32> {
+    let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
+    let col2 = textureSample(t_texture, t_sampler, in.tex_coords2);
+
+    let col = mix(col1, col2, in.blend);
+
+    return col;
 }

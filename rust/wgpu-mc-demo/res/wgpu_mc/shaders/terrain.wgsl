@@ -18,10 +18,20 @@ struct ChunkOffset {
     z: i32
 }
 
-var<push_constant> chunk_offset: ChunkOffset;
+struct PushConstants {
+    chunk_x: i32,
+    chunk_z: i32,
+    fb_width: f32,
+    fb_height: f32
+}
+
+var<push_constant> push_constants: PushConstants;
 
 @group(0) @binding(0)
 var<uniform> camera_uniform: CameraUniform;
+
+@group(3) @binding(0)
+var<uniform> inverse_camera_uniform: CameraUniform;
 
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
@@ -29,6 +39,7 @@ struct VertexResult {
     @location(1) tex_coords2: vec2<f32>,
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
+    @location(4) world_pos: vec3<f32>
 //    @location(4) screen_pos: vec4<f32>
 };
 
@@ -43,8 +54,9 @@ fn vert(
 
     var vr: VertexResult;
 
-    var world_pos = pos_in + vec3<f32>(f32(chunk_offset.x) * 16.0, 0.0, f32(chunk_offset.z) * 16.0);
+    var world_pos = pos_in + vec3<f32>(f32(push_constants.chunk_x) * 16.0, 0.0, f32(push_constants.chunk_z) * 16.0);
 
+    vr.world_pos = world_pos;
     vr.pos = camera_uniform.view_proj * vec4<f32>(world_pos, 1.0);
     vr.tex_coords = tex_coords;
     vr.tex_coords2 = tex_coords;
@@ -79,8 +91,11 @@ fn frag(
 
     let col = mix(col1, col2, in.blend);
 
-    let depthCol = textureSample(shadow_texture, shadow_sampler, in.pos.xy);
-//    var col = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    let uv = in.pos.xy / vec2<f32>(push_constants.fb_width, push_constants.fb_height);
 
-    return in.pos;
+    let depth = textureSample(shadow_texture, shadow_sampler, uv);
+
+    let 
+
+    return vec4<f32>(depth, depth, depth, 1.0);
 }

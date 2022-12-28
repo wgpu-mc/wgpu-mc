@@ -64,7 +64,7 @@ public class WgpuNative {
 
     public static native void startRendering(String title);
 
-    public static native void preInit();
+    public static native void setPanicHook();
 
     public static native void updateWindowTitle(String title);
 

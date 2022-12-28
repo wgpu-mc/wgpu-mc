@@ -1,25 +1,15 @@
 package dev.birb.wgpu.render;
 
-import dev.birb.wgpu.mixin.accessors.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustBlockStateAccessor;
-import dev.birb.wgpu.palette.RustPalette;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.util.Window;
-import net.minecraft.network.MessageType;
-import net.minecraft.text.LiteralText;
-import net.minecraft.util.collection.PackedIntegerArray;
-import net.minecraft.util.collection.PaletteStorage;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
 
 import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
-import java.util.UUID;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 import static dev.birb.wgpu.input.WgpuKeys.*;
@@ -29,6 +19,8 @@ public class Wgpu {
 
     public volatile static boolean INITIALIZED = false;
     public volatile static boolean MAY_INITIALIZE = false;
+
+    public volatile static RuntimeException EXCEPTION;
 
     public static HashMap<String, Integer> blocks;
     public static String wmIdentity;
@@ -52,10 +44,6 @@ public class Wgpu {
         }
     }
 
-    public static void preInit(String windowTitle) {
-        WgpuNative.preInit();
-    }
-
     public static void linkRenderDoc() {
         try {
             System.loadLibrary("renderdoc");
@@ -76,7 +64,7 @@ public class Wgpu {
     }
 
     public static void mouseMove(double x, double y) {
-        MinecraftClient client = MinecraftClient.getInstance();
+        MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
 
         client.execute(() -> {
             client.mouse.onCursorPos(0, x, y);
@@ -119,8 +107,12 @@ public class Wgpu {
         Wgpu.windowWidth = width;
         Wgpu.windowHeight = height;
         MinecraftClient client = MinecraftClient.getInstance();
-        client.execute(() -> client.onResolutionChanged());
+        client.execute(client::onResolutionChanged);
+    }
 
+    public static void rustPanic(String message) {
+        EXCEPTION = new RuntimeException(message);
+        while(true) {}
     }
 
     public static void helperSetBlockStateIndex(Object o, int blockstateKey) {

@@ -17,7 +17,7 @@ public class MainMixin {
 
     @Inject(method = "main", at = @At("HEAD"))
     private static void preInit(String[] args, CallbackInfo ci) {
-        Wgpu.preInit("Minecraft");
+        WgpuNative.setPanicHook();
     }
 
     @Redirect(method = "main", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/MinecraftClient;isRunning()Z"))

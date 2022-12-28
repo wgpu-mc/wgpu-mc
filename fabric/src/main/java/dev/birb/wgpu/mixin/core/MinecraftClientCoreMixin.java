@@ -4,6 +4,8 @@ import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.RunArgs;
+import net.minecraft.util.crash.CrashException;
+import net.minecraft.util.crash.CrashReport;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
@@ -38,6 +40,15 @@ public abstract class MinecraftClientCoreMixin {
             title += " + " + wmIdentity;
         }
         cir.setReturnValue(title);
+    }
+
+    @Inject(method = "run", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/MinecraftClient;render(Z)V"))
+    public void run(CallbackInfo ci) {
+        if(Wgpu.EXCEPTION != null) {
+            CrashReport report = new CrashReport(Wgpu.EXCEPTION.getMessage(), Wgpu.EXCEPTION);
+            report.addElement("This crash was caused by the Fabric mod Electrum within native Rust code. Please report this crash to the wgpu-mc developers by opening an issue and attaching this crash log at https://github.com/wgpu-mc/wgpu-mc/issues");
+            throw new CrashException(report);
+        }
     }
 
     /**

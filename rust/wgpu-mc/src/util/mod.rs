@@ -134,6 +134,50 @@ impl<'a> WmArena<'a> {
 
         unsafe { &mut *t_alloc_ptr }
     }
+
+    pub fn alloc_immutable<T>(&self, mut t: T) -> &'a T {
+        let mut length = { *self.length.borrow() };
+        let capacity = { *self.capacity.borrow() };
+
+        let heap_end = unsafe { self.heap.borrow().add(*self.length.borrow()) };
+
+        let t_size = size_of::<T>();
+        let t_alignment = align_of::<T>();
+
+        let align_offset = heap_end.align_offset(t_alignment);
+        assert_ne!(align_offset, usize::MAX);
+
+        let t_allocate_size = t_size + align_offset;
+
+        if length + t_allocate_size > capacity {
+            self.grow(min(t_allocate_size, 4096));
+
+            return self.alloc(t);
+        }
+
+        //Pointer to where the data will be allocated
+        let t_alloc_ptr = unsafe { heap_end.add(align_offset) as *mut T };
+
+        //Bump
+        length += t_allocate_size;
+        *self.length.borrow_mut() = length;
+
+        //Copy t into the memory location, and forget t
+        unsafe {
+            std::ptr::copy(&mut t as *mut T, t_alloc_ptr, 1);
+        }
+        std::mem::forget(t);
+
+        let drop_fn = unsafe {
+            std::mem::transmute::<unsafe fn(*mut T), unsafe fn(*mut u8)>(drop_in_place::<T>)
+        };
+
+        self.objects
+            .borrow_mut()
+            .push((t_alloc_ptr as *mut u8, drop_fn));
+
+        unsafe { &*t_alloc_ptr }
+    }
 }
 
 impl<'a> Drop for WmArena<'a> {

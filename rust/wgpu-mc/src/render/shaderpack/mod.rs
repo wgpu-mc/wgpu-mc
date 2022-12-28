@@ -156,7 +156,10 @@ pub struct PipelineConfig {
     pub depth: Option<String>,
 
     #[serde(default)]
-    pub uniforms: LinkedHashMap<u64, Uniform>,
+    pub uniforms: LinkedHashMap<u64, String>,
+
+    #[serde(default)]
+    pub push_constants: LinkedHashMap<u64, String>,
 
     #[serde(default = "blend_default")]
     pub blending: String,

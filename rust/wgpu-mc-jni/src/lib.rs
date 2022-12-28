@@ -1,9 +1,9 @@
 #![feature(once_cell)]
 #![feature(array_zip)]
-
-extern crate core;
+#![feature(core_panic)]
 
 use arc_swap::access::Access;
+use core::panicking::panic;
 use core::slice;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -40,7 +40,6 @@ use winit::event::{ElementState, MouseButton};
 use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
-use gl::pipeline::{GLCommand, GlPipeline};
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
@@ -52,7 +51,7 @@ use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
 use crate::entity::tmd_to_wm;
-use crate::gl::GlTexture;
+use crate::gl::{GL_COMMANDS, GLCommand, GlTexture, GL_ALLOC};
 use crate::palette::{IdList, JavaPalette};
 use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
@@ -102,10 +101,6 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 #[allow(dead_code)]
 static MOUSE_STATE: Lazy<Arc<ArcSwap<MouseState>>> =
     Lazy::new(|| Arc::new(ArcSwap::new(Arc::new(MouseState { x: 0.0, y: 0.0 }))));
-static GL_PIPELINE: Lazy<GlPipeline> = Lazy::new(|| GlPipeline {
-    commands: ArcSwap::new(Arc::new(Vec::new())),
-    blank_texture: OnceCell::new(),
-});
 static THREAD_POOL: Lazy<ThreadPool> =
     Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
 static BLOCK_STATE_PROVIDER: Lazy<MinecraftBlockstateProvider> =
@@ -622,8 +617,27 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
 
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn preInit(_env: JNIEnv, _class: JClass) {
-    gl::init();
+pub fn setPanicHook(env: JNIEnv, _class: JClass) {
+    let jvm = env.get_java_vm().unwrap();
+    let jvm_ptr = jvm.get_java_vm_pointer() as usize;
+
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let jvm = unsafe { JavaVM::from_raw(jvm_ptr as _).unwrap() };
+        let env = jvm.attach_current_thread_permanently().unwrap();
+
+        let message = format!("wgpu-mc has panicked. The JVM will now exit.\n{panic_info}");
+        let jstring = env.new_string(message).unwrap();
+
+        //Does not return
+        env.call_static_method(
+            "dev/birb/wgpu/render/Wgpu",
+            "rustPanic",
+            "(Ljava/lang/String;)V",
+            &[JValue::Object(unsafe {
+                JObject::from_raw(jstring.into_raw())
+            })],
+        );
+    }))
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -715,11 +729,12 @@ pub fn setWorldRenderState(_env: JNIEnv, _class: JClass, boolean: jboolean) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn submitCommands(_env: JNIEnv, _class: JClass) {
-    let mut commands = gl::GL_COMMANDS.get().unwrap().write();
+    let mut guard = GL_COMMANDS.write();
+    let (command_stack, submitted) = &mut *guard;
 
-    GL_PIPELINE.commands.store(Arc::new(commands.clone()));
+    std::mem::swap(command_stack, submitted);
 
-    commands.clear();
+    command_stack.clear();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -778,8 +793,8 @@ pub fn texImage2D(
             BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
 
         {
-            gl::GL_ALLOC.get().unwrap().write().insert(
-                texture_id,
+            gl::GL_ALLOC.write().insert(
+                texture_id as u32,
                 GlTexture {
                     width: width as u16,
                     height: height as u16,
@@ -862,10 +877,9 @@ pub fn subImage2D(
     let task = move || {
         let wm = RENDERER.get().unwrap();
 
-        let gl_alloc = gl::GL_ALLOC.get().unwrap();
-        let mut alloc_write = gl_alloc.write();
+        let mut alloc_write = GL_ALLOC.write();
 
-        let gl_texture = alloc_write.get_mut(&texture_id).unwrap();
+        let gl_texture = alloc_write.get_mut(&(texture_id as u32)).unwrap();
 
         let dest_row_size = gl_texture.width as usize * pixel_size;
 
@@ -932,27 +946,24 @@ pub fn getWindowHeight(_env: JNIEnv, _class: JClass) -> jint {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
-        .push(GLCommand::ClearColor(r, g, b));
+        .0
+        .push(GLCommand::ClearColor([r, g, b]));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn attachTextureBindGroup(_env: JNIEnv, _class: JClass, slot: jint, id: jint) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
-        .push(GLCommand::AttachTexture(slot, id));
+        .0
+        .push(GLCommand::AttachTexture(slot as u32, id));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn wmUsePipeline(_env: JNIEnv, _class: JClass, pipeline: jint) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
+        .0
         .push(GLCommand::UsePipeline(pipeline as usize));
 }
 
@@ -1002,18 +1013,16 @@ pub fn setProjectionMatrix(env: JNIEnv, _class: JClass, float_array: jfloatArray
     let matrix = Matrix4::from(slice_4x4) * Matrix4::from_nonuniform_scale(1.0, 1.0, 0.0);
 
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
+        .0
         .push(GLCommand::SetMatrix(matrix));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn drawIndexed(_env: JNIEnv, _class: JClass, count: jint) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
+        .0
         .push(GLCommand::DrawIndexed(count as u32));
 }
 
@@ -1034,9 +1043,8 @@ pub fn setVertexBuffer(env: JNIEnv, _class: JClass, byte_array: jbyteArray) {
     }
 
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
+        .0
         .push(GLCommand::SetVertexBuffer(Vec::from(bytemuck::cast_slice(
             &converted,
         ))));
@@ -1056,9 +1064,8 @@ pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: jintArray) {
     };
 
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
+        .0
         .push(GLCommand::SetIndexBuffer(Vec::from(slice)));
 }
 

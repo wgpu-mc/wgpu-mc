@@ -215,7 +215,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
     .unwrap();
     let mut graph = ShaderGraph::new(pack);
 
-    graph.init(&wm);
+    graph.init(&wm, None, None);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -318,7 +318,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                     array_layer_count: None,
                 });
 
-                let _ = wm.render(&graph, &view);
+                let _ = wm.render(&graph, None, None, &view);
 
                 texture.present();
 
