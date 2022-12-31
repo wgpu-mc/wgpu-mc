@@ -614,7 +614,6 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn preInit(_env: JNIEnv, _class: JClass) {
     env_logger::init();
-    gl::init();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -684,7 +683,7 @@ pub fn setWorldRenderState(_env: JNIEnv, _class: JClass, boolean: jboolean) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn submitCommands(_env: JNIEnv, _class: JClass) {
-    let mut commands = gl::GL_COMMANDS.get().unwrap().write();
+    let mut commands = gl::GL_COMMANDS.write();
 
     GL_PIPELINE.commands.store(Arc::new(commands.clone()));
 
@@ -747,7 +746,7 @@ pub fn texImage2D(
             BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
 
         {
-            gl::GL_ALLOC.get().unwrap().write().insert(
+            gl::GL_ALLOC.write().insert(
                 texture_id,
                 GlTexture {
                     width: width as u16,
@@ -831,8 +830,7 @@ pub fn subImage2D(
     let task = move || {
         let wm = RENDERER.get().unwrap();
 
-        let gl_alloc = gl::GL_ALLOC.get().unwrap();
-        let mut alloc_write = gl_alloc.write();
+        let mut alloc_write = gl::GL_ALLOC.write();
 
         let gl_texture = alloc_write.get_mut(&texture_id).unwrap();
 
@@ -901,8 +899,6 @@ pub fn getWindowHeight(_env: JNIEnv, _class: JClass) -> jint {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
         .push(GLCommand::ClearColor(r, g, b));
 }
@@ -910,8 +906,6 @@ pub fn clearColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat)
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn attachTextureBindGroup(_env: JNIEnv, _class: JClass, slot: jint, id: jint) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
         .push(GLCommand::AttachTexture(slot, id));
 }
@@ -919,8 +913,6 @@ pub fn attachTextureBindGroup(_env: JNIEnv, _class: JClass, slot: jint, id: jint
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn wmUsePipeline(_env: JNIEnv, _class: JClass, pipeline: jint) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
         .push(GLCommand::UsePipeline(pipeline as usize));
 }
@@ -971,8 +963,6 @@ pub fn setProjectionMatrix(env: JNIEnv, _class: JClass, float_array: jfloatArray
     let matrix = Matrix4::from(slice_4x4) * Matrix4::from_nonuniform_scale(1.0, 1.0, 0.0);
 
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
         .push(GLCommand::SetMatrix(matrix));
 }
@@ -980,8 +970,6 @@ pub fn setProjectionMatrix(env: JNIEnv, _class: JClass, float_array: jfloatArray
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn drawIndexed(_env: JNIEnv, _class: JClass, count: jint) {
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
         .push(GLCommand::DrawIndexed(count as u32));
 }
@@ -1003,8 +991,6 @@ pub fn setVertexBuffer(env: JNIEnv, _class: JClass, byte_array: jbyteArray) {
     }
 
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
         .push(GLCommand::SetVertexBuffer(Vec::from(bytemuck::cast_slice(
             &converted,
@@ -1025,8 +1011,6 @@ pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: jintArray) {
     };
 
     gl::GL_COMMANDS
-        .get()
-        .unwrap()
         .write()
         .push(GLCommand::SetIndexBuffer(Vec::from(slice)));
 }
