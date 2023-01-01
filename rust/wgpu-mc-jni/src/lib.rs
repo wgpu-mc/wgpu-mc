@@ -425,8 +425,6 @@ pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) {
 pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
     let wm = RENDERER.get().unwrap();
 
-    println!("baking blocks");
-
     {
         let blocks = BLOCKS.lock();
 
@@ -754,6 +752,7 @@ pub fn texImage2D(
     _type: jint,
     pixels_ptr: jlong,
 ) {
+
     let _pixel_size = match format {
         0x1908 | 0x80E1 => 4,
         _ => panic!("Unknown format {format:x}"),
@@ -761,6 +760,7 @@ pub fn texImage2D(
 
     //For when the renderer is initialized
     let task = move || {
+        println!("task");
         let area = width * height;
         //In bytes
         assert_eq!(_type, 0x1401);

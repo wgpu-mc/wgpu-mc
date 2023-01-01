@@ -11,6 +11,7 @@ use bytemuck::{Pod, Zeroable};
 use cgmath::{Matrix, Matrix4, SquareMatrix};
 use once_cell::sync::{Lazy, OnceCell};
 use std::collections::HashMap;
+use std::convert::identity;
 use std::mem::replace;
 use wgpu_mc::render::graph::{
     bind_uniforms, set_push_constants, CustomResource, GeometryCallback, ResourceInternal,
@@ -50,7 +51,7 @@ pub struct GlTexture {
     pub pixels: Vec<u8>,
 }
 
-#[derive(Pod, Zeroable, Copy, Clone)]
+#[derive(Debug, Pod, Zeroable, Copy, Clone)]
 #[repr(C)]
 pub struct ElectrumVertex {
     pub pos: [f32; 4],
@@ -125,32 +126,83 @@ impl ElectrumVertex {
             })
             .collect()
     }
+
+    pub fn map_pos_color_uint(verts: &[[f32; 4]]) -> Vec<ElectrumVertex> {
+        verts
+            .iter()
+            .map(|vert| {
+                let mut vertex = ElectrumVertex::zeroed();
+
+                (&mut vertex.pos[0..3]).copy_from_slice(&vert[0..3]);
+                vertex.pos[3] = 1.0;
+
+                let color: u32 = bytemuck::cast(vert[3]);
+                let r = (color & 0xff) as f32 / 255.0;
+                let g = ((color >> 8) & 0xff) as f32 / 255.0;
+                let b = ((color >> 16) & 0xff) as f32 / 255.0;
+                let a = ((color >> 24) & 0xff) as f32 / 255.0;
+
+                vertex.color = [r, g, b, a];
+                vertex.use_uv = 0;
+
+                vertex
+            })
+            .collect()
+    }
+
+    pub fn map_pos_color_uv_light(verts: &[[u8; 28]]) -> Vec<ElectrumVertex> {
+        verts
+            .iter()
+            .map(|vert| {
+                let mut vertex = ElectrumVertex::zeroed();
+
+                //Because of alignment issues we can't use bytemuck here
+                vertex.pos[0] = f32::from_ne_bytes(vert[0..4].try_into().unwrap());
+                vertex.pos[1] = f32::from_ne_bytes(vert[4..8].try_into().unwrap());
+                vertex.pos[2] = f32::from_ne_bytes(vert[8..12].try_into().unwrap());
+                vertex.pos[3] = 1.0;
+
+                let color: u32 = u32::from_ne_bytes(vert[12..16].try_into().unwrap());
+                let r = (color & 0xff) as f32 / 255.0;
+                let g = ((color >> 8) & 0xff) as f32 / 255.0;
+                let b = ((color >> 16) & 0xff) as f32 / 255.0;
+                let a = ((color >> 24) & 0xff) as f32 / 255.0;
+
+                vertex.color = [r, g, b, a];
+                vertex.use_uv = 1;
+
+                vertex.uv[0] = f32::from_ne_bytes(vert[16..20].try_into().unwrap());
+                vertex.uv[1] = f32::from_ne_bytes(vert[20..24].try_into().unwrap());
+
+                vertex
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug)]
-struct Draw<'a> {
+struct Draw {
     vertex_buffer: Vec<u8>,
     count: u32,
     matrix: [[f32; 4]; 4],
-    textures: HashMap<u32, &'a GlTexture>,
+    texture: Option<u32>,
     pipeline_state: PipelineState,
 }
 
 #[derive(Debug)]
-struct IndexedDraw<'a> {
+struct IndexedDraw {
     vertex_buffer: Vec<u8>,
     index_buffer: Vec<u32>,
     count: u32,
     matrix: [[f32; 4]; 4],
-    textures: HashMap<u32, &'a GlTexture>,
+    texture: Option<u32>,
     pipeline_state: PipelineState,
 }
 
 #[derive(Debug)]
-enum DrawCall<'a> {
-    Verts(Draw<'a>),
-    Indexed(IndexedDraw<'a>),
-    Clear([f32; 3]),
+enum DrawCall {
+    Verts(Draw),
+    Indexed(IndexedDraw),
 }
 
 #[derive(Debug)]
@@ -229,7 +281,7 @@ impl GeometryCallback for ElectrumGeometry {
         let mut vertex_buffer = vec![];
         let mut index_buffer = vec![];
         let mut matrix = Matrix4::<f32>::identity();
-        let mut textures = HashMap::new();
+        let mut texture = None;
         let mut pipeline_state = None;
 
         let textures_read = GL_ALLOC.read();
@@ -240,7 +292,22 @@ impl GeometryCallback for ElectrumGeometry {
                     matrix = new_matrix;
                 }
                 GLCommand::ClearColor(color) => {
-                    calls.push(DrawCall::Clear(color));
+                    #[rustfmt::skip]
+                    calls.push(DrawCall::Indexed(IndexedDraw {
+                        vertex_buffer: Vec::from(
+                            bytemuck::cast_slice(&[
+                                -1.0, 1.0, 0.0, color[0], color[1], color[2],
+                                1.0, 1.0, 0.0, color[0], color[1], color[2],
+                                1.0, -1.0, 0.0, color[0], color[1], color[2],
+                                -1.0, -1.0, 0.0, color[0], color[1], color[2]
+                            ])
+                        ),
+                        index_buffer: vec![0,1,2,0,3,2],
+                        count: 6,
+                        matrix: Matrix4::<f32>::identity().into(),
+                        texture: None,
+                        pipeline_state: PipelineState::PositionColorF32,
+                    }));
                 }
                 GLCommand::UsePipeline(pipeline) => {
                     pipeline_state = Some(match pipeline {
@@ -264,7 +331,7 @@ impl GeometryCallback for ElectrumGeometry {
                         index_buffer: replace(&mut index_buffer, vec![]),
                         count,
                         matrix: matrix.into(),
-                        textures: replace(&mut textures, HashMap::new()),
+                        texture: texture.take(),
                         pipeline_state: pipeline_state.take().unwrap(),
                     }));
                 }
@@ -273,26 +340,51 @@ impl GeometryCallback for ElectrumGeometry {
                         vertex_buffer: replace(&mut vertex_buffer, vec![]),
                         count,
                         matrix: matrix.into(),
-                        textures: replace(&mut textures, HashMap::new()),
+                        texture: texture.take(),
                         pipeline_state: pipeline_state.take().unwrap(),
                     }));
                 }
-                GLCommand::AttachTexture(index, texture) => {
-                    textures.insert(index, textures_read.get(&index).unwrap());
+                GLCommand::AttachTexture(index, id) => {
+                    assert_eq!(index, 0);
+                    texture = Some(id as u32);
                 }
             }
         }
+
+        //TODO: make gui rendering instanced to minimize draw calls by merging similar calls
+
+        // let mut draws = HashMap::new();
+        // let mut indexed_draws = HashMap::new();
+        // let mut clears = HashMap::new();
+        //
+        // for call in calls {
+        //     match call {
+        //         DrawCall::Verts(draw) => {
+        //             match draws.get_mut(&draw.texture) {
+        //                 Some(assembled_draw) => {
+        //                     assembled_draw.
+        //                 },
+        //                 None => {
+        //                     draws.insert(draw.texture, draw);
+        //                 }
+        //             };
+        //         }
+        //         DrawCall::Indexed(_) => {}
+        //         DrawCall::Clear(_) => {}
+        //     }
+        // }
 
         for call in calls {
             match call {
                 DrawCall::Verts(draw) => {
                     for (name, pipeline) in &graph.pack.pipelines.pipelines {
-                        let texture = match draw.textures.get(&0) {
-                            None => self.blank.bindable_texture.load_full(),
-                            Some(gl_texture) => {
-                                gl_texture.bindable_texture.as_ref().unwrap().clone()
+                        let mut texture = self.blank.bindable_texture.load_full();
+
+                        if let Some(texture_index) = draw.texture {
+                            if let Some(gl_texture) = textures_read.get(&texture_index) {
+                                texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
                             }
-                        };
+                        }
 
                         let augmented_resources =
                             augment_resources(wm, &resources, arena, texture, draw.matrix);
@@ -316,12 +408,13 @@ impl GeometryCallback for ElectrumGeometry {
                 }
                 DrawCall::Indexed(draw) => {
                     for (name, pipeline) in &graph.pack.pipelines.pipelines {
-                        let texture = match draw.textures.get(&0) {
-                            None => self.blank.bindable_texture.load_full(),
-                            Some(gl_texture) => {
-                                gl_texture.bindable_texture.as_ref().unwrap().clone()
+                        let mut texture = self.blank.bindable_texture.load_full();
+
+                        if let Some(texture_index) = draw.texture {
+                            if let Some(gl_texture) = textures_read.get(&texture_index) {
+                                texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
                             }
-                        };
+                        }
 
                         let augmented_resources =
                             augment_resources(wm, &resources, arena, texture, draw.matrix);
@@ -330,7 +423,9 @@ impl GeometryCallback for ElectrumGeometry {
                         set_push_constants(pipeline, render_pass, None, surface_config);
 
                         let vertices = match draw.pipeline_state {
-                            PipelineState::PositionColorUint => continue,
+                            PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
+                                bytemuck::cast_slice(&draw.vertex_buffer),
+                            ),
                             PipelineState::PositionUv => ElectrumVertex::map_pos_uv(
                                 bytemuck::cast_slice(&draw.vertex_buffer),
                             ),
@@ -340,7 +435,11 @@ impl GeometryCallback for ElectrumGeometry {
                             PipelineState::PositionUvColor => ElectrumVertex::map_pos_uv_color(
                                 bytemuck::cast_slice(&draw.vertex_buffer),
                             ),
-                            PipelineState::PositionColorUvLight => continue,
+                            PipelineState::PositionColorUvLight => {
+                                ElectrumVertex::map_pos_color_uv_light(
+                                    bytemuck::try_cast_slice(&draw.vertex_buffer).unwrap(),
+                                )
+                            },
                         };
 
                         let vertex_buffer =
@@ -369,14 +468,6 @@ impl GeometryCallback for ElectrumGeometry {
                         );
                         render_pass.draw_indexed(0..draw.count, 0, 0..1);
                     }
-                }
-                DrawCall::Clear(color) => {
-                    // render_pass.set_push_constants(
-                    //     ShaderStages::FRAGMENT,
-                    //     0,
-                    //     bytemuck::cast_slice(&color),
-                    // );
-                    // render_pass.draw(0..6, 0..1);
                 }
             }
         }

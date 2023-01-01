@@ -26,6 +26,7 @@ fn vert(
     vo.uv = uv;
     vo.color = color;
     vo.use_uv = use_uv;
+    vo.pos.z = 0.1;
 
     return vo;
 }
