@@ -11,12 +11,14 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry};
 const ALIGN: usize = 8;
 
 #[derive(Debug)]
-pub struct UniformStorage {
+///There are a couple bind group layouts which are roughly the same, such as `ssbo` or `matrix` but have slightly different semantics; this
+/// is a convenience struct to deduplicate code
+pub struct BindableBuffer {
     pub buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
 }
 
-impl UniformStorage {
+impl BindableBuffer {
     pub fn new(wm: &WmRenderer, data: &[u8], usage: wgpu::BufferUsages, layout_name: &str) -> Self {
         let pipelines = wm.pipelines.load();
         let layouts = pipelines.bind_group_layouts.read();

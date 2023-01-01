@@ -14,7 +14,7 @@ use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 use crate::render::world::chunk;
 use crate::render::world::chunk::bake;
-use crate::util::UniformStorage;
+use crate::util::BindableBuffer;
 use crate::WmRenderer;
 
 pub const CHUNK_WIDTH: usize = 16;
@@ -99,6 +99,7 @@ impl Chunk {
     }
 }
 
+#[derive(Debug)]
 pub struct ChunkManager {
     pub loaded_chunks: RwLock<HashMap<ChunkPos, ArcSwap<Chunk>>>,
 }

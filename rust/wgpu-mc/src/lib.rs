@@ -47,24 +47,19 @@ pub use minecraft_assets;
 pub use naga;
 use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-use tracing::{span, Level};
 pub use wgpu;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
-    RenderPassDescriptor, Texture,
+    SurfaceConfiguration, Texture,
 };
 
-use crate::camera::UniformMatrixHelper;
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::graph::{CustomResource, GeometryCallback, ShaderGraph};
+use crate::render::graph::{GeometryCallback, ShaderGraph};
 use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
-use crate::render::shaderpack::ShaderPackConfig;
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
-use crate::util::WmArena;
 
-pub mod camera;
 pub mod mc;
 pub mod render;
 pub mod texture;
@@ -197,11 +192,11 @@ impl WmRenderer {
             .collect();
 
         self.mc.texture_manager.atlases.store(Arc::new(atlases));
-        self.mc.init_camera(self);
 
         self.create_texture_handle(
             "wm_framebuffer_depth".into(),
             wgpu::TextureFormat::Depth32Float,
+            &self.wgpu_state.surface.read().1,
         );
     }
 
@@ -209,10 +204,8 @@ impl WmRenderer {
         &self,
         name: String,
         format: wgpu::TextureFormat,
+        config: &SurfaceConfiguration,
     ) -> TextureHandle {
-        let surface = self.wgpu_state.surface.read();
-        let config = &surface.1;
-
         let tsv = TextureSamplerView::from_rgb_bytes(
             &self.wgpu_state,
             &[],
@@ -267,38 +260,13 @@ impl WmRenderer {
             .unwrap()
             .configure(&self.wgpu_state.device, &surface_config);
 
-        let mut new_camera = *self.mc.camera.load_full();
-
-        new_camera.aspect = surface_config.width as f32 / surface_config.height as f32;
-        self.mc.camera.store(Arc::new(new_camera));
-
         let handles = { self.texture_handles.read().clone() };
-
-        drop(surface_state);
 
         handles.iter().for_each(|(name, handle)| {
             let texture = handle.bindable_texture.load();
 
-            self.create_texture_handle(name.clone(), texture.tsv.format);
+            self.create_texture_handle(name.clone(), texture.tsv.format, &surface_config);
         });
-    }
-
-    pub fn upload_camera(&self) {
-        let mut camera = **self.mc.camera.load();
-        let surface_config = &self.wgpu_state.surface.read().1;
-        camera.aspect = surface_config.width as f32 / surface_config.height as f32;
-
-        let uniforms = UniformMatrixHelper {
-            view_proj: camera.build_view_projection_matrix().into(),
-        };
-
-        self.mc.camera.store(Arc::new(camera));
-
-        self.wgpu_state.queue.write_buffer(
-            (*self.mc.camera_buffer.load_full()).as_ref().unwrap(),
-            0,
-            bytemuck::cast_slice(&[uniforms]),
-        );
     }
 
     pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
@@ -351,16 +319,10 @@ impl WmRenderer {
     pub fn render(
         &self,
         graph: &ShaderGraph,
-        additional_resources: Option<&HashMap<&String, &CustomResource>>,
-        additional_geometry: Option<&HashMap<&String, &GeometryCallback>>,
         output_texture_view: &wgpu::TextureView,
+        surface_config: &SurfaceConfiguration,
     ) -> Result<(), wgpu::SurfaceError> {
-        graph.render(
-            self,
-            output_texture_view,
-            additional_resources,
-            additional_geometry,
-        );
+        graph.render(self, output_texture_view, surface_config);
 
         Ok(())
     }

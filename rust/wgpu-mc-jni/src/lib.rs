@@ -622,6 +622,8 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
     let jvm_ptr = jvm.get_java_vm_pointer() as usize;
 
     std::panic::set_hook(Box::new(move |panic_info| {
+        println!("{panic_info}");
+
         let jvm = unsafe { JavaVM::from_raw(jvm_ptr as _).unwrap() };
         let env = jvm.attach_current_thread_permanently().unwrap();
 
@@ -1167,20 +1169,20 @@ pub fn setCamera(
     yaw: jfloat,
     pitch: jfloat,
 ) {
-    let renderer = RENDERER.get().unwrap();
-    if renderer.mc.camera_bind_group.load().is_none() {
-        renderer.mc.init_camera(renderer);
-    }
-
-    let mut camera = **renderer.mc.camera.load();
-    camera.position = Point3::new(x as f32, 200., z as f32);
-    // camera.position = Point3::new(0.0, 200.0, 0.0);
-    camera.yaw = (PI / 180.0) * yaw;
-    camera.pitch = (PI / 180.0) * pitch;
-    // camera.pitch = PI * 1.5;
-
-    renderer.mc.camera.store(Arc::new(camera));
-    renderer.upload_camera();
+    // let renderer = RENDERER.get().unwrap();
+    // if renderer.mc.camera_bind_group.load().is_none() {
+    //     renderer.mc.init_camera(renderer);
+    // }
+    //
+    // let mut camera = **renderer.mc.camera.load();
+    // camera.position = Point3::new(x as f32, 200., z as f32);
+    // // camera.position = Point3::new(0.0, 200.0, 0.0);
+    // camera.yaw = (PI / 180.0) * yaw;
+    // camera.pitch = (PI / 180.0) * pitch;
+    // // camera.pitch = PI * 1.5;
+    //
+    // renderer.mc.camera.store(Arc::new(camera));
+    // renderer.upload_camera();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

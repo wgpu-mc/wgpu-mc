@@ -112,6 +112,7 @@ public class Wgpu {
 
     public static void rustPanic(String message) {
         EXCEPTION = new RuntimeException(message);
+        LOGGER.error(message);
         while(true) {}
     }
 

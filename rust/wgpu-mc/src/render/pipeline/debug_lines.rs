@@ -5,7 +5,6 @@ use cgmath::Rad;
 use wgpu::util::BufferInitDescriptor;
 use wgpu::{BindGroupDescriptor, BindGroupEntry};
 
-use crate::camera::UniformMatrixHelper;
 use crate::render::shader::{WgslShader, WmShader};
 use crate::util::WmArena;
 use crate::wgpu::util::DeviceExt;

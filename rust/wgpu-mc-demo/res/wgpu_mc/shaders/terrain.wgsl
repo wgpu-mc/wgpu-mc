@@ -93,9 +93,7 @@ fn frag(
 
     let uv = in.pos.xy / vec2<f32>(push_constants.fb_width, push_constants.fb_height);
 
-    let depth = textureSample(shadow_texture, shadow_sampler, uv);
+//    let depth = textureSample(shadow_texture, shadow_sampler, uv);
 
-    let 
-
-    return vec4<f32>(depth, depth, depth, 1.0);
+    return col1;
 }

@@ -4,12 +4,14 @@ use arc_swap::access::{Access, DynAccess};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use arc_swap::ArcSwap;
 use bytemuck::Pod;
+use cgmath::{Matrix4, SquareMatrix};
 use futures::executor::block_on;
+use parking_lot::RwLock;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
@@ -17,6 +19,7 @@ use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCo
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 
+use crate::camera::Camera;
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::RenderLayer;
 use wgpu_mc::mc::entity::{EntityInstanceTransforms, PartTransform};
@@ -24,18 +27,19 @@ use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::mc::resource::ResourceProvider;
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
-use wgpu_mc::render::shaderpack::Mat4ValueOrMult;
-use wgpu_mc::util::UniformStorage;
+use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
+use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{
-    BindGroupDescriptor, BindGroupEntry, CommandEncoderDescriptor, ComputePassDescriptor, Maintain,
-    MaintainBase, MapMode,
+    BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoderDescriptor,
+    ComputePassDescriptor, Maintain, MaintainBase, MapMode,
 };
 use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 
 use crate::chunk::make_chunks;
 use crate::entity::describe_entity;
 
+mod camera;
 mod chunk;
 mod entity;
 
@@ -201,9 +205,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
     let mut frame_start = Instant::now();
 
     let mut forward = 0.0;
-
     let mut spin: f32 = 0.0;
-
     let mut _frame: u32 = 0;
 
     let pack = serde_yaml::from_str(
@@ -213,7 +215,59 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
             .unwrap(),
     )
     .unwrap();
-    let mut graph = ShaderGraph::new(pack);
+    let mut resources = HashMap::new();
+
+    let aspect = {
+        let surface = wm.wgpu_state.surface.read();
+        (surface.1.width as f32) / (surface.1.height as f32)
+    };
+
+    let mut camera = Camera::new(aspect);
+    let projection_bindable = Arc::new(BindableBuffer::new(
+        &wm,
+        &[0u8; 64],
+        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        "matrix",
+    ));
+    let view_bindable = Arc::new(BindableBuffer::new(
+        &wm,
+        &[0u8; 64],
+        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        "matrix",
+    ));
+
+    let view_matrix = Arc::new(RwLock::new(camera.build_view_matrix()));
+    let projection_matrix = Arc::new(RwLock::new(camera.build_perspective_matrix()));
+
+    resources.insert(
+        "wm_mat4_projection".into(),
+        CustomResource {
+            update: None,
+            data: Arc::new(ResourceInternal::Mat4(
+                Mat4ValueOrMult::Value {
+                    value: [[0.0; 4]; 4],
+                },
+                projection_matrix.clone(),
+                projection_bindable.clone(),
+            )),
+        },
+    );
+
+    resources.insert(
+        "wm_mat4_view".into(),
+        CustomResource {
+            update: None,
+            data: Arc::new(ResourceInternal::Mat4(
+                Mat4ValueOrMult::Value {
+                    value: [[0.0; 4]; 4],
+                },
+                view_matrix.clone(),
+                view_bindable.clone(),
+            )),
+        },
+    );
+
+    let mut graph = ShaderGraph::new(pack, resources, HashMap::new());
 
     graph.init(&wm, None, None);
 
@@ -290,19 +344,32 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                 }
             }
             Event::RedrawRequested(_) => {
-                wm.upload_camera();
-
                 let frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
+
+                camera.position += camera.get_direction() * forward * frame_time * 40.0;
+
+                {
+                    *projection_matrix.write() = camera.build_perspective_matrix();
+                    *view_matrix.write() = camera.build_view_matrix();
+                }
+
+                let proj_mat: Mat4 = camera.build_perspective_matrix().into();
+                let view_mat: Mat4 = camera.build_view_matrix().into();
+
+                wm.wgpu_state.queue.write_buffer(
+                    &projection_bindable.buffer,
+                    0,
+                    bytemuck::cast_slice(&proj_mat),
+                );
+
+                wm.wgpu_state.queue.write_buffer(
+                    &view_bindable.buffer,
+                    0,
+                    bytemuck::cast_slice(&view_mat),
+                );
 
                 spin += 0.5;
                 _frame += 1;
-
-                let mut camera = **wm.mc.camera.load();
-
-                let direction = camera.get_direction();
-                camera.position += direction * 200.0 * frame_time * forward;
-
-                wm.mc.camera.store(Arc::new(camera));
 
                 let surface_state = wm.wgpu_state.surface.read();
                 let surface = surface_state.0.as_ref().unwrap();
@@ -318,7 +385,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                     array_layer_count: None,
                 });
 
-                let _ = wm.render(&graph, None, None, &view);
+                let _ = wm.render(&graph, &view, &surface_state.1);
 
                 texture.present();
 
@@ -330,10 +397,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                 event: DeviceEvent::MouseMotion { delta },
                 ..
             } => {
-                let mut camera = **wm.mc.camera.load();
                 camera.yaw += (delta.0 / 100.0) as f32;
                 camera.pitch -= (delta.1 / 100.0) as f32;
-                wm.mc.camera.store(Arc::new(camera));
             }
             _ => {}
         }

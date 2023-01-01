@@ -19,7 +19,7 @@ fn vert(
     @location(0) pos: vec3<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) color: vec4<f32>,
-    @location(3) use_uv: bool
+    @location(3) use_uv: u32
 ) -> VO {
     var vo: VO;
     vo.pos = projection * vec4<f32>(pos, 1.0);
@@ -32,8 +32,10 @@ fn vert(
 
 @fragment
 fn frag(in: VO) -> @location(0) vec4<f32> {
-    if(in.use_uv == 1) {
-        return in.color * textureSample(t_texture, t_sampler, in.uv) * in.color;
+    var color_mul_uv = in.color * textureSample(t_texture, t_sampler, in.uv);
+
+    if(in.use_uv == 1u) {
+        return color_mul_uv;
     } else {
         return in.color;
     }

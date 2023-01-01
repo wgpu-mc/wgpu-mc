@@ -290,6 +290,7 @@ impl Atlas {
 }
 
 ///Stores uplodaded textures which will be automatically updated whenever necessary
+#[derive(Debug)]
 pub struct TextureManager {
     ///Using RwLock<HashMap>> instead of DashMap because when doing a resource pack reload,
     /// we need potentially a lot of textures to be updated and it's better to be able to
