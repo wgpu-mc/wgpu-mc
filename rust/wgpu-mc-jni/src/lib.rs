@@ -48,7 +48,7 @@ use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
 use crate::entity::tmd_to_wm;
-use crate::gl::{GL_COMMANDS, GLCommand, GlTexture, GL_ALLOC};
+use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::palette::{IdList, JavaPalette};
 use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
@@ -612,6 +612,8 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
     let jvm_ptr = jvm.get_java_vm_pointer() as usize;
 
     std::panic::set_hook(Box::new(move |panic_info| {
+        println!("{panic_info}");
+
         let jvm = unsafe { JavaVM::from_raw(jvm_ptr as _).unwrap() };
         let env = jvm.attach_current_thread_permanently().unwrap();
 
@@ -720,6 +722,7 @@ pub fn texImage2D(
     _type: jint,
     pixels_ptr: jlong,
 ) {
+
     let _pixel_size = match format {
         0x1908 | 0x80E1 => 4,
         _ => panic!("Unknown format {format:x}"),
@@ -727,6 +730,7 @@ pub fn texImage2D(
 
     //For when the renderer is initialized
     let task = move || {
+        println!("task");
         let area = width * height;
         //In bytes
         assert_eq!(_type, 0x1401);
@@ -980,10 +984,7 @@ pub fn setProjectionMatrix(env: JNIEnv, _class: JClass, float_array: jfloatArray
 
     let matrix = Matrix4::from(slice_4x4) * Matrix4::from_nonuniform_scale(1.0, 1.0, 0.0);
 
-    gl::GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::SetMatrix(matrix));
+    gl::GL_COMMANDS.write().0.push(GLCommand::SetMatrix(matrix));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1129,20 +1130,20 @@ pub fn setCamera(
     yaw: jfloat,
     pitch: jfloat,
 ) {
-    let renderer = RENDERER.get().unwrap();
-    if renderer.mc.camera_bind_group.load().is_none() {
-        renderer.mc.init_camera(renderer);
-    }
-
-    let mut camera = **renderer.mc.camera.load();
-    camera.position = Point3::new(x as f32, 200., z as f32);
-    // camera.position = Point3::new(0.0, 200.0, 0.0);
-    camera.yaw = (PI / 180.0) * yaw;
-    camera.pitch = (PI / 180.0) * pitch;
-    // camera.pitch = PI * 1.5;
-
-    renderer.mc.camera.store(Arc::new(camera));
-    renderer.upload_camera();
+    // let renderer = RENDERER.get().unwrap();
+    // if renderer.mc.camera_bind_group.load().is_none() {
+    //     renderer.mc.init_camera(renderer);
+    // }
+    //
+    // let mut camera = **renderer.mc.camera.load();
+    // camera.position = Point3::new(x as f32, 200., z as f32);
+    // // camera.position = Point3::new(0.0, 200.0, 0.0);
+    // camera.yaw = (PI / 180.0) * yaw;
+    // camera.pitch = (PI / 180.0) * pitch;
+    // // camera.pitch = PI * 1.5;
+    //
+    // renderer.mc.camera.store(Arc::new(camera));
+    // renderer.upload_camera();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

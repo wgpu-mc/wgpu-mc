@@ -35,21 +35,11 @@ impl Camera {
         )
     }
 
-    #[must_use]
-    pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
-        let view = cgmath::Matrix4::look_at_rh(
-            self.position,
-            self.position + self.get_direction(),
-            self.up,
-        );
-
-        let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        proj * view
+    pub fn build_view_matrix(&self) -> cgmath::Matrix4<f32> {
+        cgmath::Matrix4::look_at_rh(self.position, self.position + self.get_direction(), self.up)
     }
-}
 
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct UniformMatrixHelper {
-    pub view_proj: [[f32; 4]; 4],
+    pub fn build_perspective_matrix(&self) -> cgmath::Matrix4<f32> {
+        cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar)
+    }
 }

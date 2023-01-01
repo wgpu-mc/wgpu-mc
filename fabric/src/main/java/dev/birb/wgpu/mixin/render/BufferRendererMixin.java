@@ -61,7 +61,7 @@ public class BufferRendererMixin {
          floatBuffer.get(out);
          WgpuNative.setProjectionMatrix(out);
 
-         byte[] bytes = new byte[buffer.limit()];
+         byte[] bytes = new byte[count * vertexFormat.getVertexSize()];
          buffer.get(bytes);
 
          WgpuNative.setVertexBuffer(bytes);

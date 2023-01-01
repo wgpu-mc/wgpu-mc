@@ -1,7 +1,7 @@
 use std::collections::HashMap;
+use std::mem::size_of;
 use std::thread;
 use std::{sync::Arc, time::Instant};
-use std::mem::size_of;
 
 use futures::executor::block_on;
 use jni::{
@@ -18,13 +18,14 @@ use winit::{
 use wgpu_mc::render::graph::{GeometryCallback, ShaderGraph};
 use wgpu_mc::render::shaderpack::ShaderPackConfig;
 use wgpu_mc::wgpu;
+use wgpu_mc::wgpu::TextureFormat;
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
+use crate::gl::{ElectrumGeometry, ElectrumVertex};
 use crate::{
     entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
     CHANNELS, MC_STATE, RENDERER, WINDOW,
 };
-use crate::gl::{electrum_gui_callback, ElectrumVertex};
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
     let title: String = env.get_string(title).unwrap().into();
@@ -86,29 +87,45 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let shader_pack: ShaderPackConfig =
         serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
-    let mut shader_graph = ShaderGraph::new(shader_pack);
+
+    let mut render_geometry = HashMap::new();
+
+    render_geometry.insert(
+        "wm_geo_electrum_gui".into(),
+        Box::new(ElectrumGeometry {
+            blank: wm.create_texture_handle(
+                "electrum_blank_texture".into(),
+                TextureFormat::Bgra8Unorm,
+                &wm.wgpu_state.surface.read().1,
+            ),
+        }) as Box<dyn GeometryCallback>,
+    );
+
+    let mut shader_graph = ShaderGraph::new(shader_pack, HashMap::new(), render_geometry);
 
     let mut types = HashMap::new();
 
+    types.insert("wm_electrum_mat4".into(), "matrix".into());
     types.insert("wm_electrum_gl_texture".into(), "texture".into());
 
-    let mut geometry = HashMap::new();
+    let mut geometry_layouts = HashMap::new();
 
-    geometry.insert("wm_geo_electrum_gui".into(), wgpu::VertexBufferLayout {
-        array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &ElectrumVertex::VAO,
-    });
+    geometry_layouts.insert(
+        "wm_geo_electrum_gui".into(),
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &ElectrumVertex::VAO,
+        },
+    );
 
-    shader_graph.init(&wm, Some(&types), Some(geometry));
+    shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
 
     thread::spawn(move || {
         let wm = wm_clone;
 
         loop {
-            wm.upload_camera();
-
-            let _mc_state = MC_STATE.load();
+            let mc_state = MC_STATE.load();
 
             let surface_state = wm.wgpu_state.surface.read();
 
@@ -128,16 +145,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let _instant = Instant::now();
 
-            let resources = HashMap::new();
-
-            let mut geometry = HashMap::new();
-            let key = String::from("wm_geo_electrum_gui");
-
-            let callback = Box::new(&electrum_gui_callback) as GeometryCallback;
-
-            geometry.insert(&key, &callback);
-
-            wm.render(&shader_graph, Some(&resources), Some(&geometry), &view).unwrap();
+            wm.render(&shader_graph, &view, &surface_state.1).unwrap();
 
             texture.present();
         }

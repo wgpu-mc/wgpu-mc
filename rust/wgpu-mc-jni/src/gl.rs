@@ -2,30 +2,34 @@ use std::vec::Vec;
 
 use parking_lot::RwLock;
 
-use wgpu_mc::texture::BindableTexture;
+use wgpu_mc::texture::{BindableTexture, TextureHandle};
 
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
+use cgmath::{Matrix, Matrix4, SquareMatrix};
 use once_cell::sync::{Lazy, OnceCell};
 use std::collections::HashMap;
+use std::convert::identity;
 use std::mem::replace;
-use arc_swap::ArcSwap;
-use cgmath::{Matrix4, SquareMatrix};
-use wgpu_mc::render::graph::{bind_uniforms, CustomResource, ResourceInternal, set_push_constants, ShaderGraph, TextureResource};
-use wgpu_mc::wgpu::{vertex_attr_array, RenderPass, ShaderStages, BufferUsages, IndexFormat};
-use wgpu_mc::{wgpu, WmRenderer};
+use wgpu_mc::render::graph::{
+    bind_uniforms, set_push_constants, CustomResource, GeometryCallback, ResourceInternal,
+    ShaderGraph, TextureResource,
+};
 use wgpu_mc::render::shaderpack;
-use wgpu_mc::render::shaderpack::PipelineConfig;
-use wgpu_mc::util::{UniformStorage, WmArena};
+use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, PipelineConfig};
+use wgpu_mc::util::{BindableBuffer, WmArena};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu_mc::wgpu::{
+    vertex_attr_array, BufferUsages, IndexFormat, RenderPass, ShaderStages, SurfaceConfiguration,
+};
+use wgpu_mc::{wgpu, WmRenderer};
 
-pub static GL_ALLOC: Lazy<RwLock<HashMap<u32, GlTexture>>> = Lazy::new(|| {
-    RwLock::new(HashMap::new())
-});
-pub static GL_COMMANDS: Lazy<RwLock<(Vec<GLCommand>, Vec<GLCommand>)>> = Lazy::new(|| {
-    RwLock::new((Vec::new(), Vec::new()))
-});
+pub static GL_ALLOC: Lazy<RwLock<HashMap<u32, GlTexture>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+pub static GL_COMMANDS: Lazy<RwLock<(Vec<GLCommand>, Vec<GLCommand>)>> =
+    Lazy::new(|| RwLock::new((Vec::new(), Vec::new())));
 
 #[derive(Clone, Debug)]
 pub enum GLCommand {
@@ -47,20 +51,21 @@ pub struct GlTexture {
     pub pixels: Vec<u8>,
 }
 
-#[derive(Pod, Zeroable, Copy, Clone)]
+#[derive(Debug, Pod, Zeroable, Copy, Clone)]
 #[repr(C)]
 pub struct ElectrumVertex {
     pub pos: [f32; 4],
     pub uv: [f32; 2],
     pub color: [f32; 4],
-    pub use_uv: u32
+    pub use_uv: u32,
 }
 
 impl ElectrumVertex {
-    pub const VAO: [wgpu::VertexAttribute; 3] = vertex_attr_array![
+    pub const VAO: [wgpu::VertexAttribute; 4] = vertex_attr_array![
         0 => Float32x4,
         1 => Float32x2,
-        2 => Float32x4
+        2 => Float32x4,
+        3 => Uint32
     ];
 }
 
@@ -108,7 +113,7 @@ impl ElectrumVertex {
                 vertex.pos[3] = 1.0;
                 vertex.uv.copy_from_slice(&vert[3..5]);
 
-                let color: u32 = bytemuck::cast(verts[5]);
+                let color: u32 = bytemuck::cast(vert[5]);
                 let r = (color & 0xff) as f32 / 255.0;
                 let g = ((color >> 8) & 0xff) as f32 / 255.0;
                 let b = ((color >> 16) & 0xff) as f32 / 255.0;
@@ -121,32 +126,83 @@ impl ElectrumVertex {
             })
             .collect()
     }
+
+    pub fn map_pos_color_uint(verts: &[[f32; 4]]) -> Vec<ElectrumVertex> {
+        verts
+            .iter()
+            .map(|vert| {
+                let mut vertex = ElectrumVertex::zeroed();
+
+                (&mut vertex.pos[0..3]).copy_from_slice(&vert[0..3]);
+                vertex.pos[3] = 1.0;
+
+                let color: u32 = bytemuck::cast(vert[3]);
+                let r = (color & 0xff) as f32 / 255.0;
+                let g = ((color >> 8) & 0xff) as f32 / 255.0;
+                let b = ((color >> 16) & 0xff) as f32 / 255.0;
+                let a = ((color >> 24) & 0xff) as f32 / 255.0;
+
+                vertex.color = [r, g, b, a];
+                vertex.use_uv = 0;
+
+                vertex
+            })
+            .collect()
+    }
+
+    pub fn map_pos_color_uv_light(verts: &[[u8; 28]]) -> Vec<ElectrumVertex> {
+        verts
+            .iter()
+            .map(|vert| {
+                let mut vertex = ElectrumVertex::zeroed();
+
+                //Because of alignment issues we can't use bytemuck here
+                vertex.pos[0] = f32::from_ne_bytes(vert[0..4].try_into().unwrap());
+                vertex.pos[1] = f32::from_ne_bytes(vert[4..8].try_into().unwrap());
+                vertex.pos[2] = f32::from_ne_bytes(vert[8..12].try_into().unwrap());
+                vertex.pos[3] = 1.0;
+
+                let color: u32 = u32::from_ne_bytes(vert[12..16].try_into().unwrap());
+                let r = (color & 0xff) as f32 / 255.0;
+                let g = ((color >> 8) & 0xff) as f32 / 255.0;
+                let b = ((color >> 16) & 0xff) as f32 / 255.0;
+                let a = ((color >> 24) & 0xff) as f32 / 255.0;
+
+                vertex.color = [r, g, b, a];
+                vertex.use_uv = 1;
+
+                vertex.uv[0] = f32::from_ne_bytes(vert[16..20].try_into().unwrap());
+                vertex.uv[1] = f32::from_ne_bytes(vert[20..24].try_into().unwrap());
+
+                vertex
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug)]
-struct Draw<'a> {
+struct Draw {
     vertex_buffer: Vec<u8>,
     count: u32,
     matrix: [[f32; 4]; 4],
-    textures: HashMap<u32, &'a GlTexture>,
+    texture: Option<u32>,
     pipeline_state: PipelineState,
 }
 
 #[derive(Debug)]
-struct IndexedDraw<'a> {
+struct IndexedDraw {
     vertex_buffer: Vec<u8>,
     index_buffer: Vec<u32>,
     count: u32,
     matrix: [[f32; 4]; 4],
-    textures: HashMap<u32, &'a GlTexture>,
+    texture: Option<u32>,
     pipeline_state: PipelineState,
 }
 
 #[derive(Debug)]
-enum DrawCall<'a> {
-    Verts(Draw<'a>),
-    Indexed(IndexedDraw<'a>),
-    Clear([f32; 3])
+enum DrawCall {
+    Verts(Draw),
+    Indexed(IndexedDraw),
 }
 
 #[derive(Debug)]
@@ -155,166 +211,264 @@ enum PipelineState {
     PositionUv,
     PositionColorF32,
     PositionUvColor,
-    PositionColorUvLight
+    PositionColorUvLight,
 }
 
-pub fn electrum_gui_callback<'arena: 'pass, 'pass>(
+fn augment_resources<'arena: 'resources, 'resources>(
     wm: &WmRenderer,
-    render_pass: &mut RenderPass<'pass>,
-    graph: &ShaderGraph,
-    pipeline: &PipelineConfig,
-    resources: &HashMap<&String, &'pass CustomResource>,
-    arena: &'arena WmArena,
-) {
-    let (_, commands) = {
-        GL_COMMANDS.read().clone() //Free the lock as soon as possible
-    };
+    resources: &'resources HashMap<String, CustomResource>,
+    arena: &'arena WmArena<'arena>,
+    texture: Arc<BindableTexture>,
+    matrix: Mat4,
+) -> &'arena HashMap<&'arena String, &'resources CustomResource> {
+    arena.alloc(
+        resources
+            .into_iter()
+            .chain([
+                (
+                    &*arena.alloc("wm_electrum_gl_texture".into()),
+                    &*arena.alloc(CustomResource {
+                        update: None,
+                        data: Arc::new(ResourceInternal::Texture(
+                            TextureResource::Bindable(Arc::new(ArcSwap::new(texture))),
+                            false,
+                        )),
+                    }),
+                ),
+                (
+                    &*arena.alloc("wm_electrum_mat4".into()),
+                    &*arena.alloc(CustomResource {
+                        update: None,
+                        data: Arc::new(ResourceInternal::Mat4(
+                            Mat4ValueOrMult::Value { value: matrix },
+                            Arc::new(RwLock::new(matrix.into())),
+                            Arc::new(BindableBuffer::new(
+                                wm,
+                                bytemuck::cast_slice(&matrix),
+                                BufferUsages::UNIFORM,
+                                "matrix",
+                            )),
+                        )),
+                    }),
+                ),
+            ])
+            .collect(),
+    )
+}
 
-    let config = {
-        wm.wgpu_state.surface.read().1.clone()
-    };
+#[derive(Debug)]
+pub struct ElectrumGeometry {
+    pub blank: TextureHandle,
+}
 
-    let mut calls = vec![];
+impl GeometryCallback for ElectrumGeometry {
+    fn render<'pass, 'resource: 'pass>(
+        &self,
+        wm: &WmRenderer,
+        render_pass: &mut RenderPass<'pass>,
+        graph: &'pass ShaderGraph,
+        config: &PipelineConfig,
+        resources: &'resource HashMap<String, CustomResource>,
+        arena: &'resource WmArena<'resource>,
+        surface_config: &SurfaceConfiguration,
+    ) {
+        let (_, commands) = {
+            GL_COMMANDS.read().clone() //Free the lock as soon as possible
+        };
 
-    let mut vertex_buffer = vec![];
-    let mut index_buffer = vec![];
-    let mut matrix = Matrix4::<f32>::identity();
-    let mut textures = HashMap::new();
-    let mut pipeline_state = None;
+        let mut calls = vec![];
 
-    let textures_read = GL_ALLOC.read();
+        let mut vertex_buffer = vec![];
+        let mut index_buffer = vec![];
+        let mut matrix = Matrix4::<f32>::identity();
+        let mut texture = None;
+        let mut pipeline_state = None;
 
-    for command in commands {
-        match command {
-            GLCommand::SetMatrix(new_matrix) => {
-                matrix = new_matrix;
-            }
-            GLCommand::ClearColor(color) => {
-                calls.push(DrawCall::Clear(color));
-            }
-            GLCommand::UsePipeline(pipeline) => {
-                pipeline_state = Some(match pipeline {
-                    0 => PipelineState::PositionColorUint,
-                    1 => PipelineState::PositionUv,
-                    2 => PipelineState::PositionColorF32,
-                    3 => PipelineState::PositionColorUvLight,
-                    4 => PipelineState::PositionUvColor,
-                    _ => unimplemented!(),
-                });
-            }
-            GLCommand::SetVertexBuffer(buffer) => {
-                vertex_buffer = buffer;
-            }
-            GLCommand::SetIndexBuffer(buffer) => {
-                index_buffer = buffer;
-            }
-            GLCommand::DrawIndexed(count) => {
-                calls.push(DrawCall::Indexed(IndexedDraw {
-                    vertex_buffer: replace(&mut vertex_buffer, vec![]),
-                    index_buffer: replace(&mut index_buffer, vec![]),
-                    count,
-                    matrix: matrix.into(),
-                    textures: replace(&mut textures, HashMap::new()),
-                    pipeline_state: pipeline_state.take().unwrap(),
-                }));
-            }
-            GLCommand::Draw(count) => {
-                calls.push(DrawCall::Verts(Draw {
-                    vertex_buffer: replace(&mut vertex_buffer, vec![]),
-                    count,
-                    matrix: matrix.into(),
-                    textures: replace(&mut textures, HashMap::new()),
-                    pipeline_state: pipeline_state.take().unwrap(),
-                }));
-            }
-            GLCommand::AttachTexture(index, texture) => {
-                textures.insert(index, textures_read.get(&index).unwrap());
+        let textures_read = GL_ALLOC.read();
+
+        for command in commands {
+            match command {
+                GLCommand::SetMatrix(new_matrix) => {
+                    matrix = new_matrix;
+                }
+                GLCommand::ClearColor(color) => {
+                    #[rustfmt::skip]
+                    calls.push(DrawCall::Indexed(IndexedDraw {
+                        vertex_buffer: Vec::from(
+                            bytemuck::cast_slice(&[
+                                -1.0, 1.0, 0.0, color[0], color[1], color[2],
+                                1.0, 1.0, 0.0, color[0], color[1], color[2],
+                                1.0, -1.0, 0.0, color[0], color[1], color[2],
+                                -1.0, -1.0, 0.0, color[0], color[1], color[2]
+                            ])
+                        ),
+                        index_buffer: vec![0,1,2,0,3,2],
+                        count: 6,
+                        matrix: Matrix4::<f32>::identity().into(),
+                        texture: None,
+                        pipeline_state: PipelineState::PositionColorF32,
+                    }));
+                }
+                GLCommand::UsePipeline(pipeline) => {
+                    pipeline_state = Some(match pipeline {
+                        0 => PipelineState::PositionColorUint,
+                        1 => PipelineState::PositionUv,
+                        2 => PipelineState::PositionColorF32,
+                        3 => PipelineState::PositionColorUvLight,
+                        4 => PipelineState::PositionUvColor,
+                        _ => unimplemented!(),
+                    });
+                }
+                GLCommand::SetVertexBuffer(buffer) => {
+                    vertex_buffer = buffer;
+                }
+                GLCommand::SetIndexBuffer(buffer) => {
+                    index_buffer = buffer;
+                }
+                GLCommand::DrawIndexed(count) => {
+                    calls.push(DrawCall::Indexed(IndexedDraw {
+                        vertex_buffer: replace(&mut vertex_buffer, vec![]),
+                        index_buffer: replace(&mut index_buffer, vec![]),
+                        count,
+                        matrix: matrix.into(),
+                        texture: texture.take(),
+                        pipeline_state: pipeline_state.take().unwrap(),
+                    }));
+                }
+                GLCommand::Draw(count) => {
+                    calls.push(DrawCall::Verts(Draw {
+                        vertex_buffer: replace(&mut vertex_buffer, vec![]),
+                        count,
+                        matrix: matrix.into(),
+                        texture: texture.take(),
+                        pipeline_state: pipeline_state.take().unwrap(),
+                    }));
+                }
+                GLCommand::AttachTexture(index, id) => {
+                    assert_eq!(index, 0);
+                    texture = Some(id as u32);
+                }
             }
         }
-    }
 
-    println!("{calls:?}");
+        //TODO: make gui rendering instanced to minimize draw calls by merging similar calls
 
-    let key = "wm_electrum_gl_texture".into();
+        // let mut draws = HashMap::new();
+        // let mut indexed_draws = HashMap::new();
+        // let mut clears = HashMap::new();
+        //
+        // for call in calls {
+        //     match call {
+        //         DrawCall::Verts(draw) => {
+        //             match draws.get_mut(&draw.texture) {
+        //                 Some(assembled_draw) => {
+        //                     assembled_draw.
+        //                 },
+        //                 None => {
+        //                     draws.insert(draw.texture, draw);
+        //                 }
+        //             };
+        //         }
+        //         DrawCall::Indexed(_) => {}
+        //         DrawCall::Clear(_) => {}
+        //     }
+        // }
 
-    for call in calls {
-        match call {
-            DrawCall::Verts(draw) => {
-                assert_eq!(draw.textures.len(), 1);
+        for call in calls {
+            match call {
+                DrawCall::Verts(draw) => {
+                    for (name, pipeline) in &graph.pack.pipelines.pipelines {
+                        let mut texture = self.blank.bindable_texture.load_full();
 
-                let texture = draw.textures.get(&0).unwrap();
-                let bindable = texture.bindable_texture.as_ref().unwrap().clone();
+                        if let Some(texture_index) = draw.texture {
+                            if let Some(gl_texture) = textures_read.get(&texture_index) {
+                                texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
+                            }
+                        }
 
-                let augmented_resources =
-                    resources.clone().into_iter().chain([(&key, &*arena.alloc(CustomResource {
-                        update: None,
-                        data: Arc::new(
-                            ResourceInternal::Texture(
-                                TextureResource::Bindable(Arc::new(ArcSwap::new(bindable))),
-                                false
-                            )
-                        ),
-                    }))]).collect();
+                        let augmented_resources =
+                            augment_resources(wm, &resources, arena, texture, draw.matrix);
 
-                bind_uniforms(pipeline, &augmented_resources, arena, render_pass);
-                set_push_constants(pipeline, render_pass, None, &config);
+                        bind_uniforms(pipeline, augmented_resources, arena, render_pass);
+                        set_push_constants(pipeline, render_pass, None, surface_config);
 
-                let buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    contents: &draw.vertex_buffer,
-                    usage: BufferUsages::VERTEX,
-                });
+                        let buffer =
+                            wm.wgpu_state
+                                .device
+                                .create_buffer_init(&BufferInitDescriptor {
+                                    label: None,
+                                    contents: &draw.vertex_buffer,
+                                    usage: BufferUsages::VERTEX,
+                                });
 
-                render_pass.set_vertex_buffer(0, arena.alloc(buffer).slice(..));
-                render_pass.draw(0..draw.count, 0..1);
-            }
-            DrawCall::Indexed(draw) => {
-                assert_eq!(draw.textures.len(), 1);
+                        render_pass.set_pipeline(graph.pipelines.get(name).unwrap());
+                        render_pass.set_vertex_buffer(0, arena.alloc(buffer).slice(..));
+                        render_pass.draw(0..draw.count, 0..1);
+                    }
+                }
+                DrawCall::Indexed(draw) => {
+                    for (name, pipeline) in &graph.pack.pipelines.pipelines {
+                        let mut texture = self.blank.bindable_texture.load_full();
 
-                let texture = draw.textures.get(&0).unwrap();
-                let bindable = texture.bindable_texture.as_ref().unwrap().clone();
+                        if let Some(texture_index) = draw.texture {
+                            if let Some(gl_texture) = textures_read.get(&texture_index) {
+                                texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
+                            }
+                        }
 
-                let augmented_resources =
-                    resources.clone().into_iter().chain([(&key, &*arena.alloc(CustomResource {
-                        update: None,
-                        data: Arc::new(
-                            ResourceInternal::Texture(
-                                TextureResource::Bindable(Arc::new(ArcSwap::new(bindable))),
-                                false
-                            )
-                        ),
-                    }))]).collect();
+                        let augmented_resources =
+                            augment_resources(wm, &resources, arena, texture, draw.matrix);
 
-                bind_uniforms(pipeline, &augmented_resources, arena, render_pass);
-                set_push_constants(pipeline, render_pass, None, &config);
+                        bind_uniforms(pipeline, augmented_resources, arena, render_pass);
+                        set_push_constants(pipeline, render_pass, None, surface_config);
 
-                let vertices = match draw.pipeline_state {
-                    PipelineState::PositionColorUint => continue,
-                    PipelineState::PositionUv => ElectrumVertex::map_pos_uv(bytemuck::cast_slice(&draw.vertex_buffer)),
-                    PipelineState::PositionColorF32 => ElectrumVertex::map_pos_col_float3(bytemuck::cast_slice(&draw.vertex_buffer)),
-                    PipelineState::PositionUvColor => ElectrumVertex::map_pos_uv_color(bytemuck::cast_slice(&draw.vertex_buffer)),
-                    PipelineState::PositionColorUvLight => continue,
-                };
+                        let vertices = match draw.pipeline_state {
+                            PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
+                                bytemuck::cast_slice(&draw.vertex_buffer),
+                            ),
+                            PipelineState::PositionUv => ElectrumVertex::map_pos_uv(
+                                bytemuck::cast_slice(&draw.vertex_buffer),
+                            ),
+                            PipelineState::PositionColorF32 => ElectrumVertex::map_pos_col_float3(
+                                bytemuck::cast_slice(&draw.vertex_buffer),
+                            ),
+                            PipelineState::PositionUvColor => ElectrumVertex::map_pos_uv_color(
+                                bytemuck::cast_slice(&draw.vertex_buffer),
+                            ),
+                            PipelineState::PositionColorUvLight => {
+                                ElectrumVertex::map_pos_color_uv_light(
+                                    bytemuck::try_cast_slice(&draw.vertex_buffer).unwrap(),
+                                )
+                            },
+                        };
 
-                let vertex_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(&vertices),
-                    usage: BufferUsages::VERTEX,
-                });
+                        let vertex_buffer =
+                            wm.wgpu_state
+                                .device
+                                .create_buffer_init(&BufferInitDescriptor {
+                                    label: None,
+                                    contents: bytemuck::cast_slice(&vertices),
+                                    usage: BufferUsages::VERTEX,
+                                });
 
-                let index_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(&draw.index_buffer),
-                    usage: BufferUsages::VERTEX,
-                });
+                        let index_buffer =
+                            wm.wgpu_state
+                                .device
+                                .create_buffer_init(&BufferInitDescriptor {
+                                    label: None,
+                                    contents: bytemuck::cast_slice(&draw.index_buffer),
+                                    usage: BufferUsages::INDEX,
+                                });
 
-                render_pass.set_vertex_buffer(0, arena.alloc(vertex_buffer).slice(..));
-                render_pass.set_index_buffer(arena.alloc(index_buffer).slice(..), IndexFormat::Uint32);
-                render_pass.draw_indexed(0..draw.count, 0, 0..1);
-            }
-            DrawCall::Clear(color) => {
-                render_pass.set_push_constants(ShaderStages::FRAGMENT, 0, bytemuck::cast_slice(&color));
-                render_pass.draw(0..6, 0..1);
+                        render_pass.set_pipeline(graph.pipelines.get(name).unwrap());
+                        render_pass.set_vertex_buffer(0, arena.alloc(vertex_buffer).slice(..));
+                        render_pass.set_index_buffer(
+                            arena.alloc(index_buffer).slice(..),
+                            IndexFormat::Uint32,
+                        );
+                        render_pass.draw_indexed(0..draw.count, 0, 0..1);
+                    }
+                }
             }
         }
     }

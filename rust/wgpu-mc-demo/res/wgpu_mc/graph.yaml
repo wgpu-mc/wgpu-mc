@@ -3,10 +3,7 @@ support: wgsl
 resources:
   mvp_mat4:
     type: mat4
-    mult: [wm_projection_mat4]
-  inverse_proj_mat4:
-    type: mat4
-    mult: [wm_inverse_projection_mat4]
+    mult: [wm_mat4_projection, wm_mat4_view]
   shadow_depth:
     type: texture_depth
   shadow_col:
@@ -15,12 +12,12 @@ resources:
     type: mat4
     value: [[1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]]
 pipelines:
-  shadow_terrain:
-    geometry: wm_geo_terrain
-    depth: shadow_depth
-    output: []
-    uniforms:
-      0: mvp_mat4
+#  shadow_terrain:
+#    geometry: wm_geo_terrain
+#    depth: shadow_depth
+#    output: []
+#    uniforms:
+#      0: mvp_mat4
   terrain:
     geometry: wm_geo_terrain
     depth: wm_framebuffer_depth
@@ -32,4 +29,3 @@ pipelines:
       0: mvp_mat4
       1: wm_texture_atlas_blocks
       2: shadow_depth
-      3: inverse_proj_mat4

@@ -112,7 +112,7 @@ impl TextureSamplerView {
 }
 
 ///Texture that will be automatically resized by wgpu-mc to fit the framebuffer
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TextureHandle {
     pub bindable_texture: Arc<ArcSwap<BindableTexture>>,
 }

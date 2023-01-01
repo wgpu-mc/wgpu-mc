@@ -7,7 +7,6 @@ use minecraft_assets::schemas;
 use parking_lot::RwLock;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
-use crate::camera::{Camera, UniformMatrixHelper};
 use crate::mc::chunk::ChunkManager;
 use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
@@ -153,11 +152,6 @@ pub struct MinecraftState {
 
     pub resource_provider: Arc<dyn ResourceProvider>,
 
-    pub camera: ArcSwap<Camera>,
-
-    pub camera_buffer: ArcSwap<Option<wgpu::Buffer>>,
-    pub camera_bind_group: ArcSwap<Option<wgpu::BindGroup>>,
-
     pub texture_manager: TextureManager,
 
     pub animated_block_buffer: ArcSwap<Option<wgpu::Buffer>>,
@@ -178,49 +172,11 @@ impl MinecraftState {
                 blocks: IndexMap::new(),
             }),
 
-            camera: ArcSwap::new(Arc::new(Camera::new(1.0))),
-
-            camera_buffer: ArcSwap::new(Arc::new(None)),
-            camera_bind_group: ArcSwap::new(Arc::new(None)),
-
             resource_provider,
 
             animated_block_buffer: ArcSwap::new(Arc::new(None)),
             animated_block_bind_group: ArcSwap::new(Arc::new(None)),
         }
-    }
-
-    pub fn init_camera(&self, wm: &WmRenderer) {
-        let camera_buffer = wm.wgpu_state.device.create_buffer(&BufferDescriptor {
-            label: None,
-            size: size_of::<UniformMatrixHelper>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let camera_bind_group = wm
-            .wgpu_state
-            .device
-            .create_bind_group(&BindGroupDescriptor {
-                label: None,
-                layout: wm
-                    .pipelines
-                    .load()
-                    .bind_group_layouts
-                    .read()
-                    .get("matrix")
-                    .unwrap(),
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(
-                        camera_buffer.as_entire_buffer_binding(),
-                    ),
-                }],
-            });
-
-        self.camera_buffer.store(Arc::new(Some(camera_buffer)));
-        self.camera_bind_group
-            .store(Arc::new(Some(camera_bind_group)))
     }
 
     ///Bake blocks from their blockstates
