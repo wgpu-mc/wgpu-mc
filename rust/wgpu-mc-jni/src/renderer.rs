@@ -132,7 +132,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             let surface = surface_state.0.as_ref().unwrap();
             let texture = surface.get_current_texture().unwrap();
 
-            let _view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
                 format: Some(wgpu::TextureFormat::Bgra8Unorm),
                 dimension: Some(wgpu::TextureViewDimension::D2),

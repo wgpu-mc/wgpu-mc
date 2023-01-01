@@ -36,6 +36,7 @@ tracing-timing = "0.6.0"
 slab = "0.4.7"
 log = "0.4.17"
 env_logger = "0.10.0"
+serde_yaml = "0.9"
 
 [lib]
 crate-type = ["cdylib"]
