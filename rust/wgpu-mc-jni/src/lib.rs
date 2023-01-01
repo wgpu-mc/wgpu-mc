@@ -2,8 +2,6 @@
 #![feature(array_zip)]
 #![feature(core_panic)]
 
-use arc_swap::access::Access;
-use core::panicking::panic;
 use core::slice;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -23,8 +21,7 @@ use cgmath::{Matrix4, Point3};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
-    jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray,
-    jobject, jstring,
+    jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jstring,
 };
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
@@ -57,7 +54,6 @@ use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
 
 mod entity;
-mod gl;
 mod palette;
 mod pia;
 mod renderer;
@@ -78,7 +74,7 @@ enum RenderMessage {
 #[derive(Debug)]
 struct MinecraftRenderState {
     //draw_queue: Vec<>,
-    render_world: bool,
+    _render_world: bool,
 }
 
 #[allow(dead_code)]
@@ -95,7 +91,7 @@ static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
 static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
     ArcSwap::new(Arc::new(MinecraftRenderState {
-        render_world: false,
+        _render_world: false,
     }))
 });
 #[allow(dead_code)]
@@ -396,9 +392,7 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
                 &*BLOCK_STATE_PROVIDER,
             );
 
-            use get_size::GetSize;
-
-            println!(
+            log::info!(
                 "Baked chunk (x={}, z={}, of {}) in {}ms",
                 x,
                 z,
@@ -425,7 +419,7 @@ pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) {
 pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
     let wm = RENDERER.get().unwrap();
 
-    println!("baking blocks");
+    log::trace!("baking blocks");
 
     {
         let blocks = BLOCKS.lock();
@@ -493,8 +487,6 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
                 .unwrap()
                 .load_full();
 
-            // println!("{} {}", block_name, state_key);
-
             let model = wm_block.get_model_by_key(
                 key_iter
                     .iter()
@@ -510,14 +502,10 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
                     block: id_key as u16,
                     augment,
                 },
-                None => {
-                    // println!("{}[{:?}]", block_name, key_iter);
-
-                    BlockstateKey {
-                        block: fallback_key.0 as u16,
-                        augment: 0,
-                    }
-                }
+                None => BlockstateKey {
+                    block: fallback_key.0 as u16,
+                    augment: 0,
+                },
             };
 
             mappings.push((key, global_ref));
@@ -618,6 +606,8 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setPanicHook(env: JNIEnv, _class: JClass) {
+    env_logger::init();
+
     let jvm = env.get_java_vm().unwrap();
     let jvm_ptr = jvm.get_java_vm_pointer() as usize;
 
@@ -699,31 +689,9 @@ pub fn updateWindowTitle(env: JNIEnv, _class: JClass, jtitle: JString) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bakeBlockModels(env: JNIEnv, _class: JClass) -> jobject {
-    let _renderer = RENDERER.get().unwrap();
-
-    let block_hashmap = env.new_object("java/util/HashMap", "()V", &[]).unwrap();
-
-    // let instant = Instant::now();
-    // renderer.mc.block_manager.read().baked_block_variants.iter().for_each(|(identifier, (key, _))| {
-    //     let _integer = env.new_object("java/lang/Integer", "(I)V", &[
-    //         JValue::Int(*key as i32)
-    //     ]).unwrap();
-    //
-    //     env.call_method(block_hashmap, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", &[
-    //         JValue::Object(env.new_string(identifier.to_string()).unwrap().into()),
-    //         JValue::Object(_integer)
-    //     ]).unwrap();
-    // });
-    // println!("Uploaded blocks to java HashMap in {}ms", Instant::now().duration_since(instant).as_millis());
-
-    block_hashmap.into_raw()
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setWorldRenderState(_env: JNIEnv, _class: JClass, boolean: jboolean) {
     MC_STATE.store(Arc::new(MinecraftRenderState {
-        render_world: boolean != 0,
+        _render_world: boolean != 0,
     }));
 }
 
@@ -1070,15 +1038,6 @@ pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: jintArray) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn scheduleChunkRebuild(_env: JNIEnv, _class: JClass, _x: jint, _z: jint) {
-    let _wm = RENDERER.get().unwrap();
-
-    // println!("Building chunk {},{}", x, z);
-    // wm.mc.chunks.loaded_chunks.read().get(&(x,z)).unwrap().load().bake(&wm.mc.block_manager.read());
-    // wm.mc.chunks.assemble_world_meshes(wm);
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn createIdList(_env: JNIEnv, _class: JClass) -> jlong {
     let mut palette = Box::new(IdList::new());
 
@@ -1155,7 +1114,7 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
             WINDOW.get().unwrap().set_cursor_visible(false);
         }
         _ => {
-            println!("Set cursor mode had an invalid mode.")
+            log::warn!("Set cursor mode had an invalid mode.")
         }
     }
 }
@@ -1193,6 +1152,4 @@ pub fn registerEntityModel(env: JNIEnv, _class: JClass, json_jstring: JString) {
     let json_string: String = env.get_string(json_jstring).unwrap().into();
     let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
     let _entity_part = tmd_to_wm(&model_data.data.data);
-    // println!("{:?}", entity);
-    // let entity = Entity::new(entity_part.unwrap(), &renderer.wgpu_state, texture)
 }

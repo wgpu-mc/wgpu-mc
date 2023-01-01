@@ -11,11 +11,11 @@ use crate::render::shaderpack::{LonghandResourceConfig, Mat3ValueOrMult, Mat4Val
 use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{UniformStorage, WmArena};
 use crate::WmRenderer;
-use wgpu::{BindGroup, BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState, LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
+use wgpu::{BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState, LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexState};
 use crate::mc::chunk::Chunk;
 
 pub type GeometryCallback<'arena: 'pass, 'pass> =
-    Box<dyn Fn(&WmRenderer, &mut RenderPass<'pass>, &ShaderGraph, &PipelineConfig, &HashMap<&String, &'pass CustomResource>, &WmArena<'arena>)>;
+Box<dyn Fn(&WmRenderer, &mut RenderPass<'pass>, &ShaderGraph, &PipelineConfig, &HashMap<&String, &'pass CustomResource>, &WmArena<'arena>)>;
 
 fn mat3_update(
     resource: &CustomResource,
@@ -94,7 +94,7 @@ pub enum ResourceInternal {
     Texture(TextureResource, bool),
     Blob(UniformStorage),
     Mat3((Mat3ValueOrMult, RwLock<Matrix3<f32>>, UniformStorage)),
-    Mat4(((Mat4ValueOrMult, RwLock<Matrix4<f32>>, UniformStorage))),
+    Mat4((Mat4ValueOrMult, RwLock<Matrix4<f32>>, UniformStorage)),
     F32((f32, UniformStorage)),
     F64((f64, UniformStorage)),
     U32((u32, UniformStorage)),
@@ -228,11 +228,8 @@ impl ShaderGraph {
                 }
                 ShorthandResourceConfig::Longhand(longhand) => match &longhand.typed {
                     TypeResourceConfig::Texture3d { .. } => todo!(),
-                    TypeResourceConfig::Texture2d {
-                        src,
-                        clear_after_frame,
-                    } => {
-                        if src.len() > 0 {
+                    TypeResourceConfig::Texture2d { src, .. } => {
+                        if !src.is_empty() {
                             todo!()
                         } else {
                             let handle = wm.create_texture_handle(
@@ -251,7 +248,7 @@ impl ShaderGraph {
                             );
                         }
                     }
-                    TypeResourceConfig::TextureDepth { clear_after_frame } => {
+                    TypeResourceConfig::TextureDepth { .. } => {
                         let handle = wm.create_texture_handle(
                             resource_id.clone(),
                             TextureFormat::Depth32Float,
@@ -500,7 +497,7 @@ impl ShaderGraph {
                                     targets: &definition
                                         .output
                                         .iter()
-                                        .map(|target_texture| {
+                                        .map(|_| {
                                             Some(ColorTargetState {
                                             format: TextureFormat::Bgra8Unorm,
                                             blend: Some(match &definition.blending[..] {
@@ -529,14 +526,8 @@ impl ShaderGraph {
         self.resources = resources;
     }
 
-    pub fn render(
-        &self,
-        wm: &WmRenderer,
-        output_texture: &wgpu::TextureView,
-        additional_resources: Option<&HashMap<&String, &CustomResource>>,
-        additional_geometry: Option<&HashMap<&String, &GeometryCallback>>,
-    ) {
-        let mut arena = WmArena::new(1024);
+    pub fn render(&self, wm: &WmRenderer, output_texture: &wgpu::TextureView) {
+        let arena = WmArena::new(1024);
 
         let resources: HashMap<&String, &CustomResource> = match additional_resources {
             Some(additional_resources) => {

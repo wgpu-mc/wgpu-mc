@@ -1,14 +1,12 @@
 extern crate wgpu_mc;
 
-use arc_swap::access::{Access, DynAccess};
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::time::Instant;
 
 use arc_swap::ArcSwap;
-use bytemuck::Pod;
+
 use futures::executor::block_on;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
@@ -19,18 +17,12 @@ use winit::window::Window;
 
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::RenderLayer;
-use wgpu_mc::mc::entity::{EntityInstanceTransforms, PartTransform};
+
 use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::mc::resource::ResourceProvider;
-use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
+use wgpu_mc::render::graph::ShaderGraph;
 use wgpu_mc::render::pipeline::Vertex;
-use wgpu_mc::render::shaderpack::Mat4ValueOrMult;
-use wgpu_mc::util::UniformStorage;
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu_mc::wgpu::{
-    BindGroupDescriptor, BindGroupEntry, CommandEncoderDescriptor, ComputePassDescriptor, Maintain,
-    MaintainBase, MapMode,
-};
+
 use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 
 use crate::chunk::make_chunks;
@@ -181,7 +173,7 @@ impl RenderLayer for TerrainLayer {
 }
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
-    let (_entity, mut instances) = describe_entity(&wm);
+    let (_entity, _instances) = describe_entity(&wm);
 
     wm.pipelines
         .load_full()
@@ -202,7 +194,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
     let mut forward = 0.0;
 
-    let mut spin: f32 = 0.0;
+    let mut _spin: f32 = 0.0;
 
     let mut _frame: u32 = 0;
 
@@ -294,7 +286,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
                 let frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
-                spin += 0.5;
+                _spin += 0.5;
                 _frame += 1;
 
                 let mut camera = **wm.mc.camera.load();

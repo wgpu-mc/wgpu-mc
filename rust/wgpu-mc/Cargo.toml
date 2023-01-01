@@ -32,3 +32,5 @@ serde_with = "2.1.0"
 web-sys = "0.3.53"
 minecraft-assets = { git = "https://github.com/wgpu-mc/minecraft-assets.git" }
 get-size = { version = "0.1.1", features = ["derive"] }
+log = "0.4.17"
+logging_timer = "1.1.0"

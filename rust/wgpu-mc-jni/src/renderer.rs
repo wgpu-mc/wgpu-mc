@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::thread;
-use std::time::Duration;
 use std::{sync::Arc, time::Instant};
 use std::mem::size_of;
 
@@ -51,7 +50,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             .unwrap(),
     );
 
-    println!("Opened window");
+    log::info!("Opened window");
 
     WINDOW.set(window.clone()).unwrap();
 
@@ -81,10 +80,9 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let mut current_modifiers = ModifiersState::empty();
 
-    println!("Starting event loop");
+    log::trace!("Starting event loop");
 
     let wm_clone = wm.clone();
-    let wm_clone_1 = wm.clone();
 
     let shader_pack: ShaderPackConfig =
         serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
@@ -110,14 +108,14 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         loop {
             wm.upload_camera();
 
-            let mc_state = MC_STATE.load();
+            let _mc_state = MC_STATE.load();
 
             let surface_state = wm.wgpu_state.surface.read();
 
             let surface = surface_state.0.as_ref().unwrap();
             let texture = surface.get_current_texture().unwrap();
 
-            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+            let _view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
                 format: Some(wgpu::TextureFormat::Bgra8Unorm),
                 dimension: Some(wgpu::TextureViewDimension::D2),

@@ -68,7 +68,7 @@ impl Settings {
             default.write();
             default
         };
-        println!("Loaded settings: {setting:?}");
+        log::info!("Loaded settings: {setting:?}");
         setting
     }
 

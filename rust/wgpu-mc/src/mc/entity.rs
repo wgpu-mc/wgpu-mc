@@ -53,22 +53,22 @@ pub struct PartTransform {
 }
 
 impl PartTransform {
-    pub fn describe(&self) -> cgmath::Matrix4<f32> {
-        cgmath::Matrix4::from_nonuniform_scale(self.scale_x, self.scale_y, self.scale_z)
-            * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+    pub fn describe(&self) -> Matrix4<f32> {
+        Matrix4::from_nonuniform_scale(self.scale_x, self.scale_y, self.scale_z)
+            * Matrix4::from_translation(cgmath::Vector3::new(
                 self.pivot_x / self.scale_x,
                 self.pivot_y / self.scale_y,
                 self.pivot_z / self.scale_z,
             ))
-            * cgmath::Matrix4::from_angle_z(cgmath::Deg(self.roll))
-            * cgmath::Matrix4::from_angle_x(cgmath::Deg(self.pitch))
-            * cgmath::Matrix4::from_angle_y(cgmath::Deg(self.yaw))
-            * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+            * Matrix4::from_angle_z(cgmath::Deg(self.roll))
+            * Matrix4::from_angle_x(cgmath::Deg(self.pitch))
+            * Matrix4::from_angle_y(cgmath::Deg(self.yaw))
+            * Matrix4::from_translation(cgmath::Vector3::new(
                 -self.pivot_x / self.scale_x,
                 -self.pivot_y / self.scale_y,
                 -self.pivot_z / self.scale_z,
             ))
-            * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+            * Matrix4::from_translation(cgmath::Vector3::new(
                 self.x / self.scale_x,
                 self.y / self.scale_y,
                 self.z / self.scale_z,
@@ -476,18 +476,18 @@ pub(crate) struct EntityInstanceVBOEntry {
 }
 
 impl EntityInstanceVBOEntry {
-    const VAA: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
+    const _VAA: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
         4 => Uint32,
         5 => Float32x2,
         6 => Uint32
     ];
 
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn _desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<EntityInstanceVBOEntry>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &Self::VAA,
+            attributes: &Self::_VAA,
         }
     }
 }
@@ -593,11 +593,11 @@ impl EntityInstanceTransforms {
 
         // let mut index = 0;
         recurse_transforms(
-            cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+            Matrix4::from_translation(cgmath::Vector3::new(
                 self.position.0,
                 self.position.1,
                 self.position.2,
-            )) * cgmath::Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw)),
+            )) * Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw)),
             &entity.model_root,
             &mut vec,
             // &mut index,
@@ -609,11 +609,11 @@ impl EntityInstanceTransforms {
 }
 
 fn recurse_transforms(
-    mat: cgmath::Matrix4<f32>,
+    mat: Matrix4<f32>,
     part: &EntityPart,
-    vec: &mut Vec<cgmath::Matrix4<f32>>,
+    vec: &mut Vec<Matrix4<f32>>,
     // index: &mut usize,
-    instance_transforms: &[cgmath::Matrix4<f32>],
+    instance_transforms: &[Matrix4<f32>],
 ) {
     let instance_part_transform = instance_transforms[0];
 
