@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::{Matrix4, Point3};
@@ -35,7 +36,6 @@ use wgpu::Extent3d;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
 use winit::window::{CursorGrabMode, Window};
-use crate::gl::{GL_COMMANDS, GL_ALLOC, GLCommand, GlTexture};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
@@ -53,8 +53,8 @@ use crate::palette::{IdList, JavaPalette};
 use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
 
-mod gl;
 mod entity;
+mod gl;
 mod palette;
 mod pia;
 mod renderer;
@@ -723,7 +723,6 @@ pub fn texImage2D(
     _type: jint,
     pixels_ptr: jlong,
 ) {
-
     let _pixel_size = match format {
         0x1908 | 0x80E1 => 4,
         _ => panic!("Unknown format {format:x}"),
@@ -917,10 +916,7 @@ pub fn getWindowHeight(_env: JNIEnv, _class: JClass) -> jint {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat) {
-    GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::ClearColor([r, g, b]));
+    GL_COMMANDS.write().0.push(GLCommand::ClearColor([r, g, b]));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

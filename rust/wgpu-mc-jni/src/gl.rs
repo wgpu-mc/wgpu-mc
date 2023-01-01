@@ -439,7 +439,7 @@ impl GeometryCallback for ElectrumGeometry {
                                 ElectrumVertex::map_pos_color_uv_light(
                                     bytemuck::try_cast_slice(&draw.vertex_buffer).unwrap(),
                                 )
-                            },
+                            }
                         };
 
                         let vertex_buffer =
