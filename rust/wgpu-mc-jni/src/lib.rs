@@ -617,8 +617,8 @@ pub fn centerCursor(env: JNIEnv, _class: JClass, locked: jboolean) {
         let size = window.inner_size();
         window
             .set_cursor_position(PhysicalPosition::new(
-                inner.x + (size.width / 2),
-                inner.y + (size.height / 2),
+                inner.x + (size.width as i32 / 2),
+                inner.y + (size.height as i32 / 2),
             ))
             .unwrap();
     }
