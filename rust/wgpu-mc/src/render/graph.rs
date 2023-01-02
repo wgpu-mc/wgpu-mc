@@ -4,15 +4,13 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use treeculler::{AABB, BVol, Frustum, Vec3};
 
 use crate::mc::chunk::{Chunk, ChunkPos};
 use crate::mc::resource::ResourcePath;
 use crate::render::pipeline::{Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
-use crate::render::shaderpack::{
-    LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig,
-    ShorthandResourceConfig, TypeResourceConfig,
-};
+use crate::render::shaderpack::{LonghandResourceConfig, Mat3ValueOrMult, Mat4, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig, ShorthandResourceConfig, TypeResourceConfig};
 use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
@@ -131,6 +129,18 @@ pub struct CustomResource {
     //If this resource is updated each frame, this is what needs to be called
     pub update: Option<fn(&Self, &WmRenderer, &HashMap<String, CustomResource>)>,
     pub data: Arc<ResourceInternal>,
+}
+
+impl CustomResource {
+
+    pub fn get_mat4(&self) -> Option<Matrix4<f32>> {
+        if let ResourceInternal::Mat4(_, lock, _) = &*self.data {
+            Some(*lock.read())
+        } else {
+            None
+        }
+    }
+
 }
 
 pub struct ShaderGraph {
@@ -605,6 +615,11 @@ impl ShaderGraph {
 
         let chunk_offset = *wm.mc.chunks.chunk_offset.lock();
 
+        let projection_matrix = self.resources.get("wm_mat4_projection").unwrap().get_mat4().unwrap();
+        let view_matrix = self.resources.get("wm_mat4_view").unwrap().get_mat4().unwrap();
+
+        let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
+
         for (name, config) in &self.pack.pipelines.pipelines {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
@@ -676,6 +691,8 @@ impl ShaderGraph {
                 }),
             });
 
+            let chunk_offset = [0, 0];
+
             render_pass.set_pipeline(self.pipelines.get(name).unwrap());
 
             match &config.geometry[..] {
@@ -686,6 +703,16 @@ impl ShaderGraph {
                     for layer in &**layers {
                         for (pos, chunk_swap) in &*chunks {
                             let chunk = arena.alloc(chunk_swap.load());
+
+                            let min = Vec3::new((chunk.pos[0] * 16) as f32, 0.0, (chunk.pos[1] * 16) as f32);
+                            let max = min + Vec3::new(16.0, 384.0, 16.0);
+
+                            let aabb = AABB::<f32>::new(min, max);
+
+                            if aabb.test_against_frustum(&frustum, 0) == u8::MAX {
+                                continue;
+                            }
+
                             let (chunk_vbo, verts) =
                                 match arena.alloc(chunk.baked_layers.read()).get(layer.name()) {
                                     None => continue,

@@ -125,4 +125,8 @@ public class Wgpu {
         System.out.println(o);
     }
 
+    public static void windowFocused(boolean focused) {
+        MinecraftClient.getInstance().onWindowFocusChanged(focused);
+    }
+
 }

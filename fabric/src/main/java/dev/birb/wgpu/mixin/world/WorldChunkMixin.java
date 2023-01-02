@@ -34,12 +34,8 @@ public abstract class WorldChunkMixin {
     public void loadFromPacket(PacketByteBuf buf, NbtCompound nbt, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfo ci) {
         WmChunk chunk = new WmChunk((WorldChunk) (Object) this);
         try {
-            long time1 = System.currentTimeMillis();
             chunk.upload();
-            long time2 = System.currentTimeMillis();
-            chunk.bake();
-            long timeNow = System.currentTimeMillis();
-            System.out.println("Uploading: " + (time2 - time1) + " bake: " + (timeNow - time2));
+//            chunk.bake();
         } catch(ClassCastException e) {
             e.printStackTrace();
         }

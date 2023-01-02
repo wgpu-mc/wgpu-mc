@@ -136,7 +136,7 @@ struct MinecraftBlockstateProvider {
 
 impl BlockStateProvider for MinecraftBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
-        //Minecraft technically has negative y values now, but chunk data is technically indexed [0,384} instead of [-64,256}
+        //Minecraft technically has negative y values now, but chunk data is indexed [0,384} instead of [-64,256}
         if y >= CHUNK_HEIGHT as i16 || y < 0 {
             return ChunkBlockState::Air;
         }
@@ -386,13 +386,6 @@ pub fn bake_chunk(x: i32, z: i32) {
                 &wm.pipelines.load_full().chunk_layers.load(),
                 &bm,
                 &*BLOCK_STATE_PROVIDER,
-            );
-
-            log::info!(
-                "Baked chunk (x={}, z={}) in {}ms",
-                x,
-                z,
-                Instant::now().duration_since(instant).as_millis()
             );
         }
     });

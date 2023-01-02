@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::time::Instant;
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
@@ -67,6 +68,7 @@ impl Chunk {
         let baked_layers = layers
             .iter()
             .map(|layer| {
+                let instant = Instant::now();
                 let verts = bake(
                     block_manager,
                     self,
@@ -74,6 +76,7 @@ impl Chunk {
                     layer.filter(),
                     provider,
                 );
+                log::info!("{}", Instant::now().duration_since(instant).as_micros());
 
                 (
                     layer.name().into(),

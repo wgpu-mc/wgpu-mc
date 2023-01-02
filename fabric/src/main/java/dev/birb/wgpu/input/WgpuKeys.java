@@ -18,6 +18,8 @@ public class WgpuKeys {
     public static final int WGPU_HOME = 65;
     public static final int WGPU_DELETE = 66;
     public static final int WGPU_END = 67;
+    public static final int WGPU_ENTER = 75;
+    private static final int WGPU_SPACE = 76;
 
     // https://www.glfw.org/docs/3.3/group__keys.html
 
@@ -50,7 +52,8 @@ public class WgpuKeys {
             case WGPU_HOME ->  converted = GLFW.GLFW_KEY_HOME;
             case WGPU_END ->  converted = GLFW.GLFW_KEY_END;
             case WGPU_DELETE -> converted = GLFW.GLFW_KEY_DELETE;
-
+            case WGPU_ENTER -> converted = GLFW.GLFW_KEY_ENTER;
+            case WGPU_SPACE -> converted = GLFW.GLFW_KEY_SPACE;
         }
         if(converted == -1) {
             System.out.printf("Couldn't convert %s\n", code);

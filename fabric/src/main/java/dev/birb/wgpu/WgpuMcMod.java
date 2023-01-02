@@ -42,18 +42,7 @@ public class WgpuMcMod implements ClientModInitializer {
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (binding.wasPressed()) {
-				System.out.println("debug");
-				Chunk chunk = client.world.getChunk(client.player.getBlockPos());
-				int index = (client.player.getBlockY() + 64) / 16;
-				PalettedContainer.Data<?> data = chunk.getSection(index).getBlockStateContainer().data;
-				RustPalette<?> rustPalette = (RustPalette<?>) data.palette;
-				PackedIntegerArray pia = (PackedIntegerArray) data.storage;
-//				WgpuNative.debugPalette(0, rustPalette.getRustPointer());
-
-				pia.forEach(paletteIndex -> {
-					BlockState state = (BlockState) rustPalette.get(paletteIndex);
-					int a = 0;
-				});
+				WgpuNative.debugBake();
 			}
 		});
 	}

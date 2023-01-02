@@ -122,7 +122,7 @@ public class WgpuNative {
 
     public static native Object paletteGet(long ptr, int id);
 
-    public static native long copyPalette(long rustPalettePointer);
+    public static native long copyPalette(long rustPaletteIndex);
 
     public static native int paletteSize(long rustPalettePointer);
 
@@ -172,5 +172,15 @@ public class WgpuNative {
     public static native int piaGet(long ptr, int x, int y, int z);
 
     public static native int piaGetByIndex(long ptr, int index);
+
+    public static native void debugBake();
+
+    public static native void setMatrix(int type, float[] mat);
+
+    public static native void setChunkOffset(int x, int z);
+
+    public static native void setCursorLocked(boolean locked);
+
+    public native static void centerCursor();
 
 }

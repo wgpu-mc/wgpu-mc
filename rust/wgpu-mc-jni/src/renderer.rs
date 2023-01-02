@@ -211,6 +211,27 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         },
     );
 
+    let matrix = Matrix4::identity();
+    let mat: Mat4 = matrix.into();
+    let bindable_buffer = BindableBuffer::new(
+        &wm,
+        bytemuck::cast_slice(&mat),
+        BufferUsages::UNIFORM,
+        "matrix",
+    );
+
+    resources.insert(
+        "wm_mat4_view".into(),
+        CustomResource {
+            update: None,
+            data: Arc::new(ResourceInternal::Mat4(
+                Mat4ValueOrMult::Value { value: mat.into() },
+                Arc::new(RwLock::new(matrix)),
+                Arc::new(bindable_buffer),
+            )),
+        },
+    );
+
     let mut shader_graph = ShaderGraph::new(shader_pack, resources, render_geometry);
 
     let mut types = HashMap::new();

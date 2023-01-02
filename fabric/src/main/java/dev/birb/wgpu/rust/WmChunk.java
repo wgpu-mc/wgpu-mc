@@ -2,9 +2,14 @@ package dev.birb.wgpu.rust;
 
 import dev.birb.wgpu.mixin.accessors.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustPalette;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.collection.PackedIntegerArray;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.util.collection.IndexedIterable;
 import net.minecraft.util.collection.PaletteStorage;
+import net.minecraft.world.chunk.Palette;
+import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
 
 public class WmChunk {
@@ -15,26 +20,41 @@ public class WmChunk {
     public WmChunk(WorldChunk worldChunk) {
         MinecraftClient client = MinecraftClient.getInstance();
 
-        this.x = worldChunk.getPos().x - client.player.getChunkPos().x;
-        this.z = worldChunk.getPos().z - client.player.getChunkPos().z;
+        this.x = worldChunk.getPos().x;
+        this.z = worldChunk.getPos().z;
 
         this.worldChunk = worldChunk;
     }
 
     public void upload() throws ClassCastException {
-        long[] palettePointers = new long[24];
-        long[] storagePointers = new long[24];
+        long[] paletteIndices = new long[24];
+        long[] storageIndices = new long[24];
 
         assert this.worldChunk.getSectionArray().length == 24;
 
         for(int i=0;i<24;i++) {
-            RustPalette<?> rustPalette = (RustPalette<?>) this.worldChunk.getSection(i).getBlockStateContainer().data.palette;
-            PaletteStorage paletteStorage = this.worldChunk.getSection(i).getBlockStateContainer().data.storage;
+//            RustPalette<?> rustPalette = (RustPalette<?>) this.worldChunk.getSection(i).getBlockStateContainer().data.palette;
+            Palette<?> palette = this.worldChunk.getSection(i).getBlockStateContainer().data.palette;
 
-            palettePointers[i] = rustPalette.getRustPointer();
+            PalettedContainer<?> container = this.worldChunk.getSection(i).getBlockStateContainer();
+            PaletteStorage paletteStorage = container.data.storage;
+
+            RustPalette<?> rustPalette = new RustPalette<>(
+                WgpuNative.uploadIdList((IndexedIterable<Object>) container.idList),
+                container.idList,
+                null,
+                0
+            );
+
+            ByteBuf buf = Unpooled.buffer(palette.getPacketSize());
+            PacketByteBuf packetBuf = new PacketByteBuf(buf);
+            palette.writePacket(packetBuf);
+            rustPalette.readPacket(packetBuf);
+
+            paletteIndices[i] = rustPalette.getSlabIndex() + 1;
 
             if(paletteStorage instanceof PackedIntegerArrayAccessor accessor) {
-                long pointer = WgpuNative.createPaletteStorage(
+                long index = WgpuNative.createPaletteStorage(
                     paletteStorage.getData(),
                     accessor.getElementsPerLong(),
                     paletteStorage.getElementBits(),
@@ -45,11 +65,11 @@ public class WmChunk {
                     paletteStorage.getSize()
                 );
 
-                storagePointers[i] = pointer;
+                storageIndices[i] = index + 1;
             }
         }
 
-        WgpuNative.createChunk(this.x, this.z, palettePointers, storagePointers);
+        WgpuNative.createChunk(this.x, this.z, paletteIndices, storageIndices);
     }
 
     public void bake() {

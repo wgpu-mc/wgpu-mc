@@ -16,9 +16,9 @@ public class PaletteProviderMixin {
     @Mutable
     @Shadow @Final public static PalettedContainer.PaletteProvider BLOCK_STATE;
 
-    @Inject(method = "<clinit>", at = @At("RETURN"))
-    private static void clinit(CallbackInfo info) {
-        BLOCK_STATE = SubvertedPaletteProvider.PROVIDER;
-    }
+//    @Inject(method = "<clinit>", at = @At("RETURN"))
+//    private static void clinit(CallbackInfo info) {
+//        BLOCK_STATE = SubvertedPaletteProvider.PROVIDER;
+//    }
 
 }

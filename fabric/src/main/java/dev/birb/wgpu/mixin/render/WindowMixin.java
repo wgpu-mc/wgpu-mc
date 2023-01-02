@@ -141,7 +141,11 @@ public class WindowMixin {
      */
     @Overwrite
     public Optional<VideoMode> getVideoMode() {
-        return VideoMode.fromString(WgpuNative.getVideoMode());
+        if(Wgpu.INITIALIZED) {
+            return VideoMode.fromString(WgpuNative.getVideoMode());
+        } else {
+            return VideoMode.fromString("1920x1080@60:8");
+        }
     }
 
 }
