@@ -13,6 +13,7 @@ use once_cell::sync::{Lazy, OnceCell};
 use std::collections::HashMap;
 use std::convert::identity;
 use std::mem::replace;
+use wgpu_mc::mc::chunk::ChunkPos;
 use wgpu_mc::render::graph::{
     bind_uniforms, set_push_constants, CustomResource, GeometryCallback, ResourceInternal,
     ShaderGraph, TextureResource,
@@ -271,6 +272,7 @@ impl GeometryCallback for ElectrumGeometry {
         resources: &'resource HashMap<String, CustomResource>,
         arena: &'resource WmArena<'resource>,
         surface_config: &SurfaceConfiguration,
+        chunk_offset: ChunkPos,
     ) {
         let (_, commands) = {
             GL_COMMANDS.read().clone() //Free the lock as soon as possible
@@ -377,97 +379,90 @@ impl GeometryCallback for ElectrumGeometry {
         for call in calls {
             match call {
                 DrawCall::Verts(draw) => {
-                    for (name, pipeline) in &graph.pack.pipelines.pipelines {
-                        let mut texture = self.blank.bindable_texture.load_full();
+                    let mut texture = self.blank.bindable_texture.load_full();
 
-                        if let Some(texture_index) = draw.texture {
-                            if let Some(gl_texture) = textures_read.get(&texture_index) {
-                                texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
-                            }
+                    if let Some(texture_index) = draw.texture {
+                        if let Some(gl_texture) = textures_read.get(&texture_index) {
+                            texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
                         }
-
-                        let augmented_resources =
-                            augment_resources(wm, &resources, arena, texture, draw.matrix);
-
-                        bind_uniforms(pipeline, augmented_resources, arena, render_pass);
-                        set_push_constants(pipeline, render_pass, None, surface_config);
-
-                        let buffer =
-                            wm.wgpu_state
-                                .device
-                                .create_buffer_init(&BufferInitDescriptor {
-                                    label: None,
-                                    contents: &draw.vertex_buffer,
-                                    usage: BufferUsages::VERTEX,
-                                });
-
-                        render_pass.set_pipeline(graph.pipelines.get(name).unwrap());
-                        render_pass.set_vertex_buffer(0, arena.alloc(buffer).slice(..));
-                        render_pass.draw(0..draw.count, 0..1);
                     }
+
+                    let augmented_resources =
+                        augment_resources(wm, &resources, arena, texture, draw.matrix);
+
+                    bind_uniforms(config, augmented_resources, arena, render_pass);
+                    set_push_constants(config, render_pass, None, surface_config, chunk_offset);
+
+                    let buffer = wm
+                        .wgpu_state
+                        .device
+                        .create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: &draw.vertex_buffer,
+                            usage: BufferUsages::VERTEX,
+                        });
+
+                    render_pass.set_vertex_buffer(0, arena.alloc(buffer).slice(..));
+                    render_pass.draw(0..draw.count, 0..1);
                 }
                 DrawCall::Indexed(draw) => {
-                    for (name, pipeline) in &graph.pack.pipelines.pipelines {
-                        let mut texture = self.blank.bindable_texture.load_full();
+                    let mut texture = self.blank.bindable_texture.load_full();
 
-                        if let Some(texture_index) = draw.texture {
-                            if let Some(gl_texture) = textures_read.get(&texture_index) {
-                                texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
-                            }
+                    if let Some(texture_index) = draw.texture {
+                        if let Some(gl_texture) = textures_read.get(&texture_index) {
+                            texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
                         }
-
-                        let augmented_resources =
-                            augment_resources(wm, &resources, arena, texture, draw.matrix);
-
-                        bind_uniforms(pipeline, augmented_resources, arena, render_pass);
-                        set_push_constants(pipeline, render_pass, None, surface_config);
-
-                        let vertices = match draw.pipeline_state {
-                            PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
-                                bytemuck::cast_slice(&draw.vertex_buffer),
-                            ),
-                            PipelineState::PositionUv => ElectrumVertex::map_pos_uv(
-                                bytemuck::cast_slice(&draw.vertex_buffer),
-                            ),
-                            PipelineState::PositionColorF32 => ElectrumVertex::map_pos_col_float3(
-                                bytemuck::cast_slice(&draw.vertex_buffer),
-                            ),
-                            PipelineState::PositionUvColor => ElectrumVertex::map_pos_uv_color(
-                                bytemuck::cast_slice(&draw.vertex_buffer),
-                            ),
-                            PipelineState::PositionColorUvLight => {
-                                ElectrumVertex::map_pos_color_uv_light(
-                                    bytemuck::try_cast_slice(&draw.vertex_buffer).unwrap(),
-                                )
-                            }
-                        };
-
-                        let vertex_buffer =
-                            wm.wgpu_state
-                                .device
-                                .create_buffer_init(&BufferInitDescriptor {
-                                    label: None,
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: BufferUsages::VERTEX,
-                                });
-
-                        let index_buffer =
-                            wm.wgpu_state
-                                .device
-                                .create_buffer_init(&BufferInitDescriptor {
-                                    label: None,
-                                    contents: bytemuck::cast_slice(&draw.index_buffer),
-                                    usage: BufferUsages::INDEX,
-                                });
-
-                        render_pass.set_pipeline(graph.pipelines.get(name).unwrap());
-                        render_pass.set_vertex_buffer(0, arena.alloc(vertex_buffer).slice(..));
-                        render_pass.set_index_buffer(
-                            arena.alloc(index_buffer).slice(..),
-                            IndexFormat::Uint32,
-                        );
-                        render_pass.draw_indexed(0..draw.count, 0, 0..1);
                     }
+
+                    let augmented_resources =
+                        augment_resources(wm, &resources, arena, texture, draw.matrix);
+
+                    bind_uniforms(config, augmented_resources, arena, render_pass);
+                    set_push_constants(config, render_pass, None, surface_config, chunk_offset);
+
+                    let vertices = match draw.pipeline_state {
+                        PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
+                            bytemuck::cast_slice(&draw.vertex_buffer),
+                        ),
+                        PipelineState::PositionUv => {
+                            ElectrumVertex::map_pos_uv(bytemuck::cast_slice(&draw.vertex_buffer))
+                        }
+                        PipelineState::PositionColorF32 => ElectrumVertex::map_pos_col_float3(
+                            bytemuck::cast_slice(&draw.vertex_buffer),
+                        ),
+                        PipelineState::PositionUvColor => ElectrumVertex::map_pos_uv_color(
+                            bytemuck::cast_slice(&draw.vertex_buffer),
+                        ),
+                        PipelineState::PositionColorUvLight => {
+                            ElectrumVertex::map_pos_color_uv_light(
+                                bytemuck::try_cast_slice(&draw.vertex_buffer).unwrap(),
+                            )
+                        }
+                    };
+
+                    let vertex_buffer =
+                        wm.wgpu_state
+                            .device
+                            .create_buffer_init(&BufferInitDescriptor {
+                                label: None,
+                                contents: bytemuck::cast_slice(&vertices),
+                                usage: BufferUsages::VERTEX,
+                            });
+
+                    let index_buffer =
+                        wm.wgpu_state
+                            .device
+                            .create_buffer_init(&BufferInitDescriptor {
+                                label: None,
+                                contents: bytemuck::cast_slice(&draw.index_buffer),
+                                usage: BufferUsages::INDEX,
+                            });
+
+                    // render_pass.set_pipeline(graph.pipelines.get(name).unwrap());
+                    render_pass.set_vertex_buffer(0, arena.alloc(vertex_buffer).slice(..));
+                    render_pass
+                        .set_index_buffer(arena.alloc(index_buffer).slice(..), IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..draw.count, 0, 0..1);
                 }
             }
         }

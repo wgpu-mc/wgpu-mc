@@ -1,17 +1,19 @@
 version: "0.0.1"
 support: wgsl
 resources:
-#  mvp_mat4:
-#    type: mat4
-#    mult: [wm_mat4_projection, wm_mat4_view]
+  mvp_mat4:
+    type: mat4
+    mult: [wm_mat4_projection]
 pipelines:
-#  terrain:
-#    geometry: wm_geo_terrain
-#    depth: wm_framebuffer_depth
-#    output: [wm_framebuffer_texture]
-#    uniforms:
-#      0: mvp_mat4
-#      1: wm_texture_atlas_blocks
+  terrain:
+    geometry: wm_geo_terrain
+    depth: wm_framebuffer_depth
+    output: [wm_framebuffer_texture]
+    push_constants:
+      0: wm_pc_chunk_position
+    uniforms:
+      0: mvp_mat4
+      1: wm_texture_atlas_blocks
   electrum_gui:
     geometry: wm_geo_electrum_gui
     output: [wm_framebuffer_texture]

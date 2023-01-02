@@ -1,13 +1,21 @@
+use byteorder::LittleEndian;
+use cgmath::{perspective, Deg, Matrix4, SquareMatrix, Vector3};
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::mem::size_of;
-use std::thread;
+use std::{slice, thread};
 use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
+use jni::objects::{JClass, ReleaseMode};
+use jni::sys::{jfloatArray, jint};
 use jni::{
     objects::{JString, JValue},
     JNIEnv,
 };
+use jni_fn::jni_fn;
+use once_cell::sync::Lazy;
+use parking_lot::{Mutex, RwLock};
 use winit::event_loop::EventLoopBuilder;
 use winit::{
     dpi::PhysicalSize,
@@ -15,10 +23,14 @@ use winit::{
     event_loop::ControlFlow,
 };
 
-use wgpu_mc::render::graph::{GeometryCallback, ShaderGraph};
-use wgpu_mc::render::shaderpack::ShaderPackConfig;
+use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
+use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::render::graph::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
+use wgpu_mc::render::pipeline::Vertex;
+use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
+use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu;
-use wgpu_mc::wgpu::TextureFormat;
+use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex};
@@ -26,6 +38,76 @@ use crate::{
     entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
     CHANNELS, MC_STATE, RENDERER, WINDOW,
 };
+
+pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
+    Mutex::new(Matrices {
+        projection: [[0.0; 4]; 4],
+        view: [[0.0; 4]; 4],
+    })
+});
+
+pub struct Matrices {
+    pub projection: [[f32; 4]; 4],
+    pub view: [[f32; 4]; 4],
+}
+
+pub struct TerrainLayer;
+
+impl RenderLayer for TerrainLayer {
+    fn filter(&self) -> fn(BlockstateKey) -> bool {
+        |_| true
+    }
+
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
+        |vert, x, y, z| Vertex {
+            position: [
+                vert.position[0] + x,
+                vert.position[1] + y,
+                vert.position[2] + z,
+            ],
+            tex_coords: vert.tex_coords,
+            lightmap_coords: [0.0, 0.0],
+            normal: vert.normal,
+            color: [1.0, 1.0, 1.0, 1.0],
+            tangent: [0.0, 0.0, 0.0, 0.0],
+            uv_offset: vert.animation_uv_offset,
+        }
+    }
+
+    fn name(&self) -> &str {
+        "all"
+    }
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setChunkOffset(env: JNIEnv, _class: JClass, x: jint, z: jint) {
+    *RENDERER.get().unwrap().mc.chunks.chunk_offset.lock() = [x, z];
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setMatrix(env: JNIEnv, _class: JClass, id: jint, float_array: jfloatArray) {
+    let elements = env
+        .get_float_array_elements(float_array, ReleaseMode::NoCopyBack)
+        .unwrap();
+
+    let slice = unsafe {
+        slice::from_raw_parts(
+            elements.as_ptr() as *mut f32,
+            elements.size().unwrap() as usize,
+        )
+    };
+
+    let mut cursor = Cursor::new(bytemuck::cast_slice::<f32, u8>(slice));
+    let mut converted = Vec::with_capacity(slice.len());
+
+    for _ in 0..slice.len() {
+        use byteorder::ReadBytesExt;
+        converted.push(cursor.read_f32::<LittleEndian>().unwrap());
+    }
+
+    let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(bytemuck::cast_slice(&converted));
+    MATRICES.lock().projection = slice_4x4;
+}
 
 pub fn start_rendering(env: JNIEnv, title: JString) {
     let title: String = env.get_string(title).unwrap().into();
@@ -68,6 +150,11 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     let wm = WmRenderer::new(wgpu_state, resource_provider);
 
+    wm.pipelines
+        .load()
+        .chunk_layers
+        .store(Arc::new(vec![Box::new(TerrainLayer)]));
+
     let _ = RENDERER.set(wm.clone());
 
     wm.init();
@@ -101,7 +188,30 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         }) as Box<dyn GeometryCallback>,
     );
 
-    let mut shader_graph = ShaderGraph::new(shader_pack, HashMap::new(), render_geometry);
+    let mut resources = HashMap::new();
+
+    let matrix = Matrix4::identity();
+    let mat: Mat4 = matrix.into();
+    let bindable_buffer = BindableBuffer::new(
+        &wm,
+        bytemuck::cast_slice(&mat),
+        BufferUsages::UNIFORM,
+        "matrix",
+    );
+
+    resources.insert(
+        "wm_mat4_projection".into(),
+        CustomResource {
+            update: None,
+            data: Arc::new(ResourceInternal::Mat4(
+                Mat4ValueOrMult::Value { value: mat.into() },
+                Arc::new(RwLock::new(matrix)),
+                Arc::new(bindable_buffer),
+            )),
+        },
+    );
+
+    let mut shader_graph = ShaderGraph::new(shader_pack, resources, render_geometry);
 
     let mut types = HashMap::new();
 
@@ -125,6 +235,19 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         let wm = wm_clone;
 
         loop {
+            {
+                let matrices = MATRICES.lock();
+                let res_mat_proj = shader_graph
+                    .resources
+                    .get_mut("wm_mat4_projection")
+                    .unwrap();
+
+                if let ResourceInternal::Mat4(val, lock, _) = &*res_mat_proj.data {
+                    let matrix4: Matrix4<f32> = matrices.projection.into();
+                    *lock.write() = perspective(Deg(100.0), 1.0, 0.01, 1000.0) * matrix4;
+                }
+            }
+
             let mc_state = MC_STATE.load();
 
             let surface_state = wm.wgpu_state.surface.read();
@@ -239,6 +362,9 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                     }
                     WindowEvent::ModifiersChanged(new_modifiers) => {
                         current_modifiers = *new_modifiers;
+                    }
+                    WindowEvent::Focused(focused) => {
+                        CHANNELS.0.send(RenderMessage::Focused(*focused)).unwrap();
                     }
                     _ => {}
                 }

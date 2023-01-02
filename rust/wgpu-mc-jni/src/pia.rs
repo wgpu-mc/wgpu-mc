@@ -8,10 +8,10 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use slab::Slab;
 
-static PIA_STORAGE: Lazy<RwLock<Slab<PackedIntegerArray>>> =
+pub static PIA_STORAGE: Lazy<RwLock<Slab<PackedIntegerArray>>> =
     Lazy::new(|| RwLock::new(Slab::with_capacity(2048)));
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PackedIntegerArray {
     data: Box<[i64]>,
     elements_per_long: i32,
@@ -37,13 +37,8 @@ impl PackedIntegerArray {
 
         let i: i32 = self.compute_storage_index(index);
 
-        let ptr = unsafe { self.data.as_ptr().offset(i as isize) };
+        let l: i64 = self.data[i as usize];
 
-        let l: i64 = unsafe { ptr.read_volatile() };
-        // let l: i64 = i64::from_be_bytes(self.data[i as usize].to_ne_bytes());
-        // let l: i64 = self.data[i as usize];
-
-        // (index - i * this.elementsPerLong) * this.elementBits
         let j: i32 = (index - (i * self.elements_per_long)) * self.element_bits;
         ((l >> j) & self.max_value) as i32
     }
@@ -92,13 +87,6 @@ pub fn createPaletteStorage(
 
     let mut storage = PIA_STORAGE.write();
     storage.insert(packed_arr) as jlong
-}
-
-#[allow(unused_must_use)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn destroyPaletteStorage(_env: JNIEnv, _class: JClass, storage: jlong) {
-    let mut storage_access = PIA_STORAGE.write();
-    storage_access.remove(storage as usize);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

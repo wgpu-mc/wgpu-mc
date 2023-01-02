@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-use crate::mc::chunk::Chunk;
+use crate::mc::chunk::{Chunk, ChunkPos};
 use crate::mc::resource::ResourcePath;
 use crate::render::pipeline::{Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
@@ -18,7 +18,7 @@ use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
 use wgpu::{
-    BindGroup, BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState,
+    BindGroup, Buffer, BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState,
     FragmentState, LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass,
     RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
     RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
@@ -35,6 +35,7 @@ pub trait GeometryCallback: Send + Sync {
         resources: &'resource HashMap<String, CustomResource>,
         arena: &'resource WmArena<'resource>,
         surface_config: &SurfaceConfiguration,
+        chunk_offset: ChunkPos,
     );
 }
 
@@ -602,6 +603,8 @@ impl ShaderGraph {
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
 
+        let chunk_offset = *wm.mc.chunks.chunk_offset.lock();
+
         for (name, config) in &self.pack.pipelines.pipelines {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
@@ -683,10 +686,11 @@ impl ShaderGraph {
                     for layer in &**layers {
                         for (pos, chunk_swap) in &*chunks {
                             let chunk = arena.alloc(chunk_swap.load());
-                            let (chunk_vbo, verts) = arena
-                                .alloc(chunk.baked_layers.read())
-                                .get(layer.name())
-                                .unwrap();
+                            let (chunk_vbo, verts) =
+                                match arena.alloc(chunk.baked_layers.read()).get(layer.name()) {
+                                    None => continue,
+                                    Some(tuple) => tuple,
+                                };
 
                             bind_uniforms(config, &resource_borrow, &arena, &mut render_pass);
                             set_push_constants(
@@ -694,6 +698,7 @@ impl ShaderGraph {
                                 &mut render_pass,
                                 Some(&chunk),
                                 surface_config,
+                                chunk_offset,
                             );
 
                             render_pass.set_vertex_buffer(0, chunk_vbo.slice(..));
@@ -707,6 +712,7 @@ impl ShaderGraph {
                 }
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {
+                        render_pass.set_pipeline(self.pipelines.get(name).unwrap());
                         geo.render(
                             wm,
                             &mut render_pass,
@@ -715,6 +721,7 @@ impl ShaderGraph {
                             &self.resources,
                             &arena,
                             surface_config,
+                            chunk_offset,
                         );
                     } else {
                         unimplemented!("Unknown geometry {0}", &config.geometry);
@@ -761,6 +768,7 @@ pub fn set_push_constants(
     render_pass: &mut RenderPass,
     chunk: Option<&Chunk>,
     surface_config: &SurfaceConfiguration,
+    chunk_offset: ChunkPos,
 ) {
     pipeline
         .push_constants
@@ -779,7 +787,10 @@ pub fn set_push_constants(
             "wm_pc_chunk_position" => render_pass.set_push_constants(
                 ShaderStages::VERTEX,
                 *offset as u32,
-                bytemuck::cast_slice(&chunk.unwrap().pos),
+                bytemuck::cast_slice(&[
+                    chunk.unwrap().pos[0] - chunk_offset[0],
+                    chunk.unwrap().pos[1] - chunk_offset[1],
+                ]),
             ),
             _ => unimplemented!("Unknown push constant resource value"),
         });

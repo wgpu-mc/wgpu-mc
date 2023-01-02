@@ -15,7 +15,7 @@ use slab::Slab;
 
 use wgpu_mc::mc::block::BlockstateKey;
 
-static PALETTE_STORAGE: Lazy<RwLock<Slab<JavaPalette>>> =
+pub static PALETTE_STORAGE: Lazy<RwLock<Slab<JavaPalette>>> =
     Lazy::new(|| RwLock::new(Slab::with_capacity(4096)));
 
 pub struct IdList {
@@ -108,6 +108,7 @@ pub fn clearPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn destroyPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) {
+    panic!();
     PALETTE_STORAGE.write().remove(palette_long as usize);
 }
 
@@ -178,7 +179,7 @@ pub fn paletteReadPacket(
         .get_int_array_elements(blockstate_offsets, ReleaseMode::NoCopyBack)
         .unwrap();
 
-    let id_list = unsafe { &*(palette.id_list.get() as *mut IdList) };
+    let id_list = unsafe { &*(palette.id_list.get() as *const IdList) };
 
     let blockstate_offsets = unsafe {
         slice::from_raw_parts(

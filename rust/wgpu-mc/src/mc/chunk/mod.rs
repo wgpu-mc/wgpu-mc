@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use arc_swap::ArcSwap;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::BufferUsages;
 
@@ -98,6 +98,7 @@ impl Chunk {
 #[derive(Debug)]
 pub struct ChunkManager {
     pub loaded_chunks: RwLock<HashMap<ChunkPos, ArcSwap<Chunk>>>,
+    pub chunk_offset: Mutex<ChunkPos>,
 }
 
 impl ChunkManager {
@@ -105,6 +106,7 @@ impl ChunkManager {
     pub fn new() -> Self {
         ChunkManager {
             loaded_chunks: RwLock::new(HashMap::new()),
+            chunk_offset: Mutex::new([0, 0]),
         }
     }
 }

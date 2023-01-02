@@ -5,7 +5,6 @@
 use core::slice;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::f32::consts::PI;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::mem;
@@ -22,7 +21,8 @@ use cgmath::{Matrix4, Point3};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
-    jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jstring,
+    jboolean, jbyteArray, jdouble, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray,
+    jstring, JNI_FALSE, JNI_TRUE,
 };
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
@@ -49,8 +49,8 @@ use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
 use crate::entity::tmd_to_wm;
-use crate::palette::{IdList, JavaPalette};
-use crate::pia::PackedIntegerArray;
+use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
+use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
 mod entity;
@@ -70,6 +70,7 @@ enum RenderMessage {
     CharTyped(char, u32),
     MouseMove(f64, f64),
     Resized(u32, u32),
+    Focused(bool),
 }
 
 #[derive(Debug)]
@@ -124,7 +125,7 @@ pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 #[derive(Debug)]
 struct ChunkHolder {
-    pub sections: [Option<(Box<JavaPalette>, Box<PackedIntegerArray>)>; 24],
+    pub sections: [Option<(JavaPalette, PackedIntegerArray)>; 24],
 }
 
 #[derive(Debug)]
@@ -143,6 +144,7 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         let chunk_x = x / 16;
         let chunk_z = z / 16;
 
+        let unlock = Instant::now();
         let chunks_read = self.chunks.read();
 
         let chunk = match chunks_read.get(&(chunk_x, chunk_z)) {
@@ -341,22 +343,16 @@ pub fn createChunk(
         write.insert(
             (x, z),
             ChunkHolder {
-                sections: palettes.zip(*storages).map(|(palette_addr, storage_addr)| {
-                    //If (in Java) the chunk storage class was not a PackedIntegerArray but an EmptyPaletteStorage, it won't have created a Rust
-                    //version of the PackedIntegerArray and the jlong will default to 0, or null
-                    if palette_addr == 0 || storage_addr == 0 {
+                sections: palettes.zip(*storages).map(|(palette, storage)| {
+                    if palette == 0 || storage == 0 {
                         return None;
                     }
 
-                    //SAFETY: Java will have called createPalette and createPaletteStorage
-                    //respectively to create these pointers. Rust will also have ownership of the data at the pointers at this point.
-                    //The only thing that updates "live" later in Java is the JavaPalette, so we clone that here to keep ownership later
-                    unsafe {
-                        Some((
-                            Box::from_raw(palette_addr as *mut JavaPalette),
-                            Box::from_raw(storage_addr as *mut PackedIntegerArray),
-                        ))
-                    }
+                    //The indices are incremented by one in Java so that 0 means null/None
+                    Some((
+                        PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
+                        PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
+                    ))
                 }),
             },
         );
@@ -374,8 +370,7 @@ pub fn createChunk(
         .insert([x, z], ArcSwap::new(Arc::new(chunk)));
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
+pub fn bake_chunk(x: i32, z: i32) {
     THREAD_POOL.spawn(move || {
         let wm = RENDERER.get().unwrap();
 
@@ -394,14 +389,18 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
             );
 
             log::info!(
-                "Baked chunk (x={}, z={}, of {}) in {}ms",
+                "Baked chunk (x={}, z={}) in {}ms",
                 x,
                 z,
-                chunks.len(),
                 Instant::now().duration_since(instant).as_millis()
             );
         }
     });
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
+    bake_chunk(x, z);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -419,9 +418,6 @@ pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
     let wm = RENDERER.get().unwrap();
-
-    log::trace!("baking blocks");
-
     {
         let blocks = BLOCKS.lock();
 
@@ -600,7 +596,51 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
                 )
                 .unwrap();
             }
+            RenderMessage::Focused(focused) => {
+                env.call_static_method(
+                    "dev/birb/wgpu/render/Wgpu",
+                    "windowFocused",
+                    "(Z)V",
+                    &[JValue::Bool(if focused { JNI_TRUE } else { JNI_FALSE })],
+                )
+                .unwrap();
+            }
         };
+    }
+}
+
+#[allow(unused_must_use)]
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn centerCursor(env: JNIEnv, _class: JClass, locked: jboolean) {
+    if let Some(window) = WINDOW.get() {
+        let inner = window.inner_position().unwrap();
+        let size = window.inner_size();
+        window
+            .set_cursor_position(PhysicalPosition::new(
+                inner.x + (size.width / 2),
+                inner.y + (size.height / 2),
+            ))
+            .unwrap();
+    }
+}
+
+#[allow(unused_must_use)]
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setCursorLocked(env: JNIEnv, _class: JClass, locked: jboolean) {
+    if let Some(window) = WINDOW.get() {
+        window
+            .set_cursor_grab(match locked {
+                JNI_TRUE => {
+                    window.set_cursor_visible(false);
+                    CursorGrabMode::Confined
+                }
+                JNI_FALSE => {
+                    window.set_cursor_visible(true);
+                    CursorGrabMode::None
+                }
+                _ => unreachable!(),
+            })
+            .unwrap();
     }
 }
 
@@ -631,6 +671,21 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
             })],
         );
     }))
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn debugBake(env: JNIEnv, _class: JClass) {
+    let positions = {
+        let renderer = RENDERER.get().unwrap();
+        let chunks = renderer.mc.chunks.loaded_chunks.read();
+
+        chunks.iter().map(|(pos, _)| *pos).collect::<Vec<_>>()
+    };
+
+    println!("Baking {0} chunks", positions.len());
+    for pos in positions {
+        bake_chunk(pos[0], pos[1]);
+    }
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1063,13 +1118,13 @@ pub fn addIdListEntry(
     };
 }
 
-#[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setCursorPosition(_env: JNIEnv, _class: JClass, x: f64, y: f64) {
     WINDOW
         .get()
         .unwrap()
-        .set_cursor_position(PhysicalPosition { x, y });
+        .set_cursor_position(PhysicalPosition { x, y })
+        .unwrap();
 }
 
 const GLFW_CURSOR_NORMAL: i32 = 212993;

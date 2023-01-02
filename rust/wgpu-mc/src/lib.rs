@@ -65,7 +65,7 @@ pub mod texture;
 pub mod util;
 
 pub struct WgpuState {
-    pub surface: RwLock<(Option<wgpu::Surface>, wgpu::SurfaceConfiguration)>,
+    pub surface: RwLock<(Option<wgpu::Surface>, SurfaceConfiguration)>,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -144,8 +144,6 @@ impl WmRenderer {
             } else {
                 wgpu::PresentMode::AutoNoVsync
             },
-            // TODO: implement vsync setting
-            // if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync },
             alpha_mode: CompositeAlphaMode::Auto,
         };
 
