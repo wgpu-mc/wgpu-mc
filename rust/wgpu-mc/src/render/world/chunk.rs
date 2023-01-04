@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::mc::block::{
     BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
 };
 use crate::mc::chunk::{
-    BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME, CHUNK_WIDTH,
+    BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTIONS_PER, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME,
+    CHUNK_WIDTH,
 };
 use crate::mc::BlockManager;
 
@@ -36,17 +38,31 @@ pub fn bake<
     state_provider: &Provider,
 ) -> Vec<T> {
     //Generates the mesh for this chunk, culling faces whenever possible
-    let mut vertices = vec![];
+    let mut vertices = Vec::with_capacity(300_000);
 
-    for block_index in 0..CHUNK_VOLUME {
+    let mut block_index = 0;
+
+    loop {
+        if block_index >= CHUNK_VOLUME {
+            break;
+        }
+
         let x = (block_index % CHUNK_WIDTH) as i32;
         let y = (block_index / CHUNK_AREA) as i16;
         let z = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
 
+        if x == 0 && z == 0 && (y as usize % CHUNK_SECTION_HEIGHT) == 0 {
+            let section_index = y as usize / CHUNK_SECTION_HEIGHT;
+            if state_provider.is_section_empty(section_index as usize) {
+                block_index += CHUNK_SECTION_HEIGHT * CHUNK_AREA;
+                continue;
+            }
+        }
+
+        block_index += 1;
+
         let absolute_x = (chunk.pos[0] * 16) + x;
         let absolute_z = (chunk.pos[1] * 16) + z;
-
-        let _section_index = y / (CHUNK_SECTION_HEIGHT as i16);
 
         let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
 

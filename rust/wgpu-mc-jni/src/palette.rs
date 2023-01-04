@@ -11,9 +11,12 @@ use jni_fn::jni_fn;
 use mc_varint::VarIntRead;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use slab::Slab;
+use wgpu_mc::mc::Block;
 
 use wgpu_mc::mc::block::BlockstateKey;
+use wgpu_mc::WmRenderer;
 
 pub static PALETTE_STORAGE: Lazy<RwLock<Slab<JavaPalette>>> =
     Lazy::new(|| RwLock::new(Slab::with_capacity(4096)));
@@ -27,6 +30,62 @@ impl IdList {
         Self {
             map: HashMap::new(),
         }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DebugPalette {
+    pub store: Vec<String>,
+    pub indices: HashMap<String, usize>,
+}
+
+impl DebugPalette {
+    pub fn from_java_palette(wm: &WmRenderer, java_palette: &JavaPalette) -> Self {
+        let block_manager = wm.mc.block_manager.read();
+
+        let indices = java_palette
+            .indices
+            .iter()
+            .map(|(id, index)| {
+                let (block_name, block) =
+                    block_manager.blocks.get_index(id.block as usize).unwrap();
+
+                match block {
+                    Block::Multipart(multipart) => {
+                        let read = multipart.keys.read();
+                        let (variant_name, _) = read.get_index(id.augment as usize).unwrap();
+                        (format!("{block_name}${variant_name}"), *index)
+                    }
+                    Block::Variants(map) => {
+                        let (variant_name, _) = map.get_index(id.augment as usize).unwrap();
+                        (format!("{block_name}${variant_name}"), *index)
+                    }
+                }
+            })
+            .collect();
+
+        let store = java_palette
+            .store
+            .iter()
+            .map(|(_, id)| {
+                let (block_name, block) =
+                    block_manager.blocks.get_index(id.block as usize).unwrap();
+
+                match block {
+                    Block::Multipart(multipart) => {
+                        let read = multipart.keys.read();
+                        let (variant_name, _) = read.get_index(id.augment as usize).unwrap();
+                        format!("{block_name}${variant_name}")
+                    }
+                    Block::Variants(map) => {
+                        let (variant_name, _) = map.get_index(id.augment as usize).unwrap();
+                        format!("{block_name}${variant_name}")
+                    }
+                }
+            })
+            .collect();
+
+        Self { store, indices }
     }
 }
 
@@ -60,13 +119,6 @@ impl JavaPalette {
     pub fn add(&mut self, element: (GlobalRef, BlockstateKey)) {
         self.indices.insert(element.1, self.store.len());
         self.store.push(element);
-    }
-
-    #[allow(dead_code)]
-    pub fn has_any(&self, predicate: &dyn Fn(jobject) -> bool) -> bool {
-        self.store
-            .iter()
-            .any(|(global_ref, _)| predicate(global_ref.as_obj().into_raw()))
     }
 
     pub fn size(&self) -> usize {

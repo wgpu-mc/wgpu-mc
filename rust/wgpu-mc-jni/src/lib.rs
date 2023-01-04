@@ -10,6 +10,7 @@ use std::io::Cursor;
 use std::mem;
 use std::mem::size_of;
 use std::num::NonZeroU32;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -39,7 +40,7 @@ use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, CHUNK_HEIGHT};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, CHUNK_SECTIONS_PER};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
@@ -69,6 +70,7 @@ enum RenderMessage {
     KeyState(u32, u32, u32, u32),
     CharTyped(char, u32),
     MouseMove(f64, f64),
+    CursorMove(f64, f64),
     Resized(u32, u32),
     Focused(bool),
 }
@@ -100,24 +102,24 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 static MOUSE_STATE: Lazy<Arc<ArcSwap<MouseState>>> =
     Lazy::new(|| Arc::new(ArcSwap::new(Arc::new(MouseState { x: 0.0, y: 0.0 }))));
 static THREAD_POOL: Lazy<ThreadPool> =
-    Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
-static BLOCK_STATE_PROVIDER: Lazy<MinecraftBlockstateProvider> =
-    Lazy::new(|| MinecraftBlockstateProvider {
-        chunks: RwLock::new(HashMap::new()),
-        air: BlockstateKey {
-            block: RENDERER
-                .get()
-                .unwrap()
-                .mc
-                .block_manager
-                .read()
-                .blocks
-                .get_full("minecraft:air")
-                .unwrap()
-                .0 as u16,
-            augment: 0,
-        },
-    });
+    Lazy::new(|| ThreadPoolBuilder::new().num_threads(10).build().unwrap());
+
+static CHUNKS: Lazy<RwLock<HashMap<ChunkPos, ChunkHolder>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+
+static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
+    block: RENDERER
+        .get()
+        .unwrap()
+        .mc
+        .block_manager
+        .read()
+        .blocks
+        .get_full("minecraft:air")
+        .unwrap()
+        .0 as u16,
+    augment: 0,
+});
 
 static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::new());
@@ -129,27 +131,40 @@ struct ChunkHolder {
 }
 
 #[derive(Debug)]
-struct MinecraftBlockstateProvider {
-    pub chunks: RwLock<HashMap<(i32, i32), ChunkHolder>>,
+struct MinecraftBlockstateProvider<'a> {
+    pub center: &'a ChunkHolder,
+    pub west: Option<&'a ChunkHolder>,
+    pub north: Option<&'a ChunkHolder>,
+    pub south: Option<&'a ChunkHolder>,
+    pub east: Option<&'a ChunkHolder>,
+
+    pub pos: ChunkPos,
+
     pub air: BlockstateKey,
 }
 
-impl BlockStateProvider for MinecraftBlockstateProvider {
+impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
         //Minecraft technically has negative y values now, but chunk data is indexed [0,384} instead of [-64,256}
         if y >= CHUNK_HEIGHT as i16 || y < 0 {
             return ChunkBlockState::Air;
         }
 
-        let chunk_x = x / 16;
-        let chunk_z = z / 16;
+        let chunk_x = (x / 16) - self.pos[0];
+        let chunk_z = (z / 16) - self.pos[1];
 
-        let unlock = Instant::now();
-        let chunks_read = self.chunks.read();
+        let chunk_option = match [chunk_x, chunk_z] {
+            [0, 0] => Some(self.center),
+            [0, -1] => self.north,
+            [0, 1] => self.south,
+            [1, 0] => self.east,
+            [-1, 0] => self.west,
+            pos => return ChunkBlockState::Air,
+        };
 
-        let chunk = match chunks_read.get(&(chunk_x, chunk_z)) {
-            Some(chunk) => chunk,
+        let chunk = match chunk_option {
             None => return ChunkBlockState::Air,
+            Some(chunk) => chunk,
         };
 
         let storage_index = (y / 16) as usize;
@@ -167,6 +182,14 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         } else {
             ChunkBlockState::State(*block)
         }
+    }
+
+    fn is_section_empty(&self, index: usize) -> bool {
+        if index >= CHUNK_SECTIONS_PER {
+            return true;
+        }
+
+        self.center.sections[index].is_none()
     }
 }
 
@@ -338,10 +361,10 @@ pub fn createChunk(
         .unwrap();
 
     {
-        let mut write = BLOCK_STATE_PROVIDER.chunks.write();
+        let mut write = CHUNKS.write();
 
         write.insert(
-            (x, z),
+            [x, z],
             ChunkHolder {
                 sections: palettes.zip(*storages).map(|(palette, storage)| {
                     if palette == 0 || storage == 0 {
@@ -376,21 +399,35 @@ pub fn bake_chunk(x: i32, z: i32) {
 
         {
             let bm = wm.mc.block_manager.read();
-            let chunks = wm.mc.chunks.loaded_chunks.read();
+            let loaded_chunks = wm.mc.chunks.loaded_chunks.read();
+            let chunk = loaded_chunks.get(&[x, z]).unwrap().load();
 
-            let chunk = chunks.get(&[x, z]).unwrap().load();
+            let chunks = CHUNKS.read();
+
+            let center = chunks.get(&[x, z]).unwrap();
+            let north = chunks.get(&[x, z - 1]);
+            let south = chunks.get(&[x, z + 1]);
+            let west = chunks.get(&[x - 1, z]);
+            let east = chunks.get(&[x + 1, z]);
+
+            let bsp = MinecraftBlockstateProvider {
+                center,
+                west,
+                north,
+                south,
+                east,
+                pos: [x, z],
+                air: *AIR,
+            };
 
             let instant = Instant::now();
-            chunk.bake(
-                wm,
-                &wm.pipelines.load_full().chunk_layers.load(),
-                &bm,
-                &*BLOCK_STATE_PROVIDER,
-            );
+
+            chunk.bake(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+
+            println!("{}ms", Instant::now().duration_since(instant).as_millis());
         }
     });
 }
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
     bake_chunk(x, z);
@@ -531,6 +568,15 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
                 env.call_static_method(
                     "dev/birb/wgpu/render/Wgpu",
                     "mouseMove",
+                    "(DD)V",
+                    &[JValue::Double(x), JValue::Double(y)],
+                )
+                .unwrap();
+            }
+            RenderMessage::CursorMove(x, y) => {
+                env.call_static_method(
+                    "dev/birb/wgpu/render/Wgpu",
+                    "cursorMove",
                     "(DD)V",
                     &[JValue::Double(x), JValue::Double(y)],
                 )
@@ -679,6 +725,8 @@ pub fn debugBake(env: JNIEnv, _class: JClass) {
     for pos in positions {
         bake_chunk(pos[0], pos[1]);
     }
+
+    // let wm = RENDERER.get().unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

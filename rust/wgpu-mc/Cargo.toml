@@ -35,3 +35,6 @@ get-size = { version = "0.1.1", features = ["derive"] }
 log = "0.4.17"
 logging_timer = "1.1.0"
 treeculler = "0.2.0"
+
+[profile.release]
+debug = true

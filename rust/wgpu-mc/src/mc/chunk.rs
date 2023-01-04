@@ -18,7 +18,7 @@ pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
 pub const CHUNK_HEIGHT: usize = 384;
 pub const CHUNK_VOLUME: usize = CHUNK_AREA * CHUNK_HEIGHT;
-pub const CHUNK_SECTION_HEIGHT: usize = 1;
+pub const CHUNK_SECTION_HEIGHT: usize = 16;
 pub const CHUNK_SECTIONS_PER: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
@@ -34,6 +34,8 @@ pub struct ChunkSection {
 ///Return a BlockState within the provided world coordinates.
 pub trait BlockStateProvider: Send + Sync + Debug {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
+
+    fn is_section_empty(&self, index: usize) -> bool;
 }
 
 pub trait RenderLayer: Send + Sync {
@@ -68,7 +70,6 @@ impl Chunk {
         let baked_layers = layers
             .iter()
             .map(|layer| {
-                let instant = Instant::now();
                 let verts = bake(
                     block_manager,
                     self,
@@ -76,7 +77,6 @@ impl Chunk {
                     layer.filter(),
                     provider,
                 );
-                log::info!("{}", Instant::now().duration_since(instant).as_micros());
 
                 (
                     layer.name().into(),

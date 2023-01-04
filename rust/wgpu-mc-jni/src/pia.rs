@@ -6,12 +6,13 @@ use jni::JNIEnv;
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use slab::Slab;
 
 pub static PIA_STORAGE: Lazy<RwLock<Slab<PackedIntegerArray>>> =
     Lazy::new(|| RwLock::new(Slab::with_capacity(2048)));
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PackedIntegerArray {
     data: Box<[i64]>,
     elements_per_long: i32,

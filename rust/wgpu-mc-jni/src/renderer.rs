@@ -16,6 +16,7 @@ use jni::{
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::{Mutex, RwLock};
+use winit::event::DeviceEvent;
 use winit::event_loop::EventLoopBuilder;
 use winit::{
     dpi::PhysicalSize,
@@ -332,16 +333,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                             height: new_inner_size.height,
                         });
                     }
-                    WindowEvent::CursorMoved {
-                        device_id: _,
-                        position,
-                        ..
-                    } => {
-                        CHANNELS
-                            .0
-                            .send(RenderMessage::MouseMove(position.x, position.y))
-                            .unwrap();
-                    }
                     WindowEvent::MouseInput {
                         device_id: _,
                         state,
@@ -351,6 +342,16 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                         CHANNELS
                             .0
                             .send(RenderMessage::MouseState(*state, *button))
+                            .unwrap();
+                    }
+                    WindowEvent::CursorMoved {
+                        device_id,
+                        position,
+                        modifiers,
+                    } => {
+                        CHANNELS
+                            .0
+                            .send(RenderMessage::CursorMove(position.x, position.y))
                             .unwrap();
                     }
                     WindowEvent::ReceivedCharacter(c) => {
@@ -390,9 +391,15 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                     _ => {}
                 }
             }
-            // Event::RedrawRequested(_) => {
-
-            // }
+            Event::DeviceEvent { device_id, event } => match event {
+                DeviceEvent::MouseMotion { delta } => {
+                    CHANNELS
+                        .0
+                        .send(RenderMessage::MouseMove(delta.0, delta.1))
+                        .unwrap();
+                }
+                _ => {}
+            },
             _ => {}
         }
     });

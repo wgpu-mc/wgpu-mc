@@ -2,6 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use cgmath::{Deg, Matrix3, Vector3};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
+use serde_derive::{Deserialize, Serialize};
 
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS};
@@ -11,7 +12,7 @@ use super::resource::ResourcePath;
 
 pub type BlockPos = (i32, u16, i32);
 
-#[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct BlockstateKey {
     ///An index into [BlockManager]
     pub block: u16,

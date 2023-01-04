@@ -4,13 +4,16 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-use treeculler::{AABB, BVol, Frustum, Vec3};
+use treeculler::{BVol, Frustum, Vec3, AABB};
 
 use crate::mc::chunk::{Chunk, ChunkPos};
 use crate::mc::resource::ResourcePath;
 use crate::render::pipeline::{Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
-use crate::render::shaderpack::{LonghandResourceConfig, Mat3ValueOrMult, Mat4, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig, ShorthandResourceConfig, TypeResourceConfig};
+use crate::render::shaderpack::{
+    LonghandResourceConfig, Mat3ValueOrMult, Mat4, Mat4ValueOrMult, PipelineConfig,
+    ShaderPackConfig, ShorthandResourceConfig, TypeResourceConfig,
+};
 use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
@@ -132,7 +135,6 @@ pub struct CustomResource {
 }
 
 impl CustomResource {
-
     pub fn get_mat4(&self) -> Option<Matrix4<f32>> {
         if let ResourceInternal::Mat4(_, lock, _) = &*self.data {
             Some(*lock.read())
@@ -140,7 +142,6 @@ impl CustomResource {
             None
         }
     }
-
 }
 
 pub struct ShaderGraph {
@@ -615,8 +616,18 @@ impl ShaderGraph {
 
         let chunk_offset = *wm.mc.chunks.chunk_offset.lock();
 
-        let projection_matrix = self.resources.get("wm_mat4_projection").unwrap().get_mat4().unwrap();
-        let view_matrix = self.resources.get("wm_mat4_view").unwrap().get_mat4().unwrap();
+        let projection_matrix = self
+            .resources
+            .get("wm_mat4_projection")
+            .unwrap()
+            .get_mat4()
+            .unwrap();
+        let view_matrix = self
+            .resources
+            .get("wm_mat4_view")
+            .unwrap()
+            .get_mat4()
+            .unwrap();
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
 
@@ -704,7 +715,11 @@ impl ShaderGraph {
                         for (pos, chunk_swap) in &*chunks {
                             let chunk = arena.alloc(chunk_swap.load());
 
-                            let min = Vec3::new((chunk.pos[0] * 16) as f32, 0.0, (chunk.pos[1] * 16) as f32);
+                            let min = Vec3::new(
+                                (chunk.pos[0] * 16) as f32,
+                                0.0,
+                                (chunk.pos[1] * 16) as f32,
+                            );
                             let max = min + Vec3::new(16.0, 384.0, 16.0);
 
                             let aabb = AABB::<f32>::new(min, max);
