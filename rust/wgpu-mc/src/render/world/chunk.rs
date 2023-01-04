@@ -228,5 +228,7 @@ pub fn bake<
         }
     }
 
+    vertices.shrink_to_fit();
+
     vertices
 }

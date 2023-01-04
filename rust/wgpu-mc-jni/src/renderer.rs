@@ -257,6 +257,10 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
         let wm = wm_clone;
 
         loop {
+            let mc_state = MC_STATE.load();
+
+            let surface_state = wm.wgpu_state.surface.read();
+
             {
                 let matrices = MATRICES.lock();
                 let res_mat_proj = shader_graph
@@ -266,13 +270,9 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
                 if let ResourceInternal::Mat4(val, lock, _) = &*res_mat_proj.data {
                     let matrix4: Matrix4<f32> = matrices.projection.into();
-                    *lock.write() = perspective(Deg(100.0), 1.0, 0.01, 1000.0) * matrix4;
+                    *lock.write() = perspective(Deg(100.0), (surface_state.1.width as f32) / (surface_state.1.height as f32), 0.01, 1000.0) * matrix4;
                 }
             }
-
-            let mc_state = MC_STATE.load();
-
-            let surface_state = wm.wgpu_state.surface.read();
 
             let surface = surface_state.0.as_ref().unwrap();
             let texture = surface.get_current_texture().unwrap();

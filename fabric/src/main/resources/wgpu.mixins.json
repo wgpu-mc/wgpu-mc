@@ -12,7 +12,6 @@
     "accessors.ThreadExecutorAccessor",
     "accessors.VertexFormatElementAccessor",
     "accessors.WindowAccessor",
-    "core.ClientPlayNetworkHandlerMixin",
     "core.GlStateManagerMixin",
     "core.InputUtilMixin",
     "core.KeyboardMixin",
@@ -33,7 +32,7 @@
     "render.WindowMixin",
     "render.WorldRendererMixin",
     "world.BlockStateMixin",
-    "world.WorldChunkMixin"
+    "render.BuiltChunkMixin"
   ],
   "injectors": {
     "defaultRequire": 1

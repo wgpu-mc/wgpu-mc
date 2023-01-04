@@ -26,7 +26,7 @@ public class WmChunk {
         this.worldChunk = worldChunk;
     }
 
-    public void upload() throws ClassCastException {
+    public void uploadAndBake() throws ClassCastException {
         long[] paletteIndices = new long[24];
         long[] storageIndices = new long[24];
 
@@ -69,12 +69,14 @@ public class WmChunk {
             }
         }
 
-        WgpuNative.createChunk(this.x, this.z, paletteIndices, storageIndices);
-    }
+        int x = this.x;
+        int z = this.z;
 
-    public void bake() {
-        //Non-blocking
-        WgpuNative.bakeChunk(this.x, this.z);
-    }
+        Thread thread = new Thread(() -> {
+            WgpuNative.createChunk(x, z, paletteIndices, storageIndices);
+            WgpuNative.bakeChunk(x, z);
+        });
 
+        thread.start();
+    }
 }

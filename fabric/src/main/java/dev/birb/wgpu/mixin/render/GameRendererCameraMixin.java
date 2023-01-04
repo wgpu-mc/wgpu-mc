@@ -51,35 +51,4 @@ public abstract class GameRendererCameraMixin {
     public void reload(ResourceManager manager) {
     }
 
-    @Redirect(method = "renderWorld", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/WorldRenderer;render(Lnet/minecraft/client/util/math/MatrixStack;FJZLnet/minecraft/client/render/Camera;Lnet/minecraft/client/render/GameRenderer;Lnet/minecraft/client/render/LightmapTextureManager;Lnet/minecraft/util/math/Matrix4f;)V"))
-    public void redirectRenderWorld(WorldRenderer instance, MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f positionMatrix) {
-//        Matrix4f mat = matrices.peek().getPositionMatrix();
-        MatrixStack stack = new MatrixStack();
-        stack.loadIdentity();
-
-        ClientPlayerEntity player = MinecraftClient.getInstance().player;
-
-        if(player != null) {
-            ChunkPos pos = player.getChunkPos();
-            WgpuNative.setChunkOffset(pos.x, pos.z);
-            Vec3d translate = camera.getPos().multiply(-1.0);
-
-            stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_X.getDegreesQuaternion(camera.getPitch()));
-            stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_Y.getDegreesQuaternion(camera.getYaw() + 180.0f));
-
-            stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
-                (float) (translate.x),
-                (float) translate.y - 64.0f,
-                (float) (translate.z)
-            ));
-        }
-
-        FloatBuffer floatBuffer = FloatBuffer.allocate(16);
-        float[] out = new float[16];
-        stack.peek().getPositionMatrix().writeColumnMajor(floatBuffer);
-        floatBuffer.get(out);
-        WgpuNative.setMatrix(0, out);
-
-    }
-
 }

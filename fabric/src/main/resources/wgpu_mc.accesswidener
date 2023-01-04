@@ -26,6 +26,12 @@ accessible field net/minecraft/state/State PROPERTY_MAP_PRINTER Ljava/util/funct
 accessible field net/minecraft/world/chunk/PalettedContainer idList Lnet/minecraft/util/collection/IndexedIterable;
 accessible field net/minecraft/client/Mouse cursorDeltaX D
 accessible field net/minecraft/client/Mouse cursorDeltaY D
+accessible field net/minecraft/client/render/chunk/ChunkRendererRegionBuilder chunks Lit/unimi/dsi/fastutil/longs/Long2ObjectMap;
+accessible class net/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task
+accessible class net/minecraft/client/render/chunk/ChunkRendererRegionBuilder$ClientChunk
+accessible method net/minecraft/client/render/WorldRenderer updateChunks (Lnet/minecraft/client/render/Camera;)V
+accessible class net/minecraft/client/render/WorldRenderer$ChunkInfo
+
 
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;
