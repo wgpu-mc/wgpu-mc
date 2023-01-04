@@ -183,4 +183,6 @@ public class WgpuNative {
 
     public native static void centerCursor();
 
+    public static native void clearChunks();
+    
 }

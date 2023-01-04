@@ -129,4 +129,9 @@ public abstract class WorldRendererMixin {
         ci.cancel();
     }
 
+    @Inject(method = "setWorld", at = @At("HEAD"))
+    public void setWorld(ClientWorld world, CallbackInfo ci) {
+        WgpuNative.clearChunks();
+    }
+
 }

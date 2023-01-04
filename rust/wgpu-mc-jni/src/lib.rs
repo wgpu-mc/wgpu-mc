@@ -356,41 +356,28 @@ pub fn createChunk(
 
     assert_eq!(size_of::<usize>(), 8);
 
-    let storages: &[usize; 24] = bytemuck::cast_slice::<_, usize>(storage_elements)
-        .try_into()
-        .unwrap();
+let storages: &[usize; 24] = bytemuck::cast_slice::<_, usize>(storage_elements)
+    .try_into()
+    .unwrap();
 
-    {
-        let mut write = CHUNKS.write();
+    let mut write = CHUNKS.write();
 
-        write.insert(
-            [x, z],
-            ChunkHolder {
-                sections: palettes.zip(*storages).map(|(palette, storage)| {
-                    if palette == 0 || storage == 0 {
-                        return None;
-                    }
+    write.insert(
+        [x, z],
+        ChunkHolder {
+            sections: palettes.zip(*storages).map(|(palette, storage)| {
+                if palette == 0 || storage == 0 {
+                    return None;
+                }
 
-                    //The indices are incremented by one in Java so that 0 means null/None
-                    Some((
-                        PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
-                        PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
-                    ))
-                }),
-            },
-        );
-    }
-
-    let chunk = Chunk::new([x, z]);
-
-    RENDERER
-        .get()
-        .unwrap()
-        .mc
-        .chunks
-        .loaded_chunks
-        .write()
-        .insert([x, z], ArcSwap::new(Arc::new(chunk)));
+                //The indices are incremented by one in Java so that 0 means null/None
+                Some((
+                    PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
+                    PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
+                ))
+            }),
+        },
+    );
 }
 
 pub fn bake_chunk(x: i32, z: i32) {
@@ -398,8 +385,18 @@ pub fn bake_chunk(x: i32, z: i32) {
         let wm = RENDERER.get().unwrap();
 
         {
+            {
+                let loaded_chunks = wm.mc.chunks.loaded_chunks.read();
+                if !loaded_chunks.contains_key(&[x, z]) {
+                    drop(loaded_chunks);
+                    let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
+                    loaded_chunks.insert([x, z], ArcSwap::new(Arc::new(Chunk::new([x, z]))));
+                }
+            }
+
             let bm = wm.mc.block_manager.read();
             let loaded_chunks = wm.mc.chunks.loaded_chunks.read();
+
             let chunk = loaded_chunks.get(&[x, z]).unwrap().load();
 
             let chunks = CHUNKS.read();
@@ -428,6 +425,17 @@ pub fn bake_chunk(x: i32, z: i32) {
         }
     });
 }
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn clearChunks(_env: JNIEnv, _class: JClass) {
+    THREAD_POOL.spawn(|| {
+        let wm = RENDERER.get().unwrap();
+
+        let mut chunks = wm.mc.chunks.loaded_chunks.write();
+        chunks.clear();
+    });
+}
+
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
     bake_chunk(x, z);
