@@ -24,6 +24,8 @@ accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap ce
 accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkZ I
 accessible field net/minecraft/state/State PROPERTY_MAP_PRINTER Ljava/util/function/Function;
 accessible field net/minecraft/world/chunk/PalettedContainer idList Lnet/minecraft/util/collection/IndexedIterable;
+accessible field net/minecraft/client/Mouse cursorDeltaX D
+accessible field net/minecraft/client/Mouse cursorDeltaY D
 
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;

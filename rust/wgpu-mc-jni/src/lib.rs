@@ -102,7 +102,7 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 static MOUSE_STATE: Lazy<Arc<ArcSwap<MouseState>>> =
     Lazy::new(|| Arc::new(ArcSwap::new(Arc::new(MouseState { x: 0.0, y: 0.0 }))));
 static THREAD_POOL: Lazy<ThreadPool> =
-    Lazy::new(|| ThreadPoolBuilder::new().num_threads(10).build().unwrap());
+    Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
 
 static CHUNKS: Lazy<RwLock<HashMap<ChunkPos, ChunkHolder>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
@@ -667,19 +667,17 @@ pub fn centerCursor(env: JNIEnv, _class: JClass, locked: jboolean) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setCursorLocked(env: JNIEnv, _class: JClass, locked: jboolean) {
     if let Some(window) = WINDOW.get() {
-        window
-            .set_cursor_grab(match locked {
-                JNI_TRUE => {
-                    window.set_cursor_visible(false);
-                    CursorGrabMode::Confined
-                }
-                JNI_FALSE => {
-                    window.set_cursor_visible(true);
-                    CursorGrabMode::None
-                }
-                _ => unreachable!(),
-            })
-            .unwrap();
+        window.set_cursor_grab(match locked {
+            JNI_TRUE => {
+                window.set_cursor_visible(false);
+                CursorGrabMode::Confined
+            }
+            JNI_FALSE => {
+                window.set_cursor_visible(true);
+                CursorGrabMode::None
+            }
+            _ => unreachable!(),
+        });
     }
 }
 

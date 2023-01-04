@@ -32,3 +32,5 @@ out/
 classes/
 
 target/
+
+*.log

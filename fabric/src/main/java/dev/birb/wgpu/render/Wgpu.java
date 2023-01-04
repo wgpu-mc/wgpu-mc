@@ -63,12 +63,26 @@ public class Wgpu {
         }
     }
 
-    public static void mouseMove(double x, double y) {
+    public static void cursorMove(double x, double y) {
         MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
 
         client.execute(() -> {
-            client.mouse.onCursorPos(0, x, y);
+//            if(client.isWindowFocused() && !client.mouse.isCursorLocked()) {
+                client.mouse.onCursorPos(0, x, y);
+//            }
         });
+    }
+
+    public static void mouseMove(double x, double y) {
+//        MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+//
+//        client.execute(() -> {
+//            if(client.isWindowFocused() && client.mouse.isCursorLocked()) {
+//                client.mouse.cursorDeltaX = x;
+//                client.mouse.cursorDeltaY = y;
+//                client.mouse.updateMouse();
+//            }
+//        });
     }
 
     public static void mouseAction(int button, int action) {
