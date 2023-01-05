@@ -196,6 +196,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                         usage: BufferUsages::VERTEX | BufferUsages::INDEX | BufferUsages::COPY_DST,
                     }),
             ),
+            last_bytes: RwLock::new(None),
         }) as Box<dyn GeometryCallback>,
     );
 

@@ -32,6 +32,7 @@ public class BuiltChunkMixin {
     public void createRebuildTask(ChunkRendererRegionBuilder builder, CallbackInfoReturnable<ChunkBuilder.BuiltChunk.Task> cir) {
         for(ChunkRendererRegionBuilder.ClientChunk chunk : builder.chunks.values()) {
             WorldChunk worldChunk = chunk.getChunk();
+            System.out.println("Building chunk: " + worldChunk.getPos());
             WmChunk wmChunk = new WmChunk(worldChunk);
             wmChunk.uploadAndBake();
         }

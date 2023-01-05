@@ -1219,32 +1219,6 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCamera(
-    _env: JNIEnv,
-    _class: JClass,
-    x: jdouble,
-    _y: jdouble,
-    z: jdouble,
-    yaw: jfloat,
-    pitch: jfloat,
-) {
-    // let renderer = RENDERER.get().unwrap();
-    // if renderer.mc.camera_bind_group.load().is_none() {
-    //     renderer.mc.init_camera(renderer);
-    // }
-    //
-    // let mut camera = **renderer.mc.camera.load();
-    // camera.position = Point3::new(x as f32, 200., z as f32);
-    // // camera.position = Point3::new(0.0, 200.0, 0.0);
-    // camera.yaw = (PI / 180.0) * yaw;
-    // camera.pitch = (PI / 180.0) * pitch;
-    // // camera.pitch = PI * 1.5;
-    //
-    // renderer.mc.camera.store(Arc::new(camera));
-    // renderer.upload_camera();
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn registerEntityModel(env: JNIEnv, _class: JClass, json_jstring: JString) {
     let _renderer = RENDERER.get().unwrap();
 

@@ -42,7 +42,7 @@ public class WgpuMcMod implements ClientModInitializer {
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (binding.wasPressed()) {
-				WgpuNative.debugBake();
+				System.out.println("Player chunk pos: " + client.player.getChunkPos());
 			}
 		});
 	}

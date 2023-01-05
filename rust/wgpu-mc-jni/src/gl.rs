@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::cmp::max;
 use std::vec::Vec;
 
@@ -283,6 +284,7 @@ impl BufferPool {
 pub struct ElectrumGeometry {
     pub blank: TextureHandle,
     pub pool: Arc<Buffer>,
+    pub last_bytes: RwLock<Option<Vec<u8>>>
 }
 
 impl GeometryCallback for ElectrumGeometry {
@@ -473,8 +475,17 @@ impl GeometryCallback for ElectrumGeometry {
             }
         }
 
+        match &*self.last_bytes.read() {
+            None => {}
+            Some(bytes) => if bytes == &buffer_pool.data {
+                return;
+            }
+        }
+
         wm.wgpu_state
             .queue
             .write_buffer(&self.pool, 0, &buffer_pool.data);
+
+        *self.last_bytes.write() = Some(buffer_pool.data);
     }
 }

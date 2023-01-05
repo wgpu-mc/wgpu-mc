@@ -47,10 +47,7 @@ pub use naga;
 use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
-    SurfaceConfiguration,
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d, PresentMode, SurfaceConfiguration};
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -139,11 +136,12 @@ impl WmRenderer {
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
-            present_mode: if vsync {
-                wgpu::PresentMode::AutoVsync
-            } else {
-                wgpu::PresentMode::AutoNoVsync
-            },
+            present_mode: PresentMode::Immediate,
+            // present_mode: if vsync {
+            //     wgpu::PresentMode::AutoVsync
+            // } else {
+            //     wgpu::PresentMode::AutoNoVsync
+            // },
             alpha_mode: CompositeAlphaMode::Auto,
         };
 
