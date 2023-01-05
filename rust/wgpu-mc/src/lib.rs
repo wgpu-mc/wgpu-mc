@@ -51,6 +51,7 @@ use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
     SurfaceConfiguration,
 };
+use crate::mc::entity::EntityInstances;
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -316,8 +317,9 @@ impl WmRenderer {
         graph: &ShaderGraph,
         output_texture_view: &wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
+        entity_instances: &HashMap<String, EntityInstances>,
     ) -> Result<(), wgpu::SurfaceError> {
-        graph.render(self, output_texture_view, surface_config);
+        graph.render(self, output_texture_view, surface_config, entity_instances);
 
         Ok(())
     }

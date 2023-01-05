@@ -40,4 +40,4 @@ serde_yaml = "0.9"
 serde-binary = "0.5.0"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]

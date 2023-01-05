@@ -254,11 +254,11 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
     geometry_layouts.insert(
         "wm_geo_electrum_gui".into(),
-        wgpu::VertexBufferLayout {
+        vec![wgpu::VertexBufferLayout {
             array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &ElectrumVertex::VAO,
-        },
+        }],
     );
 
     shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
@@ -305,7 +305,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let _instant = Instant::now();
 
-            wm.render(&shader_graph, &view, &surface_state.1).unwrap();
+            wm.render(&shader_graph, &view, &surface_state.1, &HashMap::new()).unwrap();
 
             texture.present();
         }

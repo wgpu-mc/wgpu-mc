@@ -2,6 +2,8 @@
 #![feature(array_zip)]
 #![feature(core_panic)]
 
+pub extern crate wgpu_mc;
+
 use core::slice;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -54,7 +56,7 @@ use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
-mod entity;
+pub mod entity;
 mod gl;
 mod palette;
 mod pia;

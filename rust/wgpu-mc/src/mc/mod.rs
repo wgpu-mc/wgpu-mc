@@ -146,7 +146,7 @@ pub struct MinecraftState {
     pub block_manager: RwLock<BlockManager>,
 
     pub chunks: ChunkManager,
-    pub entity_models: RwLock<Vec<Entity>>,
+    pub entity_models: RwLock<Vec<Arc<Entity>>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
 

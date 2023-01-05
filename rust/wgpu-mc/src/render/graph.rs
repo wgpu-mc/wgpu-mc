@@ -27,6 +27,8 @@ use wgpu::{
     RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
     VertexBufferLayout, VertexState,
 };
+use crate::mc::entity::{EntityInstances, InstanceVertex};
+use crate::render::entity::EntityVertex;
 
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
@@ -112,7 +114,7 @@ pub enum TextureResource {
 #[derive(Debug)]
 pub enum ResourceInternal {
     Texture(TextureResource, bool),
-    Blob(BindableBuffer),
+    Blob(Arc<BindableBuffer>),
     Mat3(
         Mat3ValueOrMult,
         Arc<RwLock<Matrix3<f32>>>,
@@ -173,8 +175,16 @@ impl ShaderGraph {
         &mut self,
         wm: &WmRenderer,
         resource_types: Option<&HashMap<String, String>>,
-        mut additional_geometry: Option<HashMap<String, VertexBufferLayout>>,
+        mut additional_geometry: Option<HashMap<String, Vec<VertexBufferLayout>>>,
     ) {
+        let mut resource_types = match resource_types {
+            None => HashMap::new(),
+            Some(map) => map.clone()
+        };
+
+        resource_types.insert("wm_ssbo_entity_part_transforms".into(), "ssbo".into());
+        resource_types.insert("wm_texture_entities".into(), "texture".into());
+
         let mut resources = HashMap::new();
 
         self.quad = Some(
@@ -507,8 +517,6 @@ impl ShaderGraph {
                                             layouts
                                                 .get(
                                                     resource_types
-                                                        .as_ref()
-                                                        .unwrap()
                                                         .get(uniform)
                                                         .expect(uniform),
                                                 )
@@ -533,6 +541,24 @@ impl ShaderGraph {
                                     .collect::<Vec<_>>(),
                             });
 
+                    let buffers = match &definition.geometry[..] {
+                        "wm_geo_terrain" => vec![Vertex::desc()],
+                        "wm_geo_quad" => vec![QuadVertex::desc()],
+                        "wm_geo_entities" => vec![EntityVertex::desc(), InstanceVertex::desc()],
+                        _ => {
+                            if let Some(additional_geometry) =
+                                &mut additional_geometry
+                            {
+                                additional_geometry
+                                    .remove(&definition.geometry)
+                                    .unwrap()
+                                    .clone()
+                            } else {
+                                unimplemented!("Unknown geometry");
+                            }
+                        }
+                    };
+
                     let pipeline =
                         wm.wgpu_state
                             .device
@@ -542,21 +568,7 @@ impl ShaderGraph {
                                 vertex: VertexState {
                                     module: &shader.shader,
                                     entry_point: "vert",
-                                    buffers: &[match &definition.geometry[..] {
-                                        "wm_geo_terrain" => Vertex::desc(),
-                                        "wm_geo_quad" => QuadVertex::desc(),
-                                        _ => {
-                                            if let Some(additional_geometry) =
-                                                &mut additional_geometry
-                                            {
-                                                additional_geometry
-                                                    .remove(&definition.geometry)
-                                                    .unwrap()
-                                            } else {
-                                                unimplemented!("Unknown geometry");
-                                            }
-                                        }
-                                    }],
+                                    buffers: &buffers,
                                 },
                                 primitive: Default::default(),
                                 depth_stencil: definition.depth.as_ref().map(|_| {
@@ -609,6 +621,7 @@ impl ShaderGraph {
         wm: &WmRenderer,
         output_texture: &'graph wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
+        entity_instances: &HashMap<String, EntityInstances>
     ) {
         let arena = WmArena::new(1024);
 
@@ -765,8 +778,7 @@ impl ShaderGraph {
                         }
                     }
                 }
-                "wm_geo_entities" | "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox"
-                | "wm_geo_quad" => {
+                "wm_geo_quad" => {
                     bind_uniforms(config, &resource_borrow, &arena, &mut render_pass);
                     set_push_constants(
                         config,
@@ -779,7 +791,58 @@ impl ShaderGraph {
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
                     render_pass.set_vertex_buffer(0, self.quad.as_ref().unwrap().slice(..));
                     render_pass.draw(0..6, 0..1);
-                }
+                },
+                "wm_geo_entities" => {
+                    let entities = wm.mc.entity_models.read();
+
+                    entities.iter().for_each(|entity| {
+                        let instances = entity_instances.get(&entity.name).unwrap();
+
+                        let read_guard = instances.uploaded.read();
+                        let uploaded = read_guard.as_ref().unwrap();
+
+                        let instance_vbo = arena.alloc(uploaded.instance_vbo.clone());
+                        let bindable_buffer = uploaded.transform_ssbo.clone();
+
+                        let augmented_resources = resource_borrow.clone()
+                            .into_iter()
+                            .chain([
+                                (
+                                    &*arena.alloc("wm_ssbo_entity_part_transforms".into()),
+                                    &*arena.alloc(CustomResource {
+                                        update: None,
+                                        data: Arc::new(
+                                            ResourceInternal::Blob(bindable_buffer)
+                                        ),
+                                    }),
+                                ),
+                                (
+                                    &*arena.alloc("wm_texture_entities".into()),
+                                    &*arena.alloc(CustomResource {
+                                        update: None,
+                                        data: Arc::new(
+                                            ResourceInternal::Texture(TextureResource::Bindable(entity.texture.clone()), false)
+                                        ),
+                                    }),
+                                ),
+                            ])
+                            .collect();
+
+                        bind_uniforms(config, arena.alloc(augmented_resources), &arena, &mut render_pass);
+                        set_push_constants(
+                            config,
+                            &mut render_pass,
+                            None,
+                            surface_config,
+                            chunk_offset,
+                        );
+
+                        render_pass.set_vertex_buffer(0, arena.alloc(entity.mesh.clone()).slice(..));
+                        render_pass.set_vertex_buffer(1, instance_vbo.slice(..));
+                        render_pass.draw(0..entity.vertices, 0..instances.instances.len() as u32);
+                    });
+                },
+                "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox" => todo!(),
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {
                         render_pass.set_pipeline(self.pipelines.get(name).unwrap());
@@ -818,7 +881,7 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
                 }
                 TextureResource::Bindable(bindable) => &arena.alloc(bindable.load()).bind_group,
             },
-            ResourceInternal::Blob(BindableBuffer { bind_group, .. }) => bind_group,
+            ResourceInternal::Blob(bindable) => &bindable.bind_group,
             ResourceInternal::Mat3(_, _, bindable) | ResourceInternal::Mat4(_, _, bindable) => {
                 &bindable.bind_group
             }

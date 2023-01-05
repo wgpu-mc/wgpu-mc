@@ -1,5 +1,3 @@
-extern crate wgpu_mc;
-
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -181,7 +179,13 @@ impl RenderLayer for TerrainLayer {
 }
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
-    let (_entity, _instances) = describe_entity(&wm);
+    let (entity, instances) = describe_entity(&wm);
+
+    let mut instances_map = HashMap::new();
+
+    instances_map.insert("minecraft:chest#main".into(), instances);
+
+    wm.mc.entity_models.write().push(entity);
 
     wm.pipelines
         .load_full()
@@ -410,7 +414,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                     array_layer_count: None,
                 });
 
-                let _ = wm.render(&graph, &view, &surface_state.1);
+                let _ = wm.render(&graph, &view, &surface_state.1, &instances_map);
 
                 texture.present();
 

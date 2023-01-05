@@ -42,18 +42,17 @@ public class WgpuMcMod implements ClientModInitializer {
 			new KeyBinding("", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_M, "")
 		);
 		// Debug to dump models
-		System.out.println("[");
+		StringBuilder builder = new StringBuilder();
+
+		builder.append("{");
         EntityModels.getModels().forEach((key, tmd) -> {
-			String dumped = (new Gson()).toJson(v);
-//			System.out.println("{" +
-//					"\"identifier\": " + dumped +
-//					"}");
-
-			System.out.println(",");
-
-
+			String dumped = (new Gson()).toJson(tmd);
+			builder.append("\""+key+"\":");
+			builder.append(dumped);
+			builder.append(",");
 		});
-		System.out.println("]");
+		builder.append("}");
+		System.out.println(builder.toString());
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (binding.wasPressed()) {

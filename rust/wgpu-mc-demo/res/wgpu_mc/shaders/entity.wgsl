@@ -6,10 +6,10 @@ struct Transforms {
     mats: array<mat4x4<f32>>
 };
 
-@group(2) @binding(0)
+@group(0) @binding(0)
 var<uniform> uniform_data: Uniforms;
 
-@group(0) @binding(0)
+@group(1) @binding(0)
 var<storage> transforms: Transforms;
 
 struct VertexResult {
@@ -19,7 +19,7 @@ struct VertexResult {
 };
 
 @vertex
-fn vs_main(
+fn vert(
     @location(0) pos_in: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
     @location(2) normal: vec3<f32>,
@@ -41,13 +41,14 @@ fn vs_main(
     return vr;
 }
 
-@group(1) @binding(0)
+@group(2) @binding(0)
 var t_texture: texture_2d<f32>;
 
-@group(1) @binding(1)
+@group(2) @binding(1)
 var t_sampler: sampler;
 
 @fragment
-fn fs_main(in: VertexResult) -> @location(0) vec4<f32> {
-   return textureSample(t_texture, t_sampler, in.tex_coords);
+fn frag(in: VertexResult) -> @location(0) vec4<f32> {
+    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+//   return textureSample(t_texture, t_sampler, in.tex_coords);
 }
