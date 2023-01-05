@@ -149,8 +149,8 @@ fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Opt
 
     const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
-    let middle_x = atlas_uv.0 .0 + (atlas_uv.1 .0 / 2.0);
-    let middle_y = atlas_uv.0 .1 + (atlas_uv.1 .1 / 2.0);
+    let middle_x = atlas_uv[0][0] + (atlas_uv[1][0] / 2.0);
+    let middle_y = atlas_uv[0][1] + (atlas_uv[1][1] / 2.0);
 
     // let mat = Matrix3::from_translation([middle_x, middle_y].into())
     //     * Matrix3::from_angle_x(Deg((90 * face.rotation) as f32))
@@ -158,10 +158,10 @@ fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Opt
 
     let mat = Matrix3::identity();
 
-    let uv1 = mat * Vector3::new((atlas_uv.0 .0) / ATLAS, (atlas_uv.0 .1) / ATLAS, 1.0);
-    let uv2 = mat * Vector3::new((atlas_uv.1 .0) / ATLAS, (atlas_uv.1 .1) / ATLAS, 1.0);
+    let uv1 = mat * Vector3::new((atlas_uv[0][0]) / ATLAS, (atlas_uv[0][1]) / ATLAS, 1.0);
+    let uv2 = mat * Vector3::new((atlas_uv[1][0]) / ATLAS, (atlas_uv[1][1]) / ATLAS, 1.0);
 
-    Some(((uv1.x, uv1.y), (uv2.x, uv2.y)))
+    Some([[uv1.x, uv1.y], [uv2.x, uv2.y]])
 }
 pub struct RenderSettings {
     pub opaque: bool,
@@ -355,52 +355,52 @@ impl ModelMesh {
                         #[rustfmt::skip]
                         let faces = BlockModelFaces {
                             south: south.map(|south| {[
-                                BlockMeshVertex { position: e, tex_coords: [south.0.1.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                                BlockMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                                BlockMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                                BlockMeshVertex { position: h, tex_coords: [south.0.1.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                                BlockMeshVertex { position: g, tex_coords: [south.0.0.0, south.0.0.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
-                                BlockMeshVertex { position: f, tex_coords: [south.0.0.0, south.0.1.1], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: e, tex_coords: [south.0[1][0], south.0[1][1]], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: h, tex_coords: [south.0[1][0], south.0[0][1]], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: f, tex_coords: [south.0[0][0], south.0[1][1]], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: h, tex_coords: [south.0[1][0], south.0[0][1]], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: g, tex_coords: [south.0[0][0], south.0[0][1]], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
+                                BlockMeshVertex { position: f, tex_coords: [south.0[0][0], south.0[1][1]], normal: [0.0, 0.0, 1.0, 1.0], animation_uv_offset: south.1 },
                             ]}),
                             west: west.map(|west| {[
-                                BlockMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                                BlockMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                                BlockMeshVertex { position: f, tex_coords: [west.0.1.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                                BlockMeshVertex { position: c, tex_coords: [west.0.0.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                                BlockMeshVertex { position: b, tex_coords: [west.0.0.0, west.0.1.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
-                                BlockMeshVertex { position: g, tex_coords: [west.0.1.0, west.0.0.1], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: g, tex_coords: [west.0[1][0], west.0[0][1]], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: b, tex_coords: [west.0[0][0], west.0[1][1]], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: f, tex_coords: [west.0[1][0], west.0[1][1]], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: c, tex_coords: [west.0[0][0], west.0[0][1]], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: b, tex_coords: [west.0[0][0], west.0[1][1]], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
+                                BlockMeshVertex { position: g, tex_coords: [west.0[1][0], west.0[0][1]], normal: [-1.0, 0.0, 0.0, 1.0], animation_uv_offset: west.1 },
                             ]}),
                             north: north.map(|north| {[
-                                BlockMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                                BlockMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                                BlockMeshVertex { position: b, tex_coords: [north.0.1.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                                BlockMeshVertex { position: d, tex_coords: [north.0.0.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                                BlockMeshVertex { position: a, tex_coords: [north.0.0.0, north.0.1.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
-                                BlockMeshVertex { position: c, tex_coords: [north.0.1.0, north.0.0.1], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: c, tex_coords: [north.0[1][0], north.0[0][1]], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: a, tex_coords: [north.0[0][0], north.0[1][1]], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: b, tex_coords: [north.0[1][0], north.0[1][1]], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: d, tex_coords: [north.0[0][0], north.0[0][1]], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: a, tex_coords: [north.0[0][0], north.0[1][1]], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
+                                BlockMeshVertex { position: c, tex_coords: [north.0[1][0], north.0[0][1]], normal: [0.0, 0.0, -1.0, 1.0], animation_uv_offset: north.1 },
                             ]}),
                             east: east.map(|east| {[
-                                BlockMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                                BlockMeshVertex { position: a, tex_coords: [east.0.1.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                                BlockMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                                BlockMeshVertex { position: d, tex_coords: [east.0.1.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                                BlockMeshVertex { position: h, tex_coords: [east.0.0.0, east.0.0.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
-                                BlockMeshVertex { position: e, tex_coords: [east.0.0.0, east.0.1.1], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: e, tex_coords: [east.0[0][0], east.0[1][1]], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: a, tex_coords: [east.0[1][0], east.0[1][1]], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: d, tex_coords: [east.0[1][0], east.0[0][1]], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: d, tex_coords: [east.0[1][0], east.0[0][1]], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: h, tex_coords: [east.0[0][0], east.0[0][1]], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
+                                BlockMeshVertex { position: e, tex_coords: [east.0[0][0], east.0[1][1]], normal: [1.0, 0.0, 0.0, 1.0], animation_uv_offset: east.1 },
                             ]}),
                             up: up.map(|up| {[
-                                BlockMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                                BlockMeshVertex { position: h, tex_coords: [up.0.0.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                                BlockMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                                BlockMeshVertex { position: c, tex_coords: [up.0.1.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                                BlockMeshVertex { position: g, tex_coords: [up.0.1.0, up.0.0.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
-                                BlockMeshVertex { position: d, tex_coords: [up.0.0.0, up.0.1.1], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: g, tex_coords: [up.0[1][0], up.0[0][1]], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: h, tex_coords: [up.0[0][0], up.0[0][1]], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: d, tex_coords: [up.0[0][0], up.0[1][1]], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: c, tex_coords: [up.0[1][0], up.0[1][1]], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: g, tex_coords: [up.0[1][0], up.0[0][1]], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
+                                BlockMeshVertex { position: d, tex_coords: [up.0[0][0], up.0[1][1]], normal: [0.0, 1.0, 0.0, 1.0], animation_uv_offset: up.1 },
                             ]}),
                             down: down.map(|down| {[
-                                BlockMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                                BlockMeshVertex { position: b, tex_coords: [down.0.0.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                                BlockMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                                BlockMeshVertex { position: f, tex_coords: [down.0.0.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                                BlockMeshVertex { position: a, tex_coords: [down.0.1.0, down.0.0.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
-                                BlockMeshVertex { position: e, tex_coords: [down.0.1.0, down.0.1.1], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: f, tex_coords: [down.0[0][0], down.0[1][1]], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: b, tex_coords: [down.0[0][0], down.0[0][1]], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: a, tex_coords: [down.0[1][0], down.0[0][1]], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: f, tex_coords: [down.0[0][0], down.0[1][1]], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: a, tex_coords: [down.0[1][0], down.0[0][1]], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
+                                BlockMeshVertex { position: e, tex_coords: [down.0[1][0], down.0[1][1]], normal: [0.0, -1.0, 0.0, 1.0], animation_uv_offset: down.1 },
                             ]}),
                         };
 

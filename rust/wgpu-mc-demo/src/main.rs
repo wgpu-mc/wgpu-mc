@@ -31,7 +31,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 
 use crate::chunk::make_chunks;
-use crate::entity::describe_entity;
+use crate::entity::{describe_entity, ENTITY_NAME};
 
 mod camera;
 mod chunk;
@@ -183,7 +183,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
     let mut instances_map = HashMap::new();
 
-    instances_map.insert("minecraft:chest#main".into(), instances);
+    instances_map.insert(ENTITY_NAME.into(), instances);
 
     wm.mc.entity_models.write().push(entity);
 

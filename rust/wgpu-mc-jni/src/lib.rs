@@ -1245,12 +1245,3 @@ pub fn setCamera(
     // renderer.mc.camera.store(Arc::new(camera));
     // renderer.upload_camera();
 }
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn registerEntityModel(env: JNIEnv, _class: JClass, json_jstring: JString) {
-    let _renderer = RENDERER.get().unwrap();
-
-    let json_string: String = env.get_string(json_jstring).unwrap().into();
-    let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
-    let _entity_part = tmd_to_wm(&model_data.data.data);
-}

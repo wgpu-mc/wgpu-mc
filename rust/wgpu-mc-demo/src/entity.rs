@@ -5,13 +5,13 @@ use cgmath::{Matrix4, SquareMatrix};
 use serde::Deserialize;
 use wgpu_mc::mc::entity::{Entity, EntityInstances, EntityInstanceTransforms, PartTransform};
 use wgpu_mc::mc::resource::ResourcePath;
-use wgpu_mc::render::atlas::Atlas;
+use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::texture::TextureSamplerView;
 
 const ENTITY_JSON: &str = include_str!("../dumped_entities.json");
 
 use wgpu_mc::WmRenderer;
-use wgpu_mc_jni::entity::{ModelPartData, tmd_to_wm};
+use wgpu_mc_jni::entity::{AtlasPosition, ModelPartData, tmd_to_wm};
 
 #[derive(Deserialize)]
 pub struct Wrapper2 {
@@ -23,13 +23,14 @@ pub struct Wrapper1 {
     data: Wrapper2
 }
 
+pub const ENTITY_NAME: &str = "minecraft:ender_dragon#main";
+const TEXTURE_LOCATION: &str = "minecraft:textures/entity/enderdragon/dragon.png";
+
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
 
     let entities: HashMap<String, Wrapper1> = serde_json::from_str(ENTITY_JSON).unwrap();
-
-    let chest_main = &entities.get("minecraft:chest#main").unwrap().data.data;
-
-    let wm_entity = tmd_to_wm(chest_main);
+    
+    let model_part_data = &entities.get(ENTITY_NAME).unwrap().data.data;
 
     let entity_atlas_guard = {
         let pipelines = wm.pipelines.load();
@@ -40,22 +41,32 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
         atlas.load_full()
     };
 
-    let chest_texture_rp = ResourcePath(
-        "minecraft:textures/entity/chest/normal.png".into()
+    let atlas_pos = AtlasPosition {
+        width: ATLAS_DIMENSIONS,
+        height: ATLAS_DIMENSIONS,
+        x: 0.0,
+        y: 0.0,
+    };
+
+    let wm_entity = tmd_to_wm(model_part_data, &atlas_pos);
+
+    let texture_rp = ResourcePath(
+        TEXTURE_LOCATION.into()
     );
 
-    let chest_texture_bytes = wm.mc.resource_provider.get_bytes(&chest_texture_rp).unwrap();
+    let texture_bytes = wm.mc.resource_provider.get_bytes(&texture_rp).unwrap();
 
-    entity_atlas_guard.allocate([(&chest_texture_rp, &chest_texture_bytes)], &*wm.mc.resource_provider);
+    entity_atlas_guard.allocate([(&texture_rp, &texture_bytes)], &*wm.mc.resource_provider);
+    entity_atlas_guard.upload(&wm);
 
     let entity = Arc::new(Entity::new(
-        "minecraft:chest#main".into(),
+        ENTITY_NAME.into(),
         wm_entity.unwrap(),
         &wm.wgpu_state,
         entity_atlas_guard.bindable_texture.clone()
     ));
 
-    let one_chest_transform = EntityInstanceTransforms {
+    let one_transform = EntityInstanceTransforms {
         position: (0.0, 0.0, 0.0),
         looking_yaw: 0.0,
         uv_offset: (0.0, 0.0),
@@ -64,11 +75,21 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
             PartTransform::identity(),
             PartTransform::identity(),
             PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
+            PartTransform::identity(),
             PartTransform::identity()
         ],
     };
 
-    let instances = EntityInstances::new(entity.clone(), vec![one_chest_transform]);
+    let instances = EntityInstances::new(entity.clone(), vec![one_transform]);
     instances.upload(wm);
 
     (entity, instances)

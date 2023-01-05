@@ -61,7 +61,26 @@ pub struct TexturedModelData {
     pub dimensions: TextureDimensions,
 }
 
-pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
+#[derive(Debug, Copy, Clone)]
+pub struct AtlasPosition {
+    pub width: u32,
+    pub height: u32,
+    pub x: f32,
+    pub y: f32
+}
+
+impl AtlasPosition {
+
+    pub fn map(&self, pos: [f32; 2]) -> [f32; 2] {
+        [
+            (self.x + pos[0]) / (self.width as f32),
+            (self.y + pos[1]) / (self.height as f32),
+        ]
+    }
+
+}
+
+pub fn tmd_to_wm(part: &ModelPartData, ap: &AtlasPosition) -> Option<EntityPart> {
     Some(EntityPart {
         name: Arc::new("".into()),
         transform: PartTransform {
@@ -82,6 +101,13 @@ pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
             .cuboid_data
             .iter()
             .map(|cuboid_data| {
+                let pos = [*cuboid_data.texture_uv.get("x").unwrap(), *cuboid_data.texture_uv.get("y").unwrap()];
+                let dimensions = [
+                    cuboid_data.dimensions.get("x").unwrap(),
+                    cuboid_data.dimensions.get("y").unwrap(),
+                    cuboid_data.dimensions.get("z").unwrap(),
+                ];
+
                 Some(Cuboid {
                     x: *cuboid_data.offset.get("x")?,
                     y: *cuboid_data.offset.get("y")?,
@@ -90,13 +116,30 @@ pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
                     height: *cuboid_data.dimensions.get("y")?,
                     length: *cuboid_data.dimensions.get("z")?,
                     textures: CuboidUV {
-                        //TODO
-                        north: ((0.0, 0.0), (0.0, 0.0)),
-                        east: ((0.0, 0.0), (0.0, 0.0)),
-                        south: ((0.0, 0.0), (0.0, 0.0)),
-                        west: ((0.0, 0.0), (0.0, 0.0)),
-                        up: ((0.0, 0.0), (0.0, 0.0)),
-                        down: ((0.0, 0.0), (0.0, 0.0)),
+                        west: [
+                            ap.map([pos[0], pos[1] + dimensions[2]]),
+                            ap.map([pos[0], pos[1] + (dimensions[2] + dimensions[1])]),
+                        ],
+                        east: [
+                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + dimensions[2]]),
+                            ap.map([(pos[0] + (dimensions[0] * 3.0)), pos[1] + (dimensions[2] + dimensions[1])]),
+                        ],
+                        south: [
+                            ap.map([(pos[0] + (dimensions[0])), pos[1] + dimensions[2]]),
+                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + (dimensions[2] + dimensions[1])]),
+                        ],
+                        north: [
+                            ap.map([(pos[0] + (dimensions[0] * 3.0)), pos[1] + dimensions[2]]),
+                            ap.map([(pos[0] + (dimensions[0] * 4.0)), pos[1] + (dimensions[2] + dimensions[1])]),
+                        ],
+                        up: [
+                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1]]),
+                            ap.map([(pos[0] + (dimensions[0] * 3.0)), pos[1] + (dimensions[2])]),
+                        ],
+                        down: [
+                            ap.map([(pos[0] + dimensions[0]), pos[1]]),
+                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + (dimensions[2])]),
+                        ]
                     },
                 })
             })
@@ -104,7 +147,7 @@ pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
         children: part
             .children
             .values()
-            .map(tmd_to_wm)
+            .map(|x| tmd_to_wm(x, ap))
             .collect::<Option<Vec<EntityPart>>>()?,
     })
 }

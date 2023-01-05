@@ -214,16 +214,16 @@ impl Atlas {
 
         map.insert(
             path.clone(),
-            (
-                (
+            [
+                [
                     allocation.rectangle.min.x as f32,
                     allocation.rectangle.min.y as f32,
-                ),
-                (
+                ],
+                [
                     allocation.rectangle.max.x as f32,
                     allocation.rectangle.max.y as f32,
-                ),
-            ),
+                ],
+            ],
         );
     }
 
