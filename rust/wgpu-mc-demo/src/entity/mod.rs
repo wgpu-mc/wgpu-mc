@@ -7,7 +7,7 @@ use wgpu_mc::mc::entity::{
 use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::WmRenderer;
-
+mod entities;
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     // px = pixel(s)
     let _1_px = 1.0 / (ATLAS_DIMENSIONS as f32);

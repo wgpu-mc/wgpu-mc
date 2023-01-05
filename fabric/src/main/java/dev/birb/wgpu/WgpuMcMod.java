@@ -1,5 +1,6 @@
 package dev.birb.wgpu;
 
+import com.google.gson.Gson;
 import dev.birb.wgpu.palette.RustPalette;
 import dev.birb.wgpu.render.electrum.ElectrumRenderer;
 import dev.birb.wgpu.rust.WgpuNative;
@@ -14,6 +15,7 @@ import net.fabricmc.fabric.impl.client.indigo.IndigoMixinConfigPlugin;
 import net.fabricmc.fabric.impl.renderer.RendererAccessImpl;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.render.entity.model.EntityModels;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.world.chunk.Chunk;
@@ -39,6 +41,19 @@ public class WgpuMcMod implements ClientModInitializer {
 		KeyBinding binding = KeyBindingHelper.registerKeyBinding(
 			new KeyBinding("", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_M, "")
 		);
+		// Debug to dump models
+		System.out.println("[");
+        EntityModels.getModels().forEach((key, tmd) -> {
+			String dumped = (new Gson()).toJson(v);
+//			System.out.println("{" +
+//					"\"identifier\": " + dumped +
+//					"}");
+
+			System.out.println(",");
+
+
+		});
+		System.out.println("]");
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (binding.wasPressed()) {
