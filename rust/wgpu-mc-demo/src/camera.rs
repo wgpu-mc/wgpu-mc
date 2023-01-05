@@ -1,4 +1,4 @@
-use cgmath::{Point3, Vector3};
+use cgmath::{Point3, Transform, Vector3};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {
@@ -37,6 +37,11 @@ impl Camera {
 
     pub fn build_view_matrix(&self) -> cgmath::Matrix4<f32> {
         cgmath::Matrix4::look_at_rh(self.position, self.position + self.get_direction(), self.up)
+    }
+
+    pub fn build_rotation_matrix(&self) -> cgmath::Matrix4<f32> {
+        let array: [f32; 3] = self.get_direction().into();
+        cgmath::Matrix4::look_at_rh(Point3::new(0.0, 0.0, 0.0), array.into(), self.up)
     }
 
     pub fn build_perspective_matrix(&self) -> cgmath::Matrix4<f32> {

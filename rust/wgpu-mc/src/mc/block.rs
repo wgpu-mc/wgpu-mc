@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Deg, Matrix3, Vector3};
+use cgmath::{Deg, Matrix2, Matrix3, Matrix4, SquareMatrix, Vector2, Vector3, Vector4};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
 use serde_derive::{Deserialize, Serialize};
@@ -149,12 +149,19 @@ fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Opt
 
     const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
-    let adjusted_uv = (
-        ((atlas_uv.0 .0) / ATLAS, (atlas_uv.0 .1) / ATLAS),
-        ((atlas_uv.1 .0) / ATLAS, (atlas_uv.1 .1) / ATLAS),
-    );
+    let middle_x = atlas_uv.0 .0 + (atlas_uv.1 .0 / 2.0);
+    let middle_y = atlas_uv.0 .1 + (atlas_uv.1 .1 / 2.0);
 
-    Some(adjusted_uv)
+    // let mat = Matrix3::from_translation([middle_x, middle_y].into())
+    //     * Matrix3::from_angle_x(Deg((90 * face.rotation) as f32))
+    //     * Matrix3::from_translation([-middle_x, -middle_y].into());
+
+    let mat = Matrix3::identity();
+
+    let uv1 = mat * Vector3::new((atlas_uv.0 .0) / ATLAS, (atlas_uv.0 .1) / ATLAS, 1.0);
+    let uv2 = mat * Vector3::new((atlas_uv.1 .0) / ATLAS, (atlas_uv.1 .1) / ATLAS, 1.0);
+
+    Some(((uv1.x, uv1.y), (uv2.x, uv2.y)))
 }
 pub struct RenderSettings {
     pub opaque: bool,
@@ -226,7 +233,10 @@ impl ModelMesh {
                     );
                 };
 
-                let matrix = Matrix3::from_angle_y(Deg(model_properties.y as f32));
+                let matrix =
+                    Matrix4::from_translation(Vector3::new(0.5, 0.5, 0.5))
+                    * Matrix4::from_angle_y(Deg(model_properties.y as f32))
+                    * Matrix4::from_translation(Vector3::new(-0.5, -0.5, -0.5));
 
                 let is_cube = model.elements.iter().len() == 1 && {
                     match model.elements.iter().flatten().next() {
@@ -333,14 +343,14 @@ impl ModelMesh {
                             ))
                         );
 
-                        let a = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0)).into();
-                        let b = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0)).into();
-                        let c = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0)).into();
-                        let d = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0)).into();
-                        let e = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0)).into();
-                        let f = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0)).into();
-                        let g = (matrix * Vector3::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0)).into();
-                        let h = (matrix * Vector3::new(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0)).into();
+                        let a = (matrix * Vector4::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
+                        let b = (matrix * Vector4::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
+                        let c = (matrix * Vector4::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
+                        let d = (matrix * Vector4::new(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
+                        let e = (matrix * Vector4::new(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
+                        let f = (matrix * Vector4::new(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
+                        let g = (matrix * Vector4::new(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
+                        let h = (matrix * Vector4::new(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
 
                         #[rustfmt::skip]
                         let faces = BlockModelFaces {

@@ -49,7 +49,7 @@ use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
-    SurfaceConfiguration, Texture,
+    SurfaceConfiguration,
 };
 
 use crate::mc::resource::ResourceProvider;

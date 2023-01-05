@@ -20,7 +20,7 @@ use wgpu_mc::mc::chunk::RenderLayer;
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
-use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
+use wgpu_mc::render::shaderpack::{Mat3, Mat3ValueOrMult, Mat4, Mat4ValueOrMult};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{
@@ -231,9 +231,16 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
         BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         "matrix",
     ));
+    let rotation_bindable = Arc::new(BindableBuffer::new(
+        &wm,
+        &[0u8; 64],
+        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        "matrix",
+    ));
 
     let view_matrix = Arc::new(RwLock::new(camera.build_view_matrix()));
     let projection_matrix = Arc::new(RwLock::new(camera.build_perspective_matrix()));
+    let rotation_matrix = Arc::new(RwLock::new(camera.build_rotation_matrix()));
 
     resources.insert(
         "wm_mat4_projection".into(),
@@ -259,6 +266,20 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                 },
                 view_matrix.clone(),
                 view_bindable.clone(),
+            )),
+        },
+    );
+
+    resources.insert(
+        "wm_mat4_rotation".into(),
+        CustomResource {
+            update: None,
+            data: Arc::new(ResourceInternal::Mat4(
+                Mat4ValueOrMult::Value {
+                    value: [[0.0; 4]; 4],
+                },
+                rotation_matrix.clone(),
+                rotation_bindable.clone(),
             )),
         },
     );
@@ -347,10 +368,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                 {
                     *projection_matrix.write() = camera.build_perspective_matrix();
                     *view_matrix.write() = camera.build_view_matrix();
+                    *rotation_matrix.write() = camera.build_rotation_matrix();
                 }
 
                 let proj_mat: Mat4 = camera.build_perspective_matrix().into();
                 let view_mat: Mat4 = camera.build_view_matrix().into();
+                let rot_mat: Mat4 = camera.build_rotation_matrix().into();
 
                 wm.wgpu_state.queue.write_buffer(
                     &projection_bindable.buffer,
@@ -362,6 +385,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                     &view_bindable.buffer,
                     0,
                     bytemuck::cast_slice(&view_mat),
+                );
+
+                wm.wgpu_state.queue.write_buffer(
+                    &rotation_bindable.buffer,
+                    0,
+                    bytemuck::cast_slice(&rot_mat),
                 );
 
                 spin += 0.5;

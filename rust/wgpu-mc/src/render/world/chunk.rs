@@ -1,12 +1,10 @@
 use std::sync::Arc;
-use std::time::Instant;
 
 use crate::mc::block::{
     BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
 };
 use crate::mc::chunk::{
-    BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTIONS_PER, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME,
-    CHUNK_WIDTH,
+    BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME, CHUNK_WIDTH,
 };
 use crate::mc::BlockManager;
 

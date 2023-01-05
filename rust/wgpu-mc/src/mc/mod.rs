@@ -1,11 +1,9 @@
-use std::mem::size_of;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor};
 
 use crate::mc::chunk::ChunkManager;
 use crate::mc::entity::Entity;

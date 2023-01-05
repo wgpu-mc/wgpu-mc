@@ -356,9 +356,9 @@ pub fn createChunk(
 
     assert_eq!(size_of::<usize>(), 8);
 
-let storages: &[usize; 24] = bytemuck::cast_slice::<_, usize>(storage_elements)
-    .try_into()
-    .unwrap();
+    let storages: &[usize; 24] = bytemuck::cast_slice::<_, usize>(storage_elements)
+        .try_into()
+        .unwrap();
 
     let mut write = CHUNKS.write();
 
@@ -420,8 +420,6 @@ pub fn bake_chunk(x: i32, z: i32) {
             let instant = Instant::now();
 
             chunk.bake(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
-
-            println!("{}ms", Instant::now().duration_since(instant).as_millis());
         }
     });
 }
@@ -444,6 +442,8 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn registerBlock(env: JNIEnv, _class: JClass, name: JString) {
     let name: String = env.get_string(name).unwrap().into();
+
+    println!("{name}");
 
     BLOCKS.lock().push(name);
 }

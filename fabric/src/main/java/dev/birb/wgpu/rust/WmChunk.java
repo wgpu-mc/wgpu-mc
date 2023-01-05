@@ -33,10 +33,16 @@ public class WmChunk {
         assert this.worldChunk.getSectionArray().length == 24;
 
         for(int i=0;i<24;i++) {
-//            RustPalette<?> rustPalette = (RustPalette<?>) this.worldChunk.getSection(i).getBlockStateContainer().data.palette;
-            Palette<?> palette = this.worldChunk.getSection(i).getBlockStateContainer().data.palette;
+//            RustPalette<?> rustPalette = (RustPalette<?>) this.worldChunk.getSection(i).getBlockStateContainer().data.palette;;
+            Palette<?> palette;
+            PalettedContainer<?> container;
+            try {
+                palette = this.worldChunk.getSection(i).getBlockStateContainer().data.palette;
+                container = this.worldChunk.getSection(i).getBlockStateContainer();
+            } catch(ArrayIndexOutOfBoundsException e) {
+                continue;
+            }
 
-            PalettedContainer<?> container = this.worldChunk.getSection(i).getBlockStateContainer();
             PaletteStorage paletteStorage = container.data.storage;
 
             RustPalette<?> rustPalette = new RustPalette<>(

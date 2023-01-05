@@ -11,6 +11,9 @@ resources:
   shadow_ortho_mat4:
     type: mat4
     value: [[1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]]
+  rot:
+    type: mat4
+    mult: [wm_mat4_rotation]
 pipelines:
 #  shadow_terrain:
 #    geometry: wm_geo_terrain
@@ -18,10 +21,19 @@ pipelines:
 #    output: []
 #    uniforms:
 #      0: mvp_mat4
+  quad:
+    geometry: wm_geo_quad
+    depth: wm_framebuffer_depth
+    output: [wm_framebuffer_texture]
+    pc:
+      0: wm_pc_framebuffer_size
+    uniforms:
+      0: rot
   terrain:
     geometry: wm_geo_terrain
     depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
+    blending: premultiplied_alpha_blending
     push_constants:
       0: wm_pc_chunk_position
       8: wm_pc_framebuffer_size

@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::vec::Vec;
 
 use parking_lot::RwLock;
@@ -12,7 +13,8 @@ use cgmath::{Matrix, Matrix4, SquareMatrix};
 use once_cell::sync::{Lazy, OnceCell};
 use std::collections::HashMap;
 use std::convert::identity;
-use std::mem::replace;
+use std::mem::{align_of, replace};
+use std::ops::Range;
 use wgpu_mc::mc::chunk::ChunkPos;
 use wgpu_mc::render::graph::{
     bind_uniforms, set_push_constants, CustomResource, GeometryCallback, ResourceInternal,
@@ -21,9 +23,10 @@ use wgpu_mc::render::graph::{
 use wgpu_mc::render::shaderpack;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, PipelineConfig};
 use wgpu_mc::util::{BindableBuffer, WmArena};
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu_mc::wgpu::util::{align_to, BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{
-    vertex_attr_array, BufferUsages, IndexFormat, RenderPass, ShaderStages, SurfaceConfiguration,
+    vertex_attr_array, Buffer, BufferUsages, IndexFormat, RenderPass, ShaderStages,
+    SurfaceConfiguration,
 };
 use wgpu_mc::{wgpu, WmRenderer};
 
@@ -257,9 +260,29 @@ fn augment_resources<'arena: 'resources, 'resources>(
     )
 }
 
+pub struct BufferPool {
+    pub data: Vec<u8>,
+}
+
+impl BufferPool {
+    pub fn allocate<T: Copy + Pod + Zeroable>(&mut self, data: &[T]) -> Range<u64> {
+        let len = self.data.len() as u64;
+
+        let align = max(align_of::<T>(), 4);
+        let pad = align - (len as usize % align);
+        self.data.extend(vec![0u8; pad]);
+
+        let len = self.data.len() as u64;
+        self.data.extend(bytemuck::cast_slice(data));
+        let range = len..self.data.len() as u64;
+        range
+    }
+}
+
 #[derive(Debug)]
 pub struct ElectrumGeometry {
     pub blank: TextureHandle,
+    pub pool: Arc<Buffer>,
 }
 
 impl GeometryCallback for ElectrumGeometry {
@@ -274,6 +297,8 @@ impl GeometryCallback for ElectrumGeometry {
         surface_config: &SurfaceConfiguration,
         chunk_offset: ChunkPos,
     ) {
+        let mut buffer_pool = BufferPool { data: Vec::new() };
+
         let (_, commands) = {
             GL_COMMANDS.read().clone() //Free the lock as soon as possible
         };
@@ -393,16 +418,10 @@ impl GeometryCallback for ElectrumGeometry {
                     bind_uniforms(config, augmented_resources, arena, render_pass);
                     set_push_constants(config, render_pass, None, surface_config, chunk_offset);
 
-                    let buffer = wm
-                        .wgpu_state
-                        .device
-                        .create_buffer_init(&BufferInitDescriptor {
-                            label: None,
-                            contents: &draw.vertex_buffer,
-                            usage: BufferUsages::VERTEX,
-                        });
+                    let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
 
-                    render_pass.set_vertex_buffer(0, arena.alloc(buffer).slice(..));
+                    render_pass
+                        .set_vertex_buffer(0, arena.alloc(self.pool.clone()).slice(buffer_slice));
                     render_pass.draw(0..draw.count, 0..1);
                 }
                 DrawCall::Indexed(draw) => {
@@ -440,31 +459,22 @@ impl GeometryCallback for ElectrumGeometry {
                         }
                     };
 
-                    let vertex_buffer =
-                        wm.wgpu_state
-                            .device
-                            .create_buffer_init(&BufferInitDescriptor {
-                                label: None,
-                                contents: bytemuck::cast_slice(&vertices),
-                                usage: BufferUsages::VERTEX,
-                            });
+                    let vert_slice = buffer_pool.allocate(&vertices);
 
-                    let index_buffer =
-                        wm.wgpu_state
-                            .device
-                            .create_buffer_init(&BufferInitDescriptor {
-                                label: None,
-                                contents: bytemuck::cast_slice(&draw.index_buffer),
-                                usage: BufferUsages::INDEX,
-                            });
+                    let index_slice = buffer_pool.allocate(&draw.index_buffer);
 
-                    // render_pass.set_pipeline(graph.pipelines.get(name).unwrap());
-                    render_pass.set_vertex_buffer(0, arena.alloc(vertex_buffer).slice(..));
+                    let pool_alloc = arena.alloc(self.pool.clone());
+
+                    render_pass.set_vertex_buffer(0, pool_alloc.slice(vert_slice));
                     render_pass
-                        .set_index_buffer(arena.alloc(index_buffer).slice(..), IndexFormat::Uint32);
+                        .set_index_buffer(pool_alloc.slice(index_slice), IndexFormat::Uint32);
                     render_pass.draw_indexed(0..draw.count, 0, 0..1);
                 }
             }
         }
+
+        wm.wgpu_state
+            .queue
+            .write_buffer(&self.pool, 0, &buffer_pool.data);
     }
 }

@@ -52,6 +52,28 @@ impl Vertex {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct QuadVertex {
+    pub position: [f32; 2],
+}
+
+impl QuadVertex {
+    const VAA: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
+        0 => Float32x2,
+    ];
+
+    #[must_use]
+    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<QuadVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::VAA,
+        }
+    }
+}
+
 pub struct WmPipelines {
     pub pipeline_layouts: ArcSwap<HashMap<String, Arc<PipelineLayout>>>,
     pub render_pipelines: ArcSwap<HashMap<String, Arc<RenderPipeline>>>,

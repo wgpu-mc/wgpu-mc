@@ -5,6 +5,7 @@ use std::time::Instant;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk};
 use wgpu_mc::mc::MinecraftState;
+use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
@@ -13,10 +14,7 @@ struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
-        ChunkBlockState::State(BlockstateKey {
-            block: 1,
-            augment: 0,
-        })
+        ChunkBlockState::State(self.1)
     }
 
     fn is_section_empty(&self, index: usize) -> bool {
@@ -32,7 +30,7 @@ impl Debug for SimpleBlockstateProvider {
 
 pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let bm = wm.mc.block_manager.read();
-    let _atlas = wm
+    let atlas = wm
         .mc
         .texture_manager
         .atlases
@@ -41,13 +39,21 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, _fence) = bm.blocks.get_full("minecraft:stone").unwrap();
+    let (index, _, anvil) = bm.blocks.get_full("minecraft:anvil").unwrap();
+
+    let (_, augment) = anvil
+        .get_model_by_key(
+            [("facing", &StateValue::String("north".into()))],
+            &*wm.mc.resource_provider,
+            &atlas,
+        )
+        .unwrap();
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),
         BlockstateKey {
             block: index as u16,
-            augment: 0,
+            augment,
         },
     );
 

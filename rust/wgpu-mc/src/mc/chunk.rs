@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::time::Instant;
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};

@@ -2,25 +2,27 @@ use arc_swap::ArcSwap;
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::sync::Arc;
+use std::time::Instant;
 use treeculler::{BVol, Frustum, Vec3, AABB};
 
 use crate::mc::chunk::{Chunk, ChunkPos};
 use crate::mc::resource::ResourcePath;
-use crate::render::pipeline::{Vertex, BLOCK_ATLAS};
+use crate::render::pipeline::{QuadVertex, Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
 use crate::render::shaderpack::{
-    LonghandResourceConfig, Mat3ValueOrMult, Mat4, Mat4ValueOrMult, PipelineConfig,
-    ShaderPackConfig, ShorthandResourceConfig, TypeResourceConfig,
+    LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig,
+    ShorthandResourceConfig, TypeResourceConfig,
 };
 use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    BindGroup, Buffer, BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState,
-    FragmentState, LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass,
+    BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState,
+    LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass,
     RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
     RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
     VertexBufferLayout, VertexState,
@@ -149,6 +151,7 @@ pub struct ShaderGraph {
     pub pipelines: HashMap<String, RenderPipeline>,
     pub resources: HashMap<String, CustomResource>,
     pub geometry: HashMap<String, Box<dyn GeometryCallback>>,
+    quad: Option<wgpu::Buffer>,
 }
 
 impl ShaderGraph {
@@ -162,6 +165,7 @@ impl ShaderGraph {
             pipelines: HashMap::new(),
             resources,
             geometry,
+            quad: None,
         }
     }
 
@@ -172,6 +176,18 @@ impl ShaderGraph {
         mut additional_geometry: Option<HashMap<String, VertexBufferLayout>>,
     ) {
         let mut resources = HashMap::new();
+
+        self.quad = Some(
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&[
+                        -1.0f32, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0,
+                    ]),
+                    usage: BufferUsages::VERTEX,
+                }),
+        );
 
         let block_atlas = wm
             .mc
@@ -464,7 +480,7 @@ impl ShaderGraph {
                                 bind_group_layouts: &definition
                                     .uniforms
                                     .iter()
-                                    .map(|(index, uniform)| {
+                                    .map(|(_index, uniform)| {
                                         if let Some(resource) = resources.get(uniform) {
                                             match &*resource.data {
                                                 ResourceInternal::Texture(_, depth) => layouts
@@ -528,6 +544,7 @@ impl ShaderGraph {
                                     entry_point: "vert",
                                     buffers: &[match &definition.geometry[..] {
                                         "wm_geo_terrain" => Vertex::desc(),
+                                        "wm_geo_quad" => QuadVertex::desc(),
                                         _ => {
                                             if let Some(additional_geometry) =
                                                 &mut additional_geometry
@@ -593,7 +610,7 @@ impl ShaderGraph {
         output_texture: &'graph wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
     ) {
-        let mut arena = WmArena::new(1024);
+        let arena = WmArena::new(1024);
 
         let mut encoder = wm
             .wgpu_state
@@ -614,7 +631,7 @@ impl ShaderGraph {
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
 
-        let chunk_offset = *wm.mc.chunks.chunk_offset.lock();
+        let _chunk_offset = *wm.mc.chunks.chunk_offset.lock();
 
         let projection_matrix = self
             .resources
@@ -641,7 +658,7 @@ impl ShaderGraph {
                         let resource_definition = self.pack.resources.resources.get(texture_name);
 
                         //TODO: If the texture resource is defined as being cleared after each frame. Should use a HashMap to replace the should_clear_depth variable
-                        let clear = match resource_definition {
+                        let _clear = match resource_definition {
                             Some(&ShorthandResourceConfig::Longhand(LonghandResourceConfig {
                                 typed:
                                     TypeResourceConfig::Texture2d {
@@ -712,7 +729,7 @@ impl ShaderGraph {
                     let chunks = wm.mc.chunks.loaded_chunks.read();
 
                     for layer in &**layers {
-                        for (pos, chunk_swap) in &*chunks {
+                        for (_pos, chunk_swap) in &*chunks {
                             let chunk = arena.alloc(chunk_swap.load());
 
                             let min = Vec3::new(
@@ -750,7 +767,18 @@ impl ShaderGraph {
                 }
                 "wm_geo_entities" | "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox"
                 | "wm_geo_quad" => {
-                    todo!()
+                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass);
+                    set_push_constants(
+                        config,
+                        &mut render_pass,
+                        None,
+                        surface_config,
+                        chunk_offset,
+                    );
+
+                    render_pass.set_pipeline(self.pipelines.get(name).unwrap());
+                    render_pass.set_vertex_buffer(0, self.quad.as_ref().unwrap().slice(..));
+                    render_pass.draw(0..6, 0..1);
                 }
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {

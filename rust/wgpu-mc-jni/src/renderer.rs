@@ -31,6 +31,7 @@ use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu;
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
@@ -186,6 +187,15 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                 TextureFormat::Bgra8Unorm,
                 &wm.wgpu_state.surface.read().1,
             ),
+            pool: Arc::new(
+                wm.wgpu_state
+                    .device
+                    .create_buffer_init(&BufferInitDescriptor {
+                        label: None,
+                        contents: &vec![0u8; 10_000_000],
+                        usage: BufferUsages::VERTEX | BufferUsages::INDEX | BufferUsages::COPY_DST,
+                    }),
+            ),
         }) as Box<dyn GeometryCallback>,
     );
 
@@ -270,7 +280,12 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
                 if let ResourceInternal::Mat4(val, lock, _) = &*res_mat_proj.data {
                     let matrix4: Matrix4<f32> = matrices.projection.into();
-                    *lock.write() = perspective(Deg(100.0), (surface_state.1.width as f32) / (surface_state.1.height as f32), 0.01, 1000.0) * matrix4;
+                    *lock.write() = perspective(
+                        Deg(100.0),
+                        (surface_state.1.width as f32) / (surface_state.1.height as f32),
+                        0.01,
+                        1000.0,
+                    ) * matrix4;
                 }
             }
 
