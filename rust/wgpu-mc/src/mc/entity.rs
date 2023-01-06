@@ -8,7 +8,7 @@ use crate::render::pipeline::WmPipelines;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{WgpuState, WmRenderer};
 use arc_swap::ArcSwap;
-use cgmath::{Matrix4, SquareMatrix, Vector4};
+use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 
@@ -390,7 +390,7 @@ impl Cuboid {
 /// of their respective parents
 #[derive(Clone, Debug)]
 pub struct EntityPart {
-    pub name: Arc<String>,
+    pub name: String,
     pub transform: PartTransform,
     pub cuboids: Vec<Cuboid>,
     pub children: Vec<EntityPart>,
@@ -427,7 +427,7 @@ fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id
 }
 
 fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<String, usize>) {
-    names.insert((*part.name).clone(), *index);
+    names.insert(part.name.clone(), *index);
     *index += 1;
     part.children
         .iter()
@@ -580,11 +580,14 @@ impl EntityInstanceTransforms {
 
         // let mut index = 0;
         recurse_transforms(
-            Matrix4::from_translation(cgmath::Vector3::new(
+            Matrix4::from_translation(Vector3::new(0.5, 0.5, 0.5))
+            * Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw))
+            * Matrix4::from_translation(Vector3::new(-0.5, -0.5, -0.5))
+            * Matrix4::from_translation(cgmath::Vector3::new(
                 self.position.0,
                 self.position.1,
                 self.position.2,
-            )) * Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw)),
+            )),
             &entity.model_root,
             &mut vec,
             // &mut index,
@@ -601,7 +604,6 @@ fn recurse_transforms(
     vec: &mut Vec<Matrix4<f32>>,
     instance_transforms: &[Matrix4<f32>],
 ) {
-    println!("{}", instance_transforms.len());
     let instance_part_transform = instance_transforms[0];
 
     //mat is a transformation matrix that has been composed recursively from it's parent's and ancestors' transforms

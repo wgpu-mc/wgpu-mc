@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use arc_swap::ArcSwap;
 use cgmath::{Matrix4, SquareMatrix};
 use serde::Deserialize;
@@ -23,14 +24,24 @@ pub struct Wrapper1 {
     data: Wrapper2
 }
 
-pub const ENTITY_NAME: &str = "minecraft:ender_dragon#main";
-const TEXTURE_LOCATION: &str = "minecraft:textures/entity/enderdragon/dragon.png";
+pub const ENTITY_NAME: &str = "minecraft:chest#main";
+const TEXTURE_LOCATION: &str = "minecraft:textures/entity/chest/normal.png";
 
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
 
+    let instant = Instant::now();
     let entities: HashMap<String, Wrapper1> = serde_json::from_str(ENTITY_JSON).unwrap();
-    
+
+    println!("{}ms", Instant::now().duration_since(instant).as_millis());
+
     let model_part_data = &entities.get(ENTITY_NAME).unwrap().data.data;
+
+    let atlas_pos = AtlasPosition {
+        width: ATLAS_DIMENSIONS,
+        height: ATLAS_DIMENSIONS,
+        x: 0.0,
+        y: 0.0,
+    };
 
     let entity_atlas_guard = {
         let pipelines = wm.pipelines.load();
@@ -41,14 +52,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
         atlas.load_full()
     };
 
-    let atlas_pos = AtlasPosition {
-        width: ATLAS_DIMENSIONS,
-        height: ATLAS_DIMENSIONS,
-        x: 0.0,
-        y: 0.0,
-    };
-
-    let wm_entity = tmd_to_wm(model_part_data, &atlas_pos);
+    let wm_entity = tmd_to_wm("root".into(), model_part_data, &atlas_pos);
 
     let texture_rp = ResourcePath(
         TEXTURE_LOCATION.into()
@@ -66,27 +70,13 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
         entity_atlas_guard.bindable_texture.clone()
     ));
 
+    println!("{:?}", entity.parts);
+
     let one_transform = EntityInstanceTransforms {
         position: (0.0, 0.0, 0.0),
         looking_yaw: 0.0,
         uv_offset: (0.0, 0.0),
-        part_transforms: vec![
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity(),
-            PartTransform::identity()
-        ],
+        part_transforms: vec![PartTransform::identity(); entity.parts.len()],
     };
 
     let instances = EntityInstances::new(entity.clone(), vec![one_transform]);

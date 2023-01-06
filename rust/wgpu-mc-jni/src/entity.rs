@@ -80,9 +80,9 @@ impl AtlasPosition {
 
 }
 
-pub fn tmd_to_wm(part: &ModelPartData, ap: &AtlasPosition) -> Option<EntityPart> {
+pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Option<EntityPart> {
     Some(EntityPart {
-        name: Arc::new("".into()),
+        name,
         transform: PartTransform {
             x: 0.0,
             y: 0.0,
@@ -118,7 +118,7 @@ pub fn tmd_to_wm(part: &ModelPartData, ap: &AtlasPosition) -> Option<EntityPart>
                     textures: CuboidUV {
                         west: [
                             ap.map([pos[0], pos[1] + dimensions[2]]),
-                            ap.map([pos[0], pos[1] + (dimensions[2] + dimensions[1])]),
+                            ap.map([pos[0] + dimensions[0], pos[1] + (dimensions[2] + dimensions[1])]),
                         ],
                         east: [
                             ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + dimensions[2]]),
@@ -146,8 +146,8 @@ pub fn tmd_to_wm(part: &ModelPartData, ap: &AtlasPosition) -> Option<EntityPart>
             .collect::<Option<Vec<Cuboid>>>()?,
         children: part
             .children
-            .values()
-            .map(|x| tmd_to_wm(x, ap))
+            .iter()
+            .map(|(name, part)| tmd_to_wm(name.clone(), part, ap))
             .collect::<Option<Vec<EntityPart>>>()?,
     })
 }
