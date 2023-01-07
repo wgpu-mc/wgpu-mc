@@ -1,8 +1,13 @@
+use jni::objects::{JClass, JString};
+use jni::JNIEnv;
+use jni_fn::jni_fn;
 use std::{collections::HashMap, sync::Arc};
 
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
 
+use crate::RENDERER;
+use wgpu_mc::mc::entity::Entity;
 use wgpu_mc::{
     mc::entity::{Cuboid, CuboidUV, EntityPart, PartTransform},
     render::atlas::Atlas,
@@ -66,18 +71,16 @@ pub struct AtlasPosition {
     pub width: u32,
     pub height: u32,
     pub x: f32,
-    pub y: f32
+    pub y: f32,
 }
 
 impl AtlasPosition {
-
     pub fn map(&self, pos: [f32; 2]) -> [f32; 2] {
         [
             (self.x + pos[0]) / (self.width as f32),
             (self.y + pos[1]) / (self.height as f32),
         ]
     }
-
 }
 
 pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Option<EntityPart> {
@@ -101,7 +104,10 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Opti
             .cuboid_data
             .iter()
             .map(|cuboid_data| {
-                let pos = [*cuboid_data.texture_uv.get("x").unwrap(), *cuboid_data.texture_uv.get("y").unwrap()];
+                let pos = [
+                    *cuboid_data.texture_uv.get("x").unwrap(),
+                    *cuboid_data.texture_uv.get("y").unwrap(),
+                ];
                 let dimensions = [
                     cuboid_data.dimensions.get("x").unwrap(),
                     cuboid_data.dimensions.get("y").unwrap(),
@@ -118,19 +124,31 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Opti
                     textures: CuboidUV {
                         west: [
                             ap.map([pos[0], pos[1] + dimensions[2]]),
-                            ap.map([pos[0] + dimensions[0], pos[1] + (dimensions[2] + dimensions[1])]),
+                            ap.map([
+                                pos[0] + dimensions[0],
+                                pos[1] + (dimensions[2] + dimensions[1]),
+                            ]),
                         ],
                         east: [
                             ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + dimensions[2]]),
-                            ap.map([(pos[0] + (dimensions[0] * 3.0)), pos[1] + (dimensions[2] + dimensions[1])]),
+                            ap.map([
+                                (pos[0] + (dimensions[0] * 3.0)),
+                                pos[1] + (dimensions[2] + dimensions[1]),
+                            ]),
                         ],
                         south: [
                             ap.map([(pos[0] + (dimensions[0])), pos[1] + dimensions[2]]),
-                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + (dimensions[2] + dimensions[1])]),
+                            ap.map([
+                                (pos[0] + (dimensions[0] * 2.0)),
+                                pos[1] + (dimensions[2] + dimensions[1]),
+                            ]),
                         ],
                         north: [
                             ap.map([(pos[0] + (dimensions[0] * 3.0)), pos[1] + dimensions[2]]),
-                            ap.map([(pos[0] + (dimensions[0] * 4.0)), pos[1] + (dimensions[2] + dimensions[1])]),
+                            ap.map([
+                                (pos[0] + (dimensions[0] * 4.0)),
+                                pos[1] + (dimensions[2] + dimensions[1]),
+                            ]),
                         ],
                         up: [
                             ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1]]),
@@ -139,7 +157,7 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Opti
                         down: [
                             ap.map([(pos[0] + dimensions[0]), pos[1]]),
                             ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + (dimensions[2])]),
-                        ]
+                        ],
                     },
                 })
             })
@@ -150,4 +168,54 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Opti
             .map(|(name, part)| tmd_to_wm(name.clone(), part, ap))
             .collect::<Option<Vec<EntityPart>>>()?,
     })
+}
+
+#[derive(Deserialize)]
+pub struct Wrapper2 {
+    data: ModelPartData,
+}
+
+#[derive(Deserialize)]
+pub struct Wrapper1 {
+    data: Wrapper2,
+}
+
+static ENTITY_MPD: OnceCell<HashMap<String, ModelPartData>> = OnceCell::new();
+
+// #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
+    let wm = RENDERER.get().unwrap();
+
+    let entities_json_javastr = env.get_string(string).unwrap();
+    let entities_json: String = entities_json_javastr.into();
+
+    let mpd: HashMap<String, ModelPartData> = serde_json::from_str::<HashMap<String, Wrapper1>>()
+        .into_iter()
+        .map(|name, wrapper| (name, wrapper.data.data))
+        .collect();
+
+    ENTITY_MPD.set(mpd);
+
+    let mpd = ENTITY_MPD.get().unwrap();
+
+    let atlas_position = AtlasPosition {
+        width: 0,
+        height: 0,
+        x: 0.0,
+        y: 0.0,
+    };
+
+    let atlas = wm.mc.texture_manager.atlases.load().get("entity");
+
+    let entities: HashMap<String, Arc<Entity>> = mpd
+        .iter()
+        .map(|(name, mpd)| {
+            let entity_part = tmd_to_wm("root".into(), mpd, &atlas_position).unwrap();
+
+            (
+                name.clone(),
+                Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state)),
+            )
+        })
+        .collect();
 }

@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // let dumped_entities = include_str!("./dumped_entities.json");
     // let dumped_e: Vec<Wrapper> = serde_json::from_str(dumped_entities).unwrap();
-    
+
     // panic!("{:#?}", dumped_e);
 
     Ok(())

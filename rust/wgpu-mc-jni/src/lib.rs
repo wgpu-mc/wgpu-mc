@@ -445,8 +445,6 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
 pub fn registerBlock(env: JNIEnv, _class: JClass, name: JString) {
     let name: String = env.get_string(name).unwrap().into();
 
-    println!("{name}");
-
     BLOCKS.lock().push(name);
 }
 

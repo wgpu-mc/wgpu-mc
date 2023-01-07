@@ -16,6 +16,7 @@ use raw_window_handle::{
 };
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::mc::entity::{EntityInstanceTransforms, EntityInstances, PartTransform};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
@@ -30,7 +31,6 @@ use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
-use wgpu_mc::mc::entity::{EntityInstances, EntityInstanceTransforms, PartTransform};
 
 use crate::chunk::make_chunks;
 use crate::entity::{describe_entity, ENTITY_NAME};
@@ -388,14 +388,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
                 let gpu_instance = EntityInstances::new(
                     entity.clone(),
-                    vec![
-                        EntityInstanceTransforms {
-                            position: (0.0, 0.0, 0.0),
-                            looking_yaw: 0.0,
-                            uv_offset: (0.0, 0.0),
-                            part_transforms,
-                        }
-                    ]
+                    vec![EntityInstanceTransforms {
+                        position: (0.0, 0.0, 0.0),
+                        looking_yaw: 0.0,
+                        uv_offset: (0.0, 0.0),
+                        part_transforms,
+                    }],
                 );
 
                 gpu_instance.upload(&wm);

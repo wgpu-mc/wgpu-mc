@@ -12,9 +12,9 @@ use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 
+use crate::util::BindableBuffer;
 use bytemuck::{Pod, Zeroable};
 use wgpu::BufferUsages;
-use crate::util::BindableBuffer;
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -436,7 +436,12 @@ fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<S
 
 impl Entity {
     ///Create an entity from an [EntityPart] and upload it's mesh to the GPU
-    pub fn new(name: String, root: EntityPart, wgpu_state: &WgpuState, texture: Arc<ArcSwap<BindableTexture>>) -> Self {
+    pub fn new(
+        name: String,
+        root: EntityPart,
+        wgpu_state: &WgpuState,
+        texture: Arc<ArcSwap<BindableTexture>>,
+    ) -> Self {
         let mut parts = HashMap::new();
 
         recurse_get_names(&root, &mut 0, &mut parts);
@@ -548,7 +553,7 @@ impl EntityInstances {
             &wm,
             bytemuck::cast_slice(&matrices),
             BufferUsages::STORAGE,
-            "ssbo"
+            "ssbo",
         ));
 
         *self.uploaded.write() = Some(UploadedEntityInstances {
@@ -581,13 +586,13 @@ impl EntityInstanceTransforms {
         // let mut index = 0;
         recurse_transforms(
             Matrix4::from_translation(Vector3::new(0.5, 0.5, 0.5))
-            * Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw))
-            * Matrix4::from_translation(Vector3::new(-0.5, -0.5, -0.5))
-            * Matrix4::from_translation(cgmath::Vector3::new(
-                self.position.0,
-                self.position.1,
-                self.position.2,
-            )),
+                * Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw))
+                * Matrix4::from_translation(Vector3::new(-0.5, -0.5, -0.5))
+                * Matrix4::from_translation(cgmath::Vector3::new(
+                    self.position.0,
+                    self.position.1,
+                    self.position.2,
+                )),
             &entity.model_root,
             &mut vec,
             // &mut index,

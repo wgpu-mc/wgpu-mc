@@ -41,6 +41,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::mc::entity::EntityInstances;
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
 pub use naga;
@@ -51,7 +52,6 @@ use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
     SurfaceConfiguration,
 };
-use crate::mc::entity::EntityInstances;
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;

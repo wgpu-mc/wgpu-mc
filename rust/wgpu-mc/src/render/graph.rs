@@ -19,6 +19,8 @@ use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
+use crate::mc::entity::{EntityInstances, InstanceVertex};
+use crate::render::entity::EntityVertex;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState,
@@ -27,8 +29,6 @@ use wgpu::{
     RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
     VertexBufferLayout, VertexState,
 };
-use crate::mc::entity::{EntityInstances, InstanceVertex};
-use crate::render::entity::EntityVertex;
 
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
@@ -179,7 +179,7 @@ impl ShaderGraph {
     ) {
         let mut resource_types = match resource_types {
             None => HashMap::new(),
-            Some(map) => map.clone()
+            Some(map) => map.clone(),
         };
 
         resource_types.insert("wm_ssbo_entity_part_transforms".into(), "ssbo".into());
@@ -515,11 +515,7 @@ impl ShaderGraph {
                                             }
                                         } else {
                                             layouts
-                                                .get(
-                                                    resource_types
-                                                        .get(uniform)
-                                                        .expect(uniform),
-                                                )
+                                                .get(resource_types.get(uniform).expect(uniform))
                                                 .unwrap()
                                         }
                                     })
@@ -546,9 +542,7 @@ impl ShaderGraph {
                         "wm_geo_quad" => vec![QuadVertex::desc()],
                         "wm_geo_entities" => vec![EntityVertex::desc(), InstanceVertex::desc()],
                         _ => {
-                            if let Some(additional_geometry) =
-                                &mut additional_geometry
-                            {
+                            if let Some(additional_geometry) = &mut additional_geometry {
                                 additional_geometry
                                     .remove(&definition.geometry)
                                     .unwrap()
@@ -621,7 +615,7 @@ impl ShaderGraph {
         wm: &WmRenderer,
         output_texture: &'graph wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
-        entity_instances: &HashMap<String, EntityInstances>
+        entity_instances: &HashMap<String, EntityInstances>,
     ) {
         let arena = WmArena::new(1024);
 
@@ -791,7 +785,7 @@ impl ShaderGraph {
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
                     render_pass.set_vertex_buffer(0, self.quad.as_ref().unwrap().slice(..));
                     render_pass.draw(0..6, 0..1);
-                },
+                }
                 "wm_geo_entities" => {
                     let entities = wm.mc.entity_models.read();
 
@@ -804,31 +798,36 @@ impl ShaderGraph {
                         let instance_vbo = arena.alloc(uploaded.instance_vbo.clone());
                         let bindable_buffer = uploaded.transform_ssbo.clone();
 
-                        let augmented_resources = resource_borrow.clone()
+                        let augmented_resources = resource_borrow
+                            .clone()
                             .into_iter()
                             .chain([
                                 (
                                     &*arena.alloc("wm_ssbo_entity_part_transforms".into()),
                                     &*arena.alloc(CustomResource {
                                         update: None,
-                                        data: Arc::new(
-                                            ResourceInternal::Blob(bindable_buffer)
-                                        ),
+                                        data: Arc::new(ResourceInternal::Blob(bindable_buffer)),
                                     }),
                                 ),
                                 (
                                     &*arena.alloc("wm_texture_entities".into()),
                                     &*arena.alloc(CustomResource {
                                         update: None,
-                                        data: Arc::new(
-                                            ResourceInternal::Texture(TextureResource::Bindable(entity.texture.clone()), false)
-                                        ),
+                                        data: Arc::new(ResourceInternal::Texture(
+                                            TextureResource::Bindable(entity.texture.clone()),
+                                            false,
+                                        )),
                                     }),
                                 ),
                             ])
                             .collect();
 
-                        bind_uniforms(config, arena.alloc(augmented_resources), &arena, &mut render_pass);
+                        bind_uniforms(
+                            config,
+                            arena.alloc(augmented_resources),
+                            &arena,
+                            &mut render_pass,
+                        );
                         set_push_constants(
                             config,
                             &mut render_pass,
@@ -837,11 +836,12 @@ impl ShaderGraph {
                             chunk_offset,
                         );
 
-                        render_pass.set_vertex_buffer(0, arena.alloc(entity.mesh.clone()).slice(..));
+                        render_pass
+                            .set_vertex_buffer(0, arena.alloc(entity.mesh.clone()).slice(..));
                         render_pass.set_vertex_buffer(1, instance_vbo.slice(..));
                         render_pass.draw(0..entity.vertices, 0..instances.instances.len() as u32);
                     });
-                },
+                }
                 "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox" => todo!(),
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {

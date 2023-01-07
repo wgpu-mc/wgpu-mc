@@ -305,7 +305,8 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let _instant = Instant::now();
 
-            wm.render(&shader_graph, &view, &surface_state.1, &HashMap::new()).unwrap();
+            wm.render(&shader_graph, &view, &surface_state.1, &HashMap::new())
+                .unwrap();
 
             texture.present();
         }
