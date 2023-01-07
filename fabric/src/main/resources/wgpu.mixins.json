@@ -21,7 +21,13 @@
     "core.OptionsScreenMixin",
     "core.RegistryMixin",
     "core.TextRendererMixin",
+    "entity.EntityRenderDispatcherMixin",
+    "entity.EntityRendererFactoryMixin",
+    "entity.EntityRenderersMixin",
+    "entity.ModelPartDataMixin",
+    "entity.ModelPartMixin",
     "render.BufferRendererMixin",
+    "render.BuiltChunkMixin",
     "render.FramebufferMixin",
     "render.GameRendererCameraMixin",
     "render.GLXMixin",
@@ -31,8 +37,7 @@
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
-    "world.BlockStateMixin",
-    "render.BuiltChunkMixin"
+    "world.BlockStateMixin"
   ],
   "injectors": {
     "defaultRequire": 1

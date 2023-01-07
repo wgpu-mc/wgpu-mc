@@ -1,5 +1,6 @@
 package dev.birb.wgpu.mixin.render;
 
+import dev.birb.wgpu.entity.DummyVertexConsumer;
 import dev.birb.wgpu.rust.WgpuNative;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.MinecraftClient;
@@ -9,12 +10,18 @@ import net.minecraft.client.render.Camera;
 import net.minecraft.client.render.Frustum;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.LightmapTextureManager;
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
 import net.minecraft.client.render.chunk.ChunkBuilder;
 import net.minecraft.client.render.chunk.ChunkRendererRegionBuilder;
+import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.util.math.Vector3d;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Matrix4f;
@@ -52,6 +59,12 @@ public abstract class WorldRendererMixin {
 
     @Shadow private @Nullable ClientWorld world;
 
+    @Shadow @Final private EntityRenderDispatcher entityRenderDispatcher;
+
+    @Shadow protected abstract void renderEntity(Entity entity, double cameraX, double cameraY, double cameraZ, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers);
+
+    @Shadow @Final private BlockEntityRenderDispatcher blockEntityRenderDispatcher;
+
     /**
      * @author
      */
@@ -86,7 +99,7 @@ public abstract class WorldRendererMixin {
 
     @Inject(method = "render", cancellable = true, at = @At("HEAD"))
     public void render(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f positionMatrix, CallbackInfo ci) {
-        ChunkRendererRegionBuilder builder = new ChunkRendererRegionBuilder();
+        // -- Chunk rendering --
 
         Frustum frustum;
         if (this.capturedFrustum != null) {
@@ -99,6 +112,8 @@ public abstract class WorldRendererMixin {
         this.world.runQueuedChunkUpdates();
         this.setupTerrain(camera, frustum, this.capturedFrustum != null, this.client.player.isSpectator());
         this.updateChunks(camera);
+
+        // -- Camera --
 
         MatrixStack stack = new MatrixStack();
         stack.loadIdentity();
@@ -118,6 +133,21 @@ public abstract class WorldRendererMixin {
                     (float) translate.y - 64.0f,
                     (float) (translate.z)
             ));
+        }
+
+        // -- Entities --
+
+//        this.blockEntityRenderDispatcher.configure(this.world, camera, this.client.crosshairTarget);
+        this.entityRenderDispatcher.configure(this.world, camera, this.client.targetedEntity);
+
+        if(this.world != null) {
+            MatrixStack entityStack = new MatrixStack();
+            stack.loadIdentity();
+            VertexConsumerProvider dummyProvider = layer -> new DummyVertexConsumer();
+
+            for(Entity entity : this.world.getEntities()) {
+                this.renderEntity(entity, camera.getPos().x, camera.getPos().y, camera.getPos().z, tickDelta, entityStack, dummyProvider);
+            }
         }
 
         FloatBuffer floatBuffer = FloatBuffer.allocate(16);

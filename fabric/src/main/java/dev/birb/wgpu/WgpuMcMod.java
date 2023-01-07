@@ -44,15 +44,16 @@ public class WgpuMcMod implements ClientModInitializer {
 		// Debug to dump models
 		StringBuilder builder = new StringBuilder();
 
-		builder.append("{");
-        EntityModels.getModels().forEach((key, tmd) -> {
-			String dumped = (new Gson()).toJson(tmd);
-			builder.append("\""+key+"\":");
-			builder.append(dumped);
-			builder.append(",");
-		});
-		builder.append("}");
-		System.out.println(builder.toString());
+		WgpuNative.registerEntities(builder.toString());
+
+//		builder.append("{");
+//        EntityModels.getModels().forEach((key, tmd) -> {
+//			String dumped = (new Gson()).toJson(tmd);
+//			builder.append("\""+key+"\":");
+//			builder.append(dumped);
+//			builder.append(",");
+//		});
+//		builder.append("}");
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (binding.wasPressed()) {
