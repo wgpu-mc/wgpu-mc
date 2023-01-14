@@ -17,7 +17,7 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
     Some(
         block_manager
             .blocks
-            .get_index(key.block as usize)?
+            .get_index(key.block as usize).unwrap()
             .1
             .get_model(key.augment),
     )
@@ -73,9 +73,9 @@ pub fn bake<
             ChunkBlockState::State(key) => key,
         };
 
-        if !filter(state_key) {
-            continue;
-        }
+        // if !filter(state_key) {
+        //     continue;
+        // }
 
         let mesh = get_block(block_manager, block_state).unwrap();
 

@@ -6,7 +6,7 @@
   "name": "wgpu-mc",
   "description": "A renderer made to replace Blaze3D, written in Rust, using wgpu for cross-platform support.\nSupported backends: Vulkan, D3D12, and Metal",
   "authors": [
-    "Birb"
+    "birb"
   ],
   "accessWidenerPath": "wgpu_mc.accesswidener",
   "contact": {

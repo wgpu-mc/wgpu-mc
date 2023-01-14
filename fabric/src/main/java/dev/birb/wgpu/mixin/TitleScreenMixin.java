@@ -22,7 +22,10 @@ public class TitleScreenMixin {
     @Inject(method = "render", at = @At("HEAD"))
     private void render(MatrixStack matrices, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if(!updatedTitle && Wgpu.INITIALIZED) {
+
             WgpuNative.cacheBlockStates();
+            Wgpu.uploadBlockLayers();
+
             MinecraftClient.getInstance().updateWindowTitle();
             updatedTitle = true;
         }

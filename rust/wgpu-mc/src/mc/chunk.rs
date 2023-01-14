@@ -38,9 +38,9 @@ pub trait BlockStateProvider: Send + Sync + Debug {
 }
 
 pub trait RenderLayer: Send + Sync {
-    fn filter(&self) -> fn(BlockstateKey) -> bool;
+    fn filter(&self) -> &dyn Fn(BlockstateKey) -> bool;
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex;
+    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32) -> Vertex;
 
     fn name(&self) -> &str;
 }
@@ -48,7 +48,7 @@ pub trait RenderLayer: Send + Sync {
 #[derive(Debug)]
 pub struct Chunk {
     pub pos: ChunkPos,
-    pub baked_layers: RwLock<HashMap<String, (wgpu::Buffer, Vec<Vertex>)>>,
+    pub baked_layers: RwLock<HashMap<String, (wgpu::Buffer, u32)>>,
 }
 
 impl Chunk {
@@ -81,14 +81,14 @@ impl Chunk {
                     layer.name().into(),
                     (
                         wm.wgpu_state
-                            .device
-                            .create_buffer_init(&BufferInitDescriptor {
-                                label: None,
-                                contents: bytemuck::cast_slice(&verts),
-                                usage: BufferUsages::VERTEX,
-                            }),
-                        verts,
-                    ),
+                        .device
+                        .create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: bytemuck::cast_slice(&verts),
+                            usage: BufferUsages::VERTEX,
+                        }),
+                        verts.len() as u32
+                    )
                 )
             })
             .collect();

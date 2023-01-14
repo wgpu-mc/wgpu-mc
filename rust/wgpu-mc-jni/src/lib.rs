@@ -39,11 +39,11 @@ use winit::event::{ElementState, MouseButton};
 use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
-use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, CHUNK_SECTIONS_PER};
+use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, CHUNK_SECTIONS_PER, RenderLayer};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
-use wgpu_mc::render::pipeline::BLOCK_ATLAS;
+use wgpu_mc::render::pipeline::{BLOCK_ATLAS, Vertex};
 use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
@@ -102,10 +102,13 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 static MOUSE_STATE: Lazy<Arc<ArcSwap<MouseState>>> =
     Lazy::new(|| Arc::new(ArcSwap::new(Arc::new(MouseState { x: 0.0, y: 0.0 }))));
 static THREAD_POOL: Lazy<ThreadPool> =
-    Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
+    Lazy::new(|| ThreadPoolBuilder::new().num_threads(1).build().unwrap());
 
 static CHUNKS: Lazy<RwLock<HashMap<ChunkPos, ChunkHolder>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
+
+static LAYERS: Lazy<Mutex<HashMap<u16, u8>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     block: RENDERER
@@ -329,6 +332,103 @@ pub fn registerBlockState(
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setBlockStateRenderLayer(
+    _env: JNIEnv,
+    _class: JClass,
+    block_state: jint,
+    layer_id: jint
+) {
+    let key = BlockstateKey::from(block_state as u32);
+    LAYERS.lock().insert(key.block, layer_id as u8);
+}
+
+struct ElectrumRenderLayer {
+    name: String,
+    filter: Box<dyn Fn(BlockstateKey) -> bool + Send + Sync>
+}
+
+impl RenderLayer for ElectrumRenderLayer {
+    fn filter(&self) -> &dyn Fn(BlockstateKey) -> bool {
+        &self.filter
+    }
+
+    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
+        &|vert, x, y, z| Vertex {
+            position: [
+                vert.position[0] + x,
+                vert.position[1] + y,
+                vert.position[2] + z,
+            ],
+            tex_coords: vert.tex_coords,
+            lightmap_coords: [0.0, 0.0],
+            normal: vert.normal,
+            color: [1.0, 1.0, 1.0, 1.0],
+            tangent: [0.0, 0.0, 0.0, 0.0],
+            uv_offset: vert.animation_uv_offset,
+        }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn createRenderLayerFilters(
+    _env: JNIEnv,
+    _class: JClass
+) {
+    let layers = LAYERS.lock();
+
+    let wm = RENDERER.get().unwrap();
+
+    let mut cutout = vec![];
+    let mut transparent = vec![];
+
+    layers.iter().for_each(|(block_id, layer)| {
+        match layer {
+            0 => {},
+            1 => cutout.push(*block_id),
+            2 => transparent.push(*block_id),
+            _ => unreachable!()
+        }
+    });
+
+    cutout.sort();
+    transparent.sort();
+
+    println!("{cutout:?}\n{transparent:?}");
+
+    let cutout_clone = cutout.clone();
+    let transparent_clone = transparent.clone();
+    let solid_layer = Box::new(ElectrumRenderLayer {
+        name: "solid".into(),
+        filter: Box::new(move |key| {
+            true
+            // !cutout_clone.binary_search(&key.block).is_ok() && !transparent_clone.binary_search(&key.block).is_ok()
+        }),
+    });
+
+    let cutout_clone = cutout.clone();
+    let cutout_layer = Box::new(ElectrumRenderLayer {
+        name: "cutout".into(),
+        filter: Box::new(move |key| {
+            cutout_clone.binary_search(&key.block).is_ok()
+        }),
+    });
+
+    let transparent_clone = transparent.clone();
+    let transparent_layer = Box::new(ElectrumRenderLayer {
+        name: "transparent".into(),
+        filter: Box::new(move |key| {
+            transparent_clone.binary_search(&key.block).is_ok()
+        }),
+    });
+
+    wm.pipelines.load().chunk_layers.store(Arc::new(vec![solid_layer, cutout_layer, transparent_layer]));
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn createChunk(
     env: JNIEnv,
     _class: JClass,
@@ -429,6 +529,8 @@ pub fn bake_chunk(x: i32, z: i32) {
             let instant = Instant::now();
 
             chunk.bake(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+
+            println!("{}ms", Instant::now().duration_since(instant).as_millis());
         }
     });
 }

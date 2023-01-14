@@ -53,34 +53,6 @@ pub struct Matrices {
     pub view: [[f32; 4]; 4],
 }
 
-pub struct TerrainLayer;
-
-impl RenderLayer for TerrainLayer {
-    fn filter(&self) -> fn(BlockstateKey) -> bool {
-        |_| true
-    }
-
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        |vert, x, y, z| Vertex {
-            position: [
-                vert.position[0] + x,
-                vert.position[1] + y,
-                vert.position[2] + z,
-            ],
-            tex_coords: vert.tex_coords,
-            lightmap_coords: [0.0, 0.0],
-            normal: vert.normal,
-            color: [1.0, 1.0, 1.0, 1.0],
-            tangent: [0.0, 0.0, 0.0, 0.0],
-            uv_offset: vert.animation_uv_offset,
-        }
-    }
-
-    fn name(&self) -> &str {
-        "all"
-    }
-}
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setChunkOffset(env: JNIEnv, _class: JClass, x: jint, z: jint) {
     *RENDERER.get().unwrap().mc.chunks.chunk_offset.lock() = [x, z];
@@ -151,11 +123,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
     });
 
     let wm = WmRenderer::new(wgpu_state, resource_provider);
-
-    wm.pipelines
-        .load()
-        .chunk_layers
-        .store(Arc::new(vec![Box::new(TerrainLayer)]));
 
     let _ = RENDERER.set(wm.clone());
 

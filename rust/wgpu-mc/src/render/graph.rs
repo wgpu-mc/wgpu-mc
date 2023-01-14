@@ -728,7 +728,7 @@ impl ShaderGraph {
                     let layers = wm.pipelines.load().chunk_layers.load();
                     let chunks = wm.mc.chunks.loaded_chunks.read();
 
-                    for layer in &**layers {
+                    'layers: for layer in &**layers {
                         for (_pos, chunk_swap) in &*chunks {
                             let chunk = arena.alloc(chunk_swap.load());
 
@@ -745,7 +745,7 @@ impl ShaderGraph {
                                 continue;
                             }
 
-                            let (chunk_vbo, verts) =
+                            let (vbo, count) =
                                 match arena.alloc(chunk.baked_layers.read()).get(layer.name()) {
                                     None => continue,
                                     Some(tuple) => tuple,
@@ -760,8 +760,8 @@ impl ShaderGraph {
                                 chunk_offset,
                             );
 
-                            render_pass.set_vertex_buffer(0, chunk_vbo.slice(..));
-                            render_pass.draw(0..verts.len() as u32, 0..1);
+                            render_pass.set_vertex_buffer(0, vbo.slice(..));
+                            render_pass.draw(0..*count as u32, 0..1);
                         }
                     }
                 }

@@ -155,12 +155,12 @@ fn main() {
 pub struct TerrainLayer;
 
 impl RenderLayer for TerrainLayer {
-    fn filter(&self) -> fn(BlockstateKey) -> bool {
-        |_| true
+    fn filter(&self) -> &dyn Fn(BlockstateKey) -> bool {
+        &|_| true
     }
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        |vert, x, y, z| Vertex {
+    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
+        &|vert, x, y, z| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,

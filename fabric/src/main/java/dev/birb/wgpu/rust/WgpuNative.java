@@ -183,5 +183,9 @@ public class WgpuNative {
     public native static void centerCursor();
 
     public static native void clearChunks();
-    
+
+    public static native void setBlockStateRenderLayer(int rustBlockStateIndex, int layerId);
+
+    public static native void createRenderLayerFilters();
+
 }

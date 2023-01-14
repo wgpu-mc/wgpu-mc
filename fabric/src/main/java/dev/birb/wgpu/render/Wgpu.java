@@ -3,13 +3,18 @@ package dev.birb.wgpu.render;
 import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.RenderLayers;
 import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
+import java.util.Map;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 import static dev.birb.wgpu.input.WgpuKeys.*;
@@ -143,4 +148,28 @@ public class Wgpu {
         MinecraftClient.getInstance().onWindowFocusChanged(focused);
     }
 
+    public static void uploadBlockLayers() {
+
+        for(Map.Entry<Block, RenderLayer> entry : RenderLayers.BLOCKS.entrySet()) {
+            RenderLayer layer = entry.getValue();
+
+            //Solid RenderLayer is by default 0
+            int layerId = 0;
+
+            if(layer == RenderLayer.getCutout()) {
+                layerId = 1;
+            } else if(layer == RenderLayer.getTranslucent()) {
+                layerId = 2;
+            }
+
+            for(BlockState state : entry.getKey().getStateManager().getStates()) {
+                RustBlockStateAccessor accessor = (RustBlockStateAccessor) (Object) state;
+
+                WgpuNative.setBlockStateRenderLayer(accessor.getRustBlockStateIndex(), layerId);
+            }
+        }
+
+        WgpuNative.createRenderLayerFilters();
+
+    }
 }
