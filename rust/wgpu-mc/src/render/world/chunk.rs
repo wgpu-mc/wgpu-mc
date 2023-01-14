@@ -36,7 +36,7 @@ pub fn bake<
     state_provider: &Provider,
 ) -> Vec<T> {
     //Generates the mesh for this chunk, culling faces whenever possible
-    let mut vertices = Vec::with_capacity(300_000);
+    let mut vertices = Vec::new();
 
     let mut block_index = 0;
 
@@ -73,9 +73,9 @@ pub fn bake<
             ChunkBlockState::State(key) => key,
         };
 
-        // if !filter(state_key) {
-        //     continue;
-        // }
+        if !filter(state_key) {
+            continue;
+        }
 
         let mesh = get_block(block_manager, block_state).unwrap();
 
@@ -225,8 +225,6 @@ pub fn bake<
             }
         }
     }
-
-    vertices.shrink_to_fit();
 
     vertices
 }

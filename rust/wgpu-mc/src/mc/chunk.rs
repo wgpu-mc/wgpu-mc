@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::mem::size_of;
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
@@ -77,6 +78,8 @@ impl Chunk {
                     provider,
                 );
 
+                // println!("{} verts ({}KB)", verts.len(), verts.len() * size_of::<Vertex>() / 1024);
+
                 (
                     layer.name().into(),
                     (
@@ -84,12 +87,25 @@ impl Chunk {
                         .device
                         .create_buffer_init(&BufferInitDescriptor {
                             label: None,
-                            contents: bytemuck::cast_slice(&verts),
+                            contents: bytemuck::cast_slice(&verts[..verts.len()]),
                             usage: BufferUsages::VERTEX,
                         }),
                         verts.len() as u32
                     )
                 )
+                // (
+                //     layer.name().into(),
+                //     (
+                //         wm.wgpu_state
+                //         .device
+                //         .create_buffer_init(&BufferInitDescriptor {
+                //             label: None,
+                //             contents: &[],
+                //             usage: BufferUsages::VERTEX,
+                //         }),
+                //         0
+                //     )
+                // )
             })
             .collect();
 

@@ -404,8 +404,7 @@ pub fn createRenderLayerFilters(
     let solid_layer = Box::new(ElectrumRenderLayer {
         name: "solid".into(),
         filter: Box::new(move |key| {
-            true
-            // !cutout_clone.binary_search(&key.block).is_ok() && !transparent_clone.binary_search(&key.block).is_ok()
+            !cutout_clone.binary_search(&key.block).is_ok() && !transparent_clone.binary_search(&key.block).is_ok()
         }),
     });
 
@@ -471,18 +470,22 @@ pub fn createChunk(
 
     let mut write = CHUNKS.write();
 
+    let mut palette_storage = PALETTE_STORAGE.write();
+    let mut pia_storage = PIA_STORAGE.write();
+
     write.insert(
         [x, z],
         ChunkHolder {
             sections: palettes.zip(*storages).map(|(palette, storage)| {
                 if palette == 0 || storage == 0 {
                     return None;
+
                 }
 
                 //The indices are incremented by one in Java so that 0 means null/None
                 Some((
-                    PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
-                    PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
+                    palette_storage.remove(palette - 1),
+                    pia_storage.remove(storage - 1),
                 ))
             }),
         },

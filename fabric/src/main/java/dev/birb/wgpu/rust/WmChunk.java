@@ -4,6 +4,7 @@ import dev.birb.wgpu.mixin.accessors.PackedIntegerArrayAccessor;
 import dev.birb.wgpu.palette.RustPalette;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledUnsafeHeapByteBuf;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.collection.IndexedIterable;
@@ -11,6 +12,8 @@ import net.minecraft.util.collection.PaletteStorage;
 import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
+
+import java.lang.ref.Cleaner;
 
 public class WmChunk {
     public WorldChunk worldChunk;
@@ -33,7 +36,6 @@ public class WmChunk {
         assert this.worldChunk.getSectionArray().length == 24;
 
         for(int i=0;i<24;i++) {
-//            RustPalette<?> rustPalette = (RustPalette<?>) this.worldChunk.getSection(i).getBlockStateContainer().data.palette;;
             Palette<?> palette;
             PalettedContainer<?> container;
             try {
@@ -46,10 +48,12 @@ public class WmChunk {
             PaletteStorage paletteStorage = container.data.storage;
 
             RustPalette rustPalette = new RustPalette(
+                container.idList,
                 WgpuNative.uploadIdList((IndexedIterable<Object>) container.idList)
             );
 
             ByteBuf buf = Unpooled.buffer(palette.getPacketSize());
+
             PacketByteBuf packetBuf = new PacketByteBuf(buf);
             palette.writePacket(packetBuf);
             rustPalette.readPacket(packetBuf);

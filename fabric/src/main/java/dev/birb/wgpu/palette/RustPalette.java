@@ -6,6 +6,7 @@ import net.minecraft.util.collection.IndexedIterable;
 import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PaletteResizeListener;
 
+import java.lang.ref.Cleaner;
 import java.nio.ByteOrder;
 import java.util.List;
 import java.util.function.Predicate;
@@ -13,10 +14,10 @@ import java.util.function.Predicate;
 public class RustPalette {
 
     private final long slabIndex;
+    private final IndexedIterable<?> idList;
 
-//    public static final Cleaner CLEANER = Cleaner.create();
-
-    public RustPalette(long rustIdList) {
+    public RustPalette(IndexedIterable<?> idList, long rustIdList) {
+        this.idList = idList;
         this.slabIndex = WgpuNative.createPalette(rustIdList);
     }
 
@@ -25,6 +26,12 @@ public class RustPalette {
         int size = buf.readVarInt();
 
         int[] blockstateOffsets = new int[size];
+
+        for(int i=0;i<size;i++) {
+            Object object = this.idList.get(buf.readVarInt());
+            RustBlockStateAccessor accessor = (RustBlockStateAccessor) object;
+            blockstateOffsets[i] = accessor.getRustBlockStateIndex();
+        }
 
         WgpuNative.paletteReadPacket(this.slabIndex, buf.array(), index, blockstateOffsets);
     }

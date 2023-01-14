@@ -5,6 +5,7 @@ use std::io::Cursor;
 use std::mem::size_of;
 use std::{slice, thread};
 use std::{sync::Arc, time::Instant};
+use std::time::Duration;
 
 use futures::executor::block_on;
 use jni::objects::{JClass, ReleaseMode};
