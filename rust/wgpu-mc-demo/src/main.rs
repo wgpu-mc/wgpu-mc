@@ -369,36 +369,36 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
             Event::RedrawRequested(_) => {
                 let frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
 
-                let mut part_transforms = vec![PartTransform::identity(); entity.parts.len()];
-                let lid_index = *entity.parts.get("lid").unwrap();
-                part_transforms[lid_index] = PartTransform {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                    pivot_x: (1.0 / 16.0),
-                    pivot_y: (10.0 / 16.0),
-                    pivot_z: (1.0 / 16.0),
-                    yaw: 0.0,
-                    pitch: ((spin * 15.0).sin() * PI).to_degrees() * 0.25 - 45.0,
-                    roll: 0.0,
-                    scale_x: 1.0,
-                    scale_y: 1.0,
-                    scale_z: 1.0,
-                };
+                // let mut part_transforms = vec![PartTransform::identity(); entity.parts.len()];
+                // let lid_index = *entity.parts.get("lid").unwrap();
+                // part_transforms[lid_index] = PartTransform {
+                //     x: 0.0,
+                //     y: 0.0,
+                //     z: 0.0,
+                //     pivot_x: (1.0 / 16.0),
+                //     pivot_y: (10.0 / 16.0),
+                //     pivot_z: (1.0 / 16.0),
+                //     yaw: 0.0,
+                //     pitch: ((spin * 15.0).sin() * PI).to_degrees() * 0.25 - 45.0,
+                //     roll: 0.0,
+                //     scale_x: 1.0,
+                //     scale_y: 1.0,
+                //     scale_z: 1.0,
+                // };
 
-                let gpu_instance = EntityInstances::new(
-                    entity.clone(),
-                    vec![EntityInstanceTransforms {
-                        position: (0.0, 0.0, 0.0),
-                        looking_yaw: 0.0,
-                        uv_offset: (0.0, 0.0),
-                        part_transforms,
-                    }],
-                );
+                // let gpu_instance = EntityInstances::new(
+                //     entity.clone(),
+                //     vec![EntityInstanceTransforms {
+                //         position: (0.0, 0.0, 0.0),
+                //         looking_yaw: 0.0,
+                //         uv_offset: (0.0, 0.0),
+                //         part_transforms,
+                //     }],
+                // );
 
-                gpu_instance.upload(&wm);
+                // gpu_instance.upload(&wm);
 
-                instances_map.insert(ENTITY_NAME.into(), gpu_instance);
+                // instances_map.insert(ENTITY_NAME.into(), gpu_instance);
 
                 camera.position += camera.get_direction() * forward * frame_time * 40.0;
 

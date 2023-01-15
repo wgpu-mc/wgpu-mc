@@ -24,8 +24,8 @@ pub struct Wrapper1 {
     data: Wrapper2,
 }
 
-pub const ENTITY_NAME: &str = "minecraft:chest#main";
-const TEXTURE_LOCATION: &str = "minecraft:textures/entity/chest/normal.png";
+pub const ENTITY_NAME: &str = "minecraft:book#main";
+const TEXTURE_LOCATION: &str = "minecraft:textures/entity/enchanting_table_book.png";
 
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     let instant = Instant::now();

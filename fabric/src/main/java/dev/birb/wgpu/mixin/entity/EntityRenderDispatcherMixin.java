@@ -23,16 +23,21 @@ public abstract class EntityRenderDispatcherMixin {
     @Inject(method = "render", at = @At("TAIL"))
     public<E extends Entity> void render(E entity, double x, double y, double z, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci) {
         EntityType<?> type = entity.getType();
+
+        if(type == EntityType.ITEM) return;
+
         String rootLayerName;
 
         if(type == EntityType.PLAYER) {
-            rootLayerName = EntityModelLayers.PLAYER.getName();
+            rootLayerName = EntityModelLayers.PLAYER.toString();
         } else {
             EntityState.EntityModelInfo info = EntityState.layers.get(type);
-            rootLayerName = info.root.getName();
+            rootLayerName = info.root.toString();
+            if(rootLayerName == null) return;
         }
 
         EntityState.assembleEntity(rootLayerName);
+        EntityState.entityModelMatrices.clear();
     }
 
 }

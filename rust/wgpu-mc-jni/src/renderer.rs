@@ -37,7 +37,7 @@ use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex};
 use crate::{
-    entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
+    MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
     CHANNELS, MC_STATE, RENDERER, WINDOW,
 };
 
@@ -311,14 +311,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             texture.present();
         }
     });
-
-    ENTITY_ATLAS
-        .set(Arc::new(Atlas::new(
-            &wm.wgpu_state,
-            &wm.pipelines.load(),
-            false,
-        )))
-        .unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;

@@ -1,7 +1,8 @@
-use jni::objects::{JClass, JString};
+use jni::objects::{JClass, JObject, JString, JValue};
 use jni::JNIEnv;
 use jni_fn::jni_fn;
 use std::{collections::HashMap, sync::Arc};
+use jni::sys::jint;
 
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
@@ -12,8 +13,7 @@ use wgpu_mc::{
     mc::entity::{Cuboid, CuboidUV, EntityPart, PartTransform},
     render::atlas::Atlas,
 };
-
-pub static ENTITY_ATLAS: OnceCell<Arc<Atlas>> = OnceCell::new();
+use wgpu_mc::render::pipeline::ENTITY_ATLAS;
 
 #[derive(Debug, Deserialize)]
 pub struct ModelCuboidData {
@@ -182,16 +182,17 @@ pub struct Wrapper1 {
 
 static ENTITY_MPD: OnceCell<HashMap<String, ModelPartData>> = OnceCell::new();
 
-// #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
     let wm = RENDERER.get().unwrap();
 
     let entities_json_javastr = env.get_string(string).unwrap();
     let entities_json: String = entities_json_javastr.into();
 
-    let mpd: HashMap<String, ModelPartData> = serde_json::from_str::<HashMap<String, Wrapper1>>()
+    let mpd: HashMap<String, ModelPartData> = serde_json::from_str::<HashMap<String, Wrapper1>>(&entities_json)
+        .unwrap()
         .into_iter()
-        .map(|name, wrapper| (name, wrapper.data.data))
+        .map(|(name, wrapper)| (name, wrapper.data.data))
         .collect();
 
     ENTITY_MPD.set(mpd);
@@ -205,17 +206,37 @@ pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
         y: 0.0,
     };
 
-    let atlas = wm.mc.texture_manager.atlases.load().get("entity");
+    let atlases = wm.mc.texture_manager.atlases.load();
+    let atlas = atlases.get(ENTITY_ATLAS).unwrap();
 
-    let entities: HashMap<String, Arc<Entity>> = mpd
+    let entities: Vec<Arc<Entity>> = mpd
         .iter()
         .map(|(name, mpd)| {
             let entity_part = tmd_to_wm("root".into(), mpd, &atlas_position).unwrap();
 
-            (
-                name.clone(),
-                Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state)),
-            )
+            Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state, atlas.load().bindable_texture.clone()))
         })
         .collect();
+
+    entities.iter().for_each(|entity| {
+        let entity_string = env.new_string(&entity.name).unwrap();
+
+        entity.parts.iter().for_each(|(name, index)| {
+            let part_string = env.new_string(name).unwrap();
+
+            env.call_static_method(
+                "dev/birb/wgpu/render/Wgpu",
+                "helperSetPartIndex",
+                "(Ljava/lang/String;Ljava/lang/String;I)V",
+                unsafe { &[
+                    JValue::Object(JObject::from_raw(entity_string.into_raw())),
+                    JValue::Object(JObject::from_raw(part_string.into_raw())),
+                    JValue::Int(*index as jint),
+                ] },
+            )
+                .unwrap();
+        });
+    });
+
+    *wm.mc.entity_models.write() = entities;
 }

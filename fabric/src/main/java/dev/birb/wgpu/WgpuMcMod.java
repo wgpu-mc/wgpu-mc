@@ -37,28 +37,5 @@ public class WgpuMcMod implements ClientModInitializer {
 
 		ElectrumRenderer electrumRenderer = new ElectrumRenderer();
 		RendererAccess.INSTANCE.registerRenderer(electrumRenderer);
-
-		KeyBinding binding = KeyBindingHelper.registerKeyBinding(
-			new KeyBinding("", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_M, "")
-		);
-		// Debug to dump models
-		StringBuilder builder = new StringBuilder();
-
-		WgpuNative.registerEntities(builder.toString());
-
-//		builder.append("{");
-//        EntityModels.getModels().forEach((key, tmd) -> {
-//			String dumped = (new Gson()).toJson(tmd);
-//			builder.append("\""+key+"\":");
-//			builder.append(dumped);
-//			builder.append(",");
-//		});
-//		builder.append("}");
-
-		ClientTickEvents.END_CLIENT_TICK.register(client -> {
-			while (binding.wasPressed()) {
-				WgpuNative.debugBake();
-			}
-		});
 	}
 }

@@ -2,6 +2,7 @@ package dev.birb.wgpu.entity;
 
 import it.unimi.dsi.fastutil.Hash;
 import net.minecraft.client.render.entity.model.EntityModelLayer;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EntityType;
 import net.minecraft.util.math.Matrix4f;
 
@@ -29,21 +30,36 @@ public class EntityState {
             String partName = entry.getKey();
             Matrix4f mat = entry.getValue();
 
+            if(!partIndices.containsKey(partName)) return;
+
             int partIndex = partIndices.get(partName);
             orderedMatrices[partIndex] = mat;
         }
 
-        EntityRenderState state = renderStates.get(entityName);
+        EntityRenderState state = renderStates.getOrDefault(entityName, new EntityRenderState());
+
+        MatrixStack stack = new MatrixStack();
+        stack.loadIdentity();
+
+//        orderedMatrices[0] = stack.peek().getPositionMatrix();
 
         for(int i=0;i<orderedMatrices.length;i++) {
             Matrix4f mat = orderedMatrices[i];
+            if(mat == null) {
+                mat = stack.peek().getPositionMatrix();
+            }
             mat.writeColumnMajor(state.buffer);
         }
+
+        state.count++;
+
+        renderStates.put(entityName, state);
     }
 
     public static class EntityRenderState {
 
         public final FloatBuffer buffer = FloatBuffer.allocate(50000);
+        public int count = 0;
 
     }
 

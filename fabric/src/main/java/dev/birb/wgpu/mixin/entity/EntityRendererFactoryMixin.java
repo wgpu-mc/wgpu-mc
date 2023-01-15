@@ -16,6 +16,7 @@ public class EntityRendererFactoryMixin {
     public void getPart(EntityModelLayer layer, CallbackInfoReturnable<ModelPart> cir) {
         if(EntityState.registeringRoot) {
             EntityState.EntityModelInfo info = new EntityState.EntityModelInfo();
+            info.root = layer;
             EntityState.layers.put(EntityState.builderType, info);
             EntityState.registeringRoot = false;
         } else {

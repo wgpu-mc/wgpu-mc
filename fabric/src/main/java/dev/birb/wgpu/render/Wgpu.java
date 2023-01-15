@@ -1,5 +1,6 @@
 package dev.birb.wgpu.render;
 
+import dev.birb.wgpu.entity.EntityState;
 import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
@@ -132,6 +133,14 @@ public class Wgpu {
 
     public static void helperSetBlockStateIndex(Object o, int blockstateKey) {
         ((RustBlockStateAccessor) o).setRustBlockStateIndex(blockstateKey);
+    }
+
+    public static void helperSetPartIndex(String entity, String part, int index) {
+        if(!EntityState.matrixIndices.containsKey(entity)) {
+            EntityState.matrixIndices.put(entity, new HashMap<>());
+        }
+
+        EntityState.matrixIndices.get(entity).put(part, index);
     }
 
     public static void debug(Object o) {

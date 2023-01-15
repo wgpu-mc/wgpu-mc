@@ -57,6 +57,10 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor {
 
             String thisPartName = ((ModelPartNameAccessor) (Object) this).getName();
 
+            if(thisPartName == null) {
+                thisPartName = "root";
+            }
+
             Matrix4f mat4 = matrices.peek().getPositionMatrix();
             EntityState.entityModelMatrices.put(thisPartName, mat4);
 
