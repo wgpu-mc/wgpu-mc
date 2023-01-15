@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
-use std::mem;
+use std::{mem, thread};
 use std::mem::size_of;
 use std::num::NonZeroU32;
 use std::ops::Deref;
@@ -66,7 +66,6 @@ mod settings;
 #[allow(dead_code)]
 enum RenderMessage {
     SetTitle(String),
-    Task(Box<dyn FnOnce() + Send + Sync>),
     KeyPressed(u32),
     MouseState(ElementState, MouseButton),
     KeyState(u32, u32, u32, u32),
@@ -95,6 +94,7 @@ static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
 static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
+static TASK_CHANNELS: Lazy<(Sender<Box<dyn FnOnce() + Send + Sync>>, Receiver<Box<dyn FnOnce() + Send + Sync>>)> = Lazy::new(unbounded);
 static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
     ArcSwap::new(Arc::new(MinecraftRenderState {
         _render_world: false,
@@ -152,8 +152,8 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
             return ChunkBlockState::Air;
         }
 
-        let chunk_x = (x / 16) - self.pos[0];
-        let chunk_z = (z / 16) - self.pos[1];
+        let chunk_x = (x >> 4) - self.pos[0];
+        let chunk_z = (z >> 4) - self.pos[1];
 
         let chunk_option = match [chunk_x, chunk_z] {
             [0, 0] => Some(self.center),
@@ -161,7 +161,7 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
             [0, 1] => self.south,
             [1, 0] => self.east,
             [-1, 0] => self.west,
-            pos => return ChunkBlockState::Air,
+            _pos => return ChunkBlockState::Air,
         };
 
         let chunk = match chunk_option {
@@ -562,15 +562,23 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn runHelperThread(env: JNIEnv, _class: JClass) {
-    let rx = &CHANNELS.1;
-
     //Wait until wgpu-mc is initialized
     while RENDERER.get().is_none() {}
+
+    thread::spawn(|| {
+        let rx = &TASK_CHANNELS.1;
+        for task in rx.iter() {
+            task()
+        }
+    });
+
+
+    let rx = &CHANNELS.1;
+
 
     for render_message in rx.iter() {
         match render_message {
             RenderMessage::SetTitle(title) => WINDOW.get().unwrap().set_title(&title),
-            RenderMessage::Task(func) => func(),
             RenderMessage::KeyPressed(_) => {}
             RenderMessage::MouseMove(x, y) => {
                 env.call_static_method(
@@ -878,9 +886,9 @@ pub fn texImage2D(
         }
     };
 
-    let tx = &CHANNELS.0;
+    let tx = &TASK_CHANNELS.0;
 
-    tx.send(RenderMessage::Task(Box::new(task))).unwrap();
+    tx.send(Box::new(task)).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -991,9 +999,9 @@ pub fn subImage2D(
         );
     };
 
-    let tx = &CHANNELS.0;
+    let tx = &TASK_CHANNELS.0;
 
-    tx.send(RenderMessage::Task(Box::new(task))).unwrap();
+    tx.send(Box::new(task)).unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
