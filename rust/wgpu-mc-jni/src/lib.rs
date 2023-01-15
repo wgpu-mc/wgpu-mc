@@ -150,17 +150,8 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
             return ChunkBlockState::Air;
         }
 
-        let mut chunk_x = (x / 16) - self.pos[0];
-        let mut chunk_z = (z / 16) - self.pos[1];
-
-        //Rust i32 doesn't properly floor negative numbers, so here's a dirty fix.
-        if x < 0 && x % 16 != 0 {
-            chunk_x -= 1;
-        }
-
-        if z < 0 && z % 16 != 0 {
-            chunk_z -= 1;
-        }
+        let chunk_x = (x >> 4) - self.pos[0];
+        let chunk_z = (z >> 4) - self.pos[1];
 
         let chunk_option = match [chunk_x, chunk_z] {
             [0, 0] => Some(self.center),
@@ -168,7 +159,7 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
             [0, 1] => self.south,
             [1, 0] => self.east,
             [-1, 0] => self.west,
-            pos => return ChunkBlockState::Air,
+            _pos => return ChunkBlockState::Air,
         };
 
         let chunk = match chunk_option {
