@@ -27,7 +27,7 @@ pub fn bake<
     T,
     Provider: BlockStateProvider,
     Filter: Fn(BlockstateKey) -> bool,
-    Mapper: Fn(&BlockMeshVertex, f32, f32, f32) -> T,
+    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, BlockstateKey) -> T,
 >(
     block_manager: &BlockManager,
     chunk: &Chunk,
@@ -161,7 +161,7 @@ pub fn bake<
                         Some(north) => vertices.extend(
                             north
                                 .iter()
-                                .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                                .map(|v| mapper(v, x as f32, y as f32, z as f32, state_key)),
                         ),
                     };
                 }
@@ -169,7 +169,7 @@ pub fn bake<
                     match &model.east {
                         None => {}
                         Some(east) => vertices
-                            .extend(east.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(east.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, state_key))),
                     };
                 }
                 if render_south {
@@ -178,7 +178,7 @@ pub fn bake<
                         Some(south) => vertices.extend(
                             south
                                 .iter()
-                                .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                                .map(|v| mapper(v, x as f32, y as f32, z as f32, state_key)),
                         ),
                     };
                 }
@@ -186,21 +186,21 @@ pub fn bake<
                     match &model.west {
                         None => {}
                         Some(west) => vertices
-                            .extend(west.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(west.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, state_key))),
                     };
                 }
                 if render_up {
                     match &model.up {
                         None => {}
                         Some(up) => vertices
-                            .extend(up.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(up.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, state_key))),
                     };
                 }
                 if render_down {
                     match &model.down {
                         None => {}
                         Some(down) => vertices
-                            .extend(down.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(down.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, state_key))),
                     };
                 }
             }
@@ -220,7 +220,7 @@ pub fn bake<
                         })
                         .flatten()
                         .flatten()
-                        .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                        .map(|v| mapper(v, x as f32, y as f32, z as f32, state_key)),
                 );
             }
         }

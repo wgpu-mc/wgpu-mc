@@ -41,7 +41,7 @@ pub trait BlockStateProvider: Send + Sync + Debug {
 pub trait RenderLayer: Send + Sync {
     fn filter(&self) -> &dyn Fn(BlockstateKey) -> bool;
 
-    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32) -> Vertex;
+    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32, BlockstateKey) -> Vertex;
 
     fn name(&self) -> &str;
 }

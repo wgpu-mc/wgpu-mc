@@ -352,8 +352,8 @@ impl RenderLayer for ElectrumRenderLayer {
         &self.filter
     }
 
-    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        &|vert, x, y, z| Vertex {
+    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32, BlockstateKey) -> Vertex {
+        &|vert, x, y, z, _| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,
@@ -404,7 +404,8 @@ pub fn createRenderLayerFilters(
     let solid_layer = Box::new(ElectrumRenderLayer {
         name: "solid".into(),
         filter: Box::new(move |key| {
-            !cutout_clone.binary_search(&key.block).is_ok() && !transparent_clone.binary_search(&key.block).is_ok()
+            true
+            // !cutout_clone.binary_search(&key.block).is_ok() && !transparent_clone.binary_search(&key.block).is_ok()
         }),
     });
 
@@ -424,7 +425,7 @@ pub fn createRenderLayerFilters(
         }),
     });
 
-    wm.pipelines.load().chunk_layers.store(Arc::new(vec![solid_layer, cutout_layer, transparent_layer]));
+    wm.pipelines.load().chunk_layers.store(Arc::new(vec![solid_layer, cutout_layer]));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -639,7 +640,7 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
             let model = wm_block.get_model_by_key(
                 key_iter
                     .iter()
-                    .filter(|(a, _)| *a != "waterlogged")
+                    .filter(|(a, _)| *a != "waterlogged" && *a != "distance" && *a != "persistent")
                     .map(|(a, b)| (*a, b)),
                 &*wm.mc.resource_provider,
                 &atlas,
@@ -652,7 +653,10 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
                     augment,
                 },
                 None => BlockstateKey {
-                    block: fallback_key.0 as u16,
+                    block: {
+                        println!("{block_name} {state_key}");
+                        fallback_key.0 as u16
+                    },
                     augment: 0,
                 },
             };

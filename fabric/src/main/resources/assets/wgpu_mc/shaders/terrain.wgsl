@@ -36,15 +36,18 @@ struct VertexResult {
     @location(1) tex_coords2: vec2<f32>,
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
-    @location(4) world_pos: vec3<f32>
-//    @location(4) screen_pos: vec4<f32>
+    @location(4) world_pos: vec3<f32>,
+    @location(5) color: vec4<f32>
 };
 
 @vertex
 fn vert(
     @location(0) pos_in: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
-    @location(2) normal: vec3<f32>,
+    @location(2) lightmap_coords: vec2<f32>,
+    @location(3) normal: vec4<f32>,
+    @location(4) color: vec4<f32>,
+    @location(5) tangent: vec4<f32>,
     @location(6) uv_offset: u32
 ) -> VertexResult {
     // var uv = uv_offsets.uvs[uv_offset];
@@ -59,6 +62,7 @@ fn vert(
     vr.tex_coords2 = tex_coords;
     vr.blend = 1.0;
     vr.normal = normal;
+    vr.color = color;
 
     return vr;
 }
@@ -78,5 +82,5 @@ fn frag(
 
     let col = mix(col1, col2, in.blend);
 
-    return col1;
+    return in.color * col1;
 }

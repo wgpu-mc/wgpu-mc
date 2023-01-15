@@ -159,8 +159,8 @@ impl RenderLayer for TerrainLayer {
         &|_| true
     }
 
-    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        &|vert, x, y, z| Vertex {
+    fn mapper(&self) -> &dyn Fn(&BlockMeshVertex, f32, f32, f32, BlockstateKey) -> Vertex {
+        &|vert, x, y, z, _| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,
