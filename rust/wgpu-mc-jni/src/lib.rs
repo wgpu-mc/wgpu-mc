@@ -964,14 +964,15 @@ pub fn subImage2D(
 
         let dest_row_size = gl_texture.width as usize * pixel_size;
 
+        let clamped_size = width * pixel_size;
         let mut pixel_offset = 0usize;
         for y in 0..height {
-            let src_row_slice = &vec[pixel_offset..pixel_offset + src_row_size];
+            let src_row_slice = &vec[pixel_offset..pixel_offset + clamped_size];
             pixel_offset += next_row_byte_offset;
 
             let dest_begin =
                 (dest_row_size * (y + offsetY as usize)) + (offsetX as usize * pixel_size);
-            let dest_end = dest_begin + src_row_size;
+            let dest_end = dest_begin + clamped_size;
 
             let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
             dest_row_slice.copy_from_slice(src_row_slice);
