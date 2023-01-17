@@ -4,6 +4,8 @@ resources:
   mvp_mat4:
     type: mat4
     mult: [wm_mat4_projection]
+  rename:
+    type: texture_2d
 pipelines:
   terrain:
     geometry: wm_geo_terrain
@@ -14,6 +16,7 @@ pipelines:
     uniforms:
       0: mvp_mat4
       1: wm_texture_atlas_blocks
+      2: rename
   electrum_gui:
     geometry: wm_geo_electrum_gui
     output: [wm_framebuffer_texture]
