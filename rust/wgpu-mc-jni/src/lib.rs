@@ -920,7 +920,7 @@ pub fn subImage2D(
     unpack_skip_rows: jint,
     unpack_alignment: jint,
 ) {
-    let mut pixels = pixels as usize;
+    let pixels = pixels as usize;
     let unpack_row_length = unpack_row_length as usize;
     let unpack_skip_pixels = unpack_skip_pixels as usize;
     let unpack_skip_rows = unpack_skip_rows as usize;
@@ -935,33 +935,14 @@ pub fn subImage2D(
 
     //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
     let row_width = if unpack_row_length > 0 {
-        unpack_row_length as i64
+        unpack_row_length
     } else {
-        width as i64
+        width
     };
 
-    let src_row_size = row_width as usize * pixel_size;
-
-    //GL_UNPACK_SKIP_PIXELS
-    pixels += pixel_size * unpack_skip_pixels;
-    //GL_UNPACK_SKIP_ROWS
-    pixels += src_row_size * unpack_skip_rows;
-
-    let next_row_byte_offset = if pixel_size >= unpack_alignment {
-        src_row_size
-    } else {
-        unimplemented!()
-    };
-
+    
     //In bytes
     assert_eq!(_type, 0x1401);
-
-    let vec = unsafe {
-        Vec::from(slice::from_raw_parts(
-            pixels as *mut u8,
-            next_row_byte_offset * height,
-        ))
-    };
 
     //For when the renderer is initialized
     let task = move || {
@@ -972,19 +953,41 @@ pub fn subImage2D(
         let gl_texture = alloc_write.get_mut(&(texture_id as u32)).unwrap();
 
         let dest_row_size = gl_texture.width as usize * pixel_size;
-
-        let clamped_size = width * pixel_size;
-        let mut pixel_offset = 0usize;
         for y in 0..height {
-            let src_row_slice = &vec[pixel_offset..pixel_offset + clamped_size];
-            pixel_offset += next_row_byte_offset;
+            for x in 0..width {
+                let current_x = x + unpack_skip_pixels;
+                
+                let current_y = (y + unpack_skip_rows) * row_width;
+                let row_byte_offset = if pixel_size >= unpack_alignment {
+                    current_y
+                } else {
+                    unimplemented!()
+                };
 
-            let dest_begin =
-                (dest_row_size * (y + offsetY as usize)) + (offsetX as usize * pixel_size);
-            let dest_end = dest_begin + clamped_size;
+                let offset = (current_x + row_byte_offset) * pixel_size;
 
-            let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
-            dest_row_slice.copy_from_slice(src_row_slice);
+                //Get the rgba data for the current pixel.
+                let pixel = unsafe {
+                    std::ptr::read((pixels + offset) as *const u32)
+                };
+
+                //Convert rgba to slice format
+                let mut rgba_slice: Vec<u8> = Vec::new();
+                rgba_slice.push((pixel >> 0 & 0xFF) as u8);
+                rgba_slice.push((pixel >> 8 & 0xFF) as u8);
+                rgba_slice.push((pixel >> 16 & 0xFF) as u8);
+                rgba_slice.push((pixel >> 24 & 0xFF) as u8);
+                
+
+                //Find where the pixel data should go.
+                let dest_begin =
+                    (dest_row_size * (y + offsetY as usize)) + ((x + offsetX as usize) * pixel_size);
+                let dest_end = dest_begin + pixel_size;
+
+                //Copy/paste pixel data to target image.
+                let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
+                dest_row_slice.copy_from_slice(&rgba_slice[0..pixel_size]);
+            }
         }
 
         wm.wgpu_state.queue.write_texture(
