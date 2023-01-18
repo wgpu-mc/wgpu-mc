@@ -7,6 +7,7 @@ import net.minecraft.util.math.Matrix4f;
 import net.minecraft.util.math.Vec3f;
 import net.minecraft.util.math.Vector4f;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
@@ -499,7 +500,11 @@ public class GlStateManagerMixin {
     @Overwrite(remap = false)
     public static void _texSubImage2D(int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, long pixels) {
         //we do not care about mip maps
-        if(level != 0) return;
+        if(level != 0) 
+            return;
+
+        if(format != GL11.GL_RGBA && format != 0x80E1)
+            return;
 
         int texId = GlWmState.textureSlots.get(GlWmState.activeTexture);
         GlWmState.WmTexture texture = GlWmState.generatedTextures.get(texId);
@@ -510,6 +515,21 @@ public class GlStateManagerMixin {
         int unpack_alignment = GlWmState.pixelStore.getOrDefault(GL30.GL_UNPACK_ALIGNMENT, 4);
 
         if(width + offsetX <= texture.width && height + offsetY <= texture.height) {
+            int[] pixel_array = new int[width*height];
+
+            long pixel_size = 4L; //TODO support more formats..?
+            for(int y = 0; y < height; y++) {
+                for(int x = 0; x < width; x++){
+                    int current_x = x + unpack_skip_pixels;
+                    int current_y = (y + unpack_skip_rows) * 
+                        (unpack_row_length > 0 ? unpack_row_length : width);
+                    
+                    //TODO row_byte_offset proper impl || let row_byte_offset = if pixel_size >= unpack_alignment
+                    long offset = (current_x + current_y) * pixel_size;
+                    pixel_array[x + y * width] = MemoryUtil.memGetInt(pixels+offset);
+                }
+            }
+            
              WgpuNative.subImage2D(
                  texId,
                  target,
@@ -520,7 +540,7 @@ public class GlStateManagerMixin {
                  height,
                  format,
                  type,
-                 pixels,
+                 pixel_array,
                  unpack_row_length,
                  unpack_skip_pixels,
                  unpack_skip_rows,
