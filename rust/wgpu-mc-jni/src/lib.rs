@@ -894,7 +894,7 @@ pub fn texImage2D(
 #[allow(non_snake_case)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn subImage2D(
-    _env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     texture_id: jint,
     _target: jint,
@@ -905,13 +905,21 @@ pub fn subImage2D(
     height: jint,
     format: jint,
     _type: jint,
-    pixels: jlong,
+    pixels: jintArray,
     unpack_row_length: jint,
     unpack_skip_pixels: jint,
     unpack_skip_rows: jint,
     unpack_alignment: jint,
 ) {
-    let pixels = pixels as usize;
+    let pixel_array_pointer = env.get_int_array_elements(pixels, ReleaseMode::NoCopyBack).unwrap();
+    let pixels = unsafe {
+        Vec::from(
+            slice::from_raw_parts(
+                pixel_array_pointer.as_ptr() as *mut u32,
+                pixel_array_pointer.size().unwrap() as usize,
+            )
+        )
+    };
     let unpack_row_length = unpack_row_length as usize;
     let unpack_skip_pixels = unpack_skip_pixels as usize;
     let unpack_skip_rows = unpack_skip_rows as usize;
@@ -946,38 +954,24 @@ pub fn subImage2D(
         let dest_row_size = gl_texture.width as usize * pixel_size;
         for y in 0..height {
             for x in 0..width {
-                let current_x = x + unpack_skip_pixels;
-                
-                let current_y = (y + unpack_skip_rows) * row_width;
-                let row_byte_offset = if pixel_size >= unpack_alignment {
-                    current_y
-                } else {
-                    unimplemented!()
-                };
+                let pixel = pixels[x + y * width];
 
-                let offset = (current_x + row_byte_offset) * pixel_size;
-
-                //Get the rgba data for the current pixel.
-                let pixel = unsafe {
-                    std::ptr::read((pixels + offset) as *const u32)
-                };
-
-                //Convert rgba to slice format
-                let mut rgba_slice: Vec<u8> = Vec::new();
-                rgba_slice.push((pixel >> 0 & 0xFF) as u8);
-                rgba_slice.push((pixel >> 8 & 0xFF) as u8);
-                rgba_slice.push((pixel >> 16 & 0xFF) as u8);
-                rgba_slice.push((pixel >> 24 & 0xFF) as u8);
-                
+                //Convert rgba to slice format. There's only support for rgba at the moment.
+                let mut rgba_array: [u8; 4] = [
+                    (pixel >> 0 & 0xFF) as u8,
+                    (pixel >> 8 & 0xFF) as u8,
+                    (pixel >> 16 & 0xFF) as u8,
+                    (pixel >> 24 & 0xFF) as u8
+                ];
 
                 //Find where the pixel data should go.
                 let dest_begin =
                     (dest_row_size * (y + offsetY as usize)) + ((x + offsetX as usize) * pixel_size);
-                let dest_end = dest_begin + pixel_size;
 
+                let dest_end = dest_begin + pixel_size;
                 //Copy/paste pixel data to target image.
                 let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
-                dest_row_slice.copy_from_slice(&rgba_slice[0..pixel_size]);
+                dest_row_slice.copy_from_slice(&rgba_array[0..pixel_size]);
             }
         }
 
