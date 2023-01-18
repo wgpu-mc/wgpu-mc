@@ -27,6 +27,7 @@ use wgpu::{
     RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
     VertexBufferLayout, VertexState,
 };
+use crate::wgpu::QuerySetDescriptor;
 
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
@@ -152,6 +153,7 @@ pub struct ShaderGraph {
     pub resources: HashMap<String, CustomResource>,
     pub geometry: HashMap<String, Box<dyn GeometryCallback>>,
     quad: Option<wgpu::Buffer>,
+    query_results: Option<wgpu::Buffer>
 }
 
 impl ShaderGraph {
@@ -166,6 +168,7 @@ impl ShaderGraph {
             resources,
             geometry,
             quad: None,
+            query_results: None
         }
     }
 
@@ -176,6 +179,16 @@ impl ShaderGraph {
         mut additional_geometry: Option<HashMap<String, VertexBufferLayout>>,
     ) {
         let mut resources = HashMap::new();
+
+        self.query_results = Some(
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: &[0; 1024],
+                    usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                })
+        );
 
         self.quad = Some(
             wm.wgpu_state
@@ -631,7 +644,7 @@ impl ShaderGraph {
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
 
-        let _chunk_offset = *wm.mc.chunks.chunk_offset.lock();
+        let chunk_offset = *wm.mc.chunks.chunk_offset.lock();
 
         let projection_matrix = self
             .resources
@@ -647,6 +660,14 @@ impl ShaderGraph {
             .unwrap();
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
+
+        let query_set = wm.wgpu_state.device.create_query_set(&QuerySetDescriptor {
+            label: None,
+            ty: wgpu::QueryType::Timestamp,
+            count: self.pack.pipelines.pipelines.len() as u32
+        });
+
+        let mut query_index = 0;
 
         for (name, config) in &self.pack.pipelines.pipelines {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -719,8 +740,8 @@ impl ShaderGraph {
                 }),
             });
 
-            let chunk_offset = [0, 0];
-
+            render_pass.begin_pipeline_statistics_query(&query_set, query_index);
+            query_index += 1;
             render_pass.set_pipeline(self.pipelines.get(name).unwrap());
 
             match &config.geometry[..] {
@@ -733,9 +754,9 @@ impl ShaderGraph {
                             let chunk = arena.alloc(chunk_swap.load());
 
                             let min = Vec3::new(
-                                (chunk.pos[0] * 16) as f32,
+                                ((chunk.pos[0] + chunk_offset[0]) * 16) as f32,
                                 0.0,
-                                (chunk.pos[1] * 16) as f32,
+                                ((chunk.pos[1] + chunk_offset[1]) * 16) as f32,
                             );
                             let max = min + Vec3::new(16.0, 384.0, 16.0);
 
@@ -798,7 +819,18 @@ impl ShaderGraph {
                     }
                 }
             };
+
+            render_pass.end_pipeline_statistics_query();
         }
+
+        encoder.resolve_query_set(
+            &query_set,
+            0..self.pack.pipelines.pipelines.len() as u32,
+            self.query_results.as_ref().unwrap(),
+            0
+        );
+
+        wm.
 
         wm.wgpu_state.queue.submit([encoder.finish()]);
     }
@@ -858,8 +890,8 @@ pub fn set_push_constants(
                 ShaderStages::VERTEX,
                 *offset as u32,
                 bytemuck::cast_slice(&[
-                    chunk.unwrap().pos[0] - chunk_offset[0],
-                    chunk.unwrap().pos[1] - chunk_offset[1],
+                    chunk.unwrap().pos[0] + chunk_offset[0],
+                    chunk.unwrap().pos[1] + chunk_offset[1],
                 ]),
             ),
             _ => unimplemented!("Unknown push constant resource value"),
