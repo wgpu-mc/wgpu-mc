@@ -126,7 +126,8 @@ impl WmRenderer {
                     label: None,
                     features: wgpu::Features::default()
                         | wgpu::Features::DEPTH_CLIP_CONTROL
-                        | wgpu::Features::PUSH_CONSTANTS,
+                        | wgpu::Features::PUSH_CONSTANTS
+                        | wgpu::Features::TIMESTAMP_QUERY,
                     limits,
                 },
                 None, // Trace path
