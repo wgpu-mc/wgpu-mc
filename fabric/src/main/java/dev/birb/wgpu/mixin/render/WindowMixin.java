@@ -136,6 +136,16 @@ public class WindowMixin {
         //WgpuNative.setWindowedSize(width, height);
     }
 
+
+    /**
+     * @author wgpu-mc
+     */
+    @Overwrite
+    public int calculateScaleFactor(int guiScale, boolean forceUnicodeFont) {
+        if(guiScale < 1) return 1;
+        return guiScale;
+    }
+
     /**
      * @author wgpu-mc
      */
