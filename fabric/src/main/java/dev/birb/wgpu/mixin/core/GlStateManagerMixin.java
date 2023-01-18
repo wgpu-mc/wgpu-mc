@@ -16,7 +16,6 @@ import org.spongepowered.asm.mixin.Overwrite;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.Arrays;
 import java.util.List;
 
 @SuppressWarnings("OverwriteAuthorRequired")
