@@ -9,10 +9,6 @@ struct UV {
     padding: f32
 };
 
-struct UVs {
-    uvs: array<UV>
-};
-
 struct ChunkOffset {
     x: i32,
     z: i32
@@ -30,6 +26,9 @@ var<push_constant> push_constants: PushConstants;
 @group(0) @binding(0)
 var<uniform> proj: CameraUniform;
 
+@group(2) @binding(0)
+var<storage> uv_offsets: array<UV>;
+
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
@@ -37,7 +36,6 @@ struct VertexResult {
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
     @location(4) world_pos: vec3<f32>
-//    @location(4) screen_pos: vec4<f32>
 };
 
 @vertex
@@ -47,7 +45,7 @@ fn vert(
     @location(2) normal: vec3<f32>,
     @location(6) uv_offset: u32
 ) -> VertexResult {
-    // var uv = uv_offsets.uvs[uv_offset];
+     var uv = uv_offsets[uv_offset];
 
     var vr: VertexResult;
 
@@ -55,9 +53,9 @@ fn vert(
 
     vr.world_pos = world_pos;
     vr.pos = proj.view_proj * vec4<f32>(world_pos, 1.0);
-    vr.tex_coords = tex_coords;
-    vr.tex_coords2 = tex_coords;
-    vr.blend = 1.0;
+    vr.tex_coords = tex_coords + uv.uv1;
+    vr.tex_coords2 = tex_coords + uv.uv2;
+    vr.blend = uv.blend;
     vr.normal = normal;
 
     return vr;

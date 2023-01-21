@@ -118,13 +118,14 @@ public abstract class WorldRendererMixin {
             double modX = ((translate.x % 16.0) + 16.0) % 16.0;
             double modZ = ((translate.z % 16.0) + 16.0) % 16.0;
 
-            stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
-                    (float) (-modX),
-                    ((float) -translate.y) - 64.0f,
-                    (float) (-modZ)
-            ));
+            int offsetX = ((int) translate.x) >> 4;
+            int offsetZ = ((int) translate.z) >> 4;
 
-            WgpuNative.setChunkOffset(-(int) (Math.floor(translate.x / 16.0)), -(int) (Math.floor(translate.z / 16.0)));
+            stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
+                    (float) (-modX) - (((float) offsetX) * 16.0f),
+                    ((float) -translate.y) - 64.0f,
+                    (float) (-modZ) - (((float) offsetZ) * 16.0f)
+            ));
         }
 
         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
