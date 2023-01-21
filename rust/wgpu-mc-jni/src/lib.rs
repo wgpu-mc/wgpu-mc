@@ -894,7 +894,7 @@ pub fn texImage2D(
 #[allow(non_snake_case)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn subImage2D(
-    _env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     texture_id: jint,
     _target: jint,
@@ -905,13 +905,21 @@ pub fn subImage2D(
     height: jint,
     format: jint,
     _type: jint,
-    pixels: jlong,
+    pixels: jintArray,
     unpack_row_length: jint,
     unpack_skip_pixels: jint,
     unpack_skip_rows: jint,
     unpack_alignment: jint,
 ) {
-    let mut pixels = pixels as usize;
+    let pixel_array_pointer = env.get_int_array_elements(pixels, ReleaseMode::NoCopyBack).unwrap();
+    let pixels = unsafe {
+        Vec::from(
+            slice::from_raw_parts(
+                pixel_array_pointer.as_ptr() as *mut u32,
+                pixel_array_pointer.size().unwrap() as usize,
+            )
+        )
+    };
     let unpack_row_length = unpack_row_length as usize;
     let unpack_skip_pixels = unpack_skip_pixels as usize;
     let unpack_skip_rows = unpack_skip_rows as usize;
@@ -926,33 +934,14 @@ pub fn subImage2D(
 
     //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
     let row_width = if unpack_row_length > 0 {
-        unpack_row_length as i64
+        unpack_row_length
     } else {
-        width as i64
+        width
     };
 
-    let src_row_size = row_width as usize * pixel_size;
-
-    //GL_UNPACK_SKIP_PIXELS
-    pixels += pixel_size * unpack_skip_pixels;
-    //GL_UNPACK_SKIP_ROWS
-    pixels += src_row_size * unpack_skip_rows;
-
-    let next_row_byte_offset = if pixel_size >= unpack_alignment {
-        src_row_size
-    } else {
-        unimplemented!()
-    };
-
+    
     //In bytes
     assert_eq!(_type, 0x1401);
-
-    let vec = unsafe {
-        Vec::from(slice::from_raw_parts(
-            pixels as *mut u8,
-            next_row_byte_offset * height,
-        ))
-    };
 
     //For when the renderer is initialized
     let task = move || {
@@ -963,19 +952,27 @@ pub fn subImage2D(
         let gl_texture = alloc_write.get_mut(&(texture_id as u32)).unwrap();
 
         let dest_row_size = gl_texture.width as usize * pixel_size;
-
-        let clamped_size = width * pixel_size;
-        let mut pixel_offset = 0usize;
         for y in 0..height {
-            let src_row_slice = &vec[pixel_offset..pixel_offset + clamped_size];
-            pixel_offset += next_row_byte_offset;
+            for x in 0..width {
+                let pixel = pixels[x + y * width];
 
-            let dest_begin =
-                (dest_row_size * (y + offsetY as usize)) + (offsetX as usize * pixel_size);
-            let dest_end = dest_begin + clamped_size;
+                //Convert rgba to slice format. There's only support for rgba at the moment.
+                let mut rgba_array: [u8; 4] = [
+                    (pixel >> 0 & 0xFF) as u8,
+                    (pixel >> 8 & 0xFF) as u8,
+                    (pixel >> 16 & 0xFF) as u8,
+                    (pixel >> 24 & 0xFF) as u8
+                ];
 
-            let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
-            dest_row_slice.copy_from_slice(src_row_slice);
+                //Find where the pixel data should go.
+                let dest_begin =
+                    (dest_row_size * (y + offsetY as usize)) + ((x + offsetX as usize) * pixel_size);
+
+                let dest_end = dest_begin + pixel_size;
+                //Copy/paste pixel data to target image.
+                let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
+                dest_row_slice.copy_from_slice(&rgba_array[0..pixel_size]);
+            }
         }
 
         wm.wgpu_state.queue.write_texture(

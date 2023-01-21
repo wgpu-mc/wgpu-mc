@@ -79,7 +79,7 @@ public class WgpuNative {
 
     public static native void texImage2D(int textureId, int target, int level, int internalFormat, int width, int height, int border, int format, int _type, long pixels_ptr);
 
-    public static native void subImage2D(int texId, int target, int level, int offsetX, int offsetY, int width, int height, int format, int _type, long pixels, int unpack_pixel_skip_rows, int unpack_skip_pixels, int unpack_skip_rows, int unpack_alignment);
+    public static native void subImage2D(int texId, int target, int level, int offsetX, int offsetY, int width, int height, int format, int _type, int[] pixels, int unpack_pixel_skip_rows, int unpack_skip_pixels, int unpack_skip_rows, int unpack_alignment);
 
     public static native void submitCommands();
 
