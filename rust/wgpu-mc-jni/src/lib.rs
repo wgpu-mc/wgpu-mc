@@ -730,6 +730,9 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
 pub fn debugBake(env: JNIEnv, _class: JClass) {
     let positions = {
         let renderer = RENDERER.get().unwrap();
+
+        *renderer.mc.chunks.loaded_chunks.write() = HashMap::new();
+
         let chunks = renderer.mc.chunks.loaded_chunks.read();
 
         chunks.iter().map(|(pos, _)| *pos).collect::<Vec<_>>()
@@ -739,8 +742,6 @@ pub fn debugBake(env: JNIEnv, _class: JClass) {
     for pos in positions {
         bake_chunk(pos[0], pos[1]);
     }
-
-    // let wm = RENDERER.get().unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

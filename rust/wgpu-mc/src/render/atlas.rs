@@ -9,7 +9,9 @@ use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
 use image::imageops::overlay;
 use image::{GenericImageView, ImageBuffer, Rgba};
+use indexmap::IndexMap;
 use minecraft_assets::schemas;
+use minecraft_assets::schemas::texture::{Frame, Texture, TextureAnimation};
 use parking_lot::RwLock;
 use wgpu::Extent3d;
 
@@ -61,13 +63,11 @@ pub struct Atlas {
     ///The atlas image buffer itself. This is what gets uploaded to the GPU
     pub image: RwLock<ImageBuffer<Rgba<u8>, Vec<u8>>>,
     ///The mapping of image [ResourcePath]s to UV coordinates
-    pub uv_map: RwLock<HashMap<ResourcePath, UV>>,
+    pub uv_map: RwLock<HashMap<String, UV>>,
     ///The representation of the [Atlas]'s image buffer on the GPU, which can be bound to a draw call
     pub bindable_texture: Arc<ArcSwap<BindableTexture>>,
     ///Not every [Atlas] is used for block textures, but the ones that are store the information for each animated texture here
-    pub animated_textures: RwLock<Vec<schemas::texture::TextureAnimation>>,
-    ///
-    pub animated_texture_offsets: RwLock<HashMap<ResourcePath, u32>>,
+    pub animated_textures: RwLock<IndexMap<String, AnimatedTexture>>,
     pub resizes: bool,
     size: RwLock<u32>,
     gpu_size: RwLock<u32>,
@@ -107,8 +107,7 @@ impl Atlas {
             image: RwLock::new(ImageBuffer::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
             uv_map: Default::default(),
             bindable_texture: Arc::new(ArcSwap::new(Arc::new(bindable_texture))),
-            animated_textures: RwLock::new(Vec::new()),
-            animated_texture_offsets: Default::default(),
+            animated_textures: RwLock::new(IndexMap::new()),
             size: RwLock::new(ATLAS_DIMENSIONS),
             gpu_size: RwLock::new(ATLAS_DIMENSIONS),
             resizes,
@@ -128,7 +127,6 @@ impl Atlas {
         let mut map = self.uv_map.write();
 
         let mut animated_textures = self.animated_textures.write();
-        // let mut animated_texture_offsets = self.animated_texture_offsets.write();
 
         images.into_iter().for_each(|(name, slice)| {
             self.allocate_one(
@@ -147,9 +145,9 @@ impl Atlas {
     fn allocate_one(
         &self,
         image_buffer: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-        map: &mut HashMap<ResourcePath, UV>,
+        map: &mut HashMap<String, UV>,
         allocator: &mut AtlasAllocator,
-        animated_textures: &mut Vec<schemas::texture::TextureAnimation>,
+        animated_textures: &mut IndexMap<String, AnimatedTexture>,
         path: &ResourcePath,
         image_bytes: &[u8],
         resource_provider: &dyn ResourceProvider,
@@ -200,20 +198,22 @@ impl Atlas {
             allocation.rectangle.min.y as i64,
         );
 
-        let mcmeta_path = path.append(".mcmeta");
+        let mcmeta_path = path.prepend("textures/").append(".png.mcmeta");
 
         let mcmeta = resource_provider
             .get_string(&mcmeta_path)
-            .and_then(|string| serde_json::from_str::<schemas::texture::Texture>(&string).ok());
+            .and_then(|string| serde_json::from_str::<Texture>(&string).ok());
 
-        if let Some(texture) = mcmeta {
-            if let Some(animation) = texture.animation {
-                animated_textures.push(animation)
-            }
+        if let Some(Texture { animation: Some(animation) }) = mcmeta {
+            animated_textures.insert(path.0.clone(), AnimatedTexture::new(
+                image.width(),
+                image.height(),
+                animation
+            ));
         }
 
         map.insert(
-            path.clone(),
+            path.0.clone(),
             (
                 (
                     allocation.rectangle.min.x as f32,
@@ -283,9 +283,19 @@ impl Atlas {
         let size = *self.size.read();
 
         self.allocator.write().clear();
-        self.animated_texture_offsets.write().clear();
         self.animated_textures.write().clear();
         *self.image.write() = ImageBuffer::new(size, size);
+    }
+
+    pub fn generate_animation_offset_buffer(&self, tick: u32) -> Vec<AnimatedUV> {
+        let mut out = vec![AnimatedUV::zeroed()];
+
+        out.extend(
+            self.animated_textures.read().iter()
+                .map(|(_, texture)| texture.update(tick))
+        );
+
+        out
     }
 }
 
@@ -318,55 +328,59 @@ impl Default for TextureManager {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Zeroable, Pod)]
-struct AnimatedUV {
+#[derive(Debug, Copy, Clone, Zeroable, Pod)]
+pub struct AnimatedUV {
     pub uv_1: [f32; 2],
     pub uv_2: [f32; 2],
     pub blend: f32,
     pub padding: f32,
 }
 
-// impl AnimatedTexture {
-//     pub fn new(width: u32, height: u32, real_width: f32, animation: AnimationData) -> Self {
-//         Self {
-//             width,
-//             height,
-//             frame_size: width,
-//             real_width,
-//             real_frame_size: real_width,
-//             animation,
-//             frame_count: height / width,
-//             subframe: 0,
-//         }
-//     }
+#[derive(Clone, Debug)]
+pub struct AnimatedTexture {
+    pub datapack: TextureAnimation,
+    pub texture_width: f32,
+    pub texture_height: f32,
+    pub frame_count: u32
+}
 
-//     pub fn get_frame_size(&self) -> u32 {
-//         self.frame_size
-//     }
+impl AnimatedTexture {
+    pub fn new(texture_width: u32, texture_height: u32, datapack: TextureAnimation) -> Self {
+        Self {
+            datapack,
+            texture_width: texture_width as f32,
+            texture_height: texture_height as f32,
+            frame_count: texture_height / texture_width,
+        }
+    }
 
-//     pub fn update(&self, subframe: u32) -> [f32; 5] {
+    pub fn update(&self, subframe: u32) -> AnimatedUV {
+        //Due to padding in the buffer, some of these elements are always left as 0.0
+        let mut uv = AnimatedUV::zeroed();
+        let mut current_frame = (subframe / self.datapack.frametime as u32) % self.frame_count;
 
-//         //Due to padding in the buffer, some of these elements are always left as 0.0
-//         let mut out = [0.0; 5];
-//         let mut current_frame = (subframe / self.animation.frame_time) % self.frame_count;
+        //Use custom frame order if present
+        if let Some(frames) = &self.datapack.frames {
+            current_frame = match frames[current_frame as usize] {
+                Frame::Index(index) | Frame::Override { index, .. } => index
+            };
+        }
 
-//         if self.animation.frames.is_some() { //if custom frame order is present translate to that
-//             current_frame = self.animation.frames.as_ref().unwrap()[current_frame as usize];
-//         }
+        uv.uv_1[1] = self.texture_width * (current_frame as f32);
 
-//         out[1] = self.real_frame_size * (current_frame as f32);
+        if self.datapack.interpolate {
+            let mut next_frame = ((subframe / self.datapack.frametime as u32) + 1) % self.frame_count;
 
-//         if self.animation.interpolate {
-//             let mut next_frame = ((subframe / self.animation.frame_time) + 1) % self.frame_count;
+            if let Some(frames) = &self.datapack.frames {
+                next_frame = match frames[next_frame as usize] {
+                    Frame::Index(index) | Frame::Override { index, .. } => index
+                };
+            }
 
-//             if self.animation.frames.is_some() { //if custom frame order is present translate to that
-//                 next_frame = self.animation.frames.as_ref().unwrap()[next_frame as usize];
-//             }
+            uv.uv_2[1] = self.texture_width * (next_frame as f32);
+            uv.blend = ((subframe % self.datapack.frametime as u32) as f32) / (self.datapack.frametime as f32);
+        }
 
-//             out[3] = self.real_frame_size * (next_frame as f32);
-//             out[4] = ((subframe % self.animation.frame_time) as f32) / (self.animation.frame_time as f32);
-//         }
-
-//         out
-//     }
-// }
+        uv
+    }
+}

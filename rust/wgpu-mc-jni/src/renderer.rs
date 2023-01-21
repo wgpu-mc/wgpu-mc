@@ -5,10 +5,11 @@ use std::io::Cursor;
 use std::mem::size_of;
 use std::{slice, thread};
 use std::{sync::Arc, time::Instant};
+use arc_swap::ArcSwap;
 
 use futures::executor::block_on;
 use jni::objects::{JClass, ReleaseMode};
-use jni::sys::{jfloatArray, jint};
+use jni::sys::{jfloatArray, jint, jlong};
 use jni::{
     objects::{JString, JValue},
     JNIEnv,
@@ -32,7 +33,7 @@ use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
+use wgpu_mc::wgpu::{BufferUsages, Maintain, MapMode, TextureFormat};
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex};
@@ -46,6 +47,10 @@ pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
         projection: [[0.0; 4]; 4],
         view: [[0.0; 4]; 4],
     })
+});
+
+pub static FRAME_TIMES: Lazy<ArcSwap<u64>> = Lazy::new(|| {
+    ArcSwap::new(Arc::new(0))
 });
 
 pub struct Matrices {
@@ -79,6 +84,11 @@ impl RenderLayer for TerrainLayer {
     fn name(&self) -> &str {
         "all"
     }
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn getFrameTime(env: JNIEnv, _class: JClass) -> jlong {
+    **FRAME_TIMES.load() as jlong
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -308,6 +318,28 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             wm.render(&shader_graph, &view, &surface_state.1).unwrap();
 
             texture.present();
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                let results = shader_graph.query_results.as_ref().unwrap().clone();
+                // let results_clone = results.clone();
+
+                let slice = results.slice(..);
+
+                slice.map_async(MapMode::Read, |result| {
+                    result.unwrap();
+                });
+
+                wm.wgpu_state.device.poll(Maintain::Wait);
+
+                {
+                    let data = &results.slice(..).get_mapped_range()[..(shader_graph.pack.pipelines.pipelines.len() * 8)];
+                    let timestamps = bytemuck::cast_slice::<_, u64>(data);
+                    FRAME_TIMES.store(Arc::new(timestamps.last().unwrap() - timestamps.first().unwrap()))
+                }
+
+                results.unmap();
+            }
         }
     });
 
@@ -368,6 +400,8 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                             .0
                             .send(RenderMessage::CursorMove(position.x, position.y))
                             .unwrap();
+
+                        // window.set_cursor_position();
                     }
                     WindowEvent::ReceivedCharacter(c) => {
                         CHANNELS

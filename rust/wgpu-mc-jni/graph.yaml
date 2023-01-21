@@ -21,3 +21,4 @@ pipelines:
     uniforms:
       0: wm_electrum_mat4
       1: wm_electrum_gl_texture
+      2: wm_ssbo_texture_animations

@@ -124,10 +124,16 @@ impl WmRenderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
+                    #[cfg(not(target_os = "macos"))]
                     features: wgpu::Features::default()
                         | wgpu::Features::DEPTH_CLIP_CONTROL
                         | wgpu::Features::PUSH_CONSTANTS
+                        | wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES
                         | wgpu::Features::TIMESTAMP_QUERY,
+                    #[cfg(target_os = "macos")]
+                    features: wgpu::Features::default()
+                        | wgpu::Features::DEPTH_CLIP_CONTROL
+                        | wgpu::Features::PUSH_CONSTANTS,
                     limits,
                 },
                 None, // Trace path
@@ -265,53 +271,6 @@ impl WmRenderer {
         });
     }
 
-    pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
-        let d = data.as_slice();
-
-        let buf = self.mc.animated_block_buffer.borrow().load_full();
-
-        if buf.is_none() {
-            let animated_block_buffer = self.wgpu_state.device.create_buffer(&BufferDescriptor {
-                label: None,
-                size: (d.len() * 8) as wgpu::BufferAddress,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            let animated_block_bind_group =
-                self.wgpu_state
-                    .device
-                    .create_bind_group(&BindGroupDescriptor {
-                        label: None,
-                        layout: self
-                            .pipelines
-                            .load()
-                            .bind_group_layouts
-                            .read()
-                            .get("ssbo")
-                            .unwrap(),
-                        entries: &[BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::Buffer(
-                                animated_block_buffer.as_entire_buffer_binding(),
-                            ),
-                        }],
-                    });
-
-            self.mc
-                .animated_block_buffer
-                .store(Arc::new(Some(animated_block_buffer)));
-            self.mc
-                .animated_block_bind_group
-                .store(Arc::new(Some(animated_block_bind_group)));
-        }
-
-        self.wgpu_state.queue.write_buffer(
-            (**self.mc.animated_block_buffer.load()).as_ref().unwrap(),
-            0,
-            bytemuck::cast_slice(d),
-        );
-    }
-
     pub fn render(
         &self,
         graph: &ShaderGraph,
@@ -325,7 +284,7 @@ impl WmRenderer {
 
     pub fn get_backend_description(&self) -> String {
         format!(
-            "wgpu 0.14 ({:?})",
+            "wgpu 0.14.2 ({:?})",
             self.wgpu_state.adapter.get_info().backend
         )
     }

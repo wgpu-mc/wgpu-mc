@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
@@ -17,6 +18,12 @@ impl ResourcePath {
             a,
             split.next().unwrap()
         ))
+    }
+}
+
+impl Borrow<String> for ResourcePath {
+    fn borrow(&self) -> &String {
+        &self.0
     }
 }
 

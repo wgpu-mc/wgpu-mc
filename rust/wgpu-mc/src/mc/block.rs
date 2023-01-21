@@ -144,17 +144,22 @@ fn resolve_model(
 
 fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Option<UV> {
     let atlas_map = block_atlas.uv_map.read();
+    let animated_textures = block_atlas.animated_textures.read();
 
-    let atlas_uv = atlas_map.get(&(&face.texture.0).into())?;
+    let mut atlas_uv = *atlas_map.get(&face.texture.0)?;
+
+    if let Some(animated) = animated_textures.get(&face.texture.0) {
+        atlas_uv.1 = (atlas_uv.0.0 + animated.texture_width, atlas_uv.0.1 + animated.texture_width);
+    }
 
     const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
     let middle_x = atlas_uv.0 .0 + (atlas_uv.1 .0 / 2.0);
     let middle_y = atlas_uv.0 .1 + (atlas_uv.1 .1 / 2.0);
 
-    // let mat = Matrix3::from_translation([middle_x, middle_y].into())
+    // let mat = Matrix3::from_translation([-middle_x, -middle_y].into())
     //     * Matrix3::from_angle_x(Deg((90 * face.rotation) as f32))
-    //     * Matrix3::from_translation([-middle_x, -middle_y].into());
+    //     * Matrix3::from_translation([middle_x, middle_y].into());
 
     let mat = Matrix3::identity();
 
@@ -210,10 +215,9 @@ impl ModelMesh {
 
                     let unallocated_textures: Vec<ResourcePath> = textures.iter()
                         .filter_map(|(_, texture)| {
-                            let texture_id: ResourcePath = (&texture.0).into();
-                            if !uv_map.contains_key(&texture_id) {
+                            if !uv_map.contains_key(&texture.0) {
                                 //Block UV atlas doesn't contain a texture, so we add it
-                                Some(texture_id)
+                                Some((&texture.0).into())
                             } else {
                                 None
                             }
@@ -252,6 +256,8 @@ impl ModelMesh {
                     }
                 };
 
+                let texture_offsets = block_atlas.animated_textures.read();
+
                 let mut results = model
                     .elements
                     .iter()
@@ -267,9 +273,10 @@ impl ModelMesh {
                                 //The default UV for this texture
                                 uv,
                                 //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
+                                texture_offsets
+                                    .get_full(&tex.texture.0)
+                                    .map(|(index, ..)| index)
+                                    .unwrap_or(0) as u32
                             ))
                         );
 
@@ -281,9 +288,10 @@ impl ModelMesh {
                                 //The default UV for this texture
                                 uv,
                                 //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
+                                texture_offsets
+                                    .get_full(&tex.texture.0)
+                                    .map(|(index, ..)| index)
+                                    .unwrap_or(0) as u32
                             ))
                         );
 
@@ -295,9 +303,10 @@ impl ModelMesh {
                                 //The default UV for this texture
                                 uv,
                                 //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
+                                texture_offsets
+                                    .get_full(&tex.texture.0)
+                                    .map(|(index, ..)| index)
+                                    .unwrap_or(0) as u32
                             ))
                         );
 
@@ -309,9 +318,10 @@ impl ModelMesh {
                                 //The default UV for this texture
                                 uv,
                                 //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
+                                texture_offsets
+                                    .get_full(&tex.texture.0)
+                                    .map(|(index, ..)| index)
+                                    .unwrap_or(0) as u32
                             ))
                         );
 
@@ -323,9 +333,10 @@ impl ModelMesh {
                                 //The default UV for this texture
                                 uv,
                                 //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
+                                texture_offsets
+                                    .get_full(&tex.texture.0)
+                                    .map(|(index, ..)| index)
+                                    .unwrap_or(0) as u32
                             ))
                         );
 
@@ -337,9 +348,10 @@ impl ModelMesh {
                                 //The default UV for this texture
                                 uv,
                                 //If this texture has an animation, get the offset, otherwise default to 0
-                                *block_atlas.animated_texture_offsets.read()
-                                    .get(&(&tex.texture.0).into())
-                                    .unwrap_or(&0)
+                                texture_offsets
+                                    .get_full(&tex.texture.0)
+                                    .map(|(index, ..)| index)
+                                    .unwrap_or(0) as u32
                             ))
                         );
 

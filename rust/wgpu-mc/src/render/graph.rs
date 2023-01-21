@@ -20,13 +20,7 @@ use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState,
-    LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
-    VertexBufferLayout, VertexState,
-};
+use wgpu::{BlendState, BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState, LoadOp, Operations, PipelineLayoutDescriptor, PipelineStatisticsTypes, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
 use crate::wgpu::QuerySetDescriptor;
 
 pub trait GeometryCallback: Send + Sync {
@@ -113,7 +107,7 @@ pub enum TextureResource {
 #[derive(Debug)]
 pub enum ResourceInternal {
     Texture(TextureResource, bool),
-    Blob(BindableBuffer),
+    Blob(Arc<BindableBuffer>),
     Mat3(
         Mat3ValueOrMult,
         Arc<RwLock<Matrix3<f32>>>,
@@ -152,8 +146,8 @@ pub struct ShaderGraph {
     pub pipelines: HashMap<String, RenderPipeline>,
     pub resources: HashMap<String, CustomResource>,
     pub geometry: HashMap<String, Box<dyn GeometryCallback>>,
+    pub query_results: Option<Arc<wgpu::Buffer>>,
     quad: Option<wgpu::Buffer>,
-    query_results: Option<wgpu::Buffer>
 }
 
 impl ShaderGraph {
@@ -180,7 +174,7 @@ impl ShaderGraph {
     ) {
         let mut resources = HashMap::new();
 
-        self.query_results = Some(
+        self.query_results = Some(Arc::new(
             wm.wgpu_state
                 .device
                 .create_buffer_init(&BufferInitDescriptor {
@@ -188,7 +182,7 @@ impl ShaderGraph {
                     contents: &[0; 1024],
                     usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
                 })
-        );
+        ));
 
         self.quad = Some(
             wm.wgpu_state
@@ -220,6 +214,21 @@ impl ShaderGraph {
                     false,
                 )),
             },
+        );
+
+        {
+            //Make sure the buffer exists
+            wm.mc.tick_animated_textures(&wm, 0);
+        }
+
+        let animations = (&*wm.mc.animated_block_uv_offsets.lock()).as_ref().unwrap().clone();
+
+        resources.insert(
+            "wm_ssbo_texture_animations".into(),
+            CustomResource {
+                update: None,
+                data: Arc::new(ResourceInternal::Blob(animations)),
+            }
         );
 
         for (resource_id, definition) in &self.pack.resources.resources {
@@ -661,12 +670,14 @@ impl ShaderGraph {
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
 
+        #[cfg(not(target_os = "macos"))]
         let query_set = wm.wgpu_state.device.create_query_set(&QuerySetDescriptor {
             label: None,
             ty: wgpu::QueryType::Timestamp,
             count: self.pack.pipelines.pipelines.len() as u32
         });
 
+        #[cfg(not(target_os = "macos"))]
         let mut query_index = 0;
 
         for (name, config) in &self.pack.pipelines.pipelines {
@@ -740,8 +751,17 @@ impl ShaderGraph {
                 }),
             });
 
-            render_pass.begin_pipeline_statistics_query(&query_set, query_index);
-            query_index += 1;
+            let mut first_query = false;
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                if query_index == 0 {
+                    first_query = true;
+                    render_pass.write_timestamp(&query_set, query_index);
+                    query_index += 1;
+                }
+            }
+
             render_pass.set_pipeline(self.pipelines.get(name).unwrap());
 
             match &config.geometry[..] {
@@ -820,17 +840,22 @@ impl ShaderGraph {
                 }
             };
 
-            render_pass.end_pipeline_statistics_query();
+            #[cfg(not(target_os = "macos"))]
+            {
+                if !first_query && query_index > 0 {
+                    render_pass.write_timestamp(&query_set, query_index);
+                    query_index += 1;
+                }
+            }
         }
 
+        #[cfg(not(target_os = "macos"))]
         encoder.resolve_query_set(
             &query_set,
             0..self.pack.pipelines.pipelines.len() as u32,
             self.query_results.as_ref().unwrap(),
             0
         );
-
-        wm.
 
         wm.wgpu_state.queue.submit([encoder.finish()]);
     }
@@ -850,7 +875,7 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
                 }
                 TextureResource::Bindable(bindable) => &arena.alloc(bindable.load()).bind_group,
             },
-            ResourceInternal::Blob(BindableBuffer { bind_group, .. }) => bind_group,
+            ResourceInternal::Blob(bindable_buffer) => &bindable_buffer.bind_group,
             ResourceInternal::Mat3(_, _, bindable) | ResourceInternal::Mat4(_, _, bindable) => {
                 &bindable.bind_group
             }

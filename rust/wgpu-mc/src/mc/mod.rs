@@ -3,14 +3,16 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
+use wgpu::BufferUsages;
 
 use crate::mc::chunk::ChunkManager;
 use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
-use crate::WmRenderer;
+use crate::util::BindableBuffer;
+use crate::{WgpuState, WmRenderer};
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -152,8 +154,7 @@ pub struct MinecraftState {
 
     pub texture_manager: TextureManager,
 
-    pub animated_block_buffer: ArcSwap<Option<wgpu::Buffer>>,
-    pub animated_block_bind_group: ArcSwap<Option<wgpu::BindGroup>>,
+    pub animated_block_uv_offsets: Mutex<Option<Arc<BindableBuffer>>>,
 }
 
 impl MinecraftState {
@@ -171,9 +172,7 @@ impl MinecraftState {
             }),
 
             resource_provider,
-
-            animated_block_buffer: ArcSwap::new(Arc::new(None)),
-            animated_block_bind_group: ArcSwap::new(Arc::new(None)),
+            animated_block_uv_offsets: Mutex::new(None),
         }
     }
 
@@ -245,5 +244,27 @@ impl MinecraftState {
             });
 
         block_atlas.upload(wm);
+    }
+
+    pub fn tick_animated_textures(&self, wm: &WmRenderer, tick: u32) {
+        let atlases = self.texture_manager.atlases.load();
+        let atlas_swap = atlases.get(BLOCK_ATLAS).unwrap();
+        let atlas = atlas_swap.load();
+        let offsets = atlas.generate_animation_offset_buffer(tick);
+
+        let mut block_offsets = self.animated_block_uv_offsets.lock();
+
+        let buffer = match &*block_offsets {
+            None => {
+                let buffer = Arc::new(BindableBuffer::new(wm, bytemuck::cast_slice(&offsets), BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo"));
+                *block_offsets = Some(buffer.clone());
+                buffer
+            }
+            Some(buffer) => {
+                buffer.clone()
+            }
+        };
+
+        wm.wgpu_state.queue.write_buffer(&buffer.buffer, 0, bytemuck::cast_slice(&offsets));
     }
 }

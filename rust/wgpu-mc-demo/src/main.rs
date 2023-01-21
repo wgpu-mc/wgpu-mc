@@ -19,7 +19,7 @@ use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::RenderLayer;
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
-use wgpu_mc::render::pipeline::Vertex;
+use wgpu_mc::render::pipeline::{BLOCK_ATLAS, Vertex};
 use wgpu_mc::render::shaderpack::{Mat3, Mat3ValueOrMult, Mat4, Mat4ValueOrMult};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -362,6 +362,10 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
             }
             Event::RedrawRequested(_) => {
                 let frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
+
+                let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+
+                wm.mc.tick_animated_textures(&wm, (time / 50) as u32);
 
                 camera.position += camera.get_direction() * forward * frame_time * 40.0;
 
