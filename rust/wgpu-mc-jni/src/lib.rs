@@ -1,6 +1,7 @@
 #![feature(once_cell)]
 #![feature(array_zip)]
 #![feature(core_panic)]
+#![feature(cursor_remaining)]
 
 use core::slice;
 use std::collections::HashMap;
@@ -60,6 +61,7 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
+mod lighting;
 
 #[allow(dead_code)]
 enum RenderMessage {
