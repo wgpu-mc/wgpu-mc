@@ -226,11 +226,13 @@ impl ModelMesh {
                         .map(|path| (path, resource_provider.get_bytes(&path.prepend("textures/").append(".png")).unwrap()))
                         .collect();
 
-                    block_atlas.allocate(
-                        unallocated_textures.iter()
-                            .map(|(path, data)| (*path, data)),
-                        resource_provider,
-                    );
+                    if !unallocated_textures.is_empty() {
+                        block_atlas.allocate(
+                            unallocated_textures.iter()
+                                .map(|(path, data)| (*path, data)),
+                            resource_provider,
+                        );
+                    }
                 };
 
                 let matrix =
