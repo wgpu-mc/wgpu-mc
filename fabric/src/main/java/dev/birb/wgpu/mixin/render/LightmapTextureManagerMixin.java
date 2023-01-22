@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LightmapTextureManager.class)
 public class LightmapTextureManagerMixin {
-    @Inject(at = @At("TAIL"), method = "<init>")
+    @Inject(at = @At("RETURN"), method = "<init>")
     void constructor(GameRenderer renderer, MinecraftClient client, CallbackInfo ci) {
         LightmapTextureManager thiz = (LightmapTextureManager) (Object) this;
 

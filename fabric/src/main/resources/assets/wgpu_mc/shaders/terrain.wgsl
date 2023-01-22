@@ -33,7 +33,7 @@ var<uniform> proj: CameraUniform;
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
-    @location(1) light_coords: vec2<i32>,
+    @location(1) light_coords: vec2<u32>,
     @location(2) normals: vec4<f32>,
     @location(3) blend: f32,
     @location(4) world_pos: vec3<f32>,
@@ -44,7 +44,7 @@ struct VertexResult {
 fn vert(
     @location(0) pos_in: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
-    @location(2) light_coords: vec2<i32>,
+    @location(2) light_coords: vec2<u32>,
     @location(3) normals: vec4<f32>,
     @location(4) tangent: vec4<f32>,
     @location(5) uv_offset: u32
@@ -82,8 +82,8 @@ var t_lightmap_sampler: sampler;
 
 //     return textureSample(t_lightmap, t_lightmap_sampler, v);
 // }
-fn minecraft_sample_lighting(uv: vec2<i32> ) -> f32{
-    return f32(uv.x + uv.y / 32);
+fn minecraft_sample_lighting(uv: vec2<u32> ) -> f32 {
+    return f32((uv.x + uv.y) / 32u) / 32.0;
 }
 @fragment
 fn frag(
@@ -97,6 +97,6 @@ fn frag(
 
     // let col = mix(col1, col2, in.blend);
 
-    return light * col1;
+    return vec4<f32>(light + 0.1, light + 0.1, light + 0.1, 1.0) * col1;
     // return col1;
 }

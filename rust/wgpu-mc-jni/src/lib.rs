@@ -189,25 +189,10 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
     }
 
     fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
-        let chunk_x = (x >> 4) - self.pos[0];
-        let chunk_z = (z >> 4) - self.pos[1];
-
-        let chunk = match [chunk_x, chunk_z] {
-            [0, 0] => Some(self.center),
-            [0, -1] => self.north,
-            [0, 1] => self.south,
-            [1, 0] => self.east,
-            [-1, 0] => self.west,
-            _ => return LightLevel::from_sky_and_block(0, 0),
-        };
-
-        let chunk = match chunk {
-            None => return LightLevel::from_sky_and_block(0, 0),
-            Some(chunk) => chunk
-        };
+        let chunk = self.center;
 
         let light_data = match &chunk.light_data {
-            None => return LightLevel::from_sky_and_block(0, 0),
+            None => return LightLevel::from_sky_and_block(15, 15),
             Some(light_data) => light_data,
         };
 
@@ -456,6 +441,9 @@ pub fn bake_chunk(x: i32, z: i32) {
             let chunks = CHUNKS.read();
 
             let center = chunks.get(&[x, z]).unwrap();
+
+            println!("chunk @ {x},{z} has light: {}", center.light_data.is_some());
+
             let north = chunks.get(&[x, z - 1]);
             let south = chunks.get(&[x, z + 1]);
             let west = chunks.get(&[x - 1, z]);

@@ -64,9 +64,6 @@ impl RenderLayer for TerrainLayer {
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
         |vert, x, y, z, light| {
-            // let mul_color = (light.get_block_level() + light.get_sky_level()) as f32 / 32.0;
-            dbg!(light);
-
             Vertex {
                 position: [
                     vert.position[0] + x,

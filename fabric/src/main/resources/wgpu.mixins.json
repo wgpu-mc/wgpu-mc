@@ -27,6 +27,7 @@
     "render.GameRendererCameraMixin",
     "render.GLXMixin",
     "render.InGameHudMixin",
+    "render.LightmapTextureManagerMixin",
     "render.MinecraftClientRenderMixin",
     "render.RenderSystemMixin",
     "render.WindowFramebufferMixin",

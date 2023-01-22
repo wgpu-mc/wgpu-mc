@@ -1,4 +1,5 @@
-use byteorder::{BigEndian, NetworkEndian, ReadBytesExt};
+use std::fmt::{Debug, Formatter};
+use byteorder::{BigEndian, LittleEndian, NetworkEndian, ReadBytesExt};
 use futures::lock::Mutex;
 use jni::objects::{JClass, ReleaseMode};
 use jni::sys::{jboolean, jbyteArray, jint, jlong, jlongArray};
@@ -17,9 +18,19 @@ use crate::{ChunkHolder, CHUNKS};
 
 pub static LIGHT_DATA: Lazy<RwLock<Slab<LightData>>> = Lazy::new(|| RwLock::new(Slab::new()));
 pub static LIGHTMAP_GLID: Lazy<std::sync::Mutex<u32>> = Lazy::new(||std::sync::Mutex::new(0));
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct BitSet {
     longs: Vec<i64>,
+}
+
+impl Debug for BitSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BitSet {{ [");
+        self.longs.iter().for_each(|long| {
+            write!(f, "{long:b}").unwrap();
+        });
+        write!(f, "]")
+    }
 }
 
 impl BitSet {
@@ -35,7 +46,11 @@ impl BitSet {
     }
 
     pub fn is_set(&self, bit_index: usize) -> bool {
-        (bit_index / 64 < self.longs.len()) && (self.longs[bit_index / 64] & (1i64 << (bit_index % 64))) != 0
+        ((bit_index / 64) < self.longs.len()) && (self.longs[bit_index / 64] & (1i64 << (bit_index % 64))) != 0
+    }
+
+    pub fn count_bits(&self) -> u32 {
+        self.longs.iter().map(|long| long.count_ones()).sum()
     }
 
 }
@@ -66,6 +81,9 @@ pub struct DeserializedLightData {
 impl DeserializedLightData {
 
     pub fn new(light_data: LightData) -> Self {
+        assert_eq!(light_data.block_nibbles.len(), light_data.inited_block.count_bits() as usize);
+        assert_eq!(light_data.sky_nibbles.len(), light_data.inited_sky.count_bits() as usize);
+
         let mut sky_light = [None; 24];
         let mut block_light = [None; 24];
 
@@ -75,8 +93,10 @@ impl DeserializedLightData {
         for offset in 0..CHUNK_SECTIONS_PER {
             let inited_sky = light_data.inited_sky.is_set(offset);
             let inited_block = light_data.inited_block.is_set(offset);
-            // let empty_sky = light_data.uninited_sky.is_set(offset);
-            // let empty_block = light_data.uninited_block.is_set(offset);
+            let empty_sky = light_data.uninited_sky.is_set(offset);
+            let empty_block = light_data.uninited_block.is_set(offset);
+
+            assert!(!(inited_block && empty_block));
 
             if inited_sky {
                 sky_light[offset] = Some(light_data.sky_nibbles[sky_index]);
@@ -144,6 +164,7 @@ pub fn createAndDeserializeLightData(
     };
 
     let light_data = LightData::from_buffer(slice).unwrap();
+
     LIGHT_DATA.write().insert(light_data) as jlong
 }
 
@@ -156,9 +177,9 @@ pub fn bindLightData(
     z: jint
 ) {
     let mut chunks = CHUNKS.write();
-    println!("{}", data_offset);
 
     let light = Some(DeserializedLightData::new(LIGHT_DATA.write().remove(data_offset as usize)));
+    println!("binding light to chunk @ {x},{z}");
 
     match chunks.get_mut(&[x, z]) {
         None => { chunks.insert([x, z], ChunkHolder {

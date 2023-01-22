@@ -34,7 +34,7 @@ impl Vertex {
     const VAA: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
         0 => Float32x3,
         1 => Float32x2,
-        2 => Sint32x2,
+        2 => Uint32x2,
         3 => Float32x4,
         4 => Float32x4,
         5 => Uint32,
