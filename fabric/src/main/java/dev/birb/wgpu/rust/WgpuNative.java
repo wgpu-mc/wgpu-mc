@@ -188,4 +188,6 @@ public class WgpuNative {
 
     public static native void bindLightData(long lightData, int x, int z);
 
+    public static native void setLightmapID(int id);
+
 }

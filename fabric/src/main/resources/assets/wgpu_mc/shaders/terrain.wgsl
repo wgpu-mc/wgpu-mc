@@ -33,21 +33,21 @@ var<uniform> proj: CameraUniform;
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
-    @location(1) tex_coords2: vec2<f32>,
-    @location(2) blend: f32,
-    @location(3) normal: vec3<f32>,
+    @location(1) light_coords: vec2<i32>,
+    @location(2) normals: vec4<f32>,
+    @location(3) blend: f32,
     @location(4) world_pos: vec3<f32>,
-    @location(5) color: vec4<f32>
-//    @location(4) screen_pos: vec4<f32>
+    // @location(4) color: vec4<f32>
 };
 
 @vertex
 fn vert(
     @location(0) pos_in: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
-    @location(2) normal: vec3<f32>,
-    @location(4) color: vec4<f32>,
-    @location(6) uv_offset: u32
+    @location(2) light_coords: vec2<i32>,
+    @location(3) normals: vec4<f32>,
+    @location(4) tangent: vec4<f32>,
+    @location(5) uv_offset: u32
 ) -> VertexResult {
     // var uv = uv_offsets.uvs[uv_offset];
 
@@ -58,10 +58,10 @@ fn vert(
     vr.world_pos = world_pos;
     vr.pos = proj.view_proj * vec4<f32>(world_pos, 1.0);
     vr.tex_coords = tex_coords;
-    vr.tex_coords2 = tex_coords;
+    vr.light_coords = light_coords;
     vr.blend = 1.0;
-    vr.normal = normal;
-    vr.color = color;
+    // vr.normal = normal;
+    // vr.color = color;
 
     return vr;
 }
@@ -71,15 +71,32 @@ var t_texture: texture_2d<f32>;
 
 @group(1) @binding(1)
 var t_sampler: sampler;
+@group(2) @binding(0)
+var t_lightmap: texture_2d<f32>;
+@group(2) @binding(1)
+var t_lightmap_sampler: sampler;
 
+// fn minecraft_sample_lighting(uv: vec2<i32> ) -> vec4<f32> {
+//     let float_uv = vec2<f32>(uv);
+//     let v: vec2<f32> = clamp(float_uv / 256.0, vec2(0.5 / 16.0), vec2(15.5 / 16.0));
+
+//     return textureSample(t_lightmap, t_lightmap_sampler, v);
+// }
+fn minecraft_sample_lighting(uv: vec2<i32> ) -> f32{
+    return f32(uv.x + uv.y / 32);
+}
 @fragment
 fn frag(
     in: VertexResult
 ) -> @location(0) vec4<f32> {
     let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
-    let col2 = textureSample(t_texture, t_sampler, in.tex_coords2);
+    let light = minecraft_sample_lighting(in.light_coords);
+    // let light = textureSample(t_lightmap, t_sampler, in.light_coords);
+    
+    // let col2 = textureSample(t_texture, t_sampler, in.tex_coords2);
 
-    let col = mix(col1, col2, in.blend);
+    // let col = mix(col1, col2, in.blend);
 
-    return in.color * col1;
+    return light * col1;
+    // return col1;
 }

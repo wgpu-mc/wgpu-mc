@@ -1,3 +1,4 @@
+use arc_swap::{ArcSwap, ArcSwapAny};
 use byteorder::LittleEndian;
 use cgmath::{perspective, Deg, Matrix4, SquareMatrix, Vector3};
 use std::collections::HashMap;
@@ -35,7 +36,8 @@ use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
-use crate::gl::{ElectrumGeometry, ElectrumVertex};
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC};
+use crate::lighting::{LIGHT_DATA, LIGHTMAP_GLID};
 use crate::{
     entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
     CHANNELS, MC_STATE, RENDERER, WINDOW,
@@ -62,7 +64,8 @@ impl RenderLayer for TerrainLayer {
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
         |vert, x, y, z, light| {
-            let mul_color = (light.get_block_level() + light.get_sky_level()) as f32 / 32.0;
+            // let mul_color = (light.get_block_level() + light.get_sky_level()) as f32 / 32.0;
+            dbg!(light);
 
             Vertex {
                 position: [
@@ -71,9 +74,9 @@ impl RenderLayer for TerrainLayer {
                     vert.position[2] + z,
                 ],
                 tex_coords: vert.tex_coords,
-                lightmap_coords: [0.0, 0.0],
+                lightmap_coords: [light.get_block_level() as i32, light.get_sky_level() as i32],
                 normal: vert.normal,
-                color: [mul_color, mul_color, mul_color, 1.0],
+                // color: [mul_color, mul_color, mul_color, 1.0],
                 tangent: [0.0, 0.0, 0.0, 0.0],
                 uv_offset: vert.animation_uv_offset,
             }
@@ -225,6 +228,24 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             )),
         },
     );
+  
+    {
+        let tex_id = LIGHTMAP_GLID.lock().unwrap();
+        dbg!(&tex_id);
+        let textures_read = GL_ALLOC.read();
+        let lightmap = textures_read.get(&*tex_id).unwrap();
+        let bindable = lightmap.bindable_texture.as_ref().unwrap();
+        let asaa = ArcSwap::new(bindable.clone());
+        resources.insert(
+            "rename".into(),
+            CustomResource {
+                update: None,
+                data: Arc::new(ResourceInternal::Texture(wgpu_mc::render::graph::TextureResource::Bindable(asaa.into()), false)),
+            },
+        );
+        println!("Added resources");
+    }
+  
 
     let matrix = Matrix4::identity();
     let mat: Mat4 = matrix.into();

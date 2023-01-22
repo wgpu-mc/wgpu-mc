@@ -1,4 +1,5 @@
 use byteorder::{BigEndian, NetworkEndian, ReadBytesExt};
+use futures::lock::Mutex;
 use jni::objects::{JClass, ReleaseMode};
 use jni::sys::{jboolean, jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
@@ -15,7 +16,7 @@ use wgpu_mc::mc::chunk::CHUNK_SECTIONS_PER;
 use crate::{ChunkHolder, CHUNKS};
 
 pub static LIGHT_DATA: Lazy<RwLock<Slab<LightData>>> = Lazy::new(|| RwLock::new(Slab::new()));
-
+pub static LIGHTMAP_GLID: Lazy<std::sync::Mutex<u32>> = Lazy::new(||std::sync::Mutex::new(0));
 #[derive(Debug, Clone)]
 struct BitSet {
     longs: Vec<i64>,
@@ -166,4 +167,10 @@ pub fn bindLightData(
         }); },
         Some(holder) => holder.light_data = light
     };
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setLightmapID(env: JNIEnv, _class: JClass, gl_id: u32) {
+    *LIGHTMAP_GLID.try_lock().unwrap() = gl_id;
+    println!("SET LIGHTMAP ID");
 }

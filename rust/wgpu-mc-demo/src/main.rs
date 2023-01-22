@@ -160,16 +160,18 @@ impl RenderLayer for TerrainLayer {
     }
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
-        |vert, x, y, z, _| Vertex {
+        |vert, x, y, z, light| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,
                 vert.position[2] + z,
             ],
             tex_coords: vert.tex_coords,
-            lightmap_coords: [0.0, 0.0],
+            // lightmap_coords: [0.0, 0.0],
+            lightmap_coords: [light.get_block_level() as i32, light.get_sky_level() as i32],
+
             normal: vert.normal,
-            color: [1.0, 1.0, 1.0, 1.0],
+            // color: [1.0, 1.0, 1.0, 1.0],
             tangent: [0.0, 0.0, 0.0, 0.0],
             uv_offset: vert.animation_uv_offset,
         }

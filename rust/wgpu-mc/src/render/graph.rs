@@ -198,6 +198,10 @@ impl ShaderGraph {
             .unwrap()
             .load();
 
+            // let lightmap = wm.mc.texture_manager
+            // dbg!(lightmap);
+        self.
+            
         resources.insert(
             "wm_texture_atlas_blocks".into(),
             CustomResource {

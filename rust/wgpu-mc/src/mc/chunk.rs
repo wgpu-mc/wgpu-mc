@@ -30,7 +30,7 @@ pub struct ChunkSection {
     pub offset_y: usize,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct LightLevel {
     pub level: u8
 }
