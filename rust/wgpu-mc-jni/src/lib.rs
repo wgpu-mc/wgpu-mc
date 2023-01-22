@@ -419,7 +419,7 @@ pub fn bake_chunk(x: i32, z: i32) {
 
             let instant = Instant::now();
 
-            chunk.bake(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+            chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
         }
     });
 }

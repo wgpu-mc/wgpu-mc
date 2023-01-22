@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Deg, Matrix2, Matrix3, Matrix4, SquareMatrix, Vector2, Vector3, Vector4};
+use cgmath::{Deg, Matrix3, Matrix4, SquareMatrix, Vector3, Vector4};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
 use serde_derive::{Deserialize, Serialize};
@@ -10,13 +10,14 @@ use crate::texture::UV;
 
 use super::resource::ResourcePath;
 
+/// A block position: x, y, z
 pub type BlockPos = (i32, u16, i32);
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct BlockstateKey {
-    ///An index into [BlockManager]
+    /// An index into [BlockManager]
     pub block: u16,
-    ///Used to quickly figure out which [ModelMesh] a [Block] should return without having to hash strings
+    /// Used to quickly figure out which [ModelMesh] a [Block] should return without having to hash strings
     pub augment: u16,
 }
 
@@ -77,7 +78,7 @@ pub struct BlockModelFaces {
 #[derive(Debug)]
 ///Makes chunk mesh baking a bit faster
 pub enum CubeOrComplexMesh {
-    ///Known to be a simple cube. Only cubes are eligible for sides to be culled depending on the state if it's neighbours
+    ///Known to be a simple cube. Only cubes are eligible for sides to be culled depending on the state of it's neighbours
     Cube(Box<BlockModelFaces>),
     ///Something other than a simple cube, such as an anvil, slab, or enchanting table.
     Complex(Vec<BlockModelFaces>),
@@ -149,8 +150,8 @@ fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Opt
 
     const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
 
-    let middle_x = atlas_uv.0 .0 + (atlas_uv.1 .0 / 2.0);
-    let middle_y = atlas_uv.0 .1 + (atlas_uv.1 .1 / 2.0);
+    let _middle_x = atlas_uv.0 .0 + (atlas_uv.1 .0 / 2.0);
+    let _middle_y = atlas_uv.0 .1 + (atlas_uv.1 .1 / 2.0);
 
     // let mat = Matrix3::from_translation([middle_x, middle_y].into())
     //     * Matrix3::from_angle_x(Deg((90 * face.rotation) as f32))
@@ -163,10 +164,12 @@ fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Opt
 
     Some(((uv1.x, uv1.y), (uv2.x, uv2.y)))
 }
+
 pub struct RenderSettings {
     pub opaque: bool,
 }
 
+/// TODO: Use actual error handling library
 #[derive(Debug)]
 pub enum MeshBakeError {
     UnresolvedTextureReference(String),
@@ -174,7 +177,11 @@ pub enum MeshBakeError {
     JsonError(serde_json::Error),
 }
 
-///A block model which has been baked into a mesh and is ready for rendering
+/// A block model which has been baked into a mesh and is ready for rendering
+/// The bool is true when the blocks next to this block should be rendered,
+/// i.e. when this block does not fully obscure all six faces.
+/// NOTE: Currently, only the first bool in the Vec is actually
+/// important for the implementation.
 #[derive(Debug)]
 pub struct ModelMesh {
     pub models: Vec<(CubeOrComplexMesh, bool)>,

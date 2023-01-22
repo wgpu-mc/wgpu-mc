@@ -14,6 +14,7 @@ as terrain rendering and entity rendering are already in-place but could very we
 in the future.
 
 # Setup
+
 wgpu-mc, as you could have probably guessed, uses the [wgpu](https://github.com/gfx-rs/wgpu) crate
 for communicating with the GPU. Assuming you aren't running wgpu-mc headless (if you are, I assume
 you already know what you're doing), wgpu-mc can handle surface and device setup for you, as long
@@ -61,6 +62,8 @@ pub mod render;
 pub mod texture;
 pub mod util;
 
+/// Provides access to most of the wgpu structs relating directly to communicating/getting
+/// information about the gpu.
 pub struct WgpuState {
     pub surface: RwLock<(Option<wgpu::Surface>, SurfaceConfiguration)>,
     pub adapter: wgpu::Adapter,
@@ -69,8 +72,8 @@ pub struct WgpuState {
     pub size: Option<ArcSwap<WindowSize>>,
 }
 
-///The main wgpu-mc renderer struct. This mostly just contains wgpu state.
-///Resources pertaining to Minecraft go in `MinecraftState`
+/// The main wgpu-mc renderer struct. This mostly just contains wgpu state.
+/// Resources pertaining to Minecraft go in `MinecraftState`
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
@@ -90,7 +93,7 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-    ///This is a convenience method;
+    /// This is a convenience method;
     ///
     /// This takes in a raw window handle and returns a [WgpuState], which is then used to
     /// initialize a [WmRenderer].

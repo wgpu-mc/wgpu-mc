@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 
+/// Describes a minecraft resource, like "minecraft:stone". Useful in combination with
+/// [ResourceProvider], which gets you the actual resource.
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct ResourcePath(pub String);
 
@@ -70,6 +72,8 @@ impl From<(&str, &str)> for ResourcePath {
         Self(format!("{}:{}", strings.0, strings.1))
     }
 }
+
+/// Used to easily get resources from a [ResourcePath].
 pub trait ResourceProvider: Send + Sync {
     fn get_bytes(&self, id: &ResourcePath) -> Option<Vec<u8>>;
 
