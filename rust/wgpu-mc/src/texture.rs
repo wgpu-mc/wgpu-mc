@@ -10,7 +10,7 @@ use crate::{render::pipeline::WmPipelines, WgpuState};
 pub type TextureId = u32;
 pub type UV = ((f32, f32), (f32, f32));
 
-///Representation of a texture that has been uploaded to wgpu along with the corresponding view
+/// Representation of a texture that has been uploaded to wgpu along with the corresponding view
 /// and sampler
 #[derive(Debug)]
 pub struct TextureSamplerView {

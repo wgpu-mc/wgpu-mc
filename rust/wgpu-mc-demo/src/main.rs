@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant};
 
 use crate::camera::Camera;
 use arc_swap::ArcSwap;
-use bytemuck::Pod;
-use cgmath::{Matrix4, SquareMatrix};
+
+
 use futures::executor::block_on;
 use parking_lot::RwLock;
 use raw_window_handle::{
@@ -20,12 +20,11 @@ use wgpu_mc::mc::chunk::RenderLayer;
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
-use wgpu_mc::render::shaderpack::{Mat3, Mat3ValueOrMult, Mat4, Mat4ValueOrMult};
+use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
 use wgpu_mc::util::BindableBuffer;
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+
 use wgpu_mc::wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoderDescriptor,
-    ComputePassDescriptor, Maintain, MaintainBase, MapMode,
+    BufferUsages,
 };
 use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};

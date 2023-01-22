@@ -13,11 +13,11 @@ use wgpu_mc::WmRenderer;
 struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
-    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
+    fn get_state(&self, _x: i32, _y: i16, _z: i32) -> ChunkBlockState {
         ChunkBlockState::State(self.1)
     }
 
-    fn is_section_empty(&self, index: usize) -> bool {
+    fn is_section_empty(&self, _index: usize) -> bool {
         false
     }
 }
@@ -63,7 +63,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let pipelines = wm.pipelines.load();
     let layers = pipelines.chunk_layers.load();
 
-    chunk.bake(wm, &layers, &bm, &provider);
+    chunk.bake_chunk(wm, &layers, &bm, &provider);
 
     println!(
         "Built 1 chunk in {} microseconds",

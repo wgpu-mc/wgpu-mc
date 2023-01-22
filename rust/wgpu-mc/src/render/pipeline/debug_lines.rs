@@ -1,3 +1,5 @@
+//! Implements the debug lines that replace your crosshair in the debug menu.
+
 use bytemuck::{Pod, Zeroable};
 
 #[derive(Copy, Clone, Zeroable, Pod)]
