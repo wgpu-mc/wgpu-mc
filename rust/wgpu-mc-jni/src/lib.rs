@@ -41,7 +41,7 @@ use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, CHUNK_SECTIONS_PER};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, CHUNK_SECTIONS_PER, LightLevel, CHUNK_SECTION_HEIGHT};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
@@ -51,6 +51,7 @@ use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
 use crate::entity::tmd_to_wm;
+use crate::lighting::{DeserializedLightData, LightData};
 use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
@@ -130,6 +131,7 @@ pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 #[derive(Debug)]
 struct ChunkHolder {
     pub sections: [Option<(JavaPalette, PackedIntegerArray)>; 24],
+    pub light_data: Option<DeserializedLightData>
 }
 
 #[derive(Debug)]
@@ -184,6 +186,53 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         } else {
             ChunkBlockState::State(*block)
         }
+    }
+
+    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
+        let chunk_x = (x >> 4) - self.pos[0];
+        let chunk_z = (z >> 4) - self.pos[1];
+
+        let chunk = match [chunk_x, chunk_z] {
+            [0, 0] => Some(self.center),
+            [0, -1] => self.north,
+            [0, 1] => self.south,
+            [1, 0] => self.east,
+            [-1, 0] => self.west,
+            _ => return LightLevel::from_sky_and_block(0, 0),
+        };
+
+        let chunk = match chunk {
+            None => return LightLevel::from_sky_and_block(0, 0),
+            Some(chunk) => chunk
+        };
+
+        let light_data = match &chunk.light_data {
+            None => return LightLevel::from_sky_and_block(0, 0),
+            Some(light_data) => light_data,
+        };
+
+        let calc = (((y as usize % CHUNK_SECTION_HEIGHT) << 8) | ((z as usize) << 4) | (x as usize));
+        let index = calc / 2;
+        let index_remainder = calc % 2;
+        let mask = if index_remainder == 0 { 0b00001111u8 } else { 0b11110000 };
+        let shift = if index_remainder == 0 { 0 } else { 4 };
+
+        let section = y as usize / CHUNK_SECTION_HEIGHT;
+        let sky_light = match &light_data.sky_light[section] {
+            None => 0,
+            Some(section) => {
+                (section[index] & mask) >> shift
+            }
+        };
+
+        let block_light = match &light_data.block_light[section] {
+            None => 0,
+            Some(section) => {
+                (section[index] & mask) >> shift
+            }
+        };
+
+        LightLevel::from_sky_and_block(sky_light, block_light)
     }
 
     fn is_section_empty(&self, index: usize) -> bool {
@@ -362,24 +411,27 @@ pub fn createChunk(
         .try_into()
         .unwrap();
 
+    let holder = ChunkHolder {
+        sections: palettes.zip(*storages).map(|(palette, storage)| {
+            if palette == 0 || storage == 0 {
+                return None;
+            }
+
+            //The indices are incremented by one in Java so that 0 means null/None
+            Some((
+                PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
+                PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
+            ))
+        }),
+        light_data: None
+    };
+
     let mut write = CHUNKS.write();
 
-    write.insert(
-        [x, z],
-        ChunkHolder {
-            sections: palettes.zip(*storages).map(|(palette, storage)| {
-                if palette == 0 || storage == 0 {
-                    return None;
-                }
-
-                //The indices are incremented by one in Java so that 0 means null/None
-                Some((
-                    PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
-                    PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
-                ))
-            }),
-        },
-    );
+    match write.get_mut(&[x, z]) {
+        None => { write.insert([x, z], holder); },
+        Some(existing_holder) => { existing_holder.sections = holder.sections; }
+    };
 }
 
 pub fn bake_chunk(x: i32, z: i32) {

@@ -3,9 +3,7 @@ use std::sync::Arc;
 use crate::mc::block::{
     BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
 };
-use crate::mc::chunk::{
-    BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME, CHUNK_WIDTH,
-};
+use crate::mc::chunk::{BlockStateProvider, Chunk, CHUNK_AREA, CHUNK_SECTION_HEIGHT, CHUNK_VOLUME, CHUNK_WIDTH, LightLevel};
 use crate::mc::BlockManager;
 
 fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc<ModelMesh>> {
@@ -27,7 +25,7 @@ pub fn bake<
     T,
     Provider: BlockStateProvider,
     Filter: Fn(BlockstateKey) -> bool,
-    Mapper: Fn(&BlockMeshVertex, f32, f32, f32) -> T,
+    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> T,
 >(
     block_manager: &BlockManager,
     chunk: &Chunk,
@@ -78,6 +76,7 @@ pub fn bake<
         }
 
         let mesh = get_block(block_manager, block_state).unwrap();
+        let light = state_provider.get_light_level(x, y, z);
 
         //TODO: randomly select a mesh if there are multiple
 
@@ -161,7 +160,7 @@ pub fn bake<
                         Some(north) => vertices.extend(
                             north
                                 .iter()
-                                .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                                .map(|v| mapper(v, x as f32, y as f32, z as f32, light)),
                         ),
                     };
                 }
@@ -169,7 +168,7 @@ pub fn bake<
                     match &model.east {
                         None => {}
                         Some(east) => vertices
-                            .extend(east.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(east.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, light))),
                     };
                 }
                 if render_south {
@@ -178,7 +177,7 @@ pub fn bake<
                         Some(south) => vertices.extend(
                             south
                                 .iter()
-                                .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                                .map(|v| mapper(v, x as f32, y as f32, z as f32, light)),
                         ),
                     };
                 }
@@ -186,21 +185,21 @@ pub fn bake<
                     match &model.west {
                         None => {}
                         Some(west) => vertices
-                            .extend(west.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(west.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, light))),
                     };
                 }
                 if render_up {
                     match &model.up {
                         None => {}
                         Some(up) => vertices
-                            .extend(up.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(up.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, light))),
                     };
                 }
                 if render_down {
                     match &model.down {
                         None => {}
                         Some(down) => vertices
-                            .extend(down.iter().map(|v| mapper(v, x as f32, y as f32, z as f32))),
+                            .extend(down.iter().map(|v| mapper(v, x as f32, y as f32, z as f32, light))),
                     };
                 }
             }
@@ -220,7 +219,7 @@ pub fn bake<
                         })
                         .flatten()
                         .flatten()
-                        .map(|v| mapper(v, x as f32, y as f32, z as f32)),
+                        .map(|v| mapper(v, x as f32, y as f32, z as f32, light)),
                 );
             }
         }

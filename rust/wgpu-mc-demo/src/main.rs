@@ -16,7 +16,7 @@ use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
-use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
@@ -159,8 +159,8 @@ impl RenderLayer for TerrainLayer {
         |_| true
     }
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        |vert, x, y, z| Vertex {
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
+        |vert, x, y, z, _| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,

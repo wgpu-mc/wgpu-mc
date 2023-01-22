@@ -11,97 +11,91 @@ use std::io::{Cursor, Read};
 use std::mem::size_of;
 use tracing_timing::HashMap;
 use winit::event::VirtualKeyCode::N;
+use wgpu_mc::mc::chunk::CHUNK_SECTIONS_PER;
+use crate::{ChunkHolder, CHUNKS};
 
 pub static LIGHT_DATA: Lazy<RwLock<Slab<LightData>>> = Lazy::new(|| RwLock::new(Slab::new()));
-
-// #[derive(Clone, Debug)]
-// struct BitSet {
-//     words: Vec<i64>,
-//     in_use: usize
-// }
-
-// impl BitSet {
-
-//     fn try_from_read_be(cursor: &mut Cursor<&[u8]>) -> Option<Self> {
-//         let length: i32 = cursor.read_var_int().ok()?.into();
-//         println!("len: {}", length);
-
-//         let longs = (0..length).map(|_| cursor.read_i64::<NetworkEndian>().ok()).collect::<Option<Vec<_>>>()?;
-
-//         // let mut buffer = vec![0i64; length as usize];
-//         // cursor.read_exact(bytemuck::cast_slice_mut(&mut buffer)).ok()?;
-
-//         Some(BitSet::from(&longs[..]))
-//     }
-
-// }
-
-// impl From<&[i64]> for BitSet {
-
-//     fn from(longs: &[i64]) -> Self {
-//         let mut n = longs.len();
-//         loop {
-//             if !(n > 0 && longs[n - 1] == 0) {
-//                 break;
-//             }
-
-//             n -= 1;
-//         }
-
-//         Self {
-//             words: Vec::from(&longs[..n]),
-//             in_use: n,
-//         }
-//     }
-
-// }
-
-// fn try_read_packet_list_byte_array_be<const N: usize>(cursor: &mut Cursor<&[u8]>) -> Option<Vec<[u8; N]>> {
-//     let length: i32 = cursor.read_var_int().ok()?.into();
-
-//     let mut out = vec![];
-
-//     for _ in 0..length {
-//         let length: i32 = cursor.read_var_int().ok()?.into();
-//         assert_eq!(length as usize, N);
-//         let mut buffer = [0; N];
-//         cursor.read_exact(&mut buffer).ok()?;
-//         out.push(buffer);
-//     }
-
-//     Some(out)
-// }
 
 #[derive(Debug, Clone)]
 struct BitSet {
     longs: Vec<i64>,
 }
+
 impl BitSet {
-    fn from_reader<R: Read>(mut r: R) -> Self {
-        let len = r.read_var_int().unwrap();
+
+    fn from_reader<R: Read>(mut r: R) -> Option<Self> {
+        let len = r.read_var_int().ok()?;
         let as_i32: i32 = len.into();
         let longs = (0..as_i32)
-            .map(|_| r.read_i64::<NetworkEndian>().unwrap())
-            .collect::<Vec<_>>();
+            .map(|_| r.read_i64::<NetworkEndian>().ok())
+            .collect::<Option<Vec<_>>>()?;
 
-        Self { longs: longs }
+        Some(Self { longs })
     }
+
+    pub fn is_set(&self, bit_index: usize) -> bool {
+        (bit_index / 64 < self.longs.len()) && (self.longs[bit_index / 64] & (1i64 << (bit_index % 64))) != 0
+    }
+
 }
-fn read_nibbles<R: Read>(mut r: R) -> Vec<[u8; 2048]> {
-    let len = r.read_var_int().unwrap();
+
+fn read_nibble_arrays<const N: usize, R: Read>(mut r: R) -> Option<Vec<[u8; N]>> {
+    let len = r.read_var_int().ok()?;
     let as_i32: i32 = len.into();
-    let abc = (0..as_i32)
+
+    (0..as_i32)
         .map(|_| {
-            let mut v = [0; 2048];
-            let data_len = r.read_var_int().unwrap();
-            let as_i32: i32 = data_len.into();
-            assert_eq!(as_i32, 2048);
-            r.read(&mut v);
-            v
+            let mut v = [0; N];
+
+            let len: i32 = r.read_var_int().ok()?.into();
+            assert_eq!(len as usize, N);
+
+            r.read(&mut v).ok()?;
+            Some(v)
         })
-        .collect::<Vec<_>>();
-    abc
+        .collect::<Option<Vec<_>>>()
 }
+
+#[derive(Copy, Clone, Debug)]
+pub struct DeserializedLightData {
+    pub sky_light: [Option<[u8; 2048]>; 24],
+    pub block_light: [Option<[u8; 2048]>; 24]
+}
+
+impl DeserializedLightData {
+
+    pub fn new(light_data: LightData) -> Self {
+        let mut sky_light = [None; 24];
+        let mut block_light = [None; 24];
+
+        let mut sky_index = 0;
+        let mut block_index = 0;
+
+        for offset in 0..CHUNK_SECTIONS_PER {
+            let inited_sky = light_data.inited_sky.is_set(offset);
+            let inited_block = light_data.inited_block.is_set(offset);
+            // let empty_sky = light_data.uninited_sky.is_set(offset);
+            // let empty_block = light_data.uninited_block.is_set(offset);
+
+            if inited_sky {
+                sky_light[offset] = Some(light_data.sky_nibbles[sky_index]);
+                sky_index += 1;
+            }
+
+            if inited_block {
+                block_light[offset] = Some(light_data.block_nibbles[block_index]);
+                block_index += 1;
+            }
+        }
+
+        Self {
+            sky_light,
+            block_light
+        }
+    }
+
+}
+
 #[derive(Debug, Clone)]
 pub struct LightData {
     non_edge: bool,
@@ -116,27 +110,19 @@ pub struct LightData {
 impl LightData {
     pub fn from_buffer(bytes: &[u8]) -> Option<Self> {
         let mut cursor = Cursor::new(bytes);
-        let non_edge = if cursor.read_u8().ok()? == 1 {
-            true
-        } else {
-            false
-        };
-        let inited_sky = BitSet::from_reader(&mut cursor);
-        let inited_block = BitSet::from_reader(&mut cursor);
-        let uninited_sky = BitSet::from_reader(&mut cursor);
-        let uninited_block = BitSet::from_reader(&mut cursor);
-        let sky_nibbles = read_nibbles(&mut cursor);
-        let block_nibbles = read_nibbles(&mut cursor);
+
         Some(Self {
-            non_edge,
-            inited_sky,
-            inited_block,
-            uninited_sky,
-            uninited_block,
-            sky_nibbles,
-            block_nibbles,
+            non_edge: if cursor.read_u8().ok()? == 1 { true } else { false },
+            inited_sky: BitSet::from_reader(&mut cursor)?,
+            inited_block: BitSet::from_reader(&mut cursor)?,
+            uninited_sky: BitSet::from_reader(&mut cursor)?,
+            uninited_block: BitSet::from_reader(&mut cursor)?,
+            sky_nibbles: read_nibble_arrays(&mut cursor)?,
+            block_nibbles: read_nibble_arrays(&mut cursor)?,
         })
     }
+
+
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -157,10 +143,27 @@ pub fn createAndDeserializeLightData(
     };
 
     let light_data = LightData::from_buffer(slice).unwrap();
-    println!("{:#?}", &slice[0..30]);
-    //println!("{:?}", light_data);
-    // light_data.
-    println!("{:#?}", light_data.inited_sky);
-
     LIGHT_DATA.write().insert(light_data) as jlong
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bindLightData(
+    env: JNIEnv,
+    _class: JClass,
+    data_offset: jlong,
+    x: jint,
+    z: jint
+) {
+    let mut chunks = CHUNKS.write();
+    println!("{}", data_offset);
+
+    let light = Some(DeserializedLightData::new(LIGHT_DATA.write().remove(data_offset as usize)));
+
+    match chunks.get_mut(&[x, z]) {
+        None => { chunks.insert([x, z], ChunkHolder {
+            sections: [(); 24].map(|_| None),
+            light_data: light,
+        }); },
+        Some(holder) => holder.light_data = light
+    };
 }

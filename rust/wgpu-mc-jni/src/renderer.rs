@@ -25,7 +25,7 @@ use winit::{
 };
 
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
-use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::render::graph::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
@@ -60,19 +60,23 @@ impl RenderLayer for TerrainLayer {
         |_| true
     }
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        |vert, x, y, z| Vertex {
-            position: [
-                vert.position[0] + x,
-                vert.position[1] + y,
-                vert.position[2] + z,
-            ],
-            tex_coords: vert.tex_coords,
-            lightmap_coords: [0.0, 0.0],
-            normal: vert.normal,
-            color: [1.0, 1.0, 1.0, 1.0],
-            tangent: [0.0, 0.0, 0.0, 0.0],
-            uv_offset: vert.animation_uv_offset,
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
+        |vert, x, y, z, light| {
+            let mul_color = (light.get_block_level() + light.get_sky_level()) as f32 / 32.0;
+
+            Vertex {
+                position: [
+                    vert.position[0] + x,
+                    vert.position[1] + y,
+                    vert.position[2] + z,
+                ],
+                tex_coords: vert.tex_coords,
+                lightmap_coords: [0.0, 0.0],
+                normal: vert.normal,
+                color: [mul_color, mul_color, mul_color, 1.0],
+                tangent: [0.0, 0.0, 0.0, 0.0],
+                uv_offset: vert.animation_uv_offset,
+            }
         }
     }
 

@@ -30,9 +30,34 @@ pub struct ChunkSection {
     pub offset_y: usize,
 }
 
+#[derive(Clone, Copy)]
+pub struct LightLevel {
+    pub level: u8
+}
+
+impl LightLevel {
+
+    pub const fn from_sky_and_block(sky: u8, block: u8) -> Self {
+        Self {
+            level: (sky << 4) | (block & 0b1111),
+        }
+    }
+
+    pub fn get_sky_level(&self) -> u8 {
+        self.level >> 4
+    }
+
+    pub fn get_block_level(&self) -> u8 {
+        self.level & 0b1111
+    }
+
+}
+
 ///Return a BlockState within the provided world coordinates.
-pub trait BlockStateProvider: Send + Sync + Debug {
+pub trait BlockStateProvider: Send + Sync {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
+
+    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel;
 
     fn is_section_empty(&self, index: usize) -> bool;
 }
@@ -40,7 +65,7 @@ pub trait BlockStateProvider: Send + Sync + Debug {
 pub trait RenderLayer: Send + Sync {
     fn filter(&self) -> fn(BlockstateKey) -> bool;
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex;
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex;
 
     fn name(&self) -> &str;
 }
