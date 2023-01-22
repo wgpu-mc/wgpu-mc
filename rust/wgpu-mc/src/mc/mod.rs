@@ -12,7 +12,7 @@ use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
-use crate::WmRenderer;
+use crate::{WgpuState, WmRenderer};
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -161,10 +161,10 @@ pub struct MinecraftState {
 
 impl MinecraftState {
     #[must_use]
-    pub fn new(resource_provider: Arc<dyn ResourceProvider>) -> Self {
+    pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
             sun_position: ArcSwap::new(Arc::new(0.0)),
-            chunks: ChunkManager::new(),
+            chunks: ChunkManager::new(wgpu_state),
             entity_models: RwLock::new(Vec::new()),
 
             texture_manager: TextureManager::new(),

@@ -48,7 +48,10 @@ pub use naga;
 use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d, PresentMode, SurfaceConfiguration};
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
+    PresentMode, SurfaceConfiguration,
+};
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -103,7 +106,7 @@ impl WmRenderer {
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
@@ -163,7 +166,7 @@ impl WmRenderer {
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         let pipelines = WmPipelines::new(resource_provider.clone());
 
-        let mc = MinecraftState::new(resource_provider);
+        let mc = MinecraftState::new(&wgpu_state, resource_provider);
 
         Self {
             wgpu_state: Arc::new(wgpu_state),

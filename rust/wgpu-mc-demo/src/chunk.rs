@@ -13,8 +13,14 @@ use wgpu_mc::WmRenderer;
 struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
-    fn get_state(&self, _x: i32, _y: i16, _z: i32) -> ChunkBlockState {
-        ChunkBlockState::State(self.1)
+    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
+        // if x >= 0 && x <= 15 && z >= 0 && z <= 15 && y == 1 {
+        if x == 0 && y == 0 && z == 0 {
+            // ChunkBlockState::State(self.1)
+            ChunkBlockState::State(self.1)
+        } else {
+            ChunkBlockState::Air
+        }
     }
 
     fn is_section_empty(&self, _index: usize) -> bool {
@@ -39,15 +45,17 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, anvil) = bm.blocks.get_full("minecraft:anvil").unwrap();
+    let (index, _, anvil) = bm.blocks.get_full("minecraft:cobblestone").unwrap();
 
-    let (_, augment) = anvil
-        .get_model_by_key(
-            [("facing", &StateValue::String("north".into()))],
-            &*wm.mc.resource_provider,
-            &atlas,
-        )
-        .unwrap();
+    // let (_, augment) = anvil
+    //     .get_model_by_key(
+    //         [("facing", &StateValue::String("north".into()))],
+    //         &*wm.mc.resource_provider,
+    //         &atlas,
+    //     )
+    //     .unwrap();
+
+    let augment = 0;
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),

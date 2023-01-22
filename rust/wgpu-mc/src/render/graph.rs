@@ -24,6 +24,7 @@ use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
+use crate::wgpu::QuerySetDescriptor;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState,
@@ -32,7 +33,6 @@ use wgpu::{
     RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
     VertexBufferLayout, VertexState,
 };
-use crate::wgpu::QuerySetDescriptor;
 
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
@@ -157,7 +157,7 @@ pub struct ShaderGraph {
     pub resources: HashMap<String, CustomResource>,
     pub geometry: HashMap<String, Box<dyn GeometryCallback>>,
     quad: Option<wgpu::Buffer>,
-    query_results: Option<wgpu::Buffer>
+    query_results: Option<wgpu::Buffer>,
 }
 
 impl ShaderGraph {
@@ -172,7 +172,7 @@ impl ShaderGraph {
             resources,
             geometry,
             quad: None,
-            query_results: None
+            query_results: None,
         }
     }
 
@@ -191,7 +191,7 @@ impl ShaderGraph {
                     label: None,
                     contents: &[0; 1024],
                     usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-                })
+                }),
         );
 
         self.quad = Some(
@@ -383,7 +383,12 @@ impl ShaderGraph {
     }
 
     /// Matches on the definition, inserting the resource depending on which variant it is.
-    fn insert_resources(wm: &&WmRenderer, resources: &mut HashMap<String, CustomResource>, definition: &ShorthandResourceConfig, resource_id: String) {
+    fn insert_resources(
+        wm: &&WmRenderer,
+        resources: &mut HashMap<String, CustomResource>,
+        definition: &ShorthandResourceConfig,
+        resource_id: String,
+    ) {
         match definition {
             ShorthandResourceConfig::Int(int) => {
                 let ssbo = BindableBuffer::new(
@@ -670,12 +675,6 @@ impl ShaderGraph {
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
 
-        let query_set = wm.wgpu_state.device.create_query_set(&QuerySetDescriptor {
-            label: None,
-            ty: wgpu::QueryType::Timestamp,
-            count: self.pack.pipelines.pipelines.len() as u32
-        });
-
         let mut query_index = 0;
 
         for (name, config) in &self.pack.pipelines.pipelines {
@@ -749,7 +748,6 @@ impl ShaderGraph {
                 }),
             });
 
-            render_pass.begin_pipeline_statistics_query(&query_set, query_index);
             query_index += 1;
             render_pass.set_pipeline(self.pipelines.get(name).unwrap());
 
@@ -775,7 +773,7 @@ impl ShaderGraph {
                                 continue;
                             }
 
-                            let (chunk_vbo, verts) =
+                            let range =
                                 match arena.alloc(chunk.baked_layers.read()).get(layer.name()) {
                                     None => continue,
                                     Some(tuple) => tuple,
@@ -790,8 +788,13 @@ impl ShaderGraph {
                                 chunk_offset,
                             );
 
-                            render_pass.set_vertex_buffer(0, chunk_vbo.slice(..));
-                            render_pass.draw(0..verts.len() as u32, 0..1);
+                            render_pass.set_vertex_buffer(
+                                0,
+                                wm.mc.chunks.chunk_allocation.buffer.slice(
+                                    range.start as u64..range.end as u64
+                                )
+                            );
+                            render_pass.draw(0..(range.len() / std::mem::size_of::<Vertex>()) as u32, 0..1);
                         }
                     }
                 }
@@ -824,22 +827,11 @@ impl ShaderGraph {
                             chunk_offset,
                         );
                     } else {
-                        unimplemented!("Unknown geometry {0}", &config.geometry);
+                        unimplemented!("Unknown geometry {}", &config.geometry);
                     }
                 }
             };
-
-            render_pass.end_pipeline_statistics_query();
         }
-
-        encoder.resolve_query_set(
-            &query_set,
-            0..self.pack.pipelines.pipelines.len() as u32,
-            self.query_results.as_ref().unwrap(),
-            0
-        );
-
-        wm.
 
         wm.wgpu_state.queue.submit([encoder.finish()]);
     }

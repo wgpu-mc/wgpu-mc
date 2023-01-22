@@ -46,7 +46,8 @@ public class WmChunk {
             PaletteStorage paletteStorage = container.data.storage;
 
             RustPalette rustPalette = new RustPalette(
-                WgpuNative.uploadIdList((IndexedIterable<Object>) container.idList)
+                    container.idList,
+                    WgpuNative.uploadIdList((IndexedIterable<Object>) container.idList)
             );
 
             ByteBuf buf = Unpooled.buffer(palette.getPacketSize());

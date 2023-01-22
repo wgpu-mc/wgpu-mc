@@ -44,8 +44,8 @@ struct VertexResult {
 fn vert(
     @location(0) pos_in: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
-    @location(2) normal: vec3<f32>,
-    @location(6) uv_offset: u32
+//    @location(3) color: u32,
+//    @location(3) uv_offset: u32
 ) -> VertexResult {
     // var uv = uv_offsets.uvs[uv_offset];
 
@@ -58,7 +58,7 @@ fn vert(
     vr.tex_coords = tex_coords;
     vr.tex_coords2 = tex_coords;
     vr.blend = 1.0;
-    vr.normal = normal;
+    vr.normal = vec3<f32>(0.0, 0.0, 0.0);
 
     return vr;
 }

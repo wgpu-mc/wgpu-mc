@@ -68,10 +68,8 @@ impl RenderLayer for TerrainLayer {
                 vert.position[2] + z,
             ],
             tex_coords: vert.tex_coords,
-            lightmap_coords: [0.0, 0.0],
-            normal: vert.normal,
-            color: [1.0, 1.0, 1.0, 1.0],
-            tangent: [0.0, 0.0, 0.0, 0.0],
+            lightmap_coords: 0,
+            color: u32::MAX,
             uv_offset: vert.animation_uv_offset,
         }
     }

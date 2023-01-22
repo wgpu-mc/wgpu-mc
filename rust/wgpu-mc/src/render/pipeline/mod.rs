@@ -23,22 +23,18 @@ pub const ENTITY_ATLAS: &str = "wgpu_mc:atlases/entity";
 pub struct Vertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
-    pub lightmap_coords: [f32; 2],
-    pub normal: [f32; 4],
-    pub color: [f32; 4],
-    pub tangent: [f32; 4],
-    pub uv_offset: u32,
+    pub lightmap_coords: u32,
+    pub color: u32,
+    pub uv_offset: u32
 }
 
 impl Vertex {
-    const VAA: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+    const VAA: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
         0 => Float32x3,
         1 => Float32x2,
-        2 => Float32x2,
-        3 => Float32x4,
-        4 => Float32x4,
-        5 => Float32x4,
-        6 => Uint32
+        2 => Uint32,
+        3 => Uint32,
+        4 => Uint32
     ];
 
     #[must_use]

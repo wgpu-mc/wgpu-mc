@@ -7,13 +7,13 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
-use std::{mem, thread};
 use std::mem::size_of;
 use std::num::NonZeroU32;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+use std::{mem, thread};
 
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use arc_swap::ArcSwap;
@@ -92,15 +92,16 @@ static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
 static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
-static TASK_CHANNELS: Lazy<(Sender<Box<dyn FnOnce() + Send + Sync>>, Receiver<Box<dyn FnOnce() + Send + Sync>>)> = Lazy::new(unbounded);
+static TASK_CHANNELS: Lazy<(
+    Sender<Box<dyn FnOnce() + Send + Sync>>,
+    Receiver<Box<dyn FnOnce() + Send + Sync>>,
+)> = Lazy::new(unbounded);
 static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
     ArcSwap::new(Arc::new(MinecraftRenderState {
         _render_world: false,
     }))
 });
-#[allow(dead_code)]
-static MOUSE_STATE: Lazy<Arc<ArcSwap<MouseState>>> =
-    Lazy::new(|| Arc::new(ArcSwap::new(Arc::new(MouseState { x: 0.0, y: 0.0 }))));
+
 static THREAD_POOL: Lazy<ThreadPool> =
     Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
 
@@ -443,8 +444,6 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
 pub fn registerBlock(env: JNIEnv, _class: JClass, name: JString) {
     let name: String = env.get_string(name).unwrap().into();
 
-    println!("{name}");
-
     BLOCKS.lock().push(name);
 }
 
@@ -572,9 +571,7 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
         }
     });
 
-
     let rx = &CHANNELS.1;
-
 
     for render_message in rx.iter() {
         match render_message {
@@ -724,23 +721,6 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
             })],
         );
     }))
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn debugBake(env: JNIEnv, _class: JClass) {
-    let positions = {
-        let renderer = RENDERER.get().unwrap();
-        let chunks = renderer.mc.chunks.loaded_chunks.read();
-
-        chunks.iter().map(|(pos, _)| *pos).collect::<Vec<_>>()
-    };
-
-    println!("Baking {0} chunks", positions.len());
-    for pos in positions {
-        bake_chunk(pos[0], pos[1]);
-    }
-
-    // let wm = RENDERER.get().unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -911,14 +891,14 @@ pub fn subImage2D(
     unpack_skip_rows: jint,
     unpack_alignment: jint,
 ) {
-    let pixel_array_pointer = env.get_int_array_elements(pixels, ReleaseMode::NoCopyBack).unwrap();
+    let pixel_array_pointer = env
+        .get_int_array_elements(pixels, ReleaseMode::NoCopyBack)
+        .unwrap();
     let pixels = unsafe {
-        Vec::from(
-            slice::from_raw_parts(
-                pixel_array_pointer.as_ptr() as *mut u32,
-                pixel_array_pointer.size().unwrap() as usize,
-            )
-        )
+        Vec::from(slice::from_raw_parts(
+            pixel_array_pointer.as_ptr() as *mut u32,
+            pixel_array_pointer.size().unwrap() as usize,
+        ))
     };
     let unpack_row_length = unpack_row_length as usize;
     let unpack_skip_pixels = unpack_skip_pixels as usize;
@@ -939,7 +919,6 @@ pub fn subImage2D(
         width
     };
 
-    
     //In bytes
     assert_eq!(_type, 0x1401);
 
@@ -961,12 +940,12 @@ pub fn subImage2D(
                     (pixel >> 0 & 0xFF) as u8,
                     (pixel >> 8 & 0xFF) as u8,
                     (pixel >> 16 & 0xFF) as u8,
-                    (pixel >> 24 & 0xFF) as u8
+                    (pixel >> 24 & 0xFF) as u8,
                 ];
 
                 //Find where the pixel data should go.
-                let dest_begin =
-                    (dest_row_size * (y + offsetY as usize)) + ((x + offsetX as usize) * pixel_size);
+                let dest_begin = (dest_row_size * (y + offsetY as usize))
+                    + ((x + offsetX as usize) * pixel_size);
 
                 let dest_end = dest_begin + pixel_size;
                 //Copy/paste pixel data to target image.

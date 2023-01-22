@@ -107,7 +107,6 @@ public abstract class WorldRendererMixin {
 
         if(player != null) {
             ChunkPos pos = player.getChunkPos();
-            WgpuNative.setChunkOffset(pos.x, pos.z);
 
             Vec3d translate = camera.getPos();
 
@@ -118,13 +117,19 @@ public abstract class WorldRendererMixin {
             double modX = ((translate.x % 16.0) + 16.0) % 16.0;
             double modZ = ((translate.z % 16.0) + 16.0) % 16.0;
 
+//            stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
+//                    (float) (-modX),
+//                    ((float) -translate.y) - 64.0f,
+//                    (float) (-modZ)
+//            ));
+
             stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
-                    (float) (-modX),
-                    ((float) -translate.y) - 64.0f,
-                    (float) (-modZ)
+                    (float) -translate.x,
+                    (float) -translate.y - 64.0f,
+                    (float) -translate.z
             ));
 
-            WgpuNative.setChunkOffset(-(int) (Math.floor(translate.x / 16.0)), -(int) (Math.floor(translate.z / 16.0)));
+//            WgpuNative.setChunkOffset(-(int) (Math.floor(translate.x / 16.0)), -(int) (Math.floor(translate.z / 16.0)));
         }
 
         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
