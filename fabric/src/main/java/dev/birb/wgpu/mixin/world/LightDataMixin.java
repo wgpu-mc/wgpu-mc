@@ -29,12 +29,11 @@ public abstract class LightDataMixin {
     }
 
     @Inject(method = "<init>(Lnet/minecraft/network/PacketByteBuf;II)V", at = @At("RETURN"))
-    private void readPacket(PacketByteBuf buf, int x, int y, CallbackInfo ci) {
+    private void readPacket(PacketByteBuf buf, int x, int z, CallbackInfo ci) {
         int index = readerIndex;
         long lightData = WgpuNative.createAndDeserializeLightData(buf.array(), index);
-        LightData ld = (LightData) (Object) this;
 
-        System.out.println("non_edge: " + this.isNonEdge() + " inited_sky: " + Arrays.toString(this.getInitedSky().toLongArray()) + " sky_nibbles: " + ld.getSkyNibbles());
+        WgpuNative.bindLightData(lightData, x, z);
     }
 
 }

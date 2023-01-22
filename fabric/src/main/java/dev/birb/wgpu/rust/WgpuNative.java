@@ -186,4 +186,6 @@ public class WgpuNative {
 
     public static native long createAndDeserializeLightData(byte[] array, int index);
 
+    public static native void bindLightData(long lightData, int x, int z);
+
 }
