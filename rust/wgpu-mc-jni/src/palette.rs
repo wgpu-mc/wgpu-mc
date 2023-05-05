@@ -159,9 +159,10 @@ pub fn clearPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn destroyPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) {
+pub fn destroyPalette(_env: JNIEnv, _class: JClass, _palette_long: jlong) {
+    // TODO: clear palette from storage
     panic!();
-    PALETTE_STORAGE.write().remove(palette_long as usize);
+    // PALETTE_STORAGE.write().remove(palette_long as usize);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

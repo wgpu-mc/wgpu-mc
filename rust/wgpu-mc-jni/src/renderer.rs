@@ -1,5 +1,5 @@
 use byteorder::LittleEndian;
-use cgmath::{perspective, Deg, Matrix4, SquareMatrix, Vector3};
+use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
@@ -360,10 +360,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                             .unwrap();
                     }
                     WindowEvent::CursorMoved {
-                        device_id,
-                        position,
-                        modifiers,
-                    } => {
+                        position, .. } => {
                         CHANNELS
                             .0
                             .send(RenderMessage::CursorMove(position.x, position.y))

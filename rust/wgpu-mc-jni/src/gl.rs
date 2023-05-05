@@ -9,10 +9,9 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Matrix, Matrix4, SquareMatrix};
-use once_cell::sync::{Lazy, OnceCell};
+use cgmath::{Matrix4, SquareMatrix};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::convert::identity;
 use std::mem::{align_of, replace};
 use std::ops::Range;
 use wgpu_mc::mc::chunk::ChunkPos;
@@ -20,12 +19,10 @@ use wgpu_mc::render::graph::{
     bind_uniforms, set_push_constants, CustomResource, GeometryCallback, ResourceInternal,
     ShaderGraph, TextureResource,
 };
-use wgpu_mc::render::shaderpack;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, PipelineConfig};
 use wgpu_mc::util::{BindableBuffer, WmArena};
-use wgpu_mc::wgpu::util::{align_to, BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{
-    vertex_attr_array, Buffer, BufferUsages, IndexFormat, RenderPass, ShaderStages,
+    vertex_attr_array, Buffer, BufferUsages, IndexFormat, RenderPass,
     SurfaceConfiguration,
 };
 use wgpu_mc::{wgpu, WmRenderer};

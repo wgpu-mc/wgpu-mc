@@ -10,7 +10,6 @@ use std::io::Cursor;
 use std::{mem, thread};
 use std::mem::size_of;
 use std::num::NonZeroU32;
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -18,7 +17,7 @@ use std::time::Instant;
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
-use cgmath::{Matrix4, Point3};
+use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
