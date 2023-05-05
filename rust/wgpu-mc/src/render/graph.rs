@@ -737,7 +737,7 @@ impl ShaderGraph {
                     let chunks = wm.mc.chunks.loaded_chunks.read();
 
                     for layer in &**layers {
-                        for (_pos, chunk_swap) in &*chunks {
+                        for chunk_swap in (*chunks).values() {
                             let chunk = arena.alloc(chunk_swap.load());
 
                             let min = Vec3::new(
