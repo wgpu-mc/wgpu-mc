@@ -33,6 +33,8 @@ use wgpu::{
     VertexBufferLayout, VertexState,
 };
 
+type ResourceLookupMap = HashMap<String, CustomResource>;
+
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
         &self,
@@ -40,7 +42,7 @@ pub trait GeometryCallback: Send + Sync {
         pass: &mut RenderPass<'pass>,
         graph: &'pass ShaderGraph,
         config: &PipelineConfig,
-        resources: &'resource HashMap<String, CustomResource>,
+        resources: &'resource ResourceLookupMap,
         arena: &'resource WmArena<'resource>,
         surface_config: &SurfaceConfiguration,
         chunk_offset: ChunkPos,
@@ -50,7 +52,7 @@ pub trait GeometryCallback: Send + Sync {
 fn mat3_update(
     resource: &CustomResource,
     wm: &WmRenderer,
-    resources: &HashMap<String, CustomResource>,
+    resources: &ResourceLookupMap,
 ) {
     let mut mat3 = Matrix3::<f32>::identity();
 
@@ -79,7 +81,7 @@ fn mat3_update(
 fn mat4_update(
     resource: &CustomResource,
     wm: &WmRenderer,
-    resources: &HashMap<String, CustomResource>,
+    resources: &ResourceLookupMap,
 ) {
     let mut mat4 = Matrix4::<f32>::identity();
 
@@ -135,7 +137,7 @@ pub enum ResourceInternal {
 
 pub struct CustomResource {
     //If this resource is updated each frame, this is what needs to be called
-    pub update: Option<fn(&Self, &WmRenderer, &HashMap<String, CustomResource>)>,
+    pub update: Option<fn(&Self, &WmRenderer, &ResourceLookupMap)>,
     pub data: Arc<ResourceInternal>,
 }
 
@@ -153,7 +155,7 @@ impl CustomResource {
 pub struct ShaderGraph {
     pub pack: ShaderPackConfig,
     pub pipelines: HashMap<String, RenderPipeline>,
-    pub resources: HashMap<String, CustomResource>,
+    pub resources: ResourceLookupMap,
     pub geometry: HashMap<String, Box<dyn GeometryCallback>>,
     quad: Option<wgpu::Buffer>,
 }
@@ -161,7 +163,7 @@ pub struct ShaderGraph {
 impl ShaderGraph {
     pub fn new(
         pack: ShaderPackConfig,
-        resources: HashMap<String, CustomResource>,
+        resources: ResourceLookupMap,
         geometry: HashMap<String, Box<dyn GeometryCallback>>,
     ) -> Self {
         Self {
@@ -370,7 +372,7 @@ impl ShaderGraph {
     }
 
     /// Matches on the definition, inserting the resource depending on which variant it is.
-    fn insert_resources(wm: &&WmRenderer, resources: &mut HashMap<String, CustomResource>, definition: &ShorthandResourceConfig, resource_id: String) {
+    fn insert_resources(wm: &&WmRenderer, resources: &mut ResourceLookupMap, definition: &ShorthandResourceConfig, resource_id: String) {
         match definition {
             ShorthandResourceConfig::Int(int) => {
                 let ssbo = BindableBuffer::new(
