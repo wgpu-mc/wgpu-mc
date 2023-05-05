@@ -56,7 +56,7 @@ use wgpu::{
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::graph::{GeometryCallback, ShaderGraph};
+use crate::render::graph::ShaderGraph;
 use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
 
