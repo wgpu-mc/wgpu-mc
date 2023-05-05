@@ -1,4 +1,3 @@
-#![feature(once_cell)]
 #![feature(array_zip)]
 #![feature(core_panic)]
 
