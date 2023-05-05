@@ -38,7 +38,6 @@ so it's up to you to provide them to wgpu-mc.
 See the [render::entity] module for an example of rendering an example entity.
  */
 
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -270,7 +269,7 @@ impl WmRenderer {
     pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
         let d = data.as_slice();
 
-        let buf = self.mc.animated_block_buffer.borrow().load_full();
+        let buf = self.mc.animated_block_buffer.load_full();
 
         if buf.is_none() {
             let animated_block_buffer = self.wgpu_state.device.create_buffer(&BufferDescriptor {
