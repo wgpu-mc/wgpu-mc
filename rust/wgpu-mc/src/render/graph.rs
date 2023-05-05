@@ -667,17 +667,14 @@ impl ShaderGraph {
                         let resource_definition = self.pack.resources.resources.get(texture_name);
 
                         //TODO: If the texture resource is defined as being cleared after each frame. Should use a HashMap to replace the should_clear_depth variable
-                        let _clear = match resource_definition {
-                            Some(&ShorthandResourceConfig::Longhand(LonghandResourceConfig {
-                                typed:
-                                    TypeResourceConfig::Texture2d {
-                                        clear_after_frame: true,
-                                        ..
-                                    },
-                                ..
-                            })) => true,
-                            _ => false,
-                        };
+                        let _clear = matches!(resource_definition, Some(&ShorthandResourceConfig::Longhand(LonghandResourceConfig {
+                            typed:
+                                TypeResourceConfig::Texture2d {
+                                    clear_after_frame: true,
+                                    ..
+                                },
+                            ..
+                        })));
 
                         Some(RenderPassColorAttachment {
                             view: match &texture_name[..] {
