@@ -66,6 +66,18 @@ fn vert(
     var u: f32 = f32((v2 >> 16u) & 0xffffu) * 0.00048828125;
     var v: f32 = f32(v3 & 0xffffu) * 0.00048828125;
 
+    if(((v3 >> 61u) & 1u) == 1u) {
+        x = 16.0;
+    }
+
+    if(((v3 >> 62u) & 1u) == 1u) {
+        y = 16.0;
+    }
+
+    if((v3 >> 63u) == 1u) {
+        z = 16.0;
+    }
+
     var pos = vec3<f32>(x, y, z);
 
     var world_pos = pos + vec3<f32>(f32(push_constants.chunk_x) * 16.0, f32(push_constants.chunk_y) * 16.0, f32(push_constants.chunk_z) * 16.0);

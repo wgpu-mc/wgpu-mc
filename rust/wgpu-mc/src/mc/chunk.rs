@@ -140,8 +140,6 @@ impl Chunk {
             })
             .collect();
 
-        println!("{} {}", vertex_data.len(), index_data.len());
-
         let vertex_buffer = BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
         let index_buffer = BindableBuffer::new(wm, bytemuck::cast_slice(&index_data), BufferUsages::STORAGE, "ssbo");
 

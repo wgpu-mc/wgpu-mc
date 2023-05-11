@@ -51,26 +51,34 @@ impl Vertex {
     }
 
     pub fn compressed(&self) -> [u8; Self::VERTEX_LENGTH] {
-        // XYZ: 3 bytes (1 for each axis)
+        // XYZ: 4 bytes (1 for each axis)
         // Normal: 3 bits
         // Color: 3 bytes
-        // UV: 4 bytes (Could be one)
+        // UV: 4 bytes
         // Animated UV index: 10 bits
-        //
+        // XYZ add one flag: 3 bits
+
         // Total: 93 bits (12 bytes)
         let mut array = [0; 12];
 
         let x = self.position[0] * 16.0;
         let y = self.position[1] * 16.0;
         let z = self.position[2] * 16.0;
-        // assert!(x <= 256.0 && x.fract() == 0.0);
-        // assert!(y <= 256.0 && y.fract() == 0.0);
-        // assert!(z <= 256.0 && z.fract() == 0.0);
+
+        let x = x as u16;
+        let y = y as u16;
+        let z = z as u16;
+
+        let x_byte = x as u8;
+        let y_byte = y as u8;
+        let z_byte = z as u8;
+
+        let flag_byte = ((x == 256) as u8) | (((y == 256) as u8) << 1) | (((z == 256) as u8) << 2);
 
         //position
-        array[0] = x as u8;
-        array[1] = y as u8;
-        array[2] = z as u8;
+        array[0] = x_byte;
+        array[1] = y_byte;
+        array[2] = z_byte;
 
         //color
         array[3] = (self.color & 0xf) as u8;
@@ -95,7 +103,7 @@ impl Vertex {
 
         //UV index and normal
         array[10] = self.uv_offset as u8;
-        array[11] = (((self.uv_offset >> 8) as u8) & 0b11) | (normal_bits << 3);
+        array[11] = (((self.uv_offset >> 8) as u8) & 0b11) | (normal_bits << 2) | (flag_byte << 5);
 
         array
     }
