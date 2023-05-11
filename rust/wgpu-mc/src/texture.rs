@@ -8,7 +8,7 @@ use wgpu::Extent3d;
 use crate::{render::pipeline::WmPipelines, WgpuState};
 
 pub type TextureId = u32;
-pub type UV = ((f32, f32), (f32, f32));
+pub type UV = ((u16, u16), (u16, u16));
 
 /// Representation of a texture that has been uploaded to wgpu along with the corresponding view
 /// and sampler

@@ -1,3 +1,4 @@
+#![feature(iterator_try_collect)]
 /*!
 # wgpu-mc
 wgpu-mc is a pure-Rust crate which is designed to be usable by anyone who needs to render

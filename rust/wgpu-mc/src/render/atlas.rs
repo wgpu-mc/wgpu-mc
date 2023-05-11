@@ -218,12 +218,12 @@ impl Atlas {
             path.clone(),
             (
                 (
-                    allocation.rectangle.min.x as f32,
-                    allocation.rectangle.min.y as f32,
+                    allocation.rectangle.min.x as u16,
+                    allocation.rectangle.min.y as u16,
                 ),
                 (
-                    allocation.rectangle.max.x as f32,
-                    allocation.rectangle.max.y as f32,
+                    allocation.rectangle.max.x as u16,
+                    allocation.rectangle.max.y as u16,
                 ),
             ),
         );

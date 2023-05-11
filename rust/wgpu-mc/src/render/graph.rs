@@ -8,11 +8,12 @@ use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Range;
 use std::sync::Arc;
 
 use treeculler::{BVol, Frustum, Vec3, AABB};
 
-use crate::mc::chunk::{Chunk, ChunkPos};
+use crate::mc::chunk::{Chunk, CHUNK_SECTION_HEIGHT, ChunkBuffers, ChunkPos, SECTIONS_PER_CHUNK};
 use crate::mc::resource::ResourcePath;
 use crate::render::pipeline::{QuadVertex, Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
@@ -26,13 +27,7 @@ use crate::WmRenderer;
 
 use crate::wgpu::QuerySetDescriptor;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState,
-    LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
-    VertexBufferLayout, VertexState,
-};
+use wgpu::{BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, Face, FragmentState, FrontFace, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
 
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
@@ -182,6 +177,11 @@ impl ShaderGraph {
         resource_types: Option<&HashMap<String, String>>,
         mut additional_geometry: Option<HashMap<String, VertexBufferLayout>>,
     ) {
+        let mut resource_types = resource_types.cloned().unwrap_or(HashMap::new());
+
+        resource_types.insert("wm_ssbo_chunk_vertices".into(), "ssbo".into());
+        resource_types.insert("wm_ssbo_chunk_indices".into(), "ssbo".into());
+
         let mut resources = HashMap::new();
 
         self.query_results = Some(
@@ -285,8 +285,6 @@ impl ShaderGraph {
                                             layouts
                                                 .get(
                                                     resource_types
-                                                        .as_ref()
-                                                        .unwrap()
                                                         .get(uniform)
                                                         .expect(uniform),
                                                 )
@@ -300,7 +298,7 @@ impl ShaderGraph {
                                     .map(|(offset, resource)| match &resource[..] {
                                         "wm_pc_chunk_position" => PushConstantRange {
                                             stages: ShaderStages::VERTEX,
-                                            range: *offset as u32..*offset as u32 + 8,
+                                            range: *offset as u32..*offset as u32 + 12,
                                         },
                                         "wm_pc_framebuffer_size" => PushConstantRange {
                                             stages: ShaderStages::FRAGMENT,
@@ -311,6 +309,22 @@ impl ShaderGraph {
                                     .collect::<Vec<_>>(),
                             });
 
+                    let vertex_buffer = match &definition.geometry[..] {
+                        "wm_geo_terrain" => None,
+                        "wm_geo_quad" => Some([QuadVertex::desc()]),
+                        _ => {
+                            if let Some(additional_geometry) =
+                                &mut additional_geometry
+                            {
+                                Some([additional_geometry
+                                    .remove(&definition.geometry)
+                                    .unwrap()])
+                            } else {
+                                unimplemented!("Unknown geometry");
+                            }
+                        }
+                    };
+
                     let pipeline =
                         wm.wgpu_state
                             .device
@@ -320,23 +334,21 @@ impl ShaderGraph {
                                 vertex: VertexState {
                                     module: &shader.shader,
                                     entry_point: "vert",
-                                    buffers: &[match &definition.geometry[..] {
-                                        "wm_geo_terrain" => Vertex::desc(),
-                                        "wm_geo_quad" => QuadVertex::desc(),
-                                        _ => {
-                                            if let Some(additional_geometry) =
-                                                &mut additional_geometry
-                                            {
-                                                additional_geometry
-                                                    .remove(&definition.geometry)
-                                                    .unwrap()
-                                            } else {
-                                                unimplemented!("Unknown geometry");
-                                            }
-                                        }
-                                    }],
+                                    buffers: match &vertex_buffer {
+                                        None => &[],
+                                        Some(buffer) => buffer
+                                    }
                                 },
-                                primitive: Default::default(),
+                                primitive: PrimitiveState {
+                                    topology: PrimitiveTopology::TriangleList,
+                                    strip_index_format: None,
+                                    front_face: FrontFace::Ccw,
+                                    cull_mode: Some(Face::Back),
+                                    // cull_mode: None,
+                                    unclipped_depth: false,
+                                    polygon_mode: PolygonMode::Fill,
+                                    conservative: false,
+                                },
                                 depth_stencil: definition.depth.as_ref().map(|_| {
                                     DepthStencilState {
                                         format: TextureFormat::Depth32Float,
@@ -759,60 +771,60 @@ impl ShaderGraph {
                     for layer in &**layers {
                         for (_pos, chunk_swap) in &*chunks {
                             let chunk = arena.alloc(chunk_swap.load());
+                            let buffers = arena.alloc(chunk.buffers.load_full());
+                            let sections = chunk.sections.read();
 
-                            let min = Vec3::new(
-                                ((chunk.pos[0] + chunk_offset[0]) * 16) as f32,
-                                0.0,
-                                ((chunk.pos[1] + chunk_offset[1]) * 16) as f32,
-                            );
-                            let max = min + Vec3::new(16.0, 384.0, 16.0);
+                            for section_index in 0..SECTIONS_PER_CHUNK {
+                                let min = Vec3::new(
+                                    ((chunk.pos[0] + chunk_offset[0]) * 16) as f32,
+                                    (section_index * CHUNK_SECTION_HEIGHT) as f32,
+                                    ((chunk.pos[1] + chunk_offset[1]) * 16) as f32,
+                                );
+                                let max = min + Vec3::new(16.0, ((section_index + 1) * CHUNK_SECTION_HEIGHT) as f32, 16.0);
 
-                            let aabb = AABB::<f32>::new(min, max);
+                                let aabb = AABB::<f32>::new(min, max);
 
-                            if aabb.test_against_frustum(&frustum, 0) == u8::MAX {
-                                continue;
-                            }
+                                if aabb.test_against_frustum(&frustum, 0) == u8::MAX {
+                                    continue;
+                                }
 
-                            let range =
-                                match arena.alloc(chunk.baked_layers.read()).get(layer.name()) {
+                                let baked_layer = match sections.get(layer.name()) {
                                     None => continue,
-                                    Some(tuple) => tuple,
+                                    Some(section) => &section[section_index]
                                 };
 
-                            bind_uniforms(config, &resource_borrow, &arena, &mut render_pass);
-                            set_push_constants(
-                                config,
-                                &mut render_pass,
-                                Some(chunk),
-                                surface_config,
-                                chunk_offset,
-                            );
+                                bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, (*buffers).as_ref().as_ref());
+                                set_push_constants(
+                                    config,
+                                    &mut render_pass,
+                                    Some(chunk),
+                                    surface_config,
+                                    chunk_offset,
+                                    section_index
+                                );
 
-                            render_pass.set_vertex_buffer(
-                                0,
-                                wm.mc.chunks.chunk_allocation.buffer.slice(
-                                    range.start as u64..range.end as u64
-                                )
-                            );
-                            render_pass.draw(0..(range.len() / std::mem::size_of::<Vertex>()) as u32, 0..1);
+                                render_pass.draw(baked_layer.clone(), 0..1);
+                            }
                         }
                     }
                 }
                 "wm_geo_entities" | "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox"
                 | "wm_geo_quad" => {
-                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass);
+                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, None);
                     set_push_constants(
                         config,
                         &mut render_pass,
                         None,
                         surface_config,
                         chunk_offset,
+                        0
                     );
 
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
                     render_pass.set_vertex_buffer(0, self.quad.as_ref().unwrap().slice(..));
                     render_pass.draw(0..6, 0..1);
-                }
+                },
+
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {
                         render_pass.set_pipeline(self.pipelines.get(name).unwrap());
@@ -840,10 +852,23 @@ impl ShaderGraph {
 pub fn bind_uniforms<'resource: 'pass, 'pass>(
     config: &PipelineConfig,
     resources: &'resource HashMap<&String, &'resource CustomResource>,
-    arena: &WmArena<'resource>,
+    arena: &WmArena<'pass>,
     render_pass: &mut RenderPass<'pass>,
+    chunk_buffers: Option<&'pass ChunkBuffers>
 ) {
     for (index, resource_name) in &config.uniforms {
+        match &resource_name[..] {
+            "wm_ssbo_chunk_vertices" => {
+                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().vertex_buffer.bind_group, &[]);
+                continue;
+            },
+            "wm_ssbo_chunk_indices" => {
+                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().index_buffer.bind_group, &[]);
+                continue;
+            },
+            _ => {}
+        }
+
         let bind_group = match &*resources.get(resource_name).unwrap().data {
             ResourceInternal::Texture(handle, _) => match handle {
                 TextureResource::Handle(handle) => {
@@ -872,6 +897,7 @@ pub fn set_push_constants(
     chunk: Option<&Chunk>,
     surface_config: &SurfaceConfiguration,
     chunk_offset: ChunkPos,
+    section_y: usize
 ) {
     pipeline
         .push_constants
@@ -892,6 +918,7 @@ pub fn set_push_constants(
                 *offset as u32,
                 bytemuck::cast_slice(&[
                     chunk.unwrap().pos[0] + chunk_offset[0],
+                    section_y as i32,
                     chunk.unwrap().pos[1] + chunk_offset[1],
                 ]),
             ),

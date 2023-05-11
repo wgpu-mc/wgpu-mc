@@ -14,8 +14,8 @@ struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
-        // if x >= 0 && x <= 15 && z >= 0 && z <= 15 && y == 1 {
         if x == 0 && y == 0 && z == 0 {
+        // if x == 0 && y == 0 && z == 0 {
             // ChunkBlockState::State(self.1)
             ChunkBlockState::State(self.1)
         } else {
@@ -45,17 +45,15 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, anvil) = bm.blocks.get_full("minecraft:cobblestone").unwrap();
+    let (index, _, block) = bm.blocks.get_full("minecraft:furnace").unwrap();
 
-    // let (_, augment) = anvil
-    //     .get_model_by_key(
-    //         [("facing", &StateValue::String("north".into()))],
-    //         &*wm.mc.resource_provider,
-    //         &atlas,
-    //     )
-    //     .unwrap();
-
-    let augment = 0;
+    let (_, augment) = block
+        .get_model_by_key(
+            [("facing", &StateValue::String("north".into())), ("lit", &StateValue::Bool(true))],
+            &*wm.mc.resource_provider,
+            &atlas,
+        )
+        .unwrap();
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),

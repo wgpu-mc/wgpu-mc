@@ -12,18 +12,19 @@ use std::sync::Arc;
 use crate::WmRenderer;
 
 use crate::mc::resource::ResourceProvider;
+use crate::render::atlas::ATLAS_DIMENSIONS;
 
 use crate::wgpu::RenderPipeline;
 
 pub const BLOCK_ATLAS: &str = "wgpu_mc:atlases/block";
 pub const ENTITY_ATLAS: &str = "wgpu_mc:atlases/entity";
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug)]
 pub struct Vertex {
     pub position: [f32; 3],
-    pub tex_coords: [f32; 2],
-    pub lightmap_coords: u32,
+    pub uv: [u16; 2],
+    pub normal: [f32; 3],
+    // pub lightmap_coords: u32,
     pub color: u32,
     pub uv_offset: u32
 }
@@ -37,6 +38,8 @@ impl Vertex {
         4 => Uint32
     ];
 
+    pub const VERTEX_LENGTH: usize = 12;
+
     #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
@@ -45,6 +48,56 @@ impl Vertex {
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &Self::VAA,
         }
+    }
+
+    pub fn compressed(&self) -> [u8; Self::VERTEX_LENGTH] {
+        // XYZ: 3 bytes (1 for each axis)
+        // Normal: 3 bits
+        // Color: 3 bytes
+        // UV: 4 bytes (Could be one)
+        // Animated UV index: 10 bits
+        //
+        // Total: 93 bits (12 bytes)
+        let mut array = [0; 12];
+
+        let x = self.position[0] * 16.0;
+        let y = self.position[1] * 16.0;
+        let z = self.position[2] * 16.0;
+        // assert!(x <= 256.0 && x.fract() == 0.0);
+        // assert!(y <= 256.0 && y.fract() == 0.0);
+        // assert!(z <= 256.0 && z.fract() == 0.0);
+
+        //position
+        array[0] = x as u8;
+        array[1] = y as u8;
+        array[2] = z as u8;
+
+        //color
+        array[3] = (self.color & 0xf) as u8;
+        array[4] = ((self.color >> 8) & 0xf) as u8;
+        array[5] = ((self.color >> 16) & 0xf) as u8;
+
+        //U
+        array[6] = self.uv[0].to_le_bytes()[0];
+        array[7] = self.uv[0].to_le_bytes()[1];
+        array[8] = self.uv[1].to_le_bytes()[0];
+        array[9] = self.uv[1].to_le_bytes()[1];
+
+        let normal_bits: u8 = match self.normal {
+            [-1.0, 0.0, 0.0] => 0b00000100,
+            [1.0, 0.0, 0.0] => 0b00000000,
+            [0.0, 1.0, 0.0] => 0b00000001,
+            [0.0, -1.0, 0.0] => 0b00000101,
+            [0.0, 0.0, 1.0] => 0b00000010,
+            [0.0, 0.0, -1.0] => 0b00000110,
+            _ => unreachable!("Invalid vertex normal")
+        };
+
+        //UV index and normal
+        array[10] = self.uv_offset as u8;
+        array[11] = (((self.uv_offset >> 8) as u8) & 0b11) | (normal_bits << 3);
+
+        array
     }
 }
 

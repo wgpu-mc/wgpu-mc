@@ -40,7 +40,7 @@ use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, CHUNK_SECTIONS_PER};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, SECTIONS_PER_CHUNK};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
@@ -186,7 +186,7 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
     }
 
     fn is_section_empty(&self, index: usize) -> bool {
-        if index >= CHUNK_SECTIONS_PER {
+        if index >= SECTIONS_PER_CHUNK {
             return true;
         }
 

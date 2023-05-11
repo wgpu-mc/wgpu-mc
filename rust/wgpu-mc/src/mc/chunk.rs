@@ -1,7 +1,6 @@
 //! # Everything regarding minecraft chunks
 //!
-//! This handles storing the state of all blocks in a chunk, as well as making
-//! baking the chunk mesh
+//! This handles storing the state of all blocks in a chunk, as well as baking the chunk mesh
 //!
 //! # Chunk sections?
 //!
@@ -16,6 +15,7 @@ use std::fmt::Debug;
 use std::mem::size_of;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BufferAddress, BufferDescriptor, BufferUsages};
 
@@ -26,28 +26,23 @@ use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 
 use crate::{WgpuState, WmRenderer};
+use crate::util::BindableBuffer;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
 pub const CHUNK_HEIGHT: usize = 384;
 pub const CHUNK_VOLUME: usize = CHUNK_AREA * CHUNK_HEIGHT;
 pub const CHUNK_SECTION_HEIGHT: usize = 16;
-pub const CHUNK_SECTIONS_PER: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
+pub const SECTIONS_PER_CHUNK: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
-pub const CHUNK_ALLOCATOR_SIZE: usize = 1000 * 1000 * 1000;
+pub const CHUNK_ALLOCATOR_SIZE: usize = 1024 * 1024 * 1024;
 
 pub type ChunkPos = [i32; 2];
-
-pub struct ChunkAllocation {
-    pub buffer: Arc<wgpu::Buffer>,
-    pub allocator: RwLock<RangeAllocator<usize>>,
-}
 
 pub struct ChunkManager {
     pub loaded_chunks: RwLock<HashMap<ChunkPos, ArcSwap<Chunk>>>,
     pub chunk_offset: Mutex<ChunkPos>,
-    pub chunk_allocation: ChunkAllocation,
 }
 
 impl ChunkManager {
@@ -56,27 +51,11 @@ impl ChunkManager {
         ChunkManager {
             loaded_chunks: RwLock::new(HashMap::new()),
             chunk_offset: Mutex::new([0, 0]),
-            chunk_allocation: ChunkAllocation {
-                buffer: Arc::new(wgpu_state.device.create_buffer(&BufferDescriptor {
-                    label: None,
-                    size: CHUNK_ALLOCATOR_SIZE as BufferAddress,
-                    usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                })),
-                allocator: RwLock::new(RangeAllocator::new(0..CHUNK_ALLOCATOR_SIZE)),
-            },
         }
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ChunkSection {
-    pub empty: bool,
-    pub blocks: Box<[ChunkBlockState; SECTION_VOLUME]>,
-    pub offset_y: usize,
-}
-
-/// Return a BlockState within the provided world coordinates.
+/// Return a [ChunkBlockState] within the provided world coordinates.
 pub trait BlockStateProvider: Send + Sync + Debug {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
 
@@ -91,20 +70,26 @@ pub trait RenderLayer: Send + Sync {
     fn name(&self) -> &str;
 }
 
-/// A representation of a chunk, containing buffers and vertices for rendering.
+#[derive(Debug)]
+pub struct ChunkBuffers {
+    pub vertex_buffer: BindableBuffer,
+    pub index_buffer: BindableBuffer
+}
+
+///The struct representing a Chunk, with various render layers, split into sections
 #[derive(Debug)]
 pub struct Chunk {
     pub pos: ChunkPos,
-    /// The layers here don't have to be sections, and the [String] keys are used to distinguish
-    /// which [RenderLayer] the vertices come from.
-    pub baked_layers: RwLock<HashMap<String, Range<usize>>>,
+    pub buffers: ArcSwap<Option<ChunkBuffers>>,
+    pub sections: RwLock<HashMap<String, [Range<u32>; SECTIONS_PER_CHUNK]>>,
 }
 
 impl Chunk {
     pub fn new(pos: ChunkPos) -> Self {
         Self {
             pos,
-            baked_layers: Default::default(),
+            sections: RwLock::new(HashMap::new()),
+            buffers: ArcSwap::new(Arc::new(None)),
         }
     }
 
@@ -116,34 +101,55 @@ impl Chunk {
         block_manager: &BlockManager,
         provider: &T,
     ) {
+        let mut vertices = 0;
+        let mut vertex_data = Vec::new();
+        let mut index_data = Vec::new();
+
         let baked_layers = layers
             .iter()
             .map(|layer| {
-                let verts = bake_layer(
-                    block_manager,
-                    self,
-                    layer.mapper(),
-                    layer.filter(),
-                    provider,
-                );
+                let sections = (0..SECTIONS_PER_CHUNK).map(|index| {
+                    bake_section_layer(
+                        block_manager,
+                        self,
+                        layer.mapper(),
+                        layer.filter(),
+                        provider,
+                        index
+                    )
+                }).collect::<Vec<_>>();
 
-                let range = {
-                    let mut allocator = wm.mc.chunks.chunk_allocation.allocator.write();
-                    let size = verts.len() * size_of::<Vertex>();
-                    allocator.allocate_range(size).unwrap()
-                };
+                let ranges: [Range<u32>; SECTIONS_PER_CHUNK] = array_init::from_iter(
+                    sections.iter().map(|(vert, index)| {
+                        let offset = vertices as u32;
+                        vertices += vert.len();
 
-                wm.wgpu_state.queue.write_buffer(
-                    &wm.mc.chunks.chunk_allocation.buffer,
-                    range.start as u64,
-                    bytemuck::cast_slice(&verts)
-                );
+                        let index_offset = index_data.len();
 
-                (layer.name().into(), range)
+                        vertex_data.extend(vert.iter().map(Vertex::compressed).flatten());
+                        index_data.extend(index.iter().map(|i| *i + offset));
+
+                        index_offset as u32..index_offset as u32 + index.len() as u32
+                    })
+                ).unwrap();
+
+                (
+                    layer.name().to_string(),
+                    ranges
+                )
             })
             .collect();
 
-        *self.baked_layers.write() = baked_layers;
+        println!("{} {}", vertex_data.len(), index_data.len());
+
+        let vertex_buffer = BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
+        let index_buffer = BindableBuffer::new(wm, bytemuck::cast_slice(&index_data), BufferUsages::STORAGE, "ssbo");
+
+        self.buffers.store(Arc::new(Some(ChunkBuffers {
+            vertex_buffer,
+            index_buffer,
+        })));
+        *self.sections.write() = baked_layers;
     }
 }
 
@@ -179,7 +185,7 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
     )
 }
 
-pub fn bake_layer<
+pub fn bake_section_layer<
     T,
     Provider: BlockStateProvider,
     Filter: Fn(BlockstateKey) -> bool,
@@ -190,15 +196,22 @@ pub fn bake_layer<
     mapper: Mapper,
     filter: Filter,
     state_provider: &Provider,
+    section_index: usize
 ) -> (Vec<T>, Vec<u32>) {
     //Generates the mesh for this chunk, culling faces whenever possible
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-    let mut block_index = 0;
+    let mut block_index = section_index * (16 * 16 * 16);
+
+    let end_index = (section_index + 1) * (16 * 16 * 16);
+
+    if state_provider.is_section_empty(section_index) {
+        return (vertices, indices);
+    }
 
     loop {
-        if block_index >= CHUNK_VOLUME {
+        if block_index >= end_index {
             break;
         }
 
@@ -206,13 +219,9 @@ pub fn bake_layer<
         let y = (block_index / CHUNK_AREA) as i16;
         let z = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
 
-        if x == 0 && z == 0 && (y as usize % CHUNK_SECTION_HEIGHT) == 0 {
-            let section_index = y as usize / CHUNK_SECTION_HEIGHT;
-            if state_provider.is_section_empty(section_index) {
-                block_index += CHUNK_SECTION_HEIGHT * CHUNK_AREA;
-                continue;
-            }
-        }
+        let xf32 = x as f32;
+        let yf32 = (y % 16) as f32;
+        let zf32 = z as f32;
 
         block_index += 1;
 
@@ -255,46 +264,60 @@ pub fn bake_layer<
                     render_east
                 };
 
-                if render_north {
+                const INDICES: [u32; 6] = [0,1,2,3,4,5];
 
+                let mut extend_vertices = |face: &[u32; 6]| {
+                    let vec_index = vertices.len();
+                    vertices.extend(
+                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32))
+                    );
+                    indices.extend(INDICES.map(|index| index + (vec_index as u32)));
+                };
+
+                //"face" contains offsets into the array containing the model vertices.
+                //We use those offsets to get the relevant vertices, and add them into the chunk vertices.
+                //We then add the starting offset into the vertices to the face indices so that they match up.
+                if let (true, Some(face)) = (render_north, &model.north) {
+                    extend_vertices(face);
                 }
-                if render_east {
 
+                if let (true, Some(face)) = (render_east, &model.east) {
+                    extend_vertices(face);
                 }
-                if render_south {
 
+                if let (true, Some(face)) = (render_south, &model.south) {
+                    extend_vertices(face);
                 }
-                if render_west {
 
+                if let (true, Some(face)) = (render_west, &model.west) {
+                    extend_vertices(face);
                 }
-                if render_up {
 
+                if let (true, Some(face)) = (render_up, &model.up) {
+                    extend_vertices(face);
                 }
-                if render_down {
 
+                if let (true, Some(face)) = (render_down, &model.down) {
+                    extend_vertices(face);
                 }
             }
-            CubeOrComplexMesh::Complex(model) => {
-                vertices.extend(
-                    model
-                        .iter()
-                        .flat_map(|faces| {
-                            [
-                                faces.north.as_ref(),
-                                faces.east.as_ref(),
-                                faces.south.as_ref(),
-                                faces.west.as_ref(),
-                                faces.up.as_ref(),
-                                faces.down.as_ref(),
-                            ]
-                        })
-                        .flatten()
-                        .flatten()
-                        .map(|v| mapper(v, x as f32, y as f32, z as f32)),
-                );
+            CubeOrComplexMesh::Complex(faces) => {
+                for model in faces {
+                    let unwrapped_faces = [
+                        model.north,
+                        model.east,
+                        model.south,
+                        model.west,
+                        model.up,
+                        model.down
+                    ].iter().filter_map(|face| *face).collect::<Vec<_>>();
+
+                    vertices.extend(unwrapped_faces.iter().flatten().map(|index| mapper(&model.vertices[*index as usize], xf32, yf32, zf32)));
+                    indices.extend(unwrapped_faces.iter().flatten());
+                }
             }
         }
     }
 
-    vertices
+    (vertices, indices)
 }

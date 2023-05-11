@@ -162,8 +162,8 @@ impl RenderLayer for TerrainLayer {
                 vert.position[1] + y,
                 vert.position[2] + z,
             ],
-            tex_coords: vert.tex_coords,
-            lightmap_coords: 0,
+            uv: vert.tex_coords,
+            normal: [vert.normal[0], vert.normal[1], vert.normal[2]],
             color: u32::MAX,
             uv_offset: vert.animation_uv_offset,
         }
