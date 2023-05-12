@@ -107,23 +107,36 @@ public abstract class WorldRendererMixin {
 
         if(player != null) {
             ChunkPos pos = player.getChunkPos();
-            WgpuNative.setChunkOffset(pos.x, pos.z);
-            Vec3d translate = camera.getPos().multiply(-1.0);
+
+            Vec3d translate = camera.getPos();
 
             stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_X.getDegreesQuaternion(camera.getPitch()));
             stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_Y.getDegreesQuaternion(camera.getYaw() + 180.0f));
 
+            //Java does negative modulo in an annoying way, e.g. -1 % 16.0 = -1.0 and not 15.0
+            double modX = ((translate.x % 16.0) + 16.0) % 16.0;
+            double modZ = ((translate.z % 16.0) + 16.0) % 16.0;
+
+//            stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
+//                    (float) (-modX),
+//                    ((float) -translate.y) - 64.0f,
+//                    (float) (-modZ)
+//            ));
+
             stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
-                    (float) (translate.x),
-                    (float) translate.y - 64.0f,
-                    (float) (translate.z)
+                    (float) -translate.x,
+                    (float) -translate.y - 64.0f,
+                    (float) -translate.z
             ));
+
+//            WgpuNative.setChunkOffset(-(int) (Math.floor(translate.x / 16.0)), -(int) (Math.floor(translate.z / 16.0)));
         }
 
         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
         float[] out = new float[16];
         stack.peek().getPositionMatrix().writeColumnMajor(floatBuffer);
         floatBuffer.get(out);
+
         WgpuNative.setMatrix(0, out);
 
         ci.cancel();

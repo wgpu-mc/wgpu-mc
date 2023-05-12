@@ -91,12 +91,12 @@ pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
                     length: *cuboid_data.dimensions.get("z")?,
                     textures: CuboidUV {
                         //TODO
-                        north: ((0.0, 0.0), (0.0, 0.0)),
-                        east: ((0.0, 0.0), (0.0, 0.0)),
-                        south: ((0.0, 0.0), (0.0, 0.0)),
-                        west: ((0.0, 0.0), (0.0, 0.0)),
-                        up: ((0.0, 0.0), (0.0, 0.0)),
-                        down: ((0.0, 0.0), (0.0, 0.0)),
+                        north: ((0, 0), (0, 0)),
+                        east: ((0, 0), (0, 0)),
+                        south: ((0, 0), (0, 0)),
+                        west: ((0, 0), (0, 0)),
+                        up: ((0, 0), (0, 0)),
+                        down: ((0, 0), (0, 0)),
                     },
                 })
             })

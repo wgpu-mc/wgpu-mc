@@ -1,3 +1,5 @@
+//! Rust implementations of minecraft concepts that are important to us.
+
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -10,7 +12,7 @@ use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
-use crate::WmRenderer;
+use crate::{WgpuState, WmRenderer};
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -20,12 +22,12 @@ pub mod chunk;
 pub mod entity;
 pub mod resource;
 
-///Take in a block name (not a [ResourcePath]!) and optionally a variant state key, e.g. "facing=north" and format it some way
+/// Take in a block name (not a [ResourcePath]!) and optionally a variant state key, e.g. "facing=north" and format it some way
 /// for example, `minecraft:anvil[facing=north]` or `Block{minecraft:anvil}[facing=north]`
 pub type BlockVariantFormatter = dyn Fn(&str, Option<&str>) -> String;
 
 pub struct BlockManager {
-    ///This maps block state keys to either a [VariantMesh] or a [Multipart] struct. How the keys are formatted
+    /// This maps block state keys to either a [VariantMesh] or a [Multipart] struct. How the keys are formatted
     /// is defined by the user of wgpu-mc. For example `Block{minecraft:anvil}[facing=west]` or `minecraft:anvil#facing=west`
     pub blocks: IndexMap<String, Block>,
 }
@@ -128,18 +130,19 @@ impl Multipart {
         Arc::new(mesh)
     }
 }
+
 pub enum MultipartOrMesh {
     Multipart(Arc<Multipart>),
     Mesh(Arc<ModelMesh>),
 }
 
-///Multipart models are generated dynamically as they can be too complex
+/// Multipart models are generated dynamically as they can be too complex
 pub struct BlockInstance {
     pub render_settings: block::RenderSettings,
     pub block: MultipartOrMesh,
 }
 
-///Minecraft-specific state and data structures go in here
+/// Minecraft-specific state and data structures go in here
 pub struct MinecraftState {
     pub sun_position: ArcSwap<f32>,
 
@@ -158,10 +161,10 @@ pub struct MinecraftState {
 
 impl MinecraftState {
     #[must_use]
-    pub fn new(resource_provider: Arc<dyn ResourceProvider>) -> Self {
+    pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
             sun_position: ArcSwap::new(Arc::new(0.0)),
-            chunks: ChunkManager::new(),
+            chunks: ChunkManager::new(wgpu_state),
             entity_models: RwLock::new(Vec::new()),
 
             texture_manager: TextureManager::new(),
@@ -177,7 +180,7 @@ impl MinecraftState {
         }
     }
 
-    ///Bake blocks from their blockstates
+    /// Bake blocks from their blockstates
     ///
     /// # Example
     ///

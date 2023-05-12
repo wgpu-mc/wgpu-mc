@@ -50,7 +50,8 @@ impl BindableBuffer {
 }
 
 type WmArenaObject = (*mut u8, unsafe fn(*mut u8));
-///Untyped arena for render passes
+
+/// Untyped arena for render passes
 pub struct WmArena<'a> {
     heap: RefCell<*mut u8>,
     capacity: RefCell<usize>,

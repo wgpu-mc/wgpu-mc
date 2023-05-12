@@ -34,7 +34,8 @@
     "render.WindowMixin",
     "render.WorldRendererMixin",
     "world.BlockStateMixin",
-    "world.LightDataMixin"
+    "world.LightDataMixin",
+    "DebugHudMixin"
   ],
   "injectors": {
     "defaultRequire": 1

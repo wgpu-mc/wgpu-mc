@@ -34,11 +34,10 @@ Engine
   - [x] Variants
 - [x] Terrain rendering
 - - [ ] Translucency sorting
-- - [ ] Frustum culling compute shader
-- [x] Skybox support
+- - [x] Frustum culling
 - [x] Instanced Entity Rendering
 - [x] Animated textures
-- [x] Particles
+- [ ] Mipmaps  
 - [x] Advanced data-driven shader pipeline support
 
 Minecraft

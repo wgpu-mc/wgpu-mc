@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::cmp::max;
 use std::vec::Vec;
 
@@ -283,6 +284,7 @@ impl BufferPool {
 pub struct ElectrumGeometry {
     pub blank: TextureHandle,
     pub pool: Arc<Buffer>,
+    pub last_bytes: RwLock<Option<Vec<u8>>>,
 }
 
 impl GeometryCallback for ElectrumGeometry {
@@ -415,8 +417,8 @@ impl GeometryCallback for ElectrumGeometry {
                     let augmented_resources =
                         augment_resources(wm, &resources, arena, texture, draw.matrix);
 
-                    bind_uniforms(config, augmented_resources, arena, render_pass);
-                    set_push_constants(config, render_pass, None, surface_config, chunk_offset);
+                    bind_uniforms(config, augmented_resources, arena, render_pass, None);
+                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, 0);
 
                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
 
@@ -436,8 +438,8 @@ impl GeometryCallback for ElectrumGeometry {
                     let augmented_resources =
                         augment_resources(wm, &resources, arena, texture, draw.matrix);
 
-                    bind_uniforms(config, augmented_resources, arena, render_pass);
-                    set_push_constants(config, render_pass, None, surface_config, chunk_offset);
+                    bind_uniforms(config, augmented_resources, arena, render_pass, None);
+                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, 0);
 
                     let vertices = match draw.pipeline_state {
                         PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
@@ -473,8 +475,19 @@ impl GeometryCallback for ElectrumGeometry {
             }
         }
 
+        match &*self.last_bytes.read() {
+            None => {}
+            Some(bytes) => {
+                if bytes == &buffer_pool.data {
+                    return;
+                }
+            }
+        }
+
         wm.wgpu_state
             .queue
             .write_buffer(&self.pool, 0, &buffer_pool.data);
+
+        *self.last_bytes.write() = Some(buffer_pool.data);
     }
 }

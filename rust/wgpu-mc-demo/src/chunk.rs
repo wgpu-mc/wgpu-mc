@@ -14,14 +14,20 @@ struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
-        ChunkBlockState::State(self.1)
+        if x == 0 && y == 0 && z == 0 {
+        // if x == 0 && y == 0 && z == 0 {
+            // ChunkBlockState::State(self.1)
+            ChunkBlockState::State(self.1)
+        } else {
+            ChunkBlockState::Air
+        }
     }
 
     fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
         LightLevel::from_sky_and_block(15, 15)
     }
 
-    fn is_section_empty(&self, index: usize) -> bool {
+    fn is_section_empty(&self, _index: usize) -> bool {
         false
     }
 }
@@ -43,11 +49,11 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, anvil) = bm.blocks.get_full("minecraft:anvil").unwrap();
+    let (index, _, block) = bm.blocks.get_full("minecraft:furnace").unwrap();
 
-    let (_, augment) = anvil
+    let (_, augment) = block
         .get_model_by_key(
-            [("facing", &StateValue::String("north".into()))],
+            [("facing", &StateValue::String("north".into())), ("lit", &StateValue::Bool(true))],
             &*wm.mc.resource_provider,
             &atlas,
         )
@@ -67,7 +73,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let pipelines = wm.pipelines.load();
     let layers = pipelines.chunk_layers.load();
 
-    chunk.bake(wm, &layers, &bm, &provider);
+    chunk.bake_chunk(wm, &layers, &bm, &provider);
 
     println!(
         "Built 1 chunk in {} microseconds",

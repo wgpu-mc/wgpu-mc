@@ -2,6 +2,7 @@ package dev.birb.wgpu.mixin.core;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import dev.birb.wgpu.render.GlWmState;
+import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.util.math.Matrix4f;
 import net.minecraft.util.math.Vec3f;
@@ -14,6 +15,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.List;
@@ -516,6 +518,9 @@ public class GlStateManagerMixin {
 
         if(width + offsetX <= texture.width && height + offsetY <= texture.height) {
             int[] pixel_array = new int[width*height];
+//            ByteBuffer buffer = ByteBuffer.allocateDirect(width*height*4);
+//            buffer.order(ByteOrder.LITTLE_ENDIAN);
+//            IntBuffer intBuf = buffer.asIntBuffer();
 
             long pixel_size = 4L; //TODO support more formats..?
             for(int y = 0; y < height; y++) {
@@ -526,11 +531,14 @@ public class GlStateManagerMixin {
                     
                     //TODO row_byte_offset proper impl || let row_byte_offset = if pixel_size >= unpack_alignment
                     long offset = (current_x + current_y) * pixel_size;
+
+//                    intBuf.put(x + y * width, MemoryUtil.memGetInt(pixels+offset));
                     pixel_array[x + y * width] = MemoryUtil.memGetInt(pixels+offset);
                 }
             }
-            
-             WgpuNative.subImage2D(
+
+            Wgpu.timesTexSubImageCalled++;
+            WgpuNative.subImage2D(
                  texId,
                  target,
                  level,
@@ -545,7 +553,7 @@ public class GlStateManagerMixin {
                  unpack_skip_pixels,
                  unpack_skip_rows,
                  unpack_alignment
-             );
+            );
         } else {
             throw new RuntimeException("Attempted to map a texture that was too large onto a smaller texture");
         }

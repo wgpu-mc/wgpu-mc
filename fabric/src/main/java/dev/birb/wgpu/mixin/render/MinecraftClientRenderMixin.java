@@ -79,18 +79,8 @@ public abstract class MinecraftClientRenderMixin {
     @Inject(method = "render", at = @At("RETURN"))
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
         RenderSystem.replayQueue();
-//        WgpuNative.setProjectionMatrix(Render);
-        MinecraftClient client = (MinecraftClient) (Object) this;
-
-        if(client.player != null) {
-            int originX = ((ClientWorld) client.world).getChunkManager().chunks.centerChunkX;
-            int originZ = ((ClientWorld) client.world).getChunkManager().chunks.centerChunkX;
-
-            WgpuNative.setCamera(client.player.getX() - (originX * 16.0f), client.player.getY(), client.player.getZ() - (originZ * 16.0f), client.player.renderYaw, client.player.renderPitch);
-        }
 
         WgpuNative.submitCommands();
-        WgpuNative.setWorldRenderState(MinecraftClient.getInstance().world != null);
     }
 
 }

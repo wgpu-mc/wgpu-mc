@@ -13,7 +13,7 @@ use std::io::{Cursor, Read};
 use std::mem::size_of;
 use tracing_timing::HashMap;
 use winit::event::VirtualKeyCode::N;
-use wgpu_mc::mc::chunk::CHUNK_SECTIONS_PER;
+use wgpu_mc::mc::chunk::SECTIONS_PER_CHUNK;
 use crate::{ChunkHolder, CHUNKS};
 
 pub static LIGHT_DATA: Lazy<RwLock<Slab<LightData>>> = Lazy::new(|| RwLock::new(Slab::new()));
@@ -90,7 +90,7 @@ impl DeserializedLightData {
         let mut sky_index = 0;
         let mut block_index = 0;
 
-        for offset in 0..CHUNK_SECTIONS_PER {
+        for offset in 0..SECTIONS_PER_CHUNK {
             let inited_sky = light_data.inited_sky.is_set(offset);
             let inited_block = light_data.inited_block.is_set(offset);
             let empty_sky = light_data.uninited_sky.is_set(offset);

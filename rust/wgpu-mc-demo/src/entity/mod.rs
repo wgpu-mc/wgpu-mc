@@ -9,11 +9,6 @@ use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::WmRenderer;
 
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
-    // px = pixel(s)
-    let _1_px = 1.0 / (ATLAS_DIMENSIONS as f32);
-    let _16_px = 16.0 * _1_px;
-    let _64_px = 64.0 * _1_px;
-
     let entity_root = {
         EntityPart {
             name: Arc::new("cube".into()),
@@ -41,12 +36,12 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                 length: 32.0,
 
                 textures: CuboidUV {
-                    north: ((0.0, _1_px * 56.0), (_1_px * 24.0, _64_px)),
-                    east: ((0.0, _1_px * 56.0), (_1_px * 24.0, _64_px)),
-                    south: ((0.0, _1_px * 56.0), (_1_px * 24.0, _64_px)),
-                    west: ((0.0, _1_px * 56.0), (_1_px * 24.0, _64_px)),
-                    up: ((_1_px * 48.0, _1_px * 32.0), (_1_px * 72.0, _1_px * 56.0)),
-                    down: ((_1_px * 48.0, _1_px * 32.0), (_1_px * 72.0, _1_px * 56.0)),
+                    north: ((0, 56), (24, 64)),
+                    east: ((0, 56), (24, 64)),
+                    south: ((0, 56), (24, 64)),
+                    west: ((0, 56), (24, 64)),
+                    up: ((48, 32), (72, 56)),
+                    down: ((48, 32), (72, 56)),
                 },
             }],
             children: vec![
@@ -74,12 +69,12 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                         height: 16.0,
                         length: 16.0,
                         textures: CuboidUV {
-                            north: ((_64_px, _16_px), (_64_px + _16_px, _16_px + _16_px)),
-                            east: ((_64_px, _16_px), (_64_px + _16_px, _16_px + _16_px)),
-                            south: ((_64_px, _16_px), (_64_px + _16_px, _16_px + _16_px)),
-                            west: ((_64_px, _16_px), (_64_px + _16_px, _16_px + _16_px)),
-                            up: ((_64_px, _16_px), (_64_px + _16_px, _16_px + _16_px)),
-                            down: ((_64_px, _16_px), (_64_px + _16_px, _16_px + _16_px)),
+                            north: ((64, 16), (80, 32)),
+                            east: ((64, 16), (80, 32)),
+                            south: ((64, 16), (80, 32)),
+                            west: ((64, 16), (80, 32)),
+                            up: ((64, 16), (80, 32)),
+                            down: ((64, 16), (80, 32)),
                         },
                     }],
                     children: vec![],
@@ -108,12 +103,12 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                         height: 19.2,
                         length: 19.2,
                         textures: CuboidUV {
-                            north: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            east: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            south: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            west: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            up: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            down: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
+                            north: ((16, 0), (32, 16)),
+                            east: ((16, 0), (32, 16)),
+                            south: ((16, 0), (32, 16)),
+                            west: ((16, 0), (32, 16)),
+                            up: ((16, 0), (32, 16)),
+                            down: ((16, 0), (32, 16)),
                         },
                     }],
                     children: vec![],
@@ -142,12 +137,12 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
                         height: 19.2,
                         length: 19.2,
                         textures: CuboidUV {
-                            north: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            east: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            south: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            west: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            up: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
-                            down: ((_16_px, 0.0), (_16_px + _16_px, _16_px)),
+                            north: ((16, 0), (32, 16)),
+                            east: ((16, 0), (32, 16)),
+                            south: ((16, 0), (32, 16)),
+                            west: ((16, 0), (32, 16)),
+                            up: ((16, 0), (32, 16)),
+                            down: ((16, 0), (32, 16)),
                         },
                     }],
                     children: vec![],
