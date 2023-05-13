@@ -7,6 +7,8 @@ use crate::mc::chunk::RenderLayer;
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::ops::Mul;
+use std::simd::{f32x16, f32x4, Simd};
 use std::sync::Arc;
 
 use crate::WmRenderer;
@@ -30,7 +32,7 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub const VERTEX_LENGTH: usize = 12;
+    pub const VERTEX_LENGTH: usize = 16;
 
     pub fn compressed(&self) -> [u8; Self::VERTEX_LENGTH] {
         // XYZ: 4 bytes (1 for each axis)
@@ -39,9 +41,10 @@ impl Vertex {
         // UV: 4 bytes
         // Animated UV index: 10 bits
         // XYZ add one flag: 3 bits
+        // Block light nibble: 1 byte (4 bits for block, 4 bits for sky)
 
-        // Total: 93 bits (12 bytes)
-        let mut array = [0; 12];
+        // Total: 101 bits (13 bytes)
+        let mut array = [0; Self::VERTEX_LENGTH];
 
         let x = self.position[0] * 16.0;
         let y = self.position[1] * 16.0;
@@ -86,6 +89,7 @@ impl Vertex {
         //UV index and normal
         array[10] = self.uv_offset as u8;
         array[11] = (((self.uv_offset >> 8) as u8) & 0b11) | (normal_bits << 2) | (flag_byte << 5);
+        array[12] = self.lightmap_coords;
 
         array
     }

@@ -56,9 +56,10 @@ fn vert(
 
     var index: u32 = index_data[vertex_index];
 
-    var v1 = vertex_data[index * 3u];
-    var v2 = vertex_data[(index * 3u) + 1u];
-    var v3 = vertex_data[(index * 3u) + 2u];
+    var v1 = vertex_data[index * 4u];
+    var v2 = vertex_data[(index * 4u) + 1u];
+    var v3 = vertex_data[(index * 4u) + 2u];
+    var v4 = vertex_data[(index * 4u) + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
@@ -85,7 +86,7 @@ fn vert(
 
     vr.pos = camera_uniform.view_proj * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
-    vr.light_coords = vec2<u32>(16u, 16u);
+    vr.light_coords = vec2<u32>(v4 & 15u, (v4 >> 4u) & 15u);
     vr.blend = 0.0;
 
     return vr;

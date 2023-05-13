@@ -200,10 +200,6 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         let calc = (((y as usize % CHUNK_SECTION_HEIGHT) << 8) | (((z.abs() % 16) as usize) << 4) | ((x.abs() % 16) as usize));
         let index = calc / 2;
 
-        if index > 2047 {
-            dbg!(calc, x, y, z, index);
-        }
-
         let index_remainder = calc % 2;
         let mask = if index_remainder == 0 { 0b00001111u8 } else { 0b11110000 };
         let shift = if index_remainder == 0 { 0 } else { 4 };
@@ -468,6 +464,8 @@ pub fn bake_chunk(x: i32, z: i32) {
             let instant = Instant::now();
 
             chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+
+            println!("baked a chunk in {}ms", Instant::now().duration_since(instant).as_millis())
         }
     });
 }

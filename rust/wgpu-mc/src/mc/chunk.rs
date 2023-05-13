@@ -12,11 +12,14 @@ use parking_lot::{Mutex, RwLock};
 use range_alloc::RangeAllocator;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io::stdout;
+use std::iter::repeat;
 use std::mem::size_of;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use std::time::Instant;
+use wgpu::util::{align_to, BufferInitDescriptor, DeviceExt};
 use wgpu::{BufferAddress, BufferDescriptor, BufferUsages};
 
 use crate::mc::block::{
@@ -130,19 +133,34 @@ impl Chunk {
         let mut vertex_data = Vec::new();
         let mut index_data = Vec::new();
 
+        // let mut out = stdout().lock();
+
         let baked_layers = layers
             .iter()
             .map(|layer| {
+
+                // let _1 = Instant::now();
+
+                // use std::io::Write;
+
                 let sections = (0..SECTIONS_PER_CHUNK).map(|index| {
-                    bake_section_layer(
+                    // let _2 = Instant::now();
+
+                    let s = bake_section_layer(
                         block_manager,
                         self,
                         layer.mapper(),
                         layer.filter(),
                         provider,
                         index
-                    )
+                    );
+
+                    // writeln!(&mut out, "Baked a section in {} microseconds", Instant::now().duration_since(_2).as_micros()).unwrap();
+
+                    s
                 }).collect::<Vec<_>>();
+
+                // writeln!(&mut out, "Baked and collected all sections in {} microseconds", Instant::now().duration_since(_1).as_micros()).unwrap();
 
                 let ranges: [Range<u32>; SECTIONS_PER_CHUNK] = array_init::from_iter(
                     sections.iter().map(|(vert, index)| {
@@ -151,7 +169,12 @@ impl Chunk {
 
                         let index_offset = index_data.len();
 
+                        let _3 = Instant::now();
+
                         vertex_data.extend(vert.iter().map(Vertex::compressed).flatten());
+
+                        // writeln!(&mut out, "Extended in {} microseconds", Instant::now().duration_since(_3).as_micros()).unwrap();
+
                         index_data.extend(index.iter().map(|i| *i + offset));
 
                         index_offset as u32..index_offset as u32 + index.len() as u32
