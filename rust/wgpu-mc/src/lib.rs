@@ -107,7 +107,7 @@ impl WmRenderer {
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
@@ -130,8 +130,7 @@ impl WmRenderer {
                     label: None,
                     features: wgpu::Features::default()
                         | wgpu::Features::DEPTH_CLIP_CONTROL
-                        | wgpu::Features::PUSH_CONSTANTS
-                        | wgpu::Features::TIMESTAMP_QUERY,
+                        | wgpu::Features::PUSH_CONSTANTS,
                     limits,
                 },
                 None, // Trace path
