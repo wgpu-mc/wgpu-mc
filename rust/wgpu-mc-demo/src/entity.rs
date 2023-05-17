@@ -35,13 +35,6 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
 
     let model_part_data = &entities.get(ENTITY_NAME).unwrap().data.data;
 
-    let atlas_pos = AtlasPosition {
-        width: ATLAS_DIMENSIONS,
-        height: ATLAS_DIMENSIONS,
-        x: 0.0,
-        y: 0.0,
-    };
-
     let entity_atlas_guard = {
         let pipelines = wm.pipelines.load();
         let atlas = Arc::new(ArcSwap::new(Arc::new(Atlas::new(
@@ -55,7 +48,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
         atlas.load_full()
     };
 
-    let wm_entity = tmd_to_wm("root".into(), model_part_data, &atlas_pos);
+    let wm_entity = tmd_to_wm("root".into(), model_part_data, [0, 0]);
 
     let texture_rp = ResourcePath(TEXTURE_LOCATION.into());
 

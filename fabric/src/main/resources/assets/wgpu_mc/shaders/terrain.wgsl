@@ -20,6 +20,7 @@ struct ChunkOffset {
 
 struct PushConstants {
     chunk_x: i32,
+    chunk_y: i32,
     chunk_z: i32,
     fb_width: f32,
     fb_height: f32
@@ -27,8 +28,13 @@ struct PushConstants {
 
 var<push_constant> push_constants: PushConstants;
 
-@group(0) @binding(0)
-var<uniform> proj: CameraUniform;
+@group(0) @binding(0) var<uniform> camera_uniform: CameraUniform;
+
+@group(1) @binding(0) var t_texture: texture_2d<f32>;
+@group(1) @binding(1) var t_sampler: sampler;
+
+@group(2) @binding(0) var<storage> vertex_data: array<u32>;
+@group(3) @binding(0) var<storage> index_data: array<u32>;
 
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
@@ -37,37 +43,50 @@ struct VertexResult {
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
     @location(4) world_pos: vec3<f32>
-//    @location(4) screen_pos: vec4<f32>
 };
 
 @vertex
 fn vert(
-    @location(0) pos_in: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
-    @location(2) normal: vec3<f32>,
-    @location(6) uv_offset: u32
+    @builtin(vertex_index) vertex_index: u32
 ) -> VertexResult {
     // var uv = uv_offsets.uvs[uv_offset];
 
     var vr: VertexResult;
 
-    var world_pos = pos_in + vec3<f32>(f32(push_constants.chunk_x) * 16.0, 0.0, f32(push_constants.chunk_z) * 16.0);
+    var index: u32 = index_data[vertex_index];
 
-    vr.world_pos = world_pos;
-    vr.pos = proj.view_proj * vec4<f32>(world_pos, 1.0);
-    vr.tex_coords = tex_coords;
-    vr.tex_coords2 = tex_coords;
-    vr.blend = 1.0;
-    vr.normal = normal;
+    var v1 = vertex_data[index * 3u];
+    var v2 = vertex_data[(index * 3u) + 1u];
+    var v3 = vertex_data[(index * 3u) + 2u];
+
+    var x: f32 = f32(v1 & 0xffu) * 0.0625;
+    var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
+    var z: f32 = f32((v1 >> 16u) & 0xffu) * 0.0625;
+
+    var u: f32 = f32((v2 >> 16u) & 0xffffu) * 0.00048828125;
+    var v: f32 = f32(v3 & 0xffffu) * 0.00048828125;
+
+    if(((v3 >> 61u) & 1u) == 1u) {
+        x = 16.0;
+    }
+
+    if(((v3 >> 62u) & 1u) == 1u) {
+        y = 16.0;
+    }
+
+    if((v3 >> 63u) == 1u) {
+        z = 16.0;
+    }
+
+    var pos = vec3<f32>(x, y, z);
+
+    var world_pos = pos + vec3<f32>(f32(push_constants.chunk_x) * 16.0, f32(push_constants.chunk_y) * 16.0, f32(push_constants.chunk_z) * 16.0);
+
+    vr.pos = camera_uniform.view_proj * vec4(world_pos, 1.0);
+    vr.tex_coords = vec2<f32>(u, v);
 
     return vr;
 }
-
-@group(1) @binding(0)
-var t_texture: texture_2d<f32>;
-
-@group(1) @binding(1)
-var t_sampler: sampler;
 
 @fragment
 fn frag(

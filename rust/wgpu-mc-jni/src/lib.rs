@@ -9,13 +9,13 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
-use std::{mem, thread};
 use std::mem::size_of;
 use std::num::NonZeroU32;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+use std::{mem, thread};
 
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use arc_swap::ArcSwap;
@@ -42,7 +42,7 @@ use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, CHUNK_SECTIONS_PER};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, SECTIONS_PER_CHUNK};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
@@ -94,15 +94,16 @@ static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
 static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
-static TASK_CHANNELS: Lazy<(Sender<Box<dyn FnOnce() + Send + Sync>>, Receiver<Box<dyn FnOnce() + Send + Sync>>)> = Lazy::new(unbounded);
+static TASK_CHANNELS: Lazy<(
+    Sender<Box<dyn FnOnce() + Send + Sync>>,
+    Receiver<Box<dyn FnOnce() + Send + Sync>>,
+)> = Lazy::new(unbounded);
 static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
     ArcSwap::new(Arc::new(MinecraftRenderState {
         _render_world: false,
     }))
 });
-#[allow(dead_code)]
-static MOUSE_STATE: Lazy<Arc<ArcSwap<MouseState>>> =
-    Lazy::new(|| Arc::new(ArcSwap::new(Arc::new(MouseState { x: 0.0, y: 0.0 }))));
+
 static THREAD_POOL: Lazy<ThreadPool> =
     Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
 
@@ -187,7 +188,7 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
     }
 
     fn is_section_empty(&self, index: usize) -> bool {
-        if index >= CHUNK_SECTIONS_PER {
+        if index >= SECTIONS_PER_CHUNK {
             return true;
         }
 
@@ -421,7 +422,7 @@ pub fn bake_chunk(x: i32, z: i32) {
 
             let instant = Instant::now();
 
-            chunk.bake(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+            chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
         }
     });
 }
@@ -572,9 +573,7 @@ pub fn runHelperThread(env: JNIEnv, _class: JClass) {
         }
     });
 
-
     let rx = &CHANNELS.1;
-
 
     for render_message in rx.iter() {
         match render_message {
@@ -724,23 +723,6 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
             })],
         );
     }))
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn debugBake(env: JNIEnv, _class: JClass) {
-    let positions = {
-        let renderer = RENDERER.get().unwrap();
-        let chunks = renderer.mc.chunks.loaded_chunks.read();
-
-        chunks.iter().map(|(pos, _)| *pos).collect::<Vec<_>>()
-    };
-
-    println!("Baking {0} chunks", positions.len());
-    for pos in positions {
-        bake_chunk(pos[0], pos[1]);
-    }
-
-    // let wm = RENDERER.get().unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -894,7 +876,7 @@ pub fn texImage2D(
 #[allow(non_snake_case)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn subImage2D(
-    _env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     texture_id: jint,
     _target: jint,
@@ -905,13 +887,21 @@ pub fn subImage2D(
     height: jint,
     format: jint,
     _type: jint,
-    pixels: jlong,
+    pixels: jintArray,
     unpack_row_length: jint,
     unpack_skip_pixels: jint,
     unpack_skip_rows: jint,
     unpack_alignment: jint,
 ) {
-    let mut pixels = pixels as usize;
+    let pixel_array_pointer = env
+        .get_int_array_elements(pixels, ReleaseMode::NoCopyBack)
+        .unwrap();
+    let pixels = unsafe {
+        Vec::from(slice::from_raw_parts(
+            pixel_array_pointer.as_ptr() as *mut u32,
+            pixel_array_pointer.size().unwrap() as usize,
+        ))
+    };
     let unpack_row_length = unpack_row_length as usize;
     let unpack_skip_pixels = unpack_skip_pixels as usize;
     let unpack_skip_rows = unpack_skip_rows as usize;
@@ -926,33 +916,13 @@ pub fn subImage2D(
 
     //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
     let row_width = if unpack_row_length > 0 {
-        unpack_row_length as i64
+        unpack_row_length
     } else {
-        width as i64
-    };
-
-    let src_row_size = row_width as usize * pixel_size;
-
-    //GL_UNPACK_SKIP_PIXELS
-    pixels += pixel_size * unpack_skip_pixels;
-    //GL_UNPACK_SKIP_ROWS
-    pixels += src_row_size * unpack_skip_rows;
-
-    let next_row_byte_offset = if pixel_size >= unpack_alignment {
-        src_row_size
-    } else {
-        unimplemented!()
+        width
     };
 
     //In bytes
     assert_eq!(_type, 0x1401);
-
-    let vec = unsafe {
-        Vec::from(slice::from_raw_parts(
-            pixels as *mut u8,
-            next_row_byte_offset * height,
-        ))
-    };
 
     //For when the renderer is initialized
     let task = move || {
@@ -963,18 +933,27 @@ pub fn subImage2D(
         let gl_texture = alloc_write.get_mut(&(texture_id as u32)).unwrap();
 
         let dest_row_size = gl_texture.width as usize * pixel_size;
-
-        let mut pixel_offset = 0usize;
         for y in 0..height {
-            let src_row_slice = &vec[pixel_offset..pixel_offset + src_row_size];
-            pixel_offset += next_row_byte_offset;
+            for x in 0..width {
+                let pixel = pixels[x + y * width];
 
-            let dest_begin =
-                (dest_row_size * (y + offsetY as usize)) + (offsetX as usize * pixel_size);
-            let dest_end = dest_begin + src_row_size;
+                //Convert rgba to slice format. There's only support for rgba at the moment.
+                let mut rgba_array: [u8; 4] = [
+                    (pixel >> 0 & 0xFF) as u8,
+                    (pixel >> 8 & 0xFF) as u8,
+                    (pixel >> 16 & 0xFF) as u8,
+                    (pixel >> 24 & 0xFF) as u8,
+                ];
 
-            let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
-            dest_row_slice.copy_from_slice(src_row_slice);
+                //Find where the pixel data should go.
+                let dest_begin = (dest_row_size * (y + offsetY as usize))
+                    + ((x + offsetX as usize) * pixel_size);
+
+                let dest_end = dest_begin + pixel_size;
+                //Copy/paste pixel data to target image.
+                let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
+                dest_row_slice.copy_from_slice(&rgba_array[0..pixel_size]);
+            }
         }
 
         wm.wgpu_state.queue.write_texture(
@@ -1226,28 +1205,10 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
     }
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCamera(
-    _env: JNIEnv,
-    _class: JClass,
-    x: jdouble,
-    _y: jdouble,
-    z: jdouble,
-    yaw: jfloat,
-    pitch: jfloat,
-) {
-    // let renderer = RENDERER.get().unwrap();
-    // if renderer.mc.camera_bind_group.load().is_none() {
-    //     renderer.mc.init_camera(renderer);
-    // }
-    //
-    // let mut camera = **renderer.mc.camera.load();
-    // camera.position = Point3::new(x as f32, 200., z as f32);
-    // // camera.position = Point3::new(0.0, 200.0, 0.0);
-    // camera.yaw = (PI / 180.0) * yaw;
-    // camera.pitch = (PI / 180.0) * pitch;
-    // // camera.pitch = PI * 1.5;
-    //
-    // renderer.mc.camera.store(Arc::new(camera));
-    // renderer.upload_camera();
+pub fn registerEntityModel(env: JNIEnv, _class: JClass, json_jstring: JString) {
+    let _renderer = RENDERER.get().unwrap();
+
+    // let json_string: String = env.get_string(json_jstring).unwrap().into();
+    // let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
+    // let _entity_part = tmd_to_wm(&model_data.data.data);
 }

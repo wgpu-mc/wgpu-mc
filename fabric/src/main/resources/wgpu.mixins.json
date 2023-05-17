@@ -37,7 +37,12 @@
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
+<<<<<<< HEAD
     "world.BlockStateMixin"
+=======
+    "world.BlockStateMixin",
+    "DebugHudMixin"
+>>>>>>> master
   ],
   "injectors": {
     "defaultRequire": 1

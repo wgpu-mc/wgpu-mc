@@ -1,13 +1,19 @@
+//! # General
+//!
+//! This is about the rendering pipeline, and implements the logic behind
+//! [shaderpack::ShaderPackConfig].
+
 use arc_swap::ArcSwap;
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Range;
 use std::sync::Arc;
-use std::time::Instant;
+
 use treeculler::{BVol, Frustum, Vec3, AABB};
 
-use crate::mc::chunk::{Chunk, ChunkPos};
+use crate::mc::chunk::{Chunk, CHUNK_SECTION_HEIGHT, ChunkBuffers, ChunkPos, SECTIONS_PER_CHUNK};
 use crate::mc::resource::ResourcePath;
 use crate::render::pipeline::{QuadVertex, Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
@@ -22,13 +28,7 @@ use crate::WmRenderer;
 use crate::mc::entity::{EntityInstances, InstanceVertex};
 use crate::render::entity::EntityVertex;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, FragmentState,
-    LoadOp, Operations, PipelineLayoutDescriptor, PushConstantRange, RenderPass,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
-    VertexBufferLayout, VertexState,
-};
+use wgpu::{BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, Face, FragmentState, FrontFace, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
 
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
@@ -82,15 +82,13 @@ fn mat4_update(
 
     if let ResourceInternal::Mat4(Mat4ValueOrMult::Mult { mult }, lock, ssbo) = &*resource.data {
         mult.iter().for_each(|mat_name| {
-            match &mat_name[..] {
-                _ => {
-                    let resource = resources.get(mat_name).expect(mat_name);
-                    match &*resource.data {
-                        ResourceInternal::Mat4(_, lock, _) => {
-                            mat4 = mat4 * (*lock.read());
-                        },
-                        _ => panic!("Invalid config. Mat4 resource multiplication should only ever refer to other Mat4s")
-                    }
+            {
+                let resource = resources.get(mat_name).expect(mat_name);
+                match &*resource.data {
+                    ResourceInternal::Mat4(_, lock, _) => {
+                        mat4 = mat4 * (*lock.read());
+                    },
+                    _ => panic!("Invalid config. Mat4 resource multiplication should only ever refer to other Mat4s")
                 }
             };
         });
@@ -148,12 +146,14 @@ impl CustomResource {
     }
 }
 
+/// This struct holds information on the entirety of the rendering pipeline.
 pub struct ShaderGraph {
     pub pack: ShaderPackConfig,
     pub pipelines: HashMap<String, RenderPipeline>,
     pub resources: HashMap<String, CustomResource>,
     pub geometry: HashMap<String, Box<dyn GeometryCallback>>,
     quad: Option<wgpu::Buffer>,
+    query_results: Option<wgpu::Buffer>,
 }
 
 impl ShaderGraph {
@@ -168,6 +168,7 @@ impl ShaderGraph {
             resources,
             geometry,
             quad: None,
+            query_results: None,
         }
     }
 
@@ -177,15 +178,25 @@ impl ShaderGraph {
         resource_types: Option<&HashMap<String, String>>,
         mut additional_geometry: Option<HashMap<String, Vec<VertexBufferLayout>>>,
     ) {
-        let mut resource_types = match resource_types {
-            None => HashMap::new(),
-            Some(map) => map.clone(),
-        };
+        let mut resource_types = resource_types.cloned().unwrap_or(HashMap::new());
 
         resource_types.insert("wm_ssbo_entity_part_transforms".into(), "ssbo".into());
         resource_types.insert("wm_texture_entities".into(), "texture".into());
 
+        resource_types.insert("wm_ssbo_chunk_vertices".into(), "ssbo".into());
+        resource_types.insert("wm_ssbo_chunk_indices".into(), "ssbo".into());
+
         let mut resources = HashMap::new();
+
+        self.query_results = Some(
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: &[0; 1024],
+                    usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                }),
+        );
 
         self.quad = Some(
             wm.wgpu_state
@@ -222,246 +233,7 @@ impl ShaderGraph {
         for (resource_id, definition) in &self.pack.resources.resources {
             let resource_id = resource_id.clone();
 
-            match definition {
-                ShorthandResourceConfig::Int(int) => {
-                    let ssbo = BindableBuffer::new(
-                        wm,
-                        bytemuck::cast_slice(&[*int]),
-                        BufferUsages::STORAGE,
-                        "ssbo",
-                    );
-
-                    resources.insert(
-                        resource_id,
-                        CustomResource {
-                            update: None,
-                            data: Arc::new(ResourceInternal::I64(*int, ssbo)),
-                        },
-                    );
-                }
-                ShorthandResourceConfig::Float(float) => {
-                    let ssbo = BindableBuffer::new(
-                        wm,
-                        bytemuck::cast_slice(&[*float]),
-                        BufferUsages::UNIFORM,
-                        "matrix",
-                    );
-
-                    resources.insert(
-                        resource_id,
-                        CustomResource {
-                            update: None,
-                            data: Arc::new(ResourceInternal::F64(*float, ssbo)),
-                        },
-                    );
-                }
-                ShorthandResourceConfig::Mat3(mat3) => {
-                    let ssbo = BindableBuffer::new(
-                        wm,
-                        bytemuck::cast_slice(&mat3[..]),
-                        BufferUsages::UNIFORM,
-                        "matrix",
-                    );
-
-                    let matrix3: Matrix3<f32> = (*mat3).into();
-
-                    resources.insert(
-                        resource_id,
-                        CustomResource {
-                            update: None,
-                            data: Arc::new(ResourceInternal::Mat3(
-                                Mat3ValueOrMult::Value { value: *mat3 },
-                                Arc::new(RwLock::new(matrix3)),
-                                Arc::new(ssbo),
-                            )),
-                        },
-                    );
-                }
-                ShorthandResourceConfig::Mat4(mat4) => {
-                    let ssbo = BindableBuffer::new(
-                        wm,
-                        bytemuck::cast_slice(&mat4[..]),
-                        BufferUsages::UNIFORM,
-                        "matrix",
-                    );
-
-                    let matrix4: Matrix4<f32> = (*mat4).into();
-
-                    resources.insert(
-                        resource_id,
-                        CustomResource {
-                            update: None,
-                            data: Arc::new(ResourceInternal::Mat4(
-                                Mat4ValueOrMult::Value { value: *mat4 },
-                                Arc::new(RwLock::new(matrix4)),
-                                Arc::new(ssbo),
-                            )),
-                        },
-                    );
-                }
-                ShorthandResourceConfig::Longhand(longhand) => match &longhand.typed {
-                    TypeResourceConfig::Texture3d { .. } => todo!(),
-                    TypeResourceConfig::Texture2d { src, .. } => {
-                        if !src.is_empty() {
-                            todo!()
-                        } else {
-                            let handle = wm.create_texture_handle(
-                                resource_id.clone(),
-                                TextureFormat::Bgra8Unorm,
-                                &wm.wgpu_state.surface.read().1,
-                            );
-                            resources.insert(
-                                resource_id,
-                                CustomResource {
-                                    update: None,
-                                    data: Arc::new(ResourceInternal::Texture(
-                                        TextureResource::Handle(handle),
-                                        false,
-                                    )),
-                                },
-                            );
-                        }
-                    }
-                    TypeResourceConfig::TextureDepth { .. } => {
-                        let handle = wm.create_texture_handle(
-                            resource_id.clone(),
-                            TextureFormat::Depth32Float,
-                            &wm.wgpu_state.surface.read().1,
-                        );
-                        resources.insert(
-                            resource_id,
-                            CustomResource {
-                                update: None,
-                                data: Arc::new(ResourceInternal::Texture(
-                                    TextureResource::Handle(handle),
-                                    true,
-                                )),
-                            },
-                        );
-                    }
-                    TypeResourceConfig::F32 { value, .. } => {
-                        let ssbo = BindableBuffer::new(
-                            wm,
-                            bytemuck::cast_slice(&[*value]),
-                            BufferUsages::STORAGE,
-                            "ssbo",
-                        );
-
-                        resources.insert(
-                            resource_id,
-                            CustomResource {
-                                update: None,
-                                data: Arc::new(ResourceInternal::F32(*value, ssbo)),
-                            },
-                        );
-                    }
-                    TypeResourceConfig::F64 { value, .. } => {
-                        let ssbo = BindableBuffer::new(
-                            wm,
-                            bytemuck::cast_slice(&[*value]),
-                            BufferUsages::STORAGE,
-                            "ssbo",
-                        );
-
-                        resources.insert(
-                            resource_id,
-                            CustomResource {
-                                update: None,
-                                data: Arc::new(ResourceInternal::F64(*value, ssbo)),
-                            },
-                        );
-                    }
-                    TypeResourceConfig::I64 { value, .. } => {
-                        let ssbo = BindableBuffer::new(
-                            wm,
-                            bytemuck::cast_slice(&[*value]),
-                            BufferUsages::STORAGE,
-                            "ssbo",
-                        );
-
-                        resources.insert(
-                            resource_id,
-                            CustomResource {
-                                update: None,
-                                data: Arc::new(ResourceInternal::I64(*value, ssbo)),
-                            },
-                        );
-                    }
-                    TypeResourceConfig::I32 { value, .. } => {
-                        let ssbo = BindableBuffer::new(
-                            wm,
-                            bytemuck::cast_slice(&[*value]),
-                            BufferUsages::STORAGE,
-                            "ssbo",
-                        );
-
-                        resources.insert(
-                            resource_id,
-                            CustomResource {
-                                update: None,
-                                data: Arc::new(ResourceInternal::I32(*value, ssbo)),
-                            },
-                        );
-                    }
-                    TypeResourceConfig::Mat3(mat3) => {
-                        let value = match mat3 {
-                            Mat3ValueOrMult::Value { value } => *value,
-                            Mat3ValueOrMult::Mult { .. } => [[0.0; 3]; 3],
-                        };
-
-                        let ssbo = BindableBuffer::new(
-                            wm,
-                            bytemuck::cast_slice(&value),
-                            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                            "matrix",
-                        );
-
-                        resources.insert(
-                            resource_id,
-                            CustomResource {
-                                update: match mat3 {
-                                    Mat3ValueOrMult::Value { .. } => None,
-                                    Mat3ValueOrMult::Mult { .. } => Some(mat3_update),
-                                },
-                                data: Arc::new(ResourceInternal::Mat3(
-                                    mat3.clone(),
-                                    Arc::new(RwLock::new(value.into())),
-                                    Arc::new(ssbo),
-                                )),
-                            },
-                        );
-                    }
-                    TypeResourceConfig::Mat4(mat4) => {
-                        let value = match mat4 {
-                            Mat4ValueOrMult::Value { value } => *value,
-                            Mat4ValueOrMult::Mult { .. } => [[0.0; 4]; 4],
-                        };
-
-                        let ssbo = BindableBuffer::new(
-                            wm,
-                            bytemuck::cast_slice(&value),
-                            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                            "matrix",
-                        );
-
-                        resources.insert(
-                            resource_id,
-                            CustomResource {
-                                update: match mat4 {
-                                    Mat4ValueOrMult::Value { .. } => None,
-                                    Mat4ValueOrMult::Mult { .. } => Some(mat4_update),
-                                },
-                                data: Arc::new(ResourceInternal::Mat4(
-                                    mat4.clone(),
-                                    Arc::new(RwLock::new(value.into())),
-                                    Arc::new(ssbo),
-                                )),
-                            },
-                        );
-                    }
-                    TypeResourceConfig::Blob { .. } => todo!(),
-                },
-            }
+            Self::insert_resources(&wm, &mut resources, definition, resource_id);
         }
 
         let pipelines = wm.pipelines.load();
@@ -515,7 +287,11 @@ impl ShaderGraph {
                                             }
                                         } else {
                                             layouts
-                                                .get(resource_types.get(uniform).expect(uniform))
+                                                .get(
+                                                    resource_types
+                                                        .get(uniform)
+                                                        .expect(uniform),
+                                                )
                                                 .unwrap()
                                         }
                                     })
@@ -526,7 +302,7 @@ impl ShaderGraph {
                                     .map(|(offset, resource)| match &resource[..] {
                                         "wm_pc_chunk_position" => PushConstantRange {
                                             stages: ShaderStages::VERTEX,
-                                            range: *offset as u32..*offset as u32 + 8,
+                                            range: *offset as u32..*offset as u32 + 12,
                                         },
                                         "wm_pc_framebuffer_size" => PushConstantRange {
                                             stages: ShaderStages::FRAGMENT,
@@ -537,16 +313,17 @@ impl ShaderGraph {
                                     .collect::<Vec<_>>(),
                             });
 
-                    let buffers = match &definition.geometry[..] {
-                        "wm_geo_terrain" => vec![Vertex::desc()],
-                        "wm_geo_quad" => vec![QuadVertex::desc()],
-                        "wm_geo_entities" => vec![EntityVertex::desc(), InstanceVertex::desc()],
+                    let vertex_buffer = match &definition.geometry[..] {
+                        "wm_geo_terrain" => None,
+                        "wm_geo_entities" => Some(vec![EntityVertex::desc(), InstanceVertex::desc()]),
+                        "wm_geo_quad" => Some(vec![QuadVertex::desc()]),
                         _ => {
-                            if let Some(additional_geometry) = &mut additional_geometry {
+                            if let Some(additional_geometry) =
+                                &mut additional_geometry
+                            {
                                 additional_geometry
-                                    .remove(&definition.geometry)
-                                    .unwrap()
-                                    .clone()
+                                    .get(&definition.geometry)
+                                    .cloned()
                             } else {
                                 unimplemented!("Unknown geometry");
                             }
@@ -562,9 +339,20 @@ impl ShaderGraph {
                                 vertex: VertexState {
                                     module: &shader.shader,
                                     entry_point: "vert",
-                                    buffers: &buffers,
+                                    buffers: match &vertex_buffer {
+                                        None => &[],
+                                        Some(buffer) => buffer
+                                    }
                                 },
-                                primitive: Default::default(),
+                                primitive: PrimitiveState {
+                                    topology: PrimitiveTopology::TriangleList,
+                                    strip_index_format: None,
+                                    front_face: FrontFace::Ccw,
+                                    cull_mode: if definition.geometry == "wm_geo_terrain" { Some(Face::Back) } else { None },                                    // cull_mode: None,
+                                    unclipped_depth: false,
+                                    polygon_mode: PolygonMode::Fill,
+                                    conservative: false,
+                                },
                                 depth_stencil: definition.depth.as_ref().map(|_| {
                                     DepthStencilState {
                                         format: TextureFormat::Depth32Float,
@@ -610,6 +398,255 @@ impl ShaderGraph {
         self.resources.extend(resources.into_iter());
     }
 
+    /// Matches on the definition, inserting the resource depending on which variant it is.
+    fn insert_resources(
+        wm: &&WmRenderer,
+        resources: &mut HashMap<String, CustomResource>,
+        definition: &ShorthandResourceConfig,
+        resource_id: String,
+    ) {
+        match definition {
+            ShorthandResourceConfig::Int(int) => {
+                let ssbo = BindableBuffer::new(
+                    wm,
+                    bytemuck::cast_slice(&[*int]),
+                    BufferUsages::STORAGE,
+                    "ssbo",
+                );
+
+                resources.insert(
+                    resource_id,
+                    CustomResource {
+                        update: None,
+                        data: Arc::new(ResourceInternal::I64(*int, ssbo)),
+                    },
+                );
+            }
+            ShorthandResourceConfig::Float(float) => {
+                let ssbo = BindableBuffer::new(
+                    wm,
+                    bytemuck::cast_slice(&[*float]),
+                    BufferUsages::UNIFORM,
+                    "matrix",
+                );
+
+                resources.insert(
+                    resource_id,
+                    CustomResource {
+                        update: None,
+                        data: Arc::new(ResourceInternal::F64(*float, ssbo)),
+                    },
+                );
+            }
+            ShorthandResourceConfig::Mat3(mat3) => {
+                let ssbo = BindableBuffer::new(
+                    wm,
+                    bytemuck::cast_slice(&mat3[..]),
+                    BufferUsages::UNIFORM,
+                    "matrix",
+                );
+
+                let matrix3: Matrix3<f32> = (*mat3).into();
+
+                resources.insert(
+                    resource_id,
+                    CustomResource {
+                        update: None,
+                        data: Arc::new(ResourceInternal::Mat3(
+                            Mat3ValueOrMult::Value { value: *mat3 },
+                            Arc::new(RwLock::new(matrix3)),
+                            Arc::new(ssbo),
+                        )),
+                    },
+                );
+            }
+            ShorthandResourceConfig::Mat4(mat4) => {
+                let ssbo = BindableBuffer::new(
+                    wm,
+                    bytemuck::cast_slice(&mat4[..]),
+                    BufferUsages::UNIFORM,
+                    "matrix",
+                );
+
+                let matrix4: Matrix4<f32> = (*mat4).into();
+
+                resources.insert(
+                    resource_id,
+                    CustomResource {
+                        update: None,
+                        data: Arc::new(ResourceInternal::Mat4(
+                            Mat4ValueOrMult::Value { value: *mat4 },
+                            Arc::new(RwLock::new(matrix4)),
+                            Arc::new(ssbo),
+                        )),
+                    },
+                );
+            }
+            ShorthandResourceConfig::Longhand(longhand) => match &longhand.typed {
+                TypeResourceConfig::Texture3d { .. } => todo!(),
+                TypeResourceConfig::Texture2d { src, .. } => {
+                    if !src.is_empty() {
+                        todo!()
+                    } else {
+                        let handle = wm.create_texture_handle(
+                            resource_id.clone(),
+                            TextureFormat::Bgra8Unorm,
+                            &wm.wgpu_state.surface.read().1,
+                        );
+                        resources.insert(
+                            resource_id,
+                            CustomResource {
+                                update: None,
+                                data: Arc::new(ResourceInternal::Texture(
+                                    TextureResource::Handle(handle),
+                                    false,
+                                )),
+                            },
+                        );
+                    }
+                }
+                TypeResourceConfig::TextureDepth { .. } => {
+                    let handle = wm.create_texture_handle(
+                        resource_id.clone(),
+                        TextureFormat::Depth32Float,
+                        &wm.wgpu_state.surface.read().1,
+                    );
+                    resources.insert(
+                        resource_id,
+                        CustomResource {
+                            update: None,
+                            data: Arc::new(ResourceInternal::Texture(
+                                TextureResource::Handle(handle),
+                                true,
+                            )),
+                        },
+                    );
+                }
+                TypeResourceConfig::F32 { value, .. } => {
+                    let ssbo = BindableBuffer::new(
+                        wm,
+                        bytemuck::cast_slice(&[*value]),
+                        BufferUsages::STORAGE,
+                        "ssbo",
+                    );
+
+                    resources.insert(
+                        resource_id,
+                        CustomResource {
+                            update: None,
+                            data: Arc::new(ResourceInternal::F32(*value, ssbo)),
+                        },
+                    );
+                }
+                TypeResourceConfig::F64 { value, .. } => {
+                    let ssbo = BindableBuffer::new(
+                        wm,
+                        bytemuck::cast_slice(&[*value]),
+                        BufferUsages::STORAGE,
+                        "ssbo",
+                    );
+
+                    resources.insert(
+                        resource_id,
+                        CustomResource {
+                            update: None,
+                            data: Arc::new(ResourceInternal::F64(*value, ssbo)),
+                        },
+                    );
+                }
+                TypeResourceConfig::I64 { value, .. } => {
+                    let ssbo = BindableBuffer::new(
+                        wm,
+                        bytemuck::cast_slice(&[*value]),
+                        BufferUsages::STORAGE,
+                        "ssbo",
+                    );
+
+                    resources.insert(
+                        resource_id,
+                        CustomResource {
+                            update: None,
+                            data: Arc::new(ResourceInternal::I64(*value, ssbo)),
+                        },
+                    );
+                }
+                TypeResourceConfig::I32 { value, .. } => {
+                    let ssbo = BindableBuffer::new(
+                        wm,
+                        bytemuck::cast_slice(&[*value]),
+                        BufferUsages::STORAGE,
+                        "ssbo",
+                    );
+
+                    resources.insert(
+                        resource_id,
+                        CustomResource {
+                            update: None,
+                            data: Arc::new(ResourceInternal::I32(*value, ssbo)),
+                        },
+                    );
+                }
+                TypeResourceConfig::Mat3(mat3) => {
+                    let value = match mat3 {
+                        Mat3ValueOrMult::Value { value } => *value,
+                        Mat3ValueOrMult::Mult { .. } => [[0.0; 3]; 3],
+                    };
+
+                    let ssbo = BindableBuffer::new(
+                        wm,
+                        bytemuck::cast_slice(&value),
+                        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                        "matrix",
+                    );
+
+                    resources.insert(
+                        resource_id,
+                        CustomResource {
+                            update: match mat3 {
+                                Mat3ValueOrMult::Value { .. } => None,
+                                Mat3ValueOrMult::Mult { .. } => Some(mat3_update),
+                            },
+                            data: Arc::new(ResourceInternal::Mat3(
+                                mat3.clone(),
+                                Arc::new(RwLock::new(value.into())),
+                                Arc::new(ssbo),
+                            )),
+                        },
+                    );
+                }
+                TypeResourceConfig::Mat4(mat4) => {
+                    let value = match mat4 {
+                        Mat4ValueOrMult::Value { value } => *value,
+                        Mat4ValueOrMult::Mult { .. } => [[0.0; 4]; 4],
+                    };
+
+                    let ssbo = BindableBuffer::new(
+                        wm,
+                        bytemuck::cast_slice(&value),
+                        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                        "matrix",
+                    );
+
+                    resources.insert(
+                        resource_id,
+                        CustomResource {
+                            update: match mat4 {
+                                Mat4ValueOrMult::Value { .. } => None,
+                                Mat4ValueOrMult::Mult { .. } => Some(mat4_update),
+                            },
+                            data: Arc::new(ResourceInternal::Mat4(
+                                mat4.clone(),
+                                Arc::new(RwLock::new(value.into())),
+                                Arc::new(ssbo),
+                            )),
+                        },
+                    );
+                }
+                TypeResourceConfig::Blob { .. } => todo!(),
+            },
+        }
+    }
+
     pub fn render<'graph, 'resource: 'graph, 'a, 'b, 'c: 'b>(
         &'graph self,
         wm: &WmRenderer,
@@ -638,7 +675,7 @@ impl ShaderGraph {
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
 
-        let _chunk_offset = *wm.mc.chunks.chunk_offset.lock();
+        let chunk_offset = *wm.mc.chunks.chunk_offset.lock();
 
         let projection_matrix = self
             .resources
@@ -654,6 +691,8 @@ impl ShaderGraph {
             .unwrap();
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
+
+        let mut query_index = 0;
 
         for (name, config) in &self.pack.pipelines.pipelines {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -726,8 +765,7 @@ impl ShaderGraph {
                 }),
             });
 
-            let chunk_offset = [0, 0];
-
+            query_index += 1;
             render_pass.set_pipeline(self.pipelines.get(name).unwrap());
 
             match &config.geometry[..] {
@@ -738,48 +776,53 @@ impl ShaderGraph {
                     for layer in &**layers {
                         for (_pos, chunk_swap) in &*chunks {
                             let chunk = arena.alloc(chunk_swap.load());
+                            let buffers = arena.alloc(chunk.buffers.load_full());
+                            let sections = chunk.sections.read();
 
-                            let min = Vec3::new(
-                                (chunk.pos[0] * 16) as f32,
-                                0.0,
-                                (chunk.pos[1] * 16) as f32,
-                            );
-                            let max = min + Vec3::new(16.0, 384.0, 16.0);
+                            for section_index in 0..SECTIONS_PER_CHUNK {
+                                let min = Vec3::new(
+                                    ((chunk.pos[0] + chunk_offset[0]) * 16) as f32,
+                                    (section_index * CHUNK_SECTION_HEIGHT) as f32,
+                                    ((chunk.pos[1] + chunk_offset[1]) * 16) as f32,
+                                );
+                                let max = min + Vec3::new(16.0, ((section_index + 1) * CHUNK_SECTION_HEIGHT) as f32, 16.0);
 
-                            let aabb = AABB::<f32>::new(min, max);
+                                let aabb = AABB::<f32>::new(min, max);
 
-                            if aabb.test_against_frustum(&frustum, 0) == u8::MAX {
-                                continue;
-                            }
+                                if aabb.test_against_frustum(&frustum, 0) == u8::MAX {
+                                    continue;
+                                }
 
-                            let (chunk_vbo, verts) =
-                                match arena.alloc(chunk.baked_layers.read()).get(layer.name()) {
+                                let baked_layer = match sections.get(layer.name()) {
                                     None => continue,
-                                    Some(tuple) => tuple,
+                                    Some(section) => &section[section_index]
                                 };
 
-                            bind_uniforms(config, &resource_borrow, &arena, &mut render_pass);
-                            set_push_constants(
-                                config,
-                                &mut render_pass,
-                                Some(&chunk),
-                                surface_config,
-                                chunk_offset,
-                            );
+                                bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, (*buffers).as_ref().as_ref());
+                                set_push_constants(
+                                    config,
+                                    &mut render_pass,
+                                    Some(chunk),
+                                    surface_config,
+                                    chunk_offset,
+                                    section_index
+                                );
 
-                            render_pass.set_vertex_buffer(0, chunk_vbo.slice(..));
-                            render_pass.draw(0..verts.len() as u32, 0..1);
+                                render_pass.draw(baked_layer.clone(), 0..1);
+                            }
                         }
                     }
                 }
-                "wm_geo_quad" => {
-                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass);
+                "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox"
+                | "wm_geo_quad" => {
+                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, None);
                     set_push_constants(
                         config,
                         &mut render_pass,
                         None,
                         surface_config,
                         chunk_offset,
+                        0
                     );
 
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
@@ -827,6 +870,7 @@ impl ShaderGraph {
                             arena.alloc(augmented_resources),
                             &arena,
                             &mut render_pass,
+                            None
                         );
                         set_push_constants(
                             config,
@@ -834,6 +878,7 @@ impl ShaderGraph {
                             None,
                             surface_config,
                             chunk_offset,
+                            0
                         );
 
                         render_pass
@@ -842,7 +887,6 @@ impl ShaderGraph {
                         render_pass.draw(0..entity.vertices, 0..instances.instances.len() as u32);
                     });
                 }
-                "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox" => todo!(),
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {
                         render_pass.set_pipeline(self.pipelines.get(name).unwrap());
@@ -857,7 +901,7 @@ impl ShaderGraph {
                             chunk_offset,
                         );
                     } else {
-                        unimplemented!("Unknown geometry {0}", &config.geometry);
+                        unimplemented!("Unknown geometry {}", &config.geometry);
                     }
                 }
             };
@@ -870,10 +914,23 @@ impl ShaderGraph {
 pub fn bind_uniforms<'resource: 'pass, 'pass>(
     config: &PipelineConfig,
     resources: &'resource HashMap<&String, &'resource CustomResource>,
-    arena: &WmArena<'resource>,
+    arena: &WmArena<'pass>,
     render_pass: &mut RenderPass<'pass>,
+    chunk_buffers: Option<&'pass ChunkBuffers>
 ) {
     for (index, resource_name) in &config.uniforms {
+        match &resource_name[..] {
+            "wm_ssbo_chunk_vertices" => {
+                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().vertex_buffer.bind_group, &[]);
+                continue;
+            },
+            "wm_ssbo_chunk_indices" => {
+                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().index_buffer.bind_group, &[]);
+                continue;
+            },
+            _ => {}
+        }
+
         let bind_group = match &*resources.get(resource_name).unwrap().data {
             ResourceInternal::Texture(handle, _) => match handle {
                 TextureResource::Handle(handle) => {
@@ -902,6 +959,7 @@ pub fn set_push_constants(
     chunk: Option<&Chunk>,
     surface_config: &SurfaceConfiguration,
     chunk_offset: ChunkPos,
+    section_y: usize
 ) {
     pipeline
         .push_constants
@@ -921,8 +979,9 @@ pub fn set_push_constants(
                 ShaderStages::VERTEX,
                 *offset as u32,
                 bytemuck::cast_slice(&[
-                    chunk.unwrap().pos[0] - chunk_offset[0],
-                    chunk.unwrap().pos[1] - chunk_offset[1],
+                    chunk.unwrap().pos[0] + chunk_offset[0],
+                    section_y as i32,
+                    chunk.unwrap().pos[1] + chunk_offset[1],
                 ]),
             ),
             _ => unimplemented!("Unknown push constant resource value"),

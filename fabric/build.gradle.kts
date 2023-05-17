@@ -9,6 +9,11 @@ base {
 
 loom {
     accessWidenerPath.set(file("src/main/resources/wgpu_mc.accesswidener"))
+    runs {
+        configureEach {
+            this.isIdeConfigGenerated = true
+        }
+    }
 }
 
 val modVersion: String by project

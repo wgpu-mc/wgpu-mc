@@ -18,9 +18,11 @@ use crate::render::pipeline::WmPipelines;
 use crate::texture::{BindableTexture, TextureSamplerView, UV};
 use crate::{WgpuState, WmRenderer};
 
+/// The width and height of an [atlas](Atlas];
 pub const ATLAS_DIMENSIONS: u32 = 2048;
 
-///A texture atlas. This is used in many places, most notably terrain and entity rendering.
+/// A texture atlas. This is used in many places, most notably terrain and entity rendering.
+/// Combines multiple small textures into a single big one, which can help improve performance.
 ///
 /// # Example
 ///
@@ -56,15 +58,15 @@ pub const ATLAS_DIMENSIONS: u32 = 2048;
 /// atlas.upload(&wm_renderer);
 /// ```
 pub struct Atlas {
-    ///The image allocator which decides where images should go in the atlas texture
+    /// The image allocator which decides where images should go in the atlas texture
     pub allocator: RwLock<AtlasAllocator>,
-    ///The atlas image buffer itself. This is what gets uploaded to the GPU
+    /// The atlas image buffer itself. This is what gets uploaded to the GPU
     pub image: RwLock<ImageBuffer<Rgba<u8>, Vec<u8>>>,
-    ///The mapping of image [ResourcePath]s to UV coordinates
+    /// The mapping of image [ResourcePath]s to UV coordinates
     pub uv_map: RwLock<HashMap<ResourcePath, UV>>,
-    ///The representation of the [Atlas]'s image buffer on the GPU, which can be bound to a draw call
+    /// The representation of the [Atlas]'s image buffer on the GPU, which can be bound to a draw call
     pub bindable_texture: Arc<ArcSwap<BindableTexture>>,
-    ///Not every [Atlas] is used for block textures, but the ones that are store the information for each animated texture here
+    /// Not every [Atlas] is used for block textures, but the ones that are store the information for each animated texture here
     pub animated_textures: RwLock<Vec<schemas::texture::TextureAnimation>>,
     ///
     pub animated_texture_offsets: RwLock<HashMap<ResourcePath, u32>>,
@@ -115,7 +117,7 @@ impl Atlas {
         }
     }
 
-    ///Add multiple textures to the atlas. This automatically handles .mcmeta files when dealing with block textures
+    /// Add multiple textures to the atlas. This automatically handles .mcmeta files when dealing with block textures
     pub fn allocate<'a, T>(
         &self,
         images: impl IntoIterator<Item = (&'a ResourcePath, &'a T)>,
@@ -214,22 +216,22 @@ impl Atlas {
 
         map.insert(
             path.clone(),
-            [
-                [
-                    allocation.rectangle.min.x as f32,
-                    allocation.rectangle.min.y as f32,
-                ],
-                [
-                    allocation.rectangle.max.x as f32,
-                    allocation.rectangle.max.y as f32,
-                ],
-            ],
+            (
+                (
+                    allocation.rectangle.min.x as u16,
+                    allocation.rectangle.min.y as u16,
+                ),
+                (
+                    allocation.rectangle.max.x as u16,
+                    allocation.rectangle.max.y as u16,
+                ),
+            ),
         );
     }
 
-    ///Upload the atlas texture to the GPU. If the Atlas has to resize the texture on the GPU, then the bindable_texture that this struct provides may
-    /// become obsolete if you .load() the BindableTexture before calling upload(), so you should get the BindableTexture after calling this function and not before-hand
-    ///Returns true if the atlas was resized
+    /// Upload the atlas texture to the GPU. If the Atlas has to resize the texture on the GPU, then the bindable_texture that this struct provides may
+    /// become obsolete if you .load() the BindableTexture before calling upload(), so you should get the BindableTexture after calling this function and not before-hand.
+    /// Returns true if the atlas was resized.
     pub fn upload(&self, wm: &WmRenderer) -> bool {
         if self.resizes && *self.size.read() != *self.gpu_size.read() {
             let size = *self.size.read();
@@ -289,10 +291,10 @@ impl Atlas {
     }
 }
 
-///Stores uplodaded textures which will be automatically updated whenever necessary
+/// Stores uploaded textures which will be automatically updated whenever necessary
 #[derive(Debug)]
 pub struct TextureManager {
-    ///Using RwLock<HashMap>> instead of DashMap because when doing a resource pack reload,
+    /// Using RwLock<HashMap>> instead of DashMap because when doing a resource pack reload,
     /// we need potentially a lot of textures to be updated and it's better to be able to
     /// have some other thread work on building a new HashMap, and then just blocking any other
     /// readers for a bit to update the whole map

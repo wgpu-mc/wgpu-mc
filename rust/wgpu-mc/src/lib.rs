@@ -1,3 +1,4 @@
+#![feature(iterator_try_collect)]
 /*!
 # wgpu-mc
 wgpu-mc is a pure-Rust crate which is designed to be usable by anyone who needs to render
@@ -14,6 +15,7 @@ as terrain rendering and entity rendering are already in-place but could very we
 in the future.
 
 # Setup
+
 wgpu-mc, as you could have probably guessed, uses the [wgpu](https://github.com/gfx-rs/wgpu) crate
 for communicating with the GPU. Assuming you aren't running wgpu-mc headless (if you are, I assume
 you already know what you're doing), wgpu-mc can handle surface and device setup for you, as long
@@ -50,7 +52,7 @@ use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
-    SurfaceConfiguration,
+    PresentMode, SurfaceConfiguration,
 };
 
 use crate::mc::resource::ResourceProvider;
@@ -65,6 +67,8 @@ pub mod render;
 pub mod texture;
 pub mod util;
 
+/// Provides access to most of the wgpu structs relating directly to communicating/getting
+/// information about the gpu.
 pub struct WgpuState {
     pub surface: RwLock<(Option<wgpu::Surface>, SurfaceConfiguration)>,
     pub adapter: wgpu::Adapter,
@@ -73,8 +77,8 @@ pub struct WgpuState {
     pub size: Option<ArcSwap<WindowSize>>,
 }
 
-///The main wgpu-mc renderer struct. This mostly just contains wgpu state.
-///Resources pertaining to Minecraft go in `MinecraftState`
+/// The main wgpu-mc renderer struct. This mostly just contains wgpu state.
+/// Resources pertaining to Minecraft go in `MinecraftState`
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
@@ -94,7 +98,7 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-    ///This is a convenience method;
+    /// This is a convenience method;
     ///
     /// This takes in a raw window handle and returns a [WgpuState], which is then used to
     /// initialize a [WmRenderer].
@@ -104,7 +108,7 @@ impl WmRenderer {
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
@@ -127,7 +131,8 @@ impl WmRenderer {
                     label: None,
                     features: wgpu::Features::default()
                         | wgpu::Features::DEPTH_CLIP_CONTROL
-                        | wgpu::Features::PUSH_CONSTANTS,
+                        | wgpu::Features::PUSH_CONSTANTS
+                        | wgpu::Features::TIMESTAMP_QUERY,
                     limits,
                 },
                 None, // Trace path
@@ -140,11 +145,12 @@ impl WmRenderer {
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
-            present_mode: if vsync {
-                wgpu::PresentMode::AutoVsync
-            } else {
-                wgpu::PresentMode::AutoNoVsync
-            },
+            present_mode: PresentMode::Immediate,
+            // present_mode: if vsync {
+            //     wgpu::PresentMode::AutoVsync
+            // } else {
+            //     wgpu::PresentMode::AutoNoVsync
+            // },
             alpha_mode: CompositeAlphaMode::Auto,
         };
 
@@ -162,7 +168,7 @@ impl WmRenderer {
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         let pipelines = WmPipelines::new(resource_provider.clone());
 
-        let mc = MinecraftState::new(resource_provider);
+        let mc = MinecraftState::new(&wgpu_state, resource_provider);
 
         Self {
             wgpu_state: Arc::new(wgpu_state),

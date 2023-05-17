@@ -21,7 +21,7 @@ struct VertexResult {
 @vertex
 fn vert(
     @location(0) pos_in: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
+    @location(1) tex_coords_u32: u32,
     @location(2) normal: vec3<f32>,
     @location(3) part_id: u32,
     @location(4) entity_index: u32,
@@ -29,6 +29,8 @@ fn vert(
     @location(6) parts_per: u32
 ) -> VertexResult {
     var vr: VertexResult;
+
+    var tex_coords: vec2<f32> = vec2<f32>(f32(tex_coords_u32 & 0xffffu), f32(tex_coords_u32 >> 16u)) * vec2<f32>(0.00048828125, 0.00048828125);
 
     var part_transform_index: u32 = (entity_index * parts_per) + part_id;
     var part_transform: mat4x4<f32> = transforms.mats[part_transform_index];
@@ -49,5 +51,5 @@ var t_sampler: sampler;
 
 @fragment
 fn frag(in: VertexResult) -> @location(0) vec4<f32> {
-   return textureSample(t_texture, t_sampler, in.tex_coords);
+   return vec4<f32>(textureSample(t_texture, t_sampler, in.tex_coords).rgb, 1.0);
 }

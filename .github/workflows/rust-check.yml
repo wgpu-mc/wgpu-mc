@@ -1,7 +1,15 @@
 # Uses template from https://github.com/booyaa/gh-actions-template-rust which is licensed under MIT or Apache License Version 2.0
-on: [push, pull_request]
-
 name: Rust CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:

@@ -3,12 +3,11 @@ use std::f32::consts::PI;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use crate::camera::Camera;
 use arc_swap::ArcSwap;
-use bytemuck::Pod;
-use cgmath::{Matrix4, SquareMatrix};
+
 use futures::executor::block_on;
 use parking_lot::RwLock;
 use raw_window_handle::{
@@ -20,13 +19,10 @@ use wgpu_mc::mc::entity::{EntityInstanceTransforms, EntityInstances, PartTransfo
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
-use wgpu_mc::render::shaderpack::{Mat3, Mat3ValueOrMult, Mat4, Mat4ValueOrMult};
+use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
 use wgpu_mc::util::BindableBuffer;
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu_mc::wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoderDescriptor,
-    ComputePassDescriptor, Maintain, MaintainBase, MapMode,
-};
+
+use wgpu_mc::wgpu::BufferUsages;
 use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -166,11 +162,9 @@ impl RenderLayer for TerrainLayer {
                 vert.position[1] + y,
                 vert.position[2] + z,
             ],
-            tex_coords: vert.tex_coords,
-            lightmap_coords: [0.0, 0.0],
-            normal: vert.normal,
-            color: [1.0, 1.0, 1.0, 1.0],
-            tangent: [0.0, 0.0, 0.0, 0.0],
+            uv: vert.tex_coords,
+            normal: [vert.normal[0], vert.normal[1], vert.normal[2]],
+            color: u32::MAX,
             uv_offset: vert.animation_uv_offset,
         }
     }

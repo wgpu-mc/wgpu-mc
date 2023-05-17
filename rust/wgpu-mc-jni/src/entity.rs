@@ -75,15 +75,15 @@ pub struct AtlasPosition {
 }
 
 impl AtlasPosition {
-    pub fn map(&self, pos: [f32; 2]) -> [f32; 2] {
-        [
-            (self.x + pos[0]) / (self.width as f32),
-            (self.y + pos[1]) / (self.height as f32),
-        ]
+    pub fn map(&self, pos: (f32, f32)) -> (f32, f32) {
+        (
+            (self.x + pos.0) / (self.width as f32),
+            (self.y + pos.1) / (self.height as f32),
+        )
     }
 }
 
-pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Option<EntityPart> {
+pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: [u16; 2]) -> Option<EntityPart> {
     Some(EntityPart {
         name,
         transform: PartTransform {
@@ -105,13 +105,13 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Opti
             .iter()
             .map(|cuboid_data| {
                 let pos = [
-                    *cuboid_data.texture_uv.get("x").unwrap(),
-                    *cuboid_data.texture_uv.get("y").unwrap(),
+                    *cuboid_data.texture_uv.get("x").unwrap() as u16,
+                    *cuboid_data.texture_uv.get("y").unwrap() as u16,
                 ];
                 let dimensions = [
-                    cuboid_data.dimensions.get("x").unwrap(),
-                    cuboid_data.dimensions.get("y").unwrap(),
-                    cuboid_data.dimensions.get("z").unwrap(),
+                    *cuboid_data.dimensions.get("x").unwrap() as u16,
+                    *cuboid_data.dimensions.get("y").unwrap() as u16,
+                    *cuboid_data.dimensions.get("z").unwrap() as u16,
                 ];
 
                 Some(Cuboid {
@@ -122,42 +122,33 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: &AtlasPosition) -> Opti
                     height: *cuboid_data.dimensions.get("y")?,
                     length: *cuboid_data.dimensions.get("z")?,
                     textures: CuboidUV {
-                        west: [
-                            ap.map([pos[0], pos[1] + dimensions[2]]),
-                            ap.map([
-                                pos[0] + dimensions[0],
+                        west: (
+                            (pos[0], pos[1] + dimensions[2]),
+                            (pos[0] + dimensions[0], pos[1] + (dimensions[2] + dimensions[1]))
+                        ),
+                        east: (
+                            ((pos[0] + (dimensions[0] * 2)), pos[1] + dimensions[2]),
+                            (pos[0] + (dimensions[0] * 3), pos[1] + dimensions[2] + dimensions[1]),
+                        ),
+                        south: (
+                            (pos[0] + dimensions[0], pos[1] + dimensions[2]),
+                            (pos[0] + (dimensions[0] * 2), pos[1] + dimensions[2] + dimensions[1]),
+                        ),
+                        north: (
+                            ((pos[0] + (dimensions[0] * 3)), pos[1] + dimensions[2]),
+                            (
+                                (pos[0] + (dimensions[0] * 4)),
                                 pos[1] + (dimensions[2] + dimensions[1]),
-                            ]),
-                        ],
-                        east: [
-                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + dimensions[2]]),
-                            ap.map([
-                                (pos[0] + (dimensions[0] * 3.0)),
-                                pos[1] + (dimensions[2] + dimensions[1]),
-                            ]),
-                        ],
-                        south: [
-                            ap.map([(pos[0] + (dimensions[0])), pos[1] + dimensions[2]]),
-                            ap.map([
-                                (pos[0] + (dimensions[0] * 2.0)),
-                                pos[1] + (dimensions[2] + dimensions[1]),
-                            ]),
-                        ],
-                        north: [
-                            ap.map([(pos[0] + (dimensions[0] * 3.0)), pos[1] + dimensions[2]]),
-                            ap.map([
-                                (pos[0] + (dimensions[0] * 4.0)),
-                                pos[1] + (dimensions[2] + dimensions[1]),
-                            ]),
-                        ],
-                        up: [
-                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1]]),
-                            ap.map([(pos[0] + (dimensions[0] * 3.0)), pos[1] + (dimensions[2])]),
-                        ],
-                        down: [
-                            ap.map([(pos[0] + dimensions[0]), pos[1]]),
-                            ap.map([(pos[0] + (dimensions[0] * 2.0)), pos[1] + (dimensions[2])]),
-                        ],
+                            ),
+                        ),
+                        up: (
+                            ((pos[0] + (dimensions[0] * 2)), pos[1]),
+                            ((pos[0] + (dimensions[0] * 3)), pos[1] + (dimensions[2])),
+                        ),
+                        down: (
+                            (pos[0] + dimensions[0], pos[1]),
+                            (pos[0] + (dimensions[0] * 2), pos[1] + dimensions[2]),
+                        )
                     },
                 })
             })
@@ -199,20 +190,13 @@ pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
 
     let mpd = ENTITY_MPD.get().unwrap();
 
-    let atlas_position = AtlasPosition {
-        width: 0,
-        height: 0,
-        x: 0.0,
-        y: 0.0,
-    };
-
     let atlases = wm.mc.texture_manager.atlases.load();
     let atlas = atlases.get(ENTITY_ATLAS).unwrap();
 
     let entities: Vec<Arc<Entity>> = mpd
         .iter()
         .map(|(name, mpd)| {
-            let entity_part = tmd_to_wm("root".into(), mpd, &atlas_position).unwrap();
+            let entity_part = tmd_to_wm("root".into(), mpd, [0, 0]).unwrap();
 
             Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state, atlas.load().bindable_texture.clone()))
         })
