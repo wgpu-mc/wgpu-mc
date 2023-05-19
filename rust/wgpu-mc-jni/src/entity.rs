@@ -171,8 +171,6 @@ pub struct Wrapper1 {
     data: Wrapper2,
 }
 
-static ENTITY_MPD: OnceCell<HashMap<String, ModelPartData>> = OnceCell::new();
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
     let wm = RENDERER.get().unwrap();
@@ -186,23 +184,19 @@ pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
         .map(|(name, wrapper)| (name, wrapper.data.data))
         .collect();
 
-    ENTITY_MPD.set(mpd);
-
-    let mpd = ENTITY_MPD.get().unwrap();
-
     let atlases = wm.mc.texture_manager.atlases.load();
     let atlas = atlases.get(ENTITY_ATLAS).unwrap();
 
-    let entities: Vec<Arc<Entity>> = mpd
+    let entities: HashMap<String, Arc<Entity>> = mpd
         .iter()
         .map(|(name, mpd)| {
             let entity_part = tmd_to_wm("root".into(), mpd, [0, 0]).unwrap();
 
-            Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state, atlas.load().bindable_texture.clone()))
+            (name.clone(), Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state)))
         })
         .collect();
 
-    entities.iter().for_each(|entity| {
+    entities.iter().for_each(|(entity_name, entity)| {
         let entity_string = env.new_string(&entity.name).unwrap();
 
         entity.parts.iter().for_each(|(name, index)| {
@@ -221,6 +215,8 @@ pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
                 .unwrap();
         });
     });
+
+    println!("Entities registered: {}", entities.len());
 
     *wm.mc.entity_models.write() = entities;
 }

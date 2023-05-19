@@ -418,7 +418,7 @@ impl GeometryCallback for ElectrumGeometry {
                         augment_resources(wm, &resources, arena, texture, draw.matrix);
 
                     bind_uniforms(config, augmented_resources, arena, render_pass, None);
-                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, 0);
+                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, None, None);
 
                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
 
@@ -439,7 +439,7 @@ impl GeometryCallback for ElectrumGeometry {
                         augment_resources(wm, &resources, arena, texture, draw.matrix);
 
                     bind_uniforms(config, augmented_resources, arena, render_pass, None);
-                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, 0);
+                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, None, None);
 
                     let vertices = match draw.pipeline_state {
                         PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(

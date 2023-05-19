@@ -701,28 +701,28 @@ pub fn setCursorLocked(env: JNIEnv, _class: JClass, locked: jboolean) {
 pub fn setPanicHook(env: JNIEnv, _class: JClass) {
     env_logger::init();
 
-    let jvm = env.get_java_vm().unwrap();
-    let jvm_ptr = jvm.get_java_vm_pointer() as usize;
+    // let jvm = env.get_java_vm().unwrap();
+    // let jvm_ptr = jvm.get_java_vm_pointer() as usize;
 
-    std::panic::set_hook(Box::new(move |panic_info| {
-        println!("{panic_info}");
-
-        let jvm = unsafe { JavaVM::from_raw(jvm_ptr as _).unwrap() };
-        let env = jvm.attach_current_thread_permanently().unwrap();
-
-        let message = format!("wgpu-mc has panicked. The JVM will now exit.\n{panic_info}");
-        let jstring = env.new_string(message).unwrap();
-
-        //Does not return
-        env.call_static_method(
-            "dev/birb/wgpu/render/Wgpu",
-            "rustPanic",
-            "(Ljava/lang/String;)V",
-            &[JValue::Object(unsafe {
-                JObject::from_raw(jstring.into_raw())
-            })],
-        );
-    }))
+    // std::panic::set_hook(Box::new(move |panic_info| {
+    //     println!("{panic_info}");
+    //
+    //     let jvm = unsafe { JavaVM::from_raw(jvm_ptr as _).unwrap() };
+    //     let env = jvm.attach_current_thread_permanently().unwrap();
+    //
+    //     let message = format!("wgpu-mc has panicked. The JVM will now exit.\n{panic_info}");
+    //     let jstring = env.new_string(message).unwrap();
+    //
+    //     //Does not return
+    //     env.call_static_method(
+    //         "dev/birb/wgpu/render/Wgpu",
+    //         "rustPanic",
+    //         "(Ljava/lang/String;)V",
+    //         &[JValue::Object(unsafe {
+    //             JObject::from_raw(jstring.into_raw())
+    //         })],
+    //     );
+    // }))
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

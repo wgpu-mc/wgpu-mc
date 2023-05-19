@@ -115,8 +115,8 @@ public abstract class WorldRendererMixin {
 
         // -- Camera --
 
-        MatrixStack stack = new MatrixStack();
-        stack.loadIdentity();
+        MatrixStack cameraStack = new MatrixStack();
+        cameraStack.loadIdentity();
 
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
 
@@ -125,8 +125,8 @@ public abstract class WorldRendererMixin {
 
             Vec3d translate = camera.getPos();
 
-            stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_X.getDegreesQuaternion(camera.getPitch()));
-            stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_Y.getDegreesQuaternion(camera.getYaw() + 180.0f));
+            cameraStack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_X.getDegreesQuaternion(camera.getPitch()));
+            cameraStack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_Y.getDegreesQuaternion(camera.getYaw() + 180.0f));
 
             //Java does negative modulo in an annoying way, e.g. -1 % 16.0 = -1.0 and not 15.0
             double modX = ((translate.x % 16.0) + 16.0) % 16.0;
@@ -138,7 +138,7 @@ public abstract class WorldRendererMixin {
 //                    (float) (-modZ)
 //            ));
 
-            stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
+            cameraStack.peek().getPositionMatrix().multiply(Matrix4f.translate(
                     (float) -translate.x,
                     (float) -translate.y - 64.0f,
                     (float) -translate.z
@@ -154,7 +154,7 @@ public abstract class WorldRendererMixin {
 
         if(this.world != null) {
             MatrixStack entityStack = new MatrixStack();
-            stack.loadIdentity();
+            entityStack.loadIdentity();
             VertexConsumerProvider dummyProvider = layer -> new DummyVertexConsumer();
 
             for(Entity entity : this.world.getEntities()) {
@@ -164,7 +164,7 @@ public abstract class WorldRendererMixin {
 
         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
         float[] out = new float[16];
-        stack.peek().getPositionMatrix().writeColumnMajor(floatBuffer);
+        cameraStack.peek().getPositionMatrix().writeColumnMajor(floatBuffer);
         floatBuffer.get(out);
 
         WgpuNative.setMatrix(0, out);

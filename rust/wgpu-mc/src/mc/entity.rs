@@ -401,11 +401,10 @@ pub struct EntityPart {
 pub struct Entity {
     pub name: String,
     pub model_root: EntityPart,
-    pub texture: Arc<ArcSwap<BindableTexture>>,
     /// Names of each part referencing an index for applicable transforms
     pub parts: HashMap<String, usize>,
     pub mesh: Arc<wgpu::Buffer>,
-    pub vertices: u32,
+    pub vertex_count: u32,
 }
 
 fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id: &mut u32) {
@@ -440,7 +439,6 @@ impl Entity {
         name: String,
         root: EntityPart,
         wgpu_state: &WgpuState,
-        texture: Arc<ArcSwap<BindableTexture>>,
     ) -> Self {
         let mut parts = HashMap::new();
 
@@ -454,40 +452,36 @@ impl Entity {
         Self {
             name,
             model_root: root,
-            texture,
             parts,
             mesh: Arc::new(wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(&mesh[..]),
                 usage: wgpu::BufferUsages::VERTEX,
             })),
-            vertices: mesh.len() as u32,
+            vertex_count: mesh.len() as u32,
         }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
-pub(crate) struct UploadedEntityInstances {
-    pub(crate) transform_ssbo: Arc<BindableBuffer>,
-    pub(crate) instance_vbo: Arc<wgpu::Buffer>,
-    pub(crate) count: u32,
+pub struct UploadedEntityInstances {
+    pub transform_ssbo: Arc<BindableBuffer>,
+    pub instance_vbo: Arc<wgpu::Buffer>,
+    pub count: u32,
 }
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
-pub(crate) struct InstanceVertex {
-    /// Index into mat4[]
-    pub(crate) entity_index: u32,
-    pub(crate) uv_offset: [f32; 2],
-    pub(crate) parts_per_entity: u32,
+pub struct InstanceVertex {
+    /// Index into the mat4[] contained by [UploadedEntityInstances].transform_ssbo
+    pub entity_index: u32,
+    pub uv_offset: [u16; 2]
 }
 
 impl InstanceVertex {
-    const VAA: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
+    const VAA: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
         4 => Uint32,
-        5 => Float32x2,
-        6 => Uint32
+        5 => Float32x2
     ];
 
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -500,24 +494,27 @@ impl InstanceVertex {
     }
 }
 
-pub struct EntityInstances {
-    pub(crate) entity: Arc<Entity>,
-    pub instances: Vec<EntityInstanceTransforms>,
-    pub(crate) uploaded: RwLock<Option<UploadedEntityInstances>>,
+pub struct BundledEntityInstances {
+    pub entity: Arc<Entity>,
+    pub texture: Arc<BindableTexture>,
+    pub uploaded: Option<UploadedEntityInstances>,
+    pub count: u32
 }
 
-impl EntityInstances {
-    pub fn new(entity: Arc<Entity>, instances: Vec<EntityInstanceTransforms>) -> Self {
+impl BundledEntityInstances {
+    pub fn new(entity: Arc<Entity>, count: u32, texture: Arc<BindableTexture>) -> Self {
         Self {
             entity,
-            instances,
-            uploaded: RwLock::new(None),
+            texture,
+            uploaded: None,
+            count
         }
     }
 
-    pub fn upload(&self, wm: &WmRenderer) {
-        let matrices = self
-            .instances
+    pub fn upload(&mut self, wm: &WmRenderer, instances: &[EntityInstanceTransforms]) {
+        self.count = instances.len() as u32;
+
+        let matrices = instances
             .iter()
             .flat_map(|transforms| {
                 transforms
@@ -528,14 +525,12 @@ impl EntityInstances {
             })
             .collect::<Vec<f32>>();
 
-        let instances: Vec<InstanceVertex> = self
-            .instances
+        let instances: Vec<InstanceVertex> = instances
             .iter()
             .enumerate()
             .map(|(index, instance)| InstanceVertex {
                 entity_index: index as u32,
-                uv_offset: [instance.uv_offset.0, instance.uv_offset.1],
-                parts_per_entity: self.entity.parts.len() as u32,
+                uv_offset: [instance.uv_offset[0], instance.uv_offset[1]]
             })
             .collect();
 
@@ -545,7 +540,7 @@ impl EntityInstances {
             &BufferInitDescriptor {
                 label: None,
                 contents: instances_bytes,
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: BufferUsages::VERTEX,
             },
         ));
 
@@ -556,10 +551,10 @@ impl EntityInstances {
             "ssbo",
         ));
 
-        *self.uploaded.write() = Some(UploadedEntityInstances {
+        self.uploaded = Some(UploadedEntityInstances {
             transform_ssbo,
             instance_vbo,
-            count: self.instances.len() as u32,
+            count: self.count
         });
     }
 }
@@ -569,7 +564,7 @@ pub struct EntityInstanceTransforms {
     pub position: Position,
     ///Rotation around the Y axis
     pub looking_yaw: f32,
-    pub uv_offset: (f32, f32),
+    pub uv_offset: [u16; 2],
     pub part_transforms: Vec<PartTransform>,
 }
 

@@ -29,6 +29,8 @@ public class WgpuMcMod implements ClientModInitializer {
 
 	public static Logger LOGGER = LoggerFactory.getLogger("wgpu_mc");
 
+	public static boolean ENTITIES_UPLOADED = false;
+
 	public static ElectrumRenderer ELECTRUM;
 
 	@Override

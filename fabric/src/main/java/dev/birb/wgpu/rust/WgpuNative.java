@@ -6,6 +6,7 @@ import net.minecraft.util.collection.IndexedIterable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.FloatBuffer;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
@@ -185,5 +186,13 @@ public class WgpuNative {
     public static native void clearChunks();
 
     public static native void registerEntities(String toString);
+
+    public static native void setEntityInstanceBuffer(String entity, FloatBuffer buffer);
+
+    public static native void setEntityInstanceBuffer(String entity, float[] array, int position, int instanceCount, int textureId);
+
+    public static native void clearEntities();
+
+    public static native void identifyGlTexture(int texture, int glId);
 
 }

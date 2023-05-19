@@ -2,6 +2,7 @@ package dev.birb.wgpu.mixin.render;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.birb.wgpu.entity.EntityState;
 import dev.birb.wgpu.mixin.accessors.ThreadExecutorAccessor;
 import dev.birb.wgpu.mixin.accessors.WindowAccessor;
 import dev.birb.wgpu.render.Wgpu;
@@ -10,6 +11,7 @@ import dev.birb.wgpu.rust.WgpuResourceProvider;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.WindowSettings;
 import net.minecraft.client.render.RenderTickCounter;
+import net.minecraft.client.texture.TextureManager;
 import net.minecraft.client.util.Window;
 import net.minecraft.client.util.WindowProvider;
 import net.minecraft.client.world.ClientWorld;
@@ -32,9 +34,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.Queue;
 
 import static dev.birb.wgpu.render.Wgpu.UNSAFE;
+import static net.minecraft.screen.PlayerScreenHandler.BLOCK_ATLAS_TEXTURE;
 //import jdk.internal.misc.Unsafe;
 
 @Mixin(MinecraftClient.class)
@@ -52,6 +56,10 @@ public abstract class MinecraftClientRenderMixin {
     @Shadow private boolean paused;
 
     @Shadow public abstract ResourceManager getResourceManager();
+
+    @Shadow @Nullable public ClientWorld world;
+
+    @Shadow public abstract TextureManager getTextureManager();
 
     @Redirect(method = "<init>", at = @At(value = "NEW", target = "net/minecraft/client/util/WindowProvider"))
     private WindowProvider redirectWindowProvider(MinecraftClient client) throws InstantiationException {
@@ -79,6 +87,20 @@ public abstract class MinecraftClientRenderMixin {
     @Inject(method = "render", at = @At("RETURN"))
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
         RenderSystem.replayQueue();
+
+        if(this.world == null) {
+            WgpuNative.clearEntities();
+        }
+
+        for(Map.Entry<String, EntityState.EntityRenderState> entry : EntityState.renderStates.entrySet()) {
+            String entity = entry.getKey();
+            EntityState.EntityRenderState state = entry.getValue();
+
+            WgpuNative.setEntityInstanceBuffer(entity, state.buffer.array(), state.buffer.position(), state.count, state.textureId);
+
+            state.buffer.clear();
+            state.count = 0;
+        }
 
         WgpuNative.submitCommands();
     }

@@ -23,7 +23,7 @@ public class EntityState {
     public static final HashMap<String, EntityRenderState> renderStates = new HashMap<>();
     public static final HashMap<String, HashMap<String, Integer>> matrixIndices = new HashMap<>();
 
-    public static void assembleEntity(String entityName) {
+    public static void assembleEntity(String entityName, int textureId) {
         HashMap<String, Integer> partIndices = matrixIndices.get(entityName);
         Matrix4f[] orderedMatrices = new Matrix4f[partIndices.size()];
         for(Map.Entry<String, Matrix4f> entry : entityModelMatrices.entrySet()) {
@@ -41,16 +41,22 @@ public class EntityState {
         MatrixStack stack = new MatrixStack();
         stack.loadIdentity();
 
+        FloatBuffer floatBufTemp = FloatBuffer.allocate(16);
+
 //        orderedMatrices[0] = stack.peek().getPositionMatrix();
 
-        for(int i=0;i<orderedMatrices.length;i++) {
-            Matrix4f mat = orderedMatrices[i];
-            if(mat == null) {
+        for (Matrix4f orderedMatrix : orderedMatrices) {
+            Matrix4f mat = orderedMatrix;
+            if (mat == null) {
                 mat = stack.peek().getPositionMatrix();
             }
-            mat.writeColumnMajor(state.buffer);
+            mat.writeColumnMajor(floatBufTemp);
+
+            state.buffer.put(floatBufTemp);
+            floatBufTemp.position(0);
         }
 
+        state.textureId = textureId;
         state.count++;
 
         renderStates.put(entityName, state);
@@ -58,8 +64,9 @@ public class EntityState {
 
     public static class EntityRenderState {
 
-        public final FloatBuffer buffer = FloatBuffer.allocate(50000);
+        public final FloatBuffer buffer = FloatBuffer.allocate(100000);
         public int count = 0;
+        public int textureId;
 
     }
 

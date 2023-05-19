@@ -15,7 +15,7 @@ use raw_window_handle::{
 };
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::RenderLayer;
-use wgpu_mc::mc::entity::{EntityInstanceTransforms, EntityInstances, PartTransform};
+use wgpu_mc::mc::entity::{EntityInstanceTransforms, BundledEntityInstances, PartTransform};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
@@ -181,7 +181,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
     instances_map.insert(ENTITY_NAME.into(), instances);
 
-    wm.mc.entity_models.write().push(entity.clone());
+    // wm.mc.entity_models.write().push(entity.clone());
 
     wm.pipelines
         .load_full()

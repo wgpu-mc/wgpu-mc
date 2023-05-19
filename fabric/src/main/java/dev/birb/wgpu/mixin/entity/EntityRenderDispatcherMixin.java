@@ -1,14 +1,18 @@
 package dev.birb.wgpu.mixin.entity;
 
 import dev.birb.wgpu.entity.EntityState;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.client.render.entity.model.EntityModelLayer;
 import net.minecraft.client.render.entity.model.EntityModelLayers;
+import net.minecraft.client.texture.AbstractTexture;
+import net.minecraft.client.texture.TextureManager;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.util.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -36,7 +40,11 @@ public abstract class EntityRenderDispatcherMixin {
             if(rootLayerName == null) return;
         }
 
-        EntityState.assembleEntity(rootLayerName);
+        Identifier textureIdentifier = this.getRenderer(entity).getTexture(entity);
+        TextureManager textureManager = MinecraftClient.getInstance().getTextureManager();
+        int glId = textureManager.getTexture(textureIdentifier).getGlId();
+
+        EntityState.assembleEntity(rootLayerName, glId);
         EntityState.entityModelMatrices.clear();
     }
 

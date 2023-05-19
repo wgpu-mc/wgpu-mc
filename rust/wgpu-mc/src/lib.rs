@@ -43,7 +43,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::mc::entity::EntityInstances;
+use crate::mc::entity::BundledEntityInstances;
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
 pub use naga;
@@ -108,7 +108,7 @@ impl WmRenderer {
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
 
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
@@ -323,7 +323,7 @@ impl WmRenderer {
         graph: &ShaderGraph,
         output_texture_view: &wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
-        entity_instances: &HashMap<String, EntityInstances>,
+        entity_instances: &HashMap<String, BundledEntityInstances>,
     ) -> Result<(), wgpu::SurfaceError> {
         graph.render(self, output_texture_view, surface_config, entity_instances);
 

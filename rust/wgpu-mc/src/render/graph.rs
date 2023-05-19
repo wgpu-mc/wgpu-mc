@@ -25,7 +25,7 @@ use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
-use crate::mc::entity::{EntityInstances, InstanceVertex};
+use crate::mc::entity::{BundledEntityInstances, InstanceVertex};
 use crate::render::entity::EntityVertex;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, Face, FragmentState, FrontFace, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
@@ -307,6 +307,10 @@ impl ShaderGraph {
                                         "wm_pc_framebuffer_size" => PushConstantRange {
                                             stages: ShaderStages::FRAGMENT,
                                             range: *offset as u32..*offset as u32 + 8,
+                                        },
+                                        "wm_pc_parts_per_entity" => PushConstantRange {
+                                            stages: ShaderStages::VERTEX,
+                                            range: *offset as u32..*offset as u32 + 4,
                                         },
                                         _ => unimplemented!("Unknown push constant resource value"),
                                     })
@@ -652,7 +656,7 @@ impl ShaderGraph {
         wm: &WmRenderer,
         output_texture: &'graph wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
-        entity_instances: &HashMap<String, EntityInstances>,
+        entity_instances: &HashMap<String, BundledEntityInstances>,
     ) {
         let arena = WmArena::new(1024);
 
@@ -805,7 +809,8 @@ impl ShaderGraph {
                                     Some(chunk),
                                     surface_config,
                                     chunk_offset,
-                                    section_index
+                                    Some(section_index),
+                                    None
                                 );
 
                                 render_pass.draw(baked_layer.clone(), 0..1);
@@ -822,7 +827,8 @@ impl ShaderGraph {
                         None,
                         surface_config,
                         chunk_offset,
-                        0
+                        None,
+                        None
                     );
 
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
@@ -832,11 +838,13 @@ impl ShaderGraph {
                 "wm_geo_entities" => {
                     let entities = wm.mc.entity_models.read();
 
-                    entities.iter().for_each(|entity| {
-                        let instances = entity_instances.get(&entity.name).unwrap();
+                    for (entity_name, entity) in entities.iter() {
+                        let instances = match entity_instances.get(&entity.name) {
+                            None => continue,
+                            Some(instances) => instances
+                        };
 
-                        let read_guard = instances.uploaded.read();
-                        let uploaded = read_guard.as_ref().unwrap();
+                        let uploaded = instances.uploaded.as_ref().unwrap();
 
                         let instance_vbo = arena.alloc(uploaded.instance_vbo.clone());
                         let bindable_buffer = uploaded.transform_ssbo.clone();
@@ -857,7 +865,7 @@ impl ShaderGraph {
                                     &*arena.alloc(CustomResource {
                                         update: None,
                                         data: Arc::new(ResourceInternal::Texture(
-                                            TextureResource::Bindable(entity.texture.clone()),
+                                            TextureResource::Bindable(Arc::new(ArcSwap::new(instances.texture.clone()))),
                                             false,
                                         )),
                                     }),
@@ -878,14 +886,15 @@ impl ShaderGraph {
                             None,
                             surface_config,
                             chunk_offset,
-                            0
+                            None,
+                            Some(entity.parts.len() as u32)
                         );
 
                         render_pass
                             .set_vertex_buffer(0, arena.alloc(entity.mesh.clone()).slice(..));
                         render_pass.set_vertex_buffer(1, instance_vbo.slice(..));
-                        render_pass.draw(0..entity.vertices, 0..instances.instances.len() as u32);
-                    });
+                        render_pass.draw(0..entity.vertex_count, 0..instances.count);
+                    }
                 }
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {
@@ -959,7 +968,8 @@ pub fn set_push_constants(
     chunk: Option<&Chunk>,
     surface_config: &SurfaceConfiguration,
     chunk_offset: ChunkPos,
-    section_y: usize
+    section_y: Option<usize>,
+    parts_per_entity: Option<u32>
 ) {
     pipeline
         .push_constants
@@ -980,10 +990,17 @@ pub fn set_push_constants(
                 *offset as u32,
                 bytemuck::cast_slice(&[
                     chunk.unwrap().pos[0] + chunk_offset[0],
-                    section_y as i32,
+                    section_y.unwrap() as i32,
                     chunk.unwrap().pos[1] + chunk_offset[1],
                 ]),
             ),
+            "wm_pc_parts_per_entity" => {
+                render_pass.set_push_constants(
+                    ShaderStages::VERTEX,
+                    *offset as u32,
+                    bytemuck::cast_slice(&[parts_per_entity.unwrap()]),
+                )
+            },
             _ => unimplemented!("Unknown push constant resource value"),
         });
 }

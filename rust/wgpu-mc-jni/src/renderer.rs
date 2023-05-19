@@ -3,7 +3,7 @@ use cgmath::{perspective, Deg, Matrix4, SquareMatrix, Vector3};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
-use std::{slice, thread};
+use std::{mem, slice, thread};
 use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
@@ -14,7 +14,7 @@ use jni::{
     JNIEnv,
 };
 use jni_fn::jni_fn;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy};
 use parking_lot::{Mutex, RwLock};
 use winit::event::DeviceEvent;
 use winit::event_loop::EventLoopBuilder;
@@ -34,8 +34,10 @@ use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
+use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstanceTransforms, InstanceVertex, UploadedEntityInstances};
+use wgpu_mc::texture::BindableTexture;
 
-use crate::gl::{ElectrumGeometry, ElectrumVertex};
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC};
 use crate::{
     MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
     CHANNELS, MC_STATE, RENDERER, WINDOW,
@@ -132,8 +134,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             .build(&event_loop)
             .unwrap(),
     );
-
-    log::info!("Opened window");
 
     WINDOW.set(window.clone()).unwrap();
 
@@ -304,7 +304,9 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let _instant = Instant::now();
 
-            wm.render(&shader_graph, &view, &surface_state.1, &HashMap::new())
+            let entity_instances = ENTITY_INSTANCES.lock();
+
+            wm.render(&shader_graph, &view, &surface_state.1, &entity_instances)
                 .unwrap();
 
             texture.present();
@@ -410,4 +412,94 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
             _ => {}
         }
     });
+}
+
+struct EntityRenderState {
+    pub instance_buffer: Vec<u8>,
+    pub instance_count: u32
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+pub enum MCTextureId {
+    BLOCK_ATLAS,
+    LIGHTMAP
+}
+
+pub static ENTITY_INSTANCES: Lazy<Mutex<HashMap<String, BundledEntityInstances>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+pub static MC_TEXTURES: Lazy<Mutex<HashMap<MCTextureId, Arc<BindableTexture>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn clearEntities(_env: JNIEnv, _class: JClass) {
+    ENTITY_INSTANCES.lock().clear();
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn identifyGlTexture(_env: JNIEnv, _class: JClass, texture: jint, gl_id: jint) {
+    let alloc_read = GL_ALLOC.read();
+    let gl_texture = alloc_read.get(&(gl_id as u32)).unwrap();
+
+    let mut mc_textures = MC_TEXTURES.lock();
+    mc_textures.insert(match texture {
+        0 => MCTextureId::BLOCK_ATLAS,
+        1 => MCTextureId::LIGHTMAP,
+        _ => unreachable!()
+    }, gl_texture.bindable_texture.as_ref().unwrap().clone());
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString, array: jfloatArray, position: jint, instance_count: jint, texture_id: jint) {
+    if instance_count == 0 { return; }
+
+    let array = env.get_float_array_elements(array, ReleaseMode::NoCopyBack).unwrap();
+    let entity_name: String = env.get_string(entity_name).unwrap().into();
+
+    let transform_buffer: Vec<u8> = Vec::from(
+        bytemuck::cast_slice(unsafe {
+            slice::from_raw_parts(array.as_ptr(), array.size().unwrap() as usize)
+        })
+    );
+
+    let wm = RENDERER.get().unwrap();
+
+    let models = wm.mc.entity_models.read();
+    let entity = models.get(&entity_name).unwrap();
+
+    let instance_vertices: Vec<InstanceVertex> = (0..instance_count as u32).map(|index| {
+        InstanceVertex {
+            entity_index: index,
+            uv_offset: [0, 0],
+        }
+    }).collect();
+
+    let instance_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::cast_slice(&instance_vertices),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let transform_ssbo = BindableBuffer::new(
+        &wm,
+        bytemuck::cast_slice(&transform_buffer),
+        BufferUsages::STORAGE,
+        "ssbo"
+    );
+
+    let texture = {
+        let gl_alloc = GL_ALLOC.read();
+
+        gl_alloc.get(&(texture_id as u32)).unwrap().bindable_texture.as_ref().unwrap().clone()
+    };
+
+    let mut bundled_entity_instances = BundledEntityInstances::new(entity.clone(), instance_count as u32, texture);
+
+    bundled_entity_instances.uploaded = Some(
+        UploadedEntityInstances {
+            transform_ssbo: Arc::new(transform_ssbo),
+            instance_vbo: Arc::new(instance_buffer),
+            count: instance_count as u32,
+        }
+    );
+
+    let mut instances = ENTITY_INSTANCES.lock();
+    instances.insert(entity_name, bundled_entity_instances);
 }

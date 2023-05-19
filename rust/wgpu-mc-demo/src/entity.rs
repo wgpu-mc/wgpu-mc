@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use wgpu_mc::mc::entity::{Entity, EntityInstanceTransforms, EntityInstances, PartTransform};
+use wgpu_mc::mc::entity::{Entity, EntityInstanceTransforms, BundledEntityInstances, PartTransform};
 use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
 use wgpu_mc::texture::TextureSamplerView;
@@ -27,7 +27,7 @@ pub struct Wrapper1 {
 pub const ENTITY_NAME: &str = "minecraft:book#main";
 const TEXTURE_LOCATION: &str = "minecraft:textures/entity/enchanting_table_book.png";
 
-pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
+pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, BundledEntityInstances) {
     let instant = Instant::now();
     let entities: HashMap<String, Wrapper1> = serde_json::from_str(ENTITY_JSON).unwrap();
 
@@ -60,8 +60,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     let entity = Arc::new(Entity::new(
         ENTITY_NAME.into(),
         wm_entity.unwrap(),
-        &wm.wgpu_state,
-        entity_atlas_guard.bindable_texture.clone(),
+        &wm.wgpu_state
     ));
 
     println!("{:?}", entity.parts);
@@ -69,12 +68,12 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
     let one_transform = EntityInstanceTransforms {
         position: (0.0, 0.0, 0.0),
         looking_yaw: 0.0,
-        uv_offset: (0.0, 0.0),
+        uv_offset: [0, 0],
         part_transforms: vec![PartTransform::identity(); entity.parts.len()],
     };
 
-    let instances = EntityInstances::new(entity.clone(), vec![one_transform]);
-    instances.upload(wm);
+    let mut instances = BundledEntityInstances::new(entity.clone(), 1, entity_atlas_guard.bindable_texture.load_full());
+    instances.upload(wm, &[one_transform]);
 
     (entity, instances)
 }

@@ -4,6 +4,7 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
+    "DebugHudMixin",
     "TitleScreenMixin",
     "accessors.DefaultClientResourcePackAccessor",
     "accessors.NamespaceResourceManagerAccessor",
@@ -34,15 +35,11 @@
     "render.InGameHudMixin",
     "render.MinecraftClientRenderMixin",
     "render.RenderSystemMixin",
+    "render.SpriteAtlasTextureMixin",
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
-<<<<<<< HEAD
     "world.BlockStateMixin"
-=======
-    "world.BlockStateMixin",
-    "DebugHudMixin"
->>>>>>> master
   ],
   "injectors": {
     "defaultRequire": 1

@@ -1,5 +1,6 @@
 //! Rust implementations of minecraft concepts that are important to us.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -149,7 +150,7 @@ pub struct MinecraftState {
     pub block_manager: RwLock<BlockManager>,
 
     pub chunks: ChunkManager,
-    pub entity_models: RwLock<Vec<Arc<Entity>>>,
+    pub entity_models: RwLock<HashMap<String, Arc<Entity>>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
 
@@ -165,7 +166,7 @@ impl MinecraftState {
         MinecraftState {
             sun_position: ArcSwap::new(Arc::new(0.0)),
             chunks: ChunkManager::new(wgpu_state),
-            entity_models: RwLock::new(Vec::new()),
+            entity_models: RwLock::new(HashMap::new()),
 
             texture_manager: TextureManager::new(),
 

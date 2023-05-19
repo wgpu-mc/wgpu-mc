@@ -33,6 +33,8 @@ pipelines:
     geometry: wm_geo_entities
     depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
+    pc:
+      0: wm_pc_parts_per_entity
     uniforms:
       0: mvp_mat4
       1: wm_ssbo_entity_part_transforms
