@@ -38,20 +38,15 @@ Engine
 - [x] Instanced Entity Rendering
 - [x] Animated textures
 - [ ] Mipmaps  
-- [x] Advanced data-driven shader pipeline support
+- [x] Data-driven shader graph
 
 Minecraft
 
-- [x] Disable Blaze3d
-- [x] GUI rendering (text rendering is mangled but otherwise it works)
+- [x] GUI rendering
 - [x] Terrain rendering
     - [ ] Lighting integration
-    - [ ] Chunk updates
-- [ ] Integrate entities
+    - [x] Chunk updates
+- [ ] Integrate entities (being worked on)
 - [ ] Item rendering
-- [ ] Implement the Fabric Rendering API (Electrum)
+- [ ] Implement FRAPI/FREX
 - [ ] Particles
-
-Pie in the sky
-
-- [ ] Use https://github.com/birbe/jvm to run Minecraft in the browser
