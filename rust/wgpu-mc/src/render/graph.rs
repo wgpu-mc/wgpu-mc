@@ -836,15 +836,9 @@ impl ShaderGraph {
                     render_pass.draw(0..6, 0..1);
                 }
                 "wm_geo_entities" => {
-                    let entities = wm.mc.entity_models.read();
-
-                    for (entity_name, entity) in entities.iter() {
-                        let instances = match entity_instances.get(&entity.name) {
-                            None => continue,
-                            Some(instances) => instances
-                        };
-
-                        let uploaded = instances.uploaded.as_ref().unwrap();
+                    for (_, bundle) in entity_instances.iter() {
+                        let uploaded = bundle.uploaded.as_ref().unwrap();
+                        let entity = &*bundle.entity;
 
                         let instance_vbo = arena.alloc(uploaded.instance_vbo.clone());
                         let bindable_buffer = uploaded.transform_ssbo.clone();
@@ -865,7 +859,7 @@ impl ShaderGraph {
                                     &*arena.alloc(CustomResource {
                                         update: None,
                                         data: Arc::new(ResourceInternal::Texture(
-                                            TextureResource::Bindable(Arc::new(ArcSwap::new(instances.texture.clone()))),
+                                            TextureResource::Bindable(Arc::new(ArcSwap::new(bundle.texture.clone()))),
                                             false,
                                         )),
                                     }),
@@ -893,7 +887,7 @@ impl ShaderGraph {
                         render_pass
                             .set_vertex_buffer(0, arena.alloc(entity.mesh.clone()).slice(..));
                         render_pass.set_vertex_buffer(1, instance_vbo.slice(..));
-                        render_pass.draw(0..entity.vertex_count, 0..instances.count);
+                        render_pass.draw(0..entity.vertex_count, 0..bundle.count);
                     }
                 }
                 _ => {

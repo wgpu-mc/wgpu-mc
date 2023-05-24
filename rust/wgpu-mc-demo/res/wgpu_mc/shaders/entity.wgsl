@@ -6,6 +6,12 @@ struct Transforms {
     mats: array<mat4x4<f32>>
 };
 
+struct PushConstants {
+    parts_per_entity: u32
+}
+
+var<push_constant> push_constants: PushConstants;
+
 @group(0) @binding(0)
 var<uniform> uniform_data: Uniforms;
 
@@ -26,17 +32,16 @@ fn vert(
     @location(3) part_id: u32,
     @location(4) entity_index: u32,
     @location(5) entity_texture_offset: vec2<f32>,
-    @location(6) parts_per: u32
 ) -> VertexResult {
     var vr: VertexResult;
 
     var tex_coords: vec2<f32> = vec2<f32>(f32(tex_coords_u32 & 0xffffu), f32(tex_coords_u32 >> 16u)) * vec2<f32>(0.00048828125, 0.00048828125);
 
-    var part_transform_index: u32 = (entity_index * parts_per) + part_id;
+    var part_transform_index: u32 = (entity_index * push_constants.parts_per_entity) + part_id;
     var part_transform: mat4x4<f32> = transforms.mats[part_transform_index];
 
-    //vr.pos = uniform_data.view_proj * part_transform * vec4<f32>(pos_in, 0.0);
-    vr.pos = uniform_data.view_proj * part_transform * vec4<f32>(pos_in, 1.0);
+    vr.pos = uniform_data.view_proj * part_transform * vec4<f32>(pos_in + vec3<f32>(0.0, 64.0, 0.0), 1.0);
+
     vr.tex_coords = tex_coords + entity_texture_offset;
     vr.normal = mat3x3<f32>(part_transform[0].xyz, part_transform[1].xyz, part_transform[2].xyz) * normal;
 

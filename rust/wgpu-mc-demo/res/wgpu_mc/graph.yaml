@@ -25,15 +25,15 @@ pipelines:
     geometry: wm_geo_quad
     depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
-    pc:
+    push_constants:
       0: wm_pc_framebuffer_size
     uniforms:
       0: rot
   entity:
     geometry: wm_geo_entities
-    depth: wm_framebuffer_depth
+#    depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
-    pc:
+    push_constants:
       0: wm_pc_parts_per_entity
     uniforms:
       0: mvp_mat4
