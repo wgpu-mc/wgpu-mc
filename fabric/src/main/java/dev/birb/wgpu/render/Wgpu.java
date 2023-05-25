@@ -6,6 +6,7 @@ import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import net.minecraft.client.MinecraftClient;
 
+import net.minecraft.client.render.entity.model.EntityModels;
 import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
 
@@ -138,6 +139,8 @@ public class Wgpu {
     }
 
     public static void helperSetPartIndex(String entity, String part, int index) {
+
+
         if(!EntityState.matrixIndices.containsKey(entity)) {
             EntityState.matrixIndices.put(entity, new HashMap<>());
         }

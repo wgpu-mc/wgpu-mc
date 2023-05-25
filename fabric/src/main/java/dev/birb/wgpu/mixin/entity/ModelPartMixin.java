@@ -31,6 +31,7 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor {
     @Shadow protected abstract void renderCuboids(MatrixStack.Entry entry, VertexConsumer vertexConsumer, int light, int overlay, float red, float green, float blue, float alpha);
 
     private String name;
+    private int partIndex;
 
     @Override
     public String getName() {
@@ -61,6 +62,7 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor {
                 thisPartName = "root";
             }
 
+            this.rotate(matrices);
             Matrix4f mat4 = matrices.peek().getPositionMatrix();
             EntityState.entityModelMatrices.put(thisPartName, mat4);
 

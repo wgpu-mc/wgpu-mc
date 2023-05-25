@@ -12,6 +12,7 @@ import net.minecraft.client.texture.TextureManager;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.FallingBlockEntity;
 import net.minecraft.util.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -28,6 +29,9 @@ public abstract class EntityRenderDispatcherMixin {
     public<E extends Entity> void render(E entity, double x, double y, double z, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci) {
         EntityType<?> type = entity.getType();
 
+        //TODO implement FallingBlockEntity
+        if(entity instanceof FallingBlockEntity) return;
+
         if(type == EntityType.ITEM) return;
 
         String rootLayerName;
@@ -36,6 +40,8 @@ public abstract class EntityRenderDispatcherMixin {
             rootLayerName = EntityModelLayers.PLAYER.toString();
         } else {
             EntityState.EntityModelInfo info = EntityState.layers.get(type);
+            boolean debugBreak = false;
+            while(info == null && !debugBreak) {}
             rootLayerName = info.root.toString();
             if(rootLayerName == null) return;
         }

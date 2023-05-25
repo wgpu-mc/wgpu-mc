@@ -22,6 +22,7 @@
     "core.OptionsScreenMixin",
     "core.RegistryMixin",
     "core.TextRendererMixin",
+    "entity.EntityModelLoaderMixin",
     "entity.EntityRenderDispatcherMixin",
     "entity.EntityRendererFactoryMixin",
     "entity.EntityRenderersMixin",

@@ -18,7 +18,15 @@ public class EntityState {
     public static final HashMap<EntityType<?>, EntityModelInfo> layers = new HashMap<>();
     public static boolean registeringRoot = false;
 
-    public static HashMap<String, Matrix4f> entityModelMatrices = new HashMap<>();
+    static class MatrixIndexTuple {
+
+        int index;
+        Matrix4f mat;
+
+    }
+
+    public static List<MatrixIndexTuple> entityModelMatrices = new ArrayList<>();
+//    public static HashMap<String, Matrix4f> entityModelMatrices = new HashMap<>();
 
     public static final HashMap<String, EntityRenderState> renderStates = new HashMap<>();
     public static final HashMap<String, HashMap<String, Integer>> matrixIndices = new HashMap<>();
@@ -26,13 +34,14 @@ public class EntityState {
     public static void assembleEntity(String entityName, int textureId) {
         HashMap<String, Integer> partIndices = matrixIndices.get(entityName);
         Matrix4f[] orderedMatrices = new Matrix4f[partIndices.size()];
-        for(Map.Entry<String, Matrix4f> entry : entityModelMatrices.entrySet()) {
-            String partName = entry.getKey();
-            Matrix4f mat = entry.getValue();
+//        for(Map.Entry<String, Matrix4f> entry : entityModelMatrices.entrySet()) {
+        for(Matrix4f mat : entityModelMatrices) {
+//            String partName = entry.getKey();
+//            Matrix4f mat = entry.getValue();
 
-            if(!partIndices.containsKey(partName)) return;
+//            if(!partIndices.containsKey(partName)) return;
 
-            int partIndex = partIndices.get(partName);
+//            int partIndex = partIndices.get(partName);
             orderedMatrices[partIndex] = mat;
         }
 
