@@ -1,5 +1,6 @@
 package dev.birb.wgpu.input;
 
+import dev.birb.wgpu.WgpuMcMod;
 import org.lwjgl.glfw.GLFW;
 
 public class WgpuKeys {
@@ -60,7 +61,7 @@ public class WgpuKeys {
             case WGPU_SPACE -> converted = GLFW.GLFW_KEY_SPACE;
         }
         if(converted == -1) {
-            System.out.printf("Couldn't convert %s\n", code);
+            WgpuMcMod.LOGGER.error("Couldn't convert winit keycode " + code + " to GLFW");
         }
         return converted;
     }

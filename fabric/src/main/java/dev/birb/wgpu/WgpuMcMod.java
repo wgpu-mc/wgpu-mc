@@ -27,15 +27,16 @@ import org.slf4j.LoggerFactory;
 
 public class WgpuMcMod implements ClientModInitializer {
 
-	public static Logger LOGGER = LoggerFactory.getLogger("wgpu_mc");
+	public static Logger LOGGER = LoggerFactory.getLogger("electrum");
 
 	public static boolean ENTITIES_UPLOADED = false;
+	public static boolean MAY_INJECT_PART_IDS = false;
 
 	public static ElectrumRenderer ELECTRUM;
 
 	@Override
 	public void onInitializeClient() {
-		LOGGER.info("[Electrum] Registering Electrum renderer!");
+		LOGGER.info("Registering FRAPI renderer");
 
 		ElectrumRenderer electrumRenderer = new ElectrumRenderer();
 		RendererAccess.INSTANCE.registerRenderer(electrumRenderer);

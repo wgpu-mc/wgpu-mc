@@ -21,10 +21,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.Map;
+
 @Mixin(EntityRenderDispatcher.class)
 public abstract class EntityRenderDispatcherMixin {
 
     @Shadow public abstract <T extends Entity> EntityRenderer<? super T> getRenderer(T entity);
+
+    @Shadow private Map<EntityType<?>, EntityRenderer<?>> renderers;
 
     private static int getOverlayColor(int packedUV) {
         int u = packedUV & 0xffff;
@@ -38,6 +42,7 @@ public abstract class EntityRenderDispatcherMixin {
     @Inject(method = "render", at = @At("TAIL"))
     public<E extends Entity> void render(E entity, double x, double y, double z, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci) {
         EntityType<?> type = entity.getType();
+        EntityRenderer<?> renderer = this.getRenderer(entity);
 
         //TODO implement FallingBlockEntity
         if(entity instanceof FallingBlockEntity) return;
@@ -46,8 +51,9 @@ public abstract class EntityRenderDispatcherMixin {
 
         EntityState.instanceOverlay = 0xffffffff;
 
-        if(entity instanceof LivingEntity) {
-            EntityState.instanceOverlay = getOverlayColor(LivingEntityRenderer.getOverlay((LivingEntity) entity, tickDelta));
+        if(renderer instanceof LivingEntityRenderer livingRenderer) {
+            LivingEntity livingEntity = (LivingEntity) entity;
+            EntityState.instanceOverlay = getOverlayColor(LivingEntityRenderer.getOverlay(livingEntity, livingRenderer.getAnimationCounter(livingEntity, tickDelta)));
         }
 
         String rootLayerName;
@@ -57,7 +63,8 @@ public abstract class EntityRenderDispatcherMixin {
         } else {
             EntityState.EntityModelInfo info = EntityState.layers.get(type);
             boolean debugBreak = false;
-            while(info == null && !debugBreak) {}
+            if(info == null) return;
+
             rootLayerName = info.root.toString();
             if(rootLayerName == null) return;
         }
@@ -67,7 +74,7 @@ public abstract class EntityRenderDispatcherMixin {
         int glId = textureManager.getTexture(textureIdentifier).getGlId();
 
         EntityState.assembleEntity(rootLayerName, glId);
-        EntityState.entityModelPartStates.clear();
+//        EntityState.entityModelPartStates.clear();
     }
 
 }

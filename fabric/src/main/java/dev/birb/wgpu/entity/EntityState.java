@@ -32,7 +32,10 @@ public class EntityState {
     }
 
 //    public static List<MatrixIndexTuple> entityModelMatrices = new ArrayList<>();
-    public static HashMap<String, ModelPartState> entityModelPartStates = new HashMap<>();
+
+//    public static HashMap<String, ModelPartState> entityModelPartStates = new HashMap<>();
+    public static ModelPartState[] entityModelPartStates = new ModelPartState[1000];
+
     public static int instanceOverlay = 0xffffffff;
 
     public static final HashMap<String, EntityRenderState> renderStates = new HashMap<>();
@@ -40,33 +43,22 @@ public class EntityState {
 
     public static void assembleEntity(String entityName, int textureId) {
         HashMap<String, Integer> partIndices = matrixIndices.get(entityName);
-        Matrix4f[] orderedMatrices = new Matrix4f[partIndices.size()];
-        int[] overlays = new int[partIndices.size()];
-
-        for(Map.Entry<String, ModelPartState> entry : entityModelPartStates.entrySet()) {
-//        for(Matrix4f mat : entityModelMatrices) {
-            String partName = entry.getKey();
-            Matrix4f mat = entry.getValue().mat;
-
-            if(!partIndices.containsKey(partName)) return;
-
-            int partIndex = partIndices.get(partName);
-            orderedMatrices[partIndex] = mat;
-            overlays[partIndex] = entry.getValue().overlay;
-        }
-
-        EntityRenderState state = renderStates.getOrDefault(entityName, new EntityRenderState());
-        state.overlays.put(overlays);
 
         MatrixStack stack = new MatrixStack();
         stack.loadIdentity();
 
+        EntityRenderState state = renderStates.getOrDefault(entityName, new EntityRenderState());
+
         FloatBuffer floatBufTemp = FloatBuffer.allocate(16);
 
-//        orderedMatrices[0] = stack.peek().getPositionMatrix();
+        for(int i=0;i<partIndices.size();i++) {
+            ModelPartState modelPartState = entityModelPartStates[i];
 
-        for (Matrix4f orderedMatrix : orderedMatrices) {
-            Matrix4f mat = orderedMatrix;
+            if(modelPartState == null) modelPartState = new ModelPartState();
+
+            Matrix4f mat = modelPartState.mat;
+            state.overlays.put(modelPartState.overlay);
+
             if (mat == null) {
                 mat = stack.peek().getPositionMatrix();
             }
@@ -78,7 +70,6 @@ public class EntityState {
                 FloatBuffer oldBuffer = state.buffer;
                 state.buffer = FloatBuffer.allocate(state.buffer.capacity() + 10000);
                 state.buffer.put(oldBuffer);
-//                state.buffer.position()
             }
             floatBufTemp.position(0);
         }

@@ -216,7 +216,5 @@ pub fn registerEntities(env: JNIEnv, _class: JClass, string: JString) {
         });
     });
 
-    println!("Entities registered: {}", entities.len());
-
     *wm.mc.entity_models.write() = entities;
 }

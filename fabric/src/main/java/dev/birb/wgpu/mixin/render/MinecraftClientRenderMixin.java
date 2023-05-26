@@ -2,6 +2,7 @@ package dev.birb.wgpu.mixin.render;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.entity.EntityState;
 import dev.birb.wgpu.mixin.accessors.ThreadExecutorAccessor;
 import dev.birb.wgpu.mixin.accessors.WindowAccessor;
@@ -34,6 +35,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Queue;
 
@@ -87,6 +89,13 @@ public abstract class MinecraftClientRenderMixin {
     @Inject(method = "render", at = @At("RETURN"))
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
         RenderSystem.replayQueue();
+
+        if(WgpuMcMod.MAY_INJECT_PART_IDS) {
+            ArrayList<Runnable> list = (ArrayList<Runnable>) Wgpu.injectPartIds.clone();
+            Wgpu.injectPartIds = new ArrayList<>();
+
+            list.forEach(Runnable::run);
+        }
 
         if(this.world == null) {
             WgpuNative.clearEntities();

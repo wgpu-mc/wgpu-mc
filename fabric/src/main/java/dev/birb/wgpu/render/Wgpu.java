@@ -11,7 +11,9 @@ import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 import static dev.birb.wgpu.input.WgpuKeys.*;
@@ -30,6 +32,7 @@ public class Wgpu {
         return textureManager;
     }
     public static HashMap<Integer, Integer> keyStates = new HashMap<>();
+    public static ArrayList<Runnable> injectPartIds = new ArrayList<>();
 
     public static int timesTexSubImageCalled = 0;
 
@@ -146,11 +149,6 @@ public class Wgpu {
         }
 
         EntityState.matrixIndices.get(entity).put(part, index);
-    }
-
-    public static void debug(Object o) {
-        // MinecraftClient.getInstance().inGameHud.addChatMessage(MessageType.CHAT, new LiteralText(o.toString()), UUID.randomUUID());
-        System.out.println(o);
     }
 
     public static void windowFocused(boolean focused) {

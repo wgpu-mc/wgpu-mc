@@ -8,9 +8,12 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.model.TexturedModelData;
 import net.minecraft.client.render.entity.model.EntityModelLayer;
+import net.minecraft.client.render.entity.model.EntityModelLoader;
 import net.minecraft.client.render.entity.model.EntityModels;
 import net.minecraft.client.texture.TextureManager;
 import net.minecraft.client.util.math.MatrixStack;
+import org.apache.logging.log4j.Logger;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -26,6 +29,7 @@ import static net.minecraft.screen.PlayerScreenHandler.BLOCK_ATLAS_TEXTURE;
 @Mixin(TitleScreen.class)
 public class TitleScreenMixin {
 
+    @Shadow @Final private static Logger LOGGER;
     private boolean updatedTitle = false;
 
     @Inject(method = "render", at = @At("HEAD"))
@@ -35,11 +39,16 @@ public class TitleScreenMixin {
             MinecraftClient.getInstance().updateWindowTitle();
             updatedTitle = true;
 
+            long millis = System.currentTimeMillis();
+
             StringBuilder builder = new StringBuilder();
 
             builder.append("{");
             boolean first = true;
-            for(Map.Entry<EntityModelLayer, TexturedModelData> entry : EntityModels.getModels().entrySet()) {
+
+            Map<EntityModelLayer, TexturedModelData> models = EntityModels.getModels();
+
+            for(Map.Entry<EntityModelLayer, TexturedModelData> entry : models.entrySet()) {
                 if(!first) {
                     builder.append(",");
                 }
@@ -51,6 +60,10 @@ public class TitleScreenMixin {
             builder.append("}");
 
             WgpuNative.registerEntities(builder.toString());
+
+            WgpuMcMod.MAY_INJECT_PART_IDS = true;
+
+            WgpuMcMod.LOGGER.info("Uploaded " + models.size() + " TMDs to wgpu-mc and processed them in " + (System.currentTimeMillis() - millis) + "ms");
 
             TextureManager textureManager = MinecraftClient.getInstance().getTextureManager();
             int blockTexAtlasId = textureManager.getTexture(BLOCK_ATLAS_TEXTURE).getGlId();

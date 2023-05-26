@@ -1,6 +1,7 @@
 package dev.birb.wgpu.mixin.core;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.render.GlWmState;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
@@ -485,7 +486,7 @@ public class GlStateManagerMixin {
         GlWmState.WmTexture texture = GlWmState.generatedTextures.get(texId);
 
         if(width < texture.width || height < texture.height) {
-            System.out.println("Tried to make texture smaller?");
+            WgpuMcMod.LOGGER.debug("_texImage2D tried to make a texture smaller?");
             return;
         }
 
