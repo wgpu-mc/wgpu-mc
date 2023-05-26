@@ -8,7 +8,7 @@ use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
 use jni::objects::{JClass, ReleaseMode};
-use jni::sys::{jfloatArray, jint};
+use jni::sys::{jfloatArray, jint, jintArray};
 use jni::{
     objects::{JString, JValue},
     JNIEnv,
@@ -34,7 +34,7 @@ use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
-use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstanceTransforms, InstanceVertex, UploadedEntityInstances};
+use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstance, InstanceVertex, UploadedEntityInstances};
 use wgpu_mc::texture::BindableTexture;
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC};
@@ -277,9 +277,9 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                     .get_mut("wm_mat4_projection")
                     .unwrap();
 
-                if let ResourceInternal::Mat4(val, lock, _) = &*res_mat_proj.data {
+                if let ResourceInternal::Mat4(val, mat, _) = &*res_mat_proj.data {
                     let matrix4: Matrix4<f32> = matrices.projection.into();
-                    *lock.write() = perspective(
+                    *mat.write() = perspective(
                         Deg(100.0),
                         (surface_state.1.width as f32) / (surface_state.1.height as f32),
                         0.01,
@@ -306,7 +306,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
 
             let entity_instances = ENTITY_INSTANCES.lock();
 
-            wm.render(&shader_graph, &view, &surface_state.1, &entity_instances)
+            wm.render(&mut shader_graph, &view, &surface_state.1, &entity_instances)
                 .unwrap();
 
             texture.present();
@@ -447,17 +447,23 @@ pub fn identifyGlTexture(_env: JNIEnv, _class: JClass, texture: jint, gl_id: jin
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString, array: jfloatArray, position: jint, instance_count: jint, texture_id: jint) {
-    if instance_count == 0 { return; }
+pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString, mat4_array: jfloatArray, position: jint, overlay_array: jintArray, overlay_array_position: jint, instance_count: jint, texture_id: jint) {
+    let mat4_array = env.get_float_array_elements(mat4_array, ReleaseMode::NoCopyBack).unwrap();
+    let overlay_array = env.get_int_array_elements(overlay_array, ReleaseMode::NoCopyBack).unwrap();
 
-    let array = env.get_float_array_elements(array, ReleaseMode::NoCopyBack).unwrap();
     let entity_name: String = env.get_string(entity_name).unwrap().into();
 
-    let transform_buffer: Vec<u8> = Vec::from(
-        bytemuck::cast_slice(unsafe {
-            slice::from_raw_parts(array.as_ptr(), array.size().unwrap() as usize)
-        })
-    );
+    if instance_count == 0 {
+        ENTITY_INSTANCES.lock().remove(&entity_name);
+    }
+
+    let transform_slice: &[u8] = bytemuck::cast_slice(unsafe {
+        slice::from_raw_parts(mat4_array.as_ptr(), mat4_array.size().unwrap() as usize)
+    });
+
+    let overlay_slice: &[u8] = bytemuck::cast_slice(unsafe {
+        slice::from_raw_parts(overlay_array.as_ptr(), overlay_array.size().unwrap() as usize)
+    });
 
     let wm = RENDERER.get().unwrap();
 
@@ -471,18 +477,25 @@ pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString
         }
     }).collect();
 
-    let instance_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+    let instance_buffer = Arc::new(wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytemuck::cast_slice(&instance_vertices),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
+        usage: BufferUsages::VERTEX,
+    }));
 
-    let transform_ssbo = BindableBuffer::new(
+    let transform_ssbo = Arc::new(BindableBuffer::new(
         &wm,
-        bytemuck::cast_slice(&transform_buffer),
+        transform_slice,
         BufferUsages::STORAGE,
         "ssbo"
-    );
+    ));
+
+    let overlay_ssbo = Arc::new(BindableBuffer::new(
+        &wm,
+        overlay_slice,
+        BufferUsages::STORAGE,
+        "ssbo"
+    ));
 
     let texture = {
         let gl_alloc = GL_ALLOC.read();
@@ -494,8 +507,9 @@ pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString
 
     bundled_entity_instances.uploaded = Some(
         UploadedEntityInstances {
-            transform_ssbo: Arc::new(transform_ssbo),
-            instance_vbo: Arc::new(instance_buffer),
+            transform_ssbo,
+            instance_vbo: instance_buffer,
+            overlay_ssbo,
             count: instance_count as u32,
         }
     );

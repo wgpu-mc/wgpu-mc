@@ -30,6 +30,7 @@ pipelines:
       0: mvp_mat4
       1: wm_ssbo_entity_part_transforms
       2: wm_texture_entities
+      3: wm_ssbo_entity_part_overlays
   electrum_gui:
     geometry: wm_geo_electrum_gui
     output: [wm_framebuffer_texture]

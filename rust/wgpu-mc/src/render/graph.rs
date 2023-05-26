@@ -181,6 +181,7 @@ impl ShaderGraph {
         let mut resource_types = resource_types.cloned().unwrap_or(HashMap::new());
 
         resource_types.insert("wm_ssbo_entity_part_transforms".into(), "ssbo".into());
+        resource_types.insert("wm_ssbo_entity_part_overlays".into(), "ssbo".into());
         resource_types.insert("wm_texture_entities".into(), "texture".into());
 
         resource_types.insert("wm_ssbo_chunk_vertices".into(), "ssbo".into());
@@ -841,7 +842,8 @@ impl ShaderGraph {
                         let entity = &*bundle.entity;
 
                         let instance_vbo = arena.alloc(uploaded.instance_vbo.clone());
-                        let bindable_buffer = uploaded.transform_ssbo.clone();
+                        let part_transforms_buffer = uploaded.transform_ssbo.clone();
+                        let overlay_buffer = uploaded.overlay_ssbo.clone();
 
                         let augmented_resources = resource_borrow
                             .clone()
@@ -851,7 +853,14 @@ impl ShaderGraph {
                                     &*arena.alloc("wm_ssbo_entity_part_transforms".into()),
                                     &*arena.alloc(CustomResource {
                                         update: None,
-                                        data: Arc::new(ResourceInternal::Blob(bindable_buffer)),
+                                        data: Arc::new(ResourceInternal::Blob(part_transforms_buffer)),
+                                    }),
+                                ),
+                                (
+                                    &*arena.alloc("wm_ssbo_entity_part_overlays".into()),
+                                    &*arena.alloc(CustomResource {
+                                        update: None,
+                                        data: Arc::new(ResourceInternal::Blob(overlay_buffer)),
                                     }),
                                 ),
                                 (

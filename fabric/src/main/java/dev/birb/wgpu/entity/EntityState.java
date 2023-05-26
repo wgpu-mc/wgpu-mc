@@ -1,12 +1,13 @@
 package dev.birb.wgpu.entity;
 
-import it.unimi.dsi.fastutil.Hash;
 import net.minecraft.client.render.entity.model.EntityModelLayer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EntityType;
 import net.minecraft.util.math.Matrix4f;
 
+import java.nio.BufferOverflowException;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,8 +26,14 @@ public class EntityState {
 
     }
 
-    public static List<MatrixIndexTuple> entityModelMatrices = new ArrayList<>();
-//    public static HashMap<String, Matrix4f> entityModelMatrices = new HashMap<>();
+    public static class ModelPartState {
+        public Matrix4f mat;
+        public int overlay;
+    }
+
+//    public static List<MatrixIndexTuple> entityModelMatrices = new ArrayList<>();
+    public static HashMap<String, ModelPartState> entityModelPartStates = new HashMap<>();
+    public static int instanceOverlay = 0xffffffff;
 
     public static final HashMap<String, EntityRenderState> renderStates = new HashMap<>();
     public static final HashMap<String, HashMap<String, Integer>> matrixIndices = new HashMap<>();
@@ -34,18 +41,22 @@ public class EntityState {
     public static void assembleEntity(String entityName, int textureId) {
         HashMap<String, Integer> partIndices = matrixIndices.get(entityName);
         Matrix4f[] orderedMatrices = new Matrix4f[partIndices.size()];
-//        for(Map.Entry<String, Matrix4f> entry : entityModelMatrices.entrySet()) {
-        for(Matrix4f mat : entityModelMatrices) {
-//            String partName = entry.getKey();
-//            Matrix4f mat = entry.getValue();
+        int[] overlays = new int[partIndices.size()];
 
-//            if(!partIndices.containsKey(partName)) return;
+        for(Map.Entry<String, ModelPartState> entry : entityModelPartStates.entrySet()) {
+//        for(Matrix4f mat : entityModelMatrices) {
+            String partName = entry.getKey();
+            Matrix4f mat = entry.getValue().mat;
 
-//            int partIndex = partIndices.get(partName);
+            if(!partIndices.containsKey(partName)) return;
+
+            int partIndex = partIndices.get(partName);
             orderedMatrices[partIndex] = mat;
+            overlays[partIndex] = entry.getValue().overlay;
         }
 
         EntityRenderState state = renderStates.getOrDefault(entityName, new EntityRenderState());
+        state.overlays.put(overlays);
 
         MatrixStack stack = new MatrixStack();
         stack.loadIdentity();
@@ -61,7 +72,14 @@ public class EntityState {
             }
             mat.writeColumnMajor(floatBufTemp);
 
-            state.buffer.put(floatBufTemp);
+            try {
+                state.buffer.put(floatBufTemp);
+            } catch(BufferOverflowException e) {
+                FloatBuffer oldBuffer = state.buffer;
+                state.buffer = FloatBuffer.allocate(state.buffer.capacity() + 10000);
+                state.buffer.put(oldBuffer);
+//                state.buffer.position()
+            }
             floatBufTemp.position(0);
         }
 
@@ -73,7 +91,8 @@ public class EntityState {
 
     public static class EntityRenderState {
 
-        public final FloatBuffer buffer = FloatBuffer.allocate(100000);
+        public FloatBuffer buffer = FloatBuffer.allocate(100000);
+        public final IntBuffer overlays = IntBuffer.allocate(100000);
         public int count = 0;
         public int textureId;
 

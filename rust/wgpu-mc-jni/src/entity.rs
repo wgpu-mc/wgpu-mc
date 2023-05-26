@@ -123,31 +123,31 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: [u16; 2]) -> Option<Ent
                     length: *cuboid_data.dimensions.get("z")?,
                     textures: CuboidUV {
                         west: (
+                            (pos[0] + dimensions[0], pos[1] + (dimensions[2] + dimensions[1])),
                             (pos[0], pos[1] + dimensions[2]),
-                            (pos[0] + dimensions[0], pos[1] + (dimensions[2] + dimensions[1]))
                         ),
                         east: (
-                            ((pos[0] + (dimensions[0] * 2)), pos[1] + dimensions[2]),
                             (pos[0] + (dimensions[0] * 3), pos[1] + dimensions[2] + dimensions[1]),
-                        ),
-                        south: (
-                            (pos[0] + dimensions[0], pos[1] + dimensions[2]),
-                            (pos[0] + (dimensions[0] * 2), pos[1] + dimensions[2] + dimensions[1]),
+                            ((pos[0] + (dimensions[0] * 2)), pos[1] + dimensions[2]),
                         ),
                         north: (
-                            ((pos[0] + (dimensions[0] * 3)), pos[1] + dimensions[2]),
+                            (pos[0] + (dimensions[0] * 2), pos[1] + dimensions[2] + dimensions[1]),
+                            (pos[0] + dimensions[0], pos[1] + dimensions[2]),
+                        ),
+                        south: (
                             (
                                 (pos[0] + (dimensions[0] * 4)),
                                 pos[1] + (dimensions[2] + dimensions[1]),
                             ),
+                            ((pos[0] + (dimensions[0] * 3)), pos[1] + dimensions[2]),
                         ),
                         up: (
-                            ((pos[0] + (dimensions[0] * 2)), pos[1]),
                             ((pos[0] + (dimensions[0] * 3)), pos[1] + (dimensions[2])),
+                            ((pos[0] + (dimensions[0] * 2)), pos[1]),
                         ),
                         down: (
-                            (pos[0] + dimensions[0], pos[1]),
                             (pos[0] + (dimensions[0] * 2), pos[1] + dimensions[2]),
+                            (pos[0] + dimensions[0], pos[1]),
                         )
                     },
                 })

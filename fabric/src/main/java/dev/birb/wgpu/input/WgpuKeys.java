@@ -8,6 +8,8 @@ public class WgpuKeys {
     public static final int WGPU_LCONTROL = 117;
     public static final int WGPU_RCONTROL = 138;
     public static final int WGPU_F3 = 39;
+    public static final int WGPU_F4 = 40;
+    public static final int WGPU_F5 = 41;
     public static final int WGPU_BACKSPACE = 74;
     public static final int WGPU_TAB = 146;
     public static final int WGPU_ESCAPE = 36;
@@ -42,6 +44,8 @@ public class WgpuKeys {
             case WGPU_LCONTROL -> converted = GLFW.GLFW_KEY_LEFT_CONTROL;
             case WGPU_RCONTROL -> converted = GLFW.GLFW_KEY_RIGHT_CONTROL;
             case WGPU_F3 -> converted = GLFW.GLFW_KEY_F3;
+            case WGPU_F4 -> converted = GLFW.GLFW_KEY_F4;
+            case WGPU_F5 -> converted = GLFW.GLFW_KEY_F5;
             case WGPU_BACKSPACE -> converted = GLFW.GLFW_KEY_BACKSPACE;
             case WGPU_TAB ->  converted = GLFW.GLFW_KEY_TAB;
             case WGPU_ESCAPE ->  converted = GLFW.GLFW_KEY_ESCAPE;

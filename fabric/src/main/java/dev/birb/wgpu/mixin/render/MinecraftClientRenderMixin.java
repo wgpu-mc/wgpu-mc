@@ -96,9 +96,11 @@ public abstract class MinecraftClientRenderMixin {
             String entity = entry.getKey();
             EntityState.EntityRenderState state = entry.getValue();
 
-            WgpuNative.setEntityInstanceBuffer(entity, state.buffer.array(), state.buffer.position(), state.count, state.textureId);
+            WgpuNative.setEntityInstanceBuffer(entity, state.buffer.array(), state.buffer.position(), state.overlays.array(), state.overlays.position(), state.count, state.textureId);
 
             state.buffer.clear();
+            state.overlays.clear();
+
             state.count = 0;
         }
 

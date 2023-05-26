@@ -58,7 +58,7 @@ use wgpu::{
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::graph::{GeometryCallback, ShaderGraph};
+use crate::render::graph::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph, TextureResource};
 use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
 
@@ -318,12 +318,12 @@ impl WmRenderer {
         );
     }
 
-    pub fn render(
+    pub fn render<'graph: 'resources, 'resources>(
         &self,
         graph: &ShaderGraph,
         output_texture_view: &wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
-        entity_instances: &HashMap<String, BundledEntityInstances>,
+        entity_instances: &'resources HashMap<String, BundledEntityInstances>,
     ) -> Result<(), wgpu::SurfaceError> {
         graph.render(self, output_texture_view, surface_config, entity_instances);
 

@@ -11,7 +11,6 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.Inject;
 
 import java.util.Iterator;
 import java.util.List;
@@ -50,9 +49,10 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor {
     @Overwrite
     public void render(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, float red, float green, float blue, float alpha) {
         if (!this.cuboids.isEmpty() || !this.children.isEmpty()) {
-            if(!this.visible) {
-                //TODO
-            }
+            int actualOverlay = EntityState.instanceOverlay;
+
+            //sets the alpha to 0
+            if(!this.visible) actualOverlay = 0;
 
             matrices.push();
 
@@ -64,7 +64,12 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor {
 
             this.rotate(matrices);
             Matrix4f mat4 = matrices.peek().getPositionMatrix();
-            EntityState.entityModelMatrices.put(thisPartName, mat4);
+
+            EntityState.ModelPartState state = new EntityState.ModelPartState();
+            state.overlay = actualOverlay;
+            state.mat = mat4;
+
+            EntityState.entityModelPartStates.put(thisPartName, state);
 
             Matrix3f normalMat3 = matrices.peek().getNormalMatrix();
 

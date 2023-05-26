@@ -1204,11 +1204,3 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
         }
     }
 }
-
-pub fn registerEntityModel(env: JNIEnv, _class: JClass, json_jstring: JString) {
-    let _renderer = RENDERER.get().unwrap();
-
-    // let json_string: String = env.get_string(json_jstring).unwrap().into();
-    // let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
-    // let _entity_part = tmd_to_wm(&model_data.data.data);
-}

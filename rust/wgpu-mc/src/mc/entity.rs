@@ -463,10 +463,10 @@ impl Entity {
     }
 }
 
-#[derive(Clone)]
 pub struct UploadedEntityInstances {
     pub transform_ssbo: Arc<BindableBuffer>,
     pub instance_vbo: Arc<wgpu::Buffer>,
+    pub overlay_ssbo: Arc<BindableBuffer>,
     pub count: u32,
 }
 
@@ -511,7 +511,7 @@ impl BundledEntityInstances {
         }
     }
 
-    pub fn upload(&mut self, wm: &WmRenderer, instances: &[EntityInstanceTransforms]) {
+    pub fn upload(&mut self, wm: &WmRenderer, instances: &[EntityInstance]) {
         self.count = instances.len() as u32;
 
         let matrices = instances
@@ -524,6 +524,13 @@ impl BundledEntityInstances {
                     .flatten()
             })
             .collect::<Vec<f32>>();
+
+        let overlays: Vec<u32> = instances
+            .iter()
+            .map(|instance| &instance.overlays)
+            .flatten()
+            .cloned()
+            .collect();
 
         let instances: Vec<InstanceVertex> = instances
             .iter()
@@ -551,24 +558,33 @@ impl BundledEntityInstances {
             "ssbo",
         ));
 
+        let overlay_ssbo = Arc::new(BindableBuffer::new(
+            &wm,
+            bytemuck::cast_slice(&overlays),
+            BufferUsages::STORAGE,
+            "ssbo"
+        ));
+
         self.uploaded = Some(UploadedEntityInstances {
             transform_ssbo,
             instance_vbo,
+            overlay_ssbo,
             count: self.count
         });
     }
 }
 
-pub struct EntityInstanceTransforms {
+pub struct EntityInstance {
     ///Index
     pub position: Position,
     ///Rotation around the Y axis
     pub looking_yaw: f32,
     pub uv_offset: [u16; 2],
     pub part_transforms: Vec<PartTransform>,
+    pub overlays: Vec<u32>
 }
 
-impl EntityInstanceTransforms {
+impl EntityInstance {
     pub fn get_matrices(&self, entity: &Entity) -> Vec<[[f32; 4]; 4]> {
         let transforms: Vec<Matrix4<f32>> = self
             .part_transforms
