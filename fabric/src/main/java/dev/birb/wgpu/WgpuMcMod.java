@@ -32,6 +32,9 @@ public class WgpuMcMod implements ClientModInitializer {
 	public static boolean ENTITIES_UPLOADED = false;
 	public static boolean MAY_INJECT_PART_IDS = false;
 
+	public static long TIME_SPENT_ENTITIES = 0;
+	public static long ENTRIES = 0;
+
 	public static ElectrumRenderer ELECTRUM;
 
 	@Override

@@ -524,17 +524,17 @@ public class GlStateManagerMixin {
 //            IntBuffer intBuf = buffer.asIntBuffer();
 
             long pixel_size = 4L; //TODO support more formats..?
-            for(int y = 0; y < height; y++) {
-                for(int x = 0; x < width; x++){
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     int current_x = x + unpack_skip_pixels;
-                    int current_y = (y + unpack_skip_rows) * 
-                        (unpack_row_length > 0 ? unpack_row_length : width);
-                    
+                    int current_y = (y + unpack_skip_rows) *
+                            (unpack_row_length > 0 ? unpack_row_length : width);
+
                     //TODO row_byte_offset proper impl || let row_byte_offset = if pixel_size >= unpack_alignment
                     long offset = (current_x + current_y) * pixel_size;
 
 //                    intBuf.put(x + y * width, MemoryUtil.memGetInt(pixels+offset));
-                    pixel_array[x + y * width] = MemoryUtil.memGetInt(pixels+offset);
+                    pixel_array[x + y * width] = MemoryUtil.memGetInt(pixels + offset);
                 }
             }
 

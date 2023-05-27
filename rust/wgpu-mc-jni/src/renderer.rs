@@ -8,7 +8,7 @@ use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
 use jni::objects::{JByteBuffer, JClass, JObject, ReleaseMode};
-use jni::sys::{jfloatArray, jint, jintArray};
+use jni::sys::{jfloatArray, jint, jintArray, jlong};
 use jni::{
     objects::{JString, JValue},
     JNIEnv,
@@ -38,10 +38,7 @@ use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstance, InstanceVertex
 use wgpu_mc::texture::BindableTexture;
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC};
-use crate::{
-    MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
-    CHANNELS, MC_STATE, RENDERER, WINDOW,
-};
+use crate::{MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, MC_STATE, RENDERER, WINDOW, THREAD_POOL};
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
@@ -430,7 +427,7 @@ pub static MC_TEXTURES: Lazy<Mutex<HashMap<MCTextureId, Arc<BindableTexture>>>> 
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearEntities(_env: JNIEnv, _class: JClass) {
-    ENTITY_INSTANCES.lock().clear();
+    THREAD_POOL.spawn(|| ENTITY_INSTANCES.lock().clear());
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -447,82 +444,83 @@ pub fn identifyGlTexture(_env: JNIEnv, _class: JClass, texture: jint, gl_id: jin
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString, mat4_array: JObject, position: jint, overlay_array: JObject, overlay_array_position: jint, instance_count: jint, texture_id: jint) {
-    return;
+pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString, mat4_array: jfloatArray, position: jint, overlay_array: jintArray, overlay_array_position: jint, instance_count: jint, texture_id: jint) -> jlong {
+    let now = Instant::now();
 
     let entity_name: String = env.get_string(entity_name).unwrap().into();
 
     if instance_count == 0 {
-        ENTITY_INSTANCES.lock().remove(&entity_name);
-        return;
+        THREAD_POOL.spawn(move || { ENTITY_INSTANCES.lock().remove(&entity_name); });
+        return Instant::now().duration_since(now).as_nanos() as jlong;
     }
 
-    let mat4_array_addr = env.get_direct_buffer_address(mat4_array.into()).unwrap();
-    let overlay_array_addr = env.get_direct_buffer_address(overlay_array.into()).unwrap();
+    let mat4_array = env.get_float_array_elements(mat4_array, ReleaseMode::NoCopyBack).unwrap();
+    let overlay_array = env.get_int_array_elements(overlay_array, ReleaseMode::NoCopyBack).unwrap();
 
     let transform_slice: &[u8] = bytemuck::cast_slice(unsafe {
-        slice::from_raw_parts(mat4_array_addr as *mut f32, position as usize)
+        slice::from_raw_parts(mat4_array.as_ptr(), mat4_array.size().unwrap() as usize)
     });
 
     let overlay_slice: &[u8] = bytemuck::cast_slice(unsafe {
-        slice::from_raw_parts(overlay_array_addr as *mut i32, overlay_array_position as usize)
+        slice::from_raw_parts(overlay_array.as_ptr(), overlay_array.size().unwrap() as usize)
     });
 
-    let wm = RENDERER.get().unwrap();
+    let transforms = Vec::from(transform_slice);
+    let overlays = Vec::from(overlay_slice);
 
-    let models = wm.mc.entity_models.read();
-    let entity = models.get(&entity_name).unwrap();
+    THREAD_POOL.spawn(move || {
+        let wm = RENDERER.get().unwrap();
 
-    let instance_vertices: Vec<InstanceVertex> = (0..instance_count as u32).map(|index| {
-        InstanceVertex {
-            entity_index: index,
-            uv_offset: [0, 0],
-        }
-    }).collect();
+        let models = wm.mc.entity_models.read();
+        let entity = models.get(&entity_name).unwrap();
 
-    let instance_buffer = Arc::new(wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
-        label: None,
-        contents: bytemuck::cast_slice(&instance_vertices),
-        usage: BufferUsages::VERTEX,
-    }));
+        let instance_vertices: Vec<InstanceVertex> = (0..instance_count as u32).map(|index| {
+            InstanceVertex {
+                entity_index: index,
+                uv_offset: [0, 0],
+            }
+        }).collect();
 
-    let transform_ssbo = Arc::new(BindableBuffer::new(
-        &wm,
-        transform_slice,
-        BufferUsages::STORAGE,
-        "ssbo"
-    ));
+        let instance_buffer = Arc::new(wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&instance_vertices),
+            usage: BufferUsages::VERTEX,
+        }));
 
-    let overlay_ssbo = Arc::new(BindableBuffer::new(
-        &wm,
-        overlay_slice,
-        BufferUsages::STORAGE,
-        "ssbo"
-    ));
+        let transform_ssbo = Arc::new(BindableBuffer::new(
+            &wm,
+            &transforms,
+            BufferUsages::STORAGE,
+            "ssbo"
+        ));
 
-    let texture = {
-        let gl_alloc = GL_ALLOC.read();
+        let overlay_ssbo = Arc::new(BindableBuffer::new(
+            &wm,
+            &overlays,
+            BufferUsages::STORAGE,
+            "ssbo"
+        ));
 
-        gl_alloc
-            .get(&(texture_id as u32))
-            .expect(&format!("GL texture {} did not exist", texture_id))
-            .bindable_texture
-            .as_ref()
-            .expect(&format!("GL texture slot {} had no texture bound", texture_id))
-            .clone()
-    };
+        let texture = {
+            let gl_alloc = GL_ALLOC.read();
 
-    let mut bundled_entity_instances = BundledEntityInstances::new(entity.clone(), instance_count as u32, texture);
+            gl_alloc.get(&(texture_id as u32)).unwrap().bindable_texture.as_ref().unwrap().clone()
+        };
 
-    bundled_entity_instances.uploaded = Some(
-        UploadedEntityInstances {
-            transform_ssbo,
-            instance_vbo: instance_buffer,
-            overlay_ssbo,
-            count: instance_count as u32,
-        }
-    );
+        let mut bundled_entity_instances = BundledEntityInstances::new(entity.clone(), instance_count as u32, texture);
 
-    let mut instances = ENTITY_INSTANCES.lock();
-    instances.insert(entity_name, bundled_entity_instances);
+        bundled_entity_instances.uploaded = Some(
+            UploadedEntityInstances {
+                transform_ssbo,
+                instance_vbo: instance_buffer,
+                overlay_ssbo,
+                count: instance_count as u32,
+            }
+        );
+
+        let mut instances = ENTITY_INSTANCES.lock();
+        instances.insert(entity_name, bundled_entity_instances);
+    });
+
+    return Instant::now().duration_since(now).as_nanos() as jlong;
 }

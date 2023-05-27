@@ -60,11 +60,17 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
             this.rotate(matrices);
             Matrix4f mat4 = matrices.peek().getPositionMatrix();
 
+            String thisPartName = ((ModelPartNameAccessor) (Object) this).getName();
+
+            if(thisPartName == null) {
+                thisPartName = "root";
+            }
+
             EntityState.ModelPartState state = new EntityState.ModelPartState();
             state.overlay = actualOverlay;
             state.mat = mat4;
 
-            EntityState.entityModelPartStates[this.partIndex] = state;
+            EntityState.entityModelPartStates.put(thisPartName, state);
 
             Matrix3f normalMat3 = matrices.peek().getNormalMatrix();
 

@@ -188,7 +188,7 @@ public class WgpuNative {
 
     public static native void registerEntities(String toString);
 
-    public static native void setEntityInstanceBuffer(String entity, ByteBuffer array, int position, ByteBuffer overlayArray, int overlayArrayPosition, int instanceCount, int textureId);
+    public static native long setEntityInstanceBuffer(String entity, float[] array, int position, int[] overlayArray, int overlayArrayPosition, int instanceCount, int textureId);
 
     public static native void clearEntities();
 

@@ -74,7 +74,7 @@ public abstract class EntityRenderDispatcherMixin {
         int glId = textureManager.getTexture(textureIdentifier).getGlId();
 
         EntityState.assembleEntity(rootLayerName, glId);
-//        EntityState.entityModelPartStates.clear();
+        EntityState.entityModelPartStates.clear();
     }
 
 }

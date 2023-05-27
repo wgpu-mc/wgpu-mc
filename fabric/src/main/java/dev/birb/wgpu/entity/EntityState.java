@@ -12,6 +12,7 @@ import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class EntityState {
 
@@ -31,11 +32,8 @@ public class EntityState {
         public int overlay;
     }
 
-//    public static List<MatrixIndexTuple> entityModelMatrices = new ArrayList<>();
-
-//    public static HashMap<String, ModelPartState> entityModelPartStates = new HashMap<>();
-    public static ModelPartState[] entityModelPartStates = new ModelPartState[1000];
-
+    //    public static List<MatrixIndexTuple> entityModelMatrices = new ArrayList<>();
+    public static HashMap<String, ModelPartState> entityModelPartStates = new HashMap<>();
     public static int instanceOverlay = 0xffffffff;
 
     public static final HashMap<String, EntityRenderState> renderStates = new HashMap<>();
@@ -43,43 +41,54 @@ public class EntityState {
 
     public static void assembleEntity(String entityName, int textureId) {
         HashMap<String, Integer> partIndices = matrixIndices.get(entityName);
+        Matrix4f[] orderedMatrices = new Matrix4f[partIndices.size()];
+        int[] overlays = new int[partIndices.size()];
+
+        for(Map.Entry<String, ModelPartState> entry : entityModelPartStates.entrySet()) {
+//        for(Matrix4f mat : entityModelMatrices) {
+            String partName = entry.getKey();
+            Matrix4f mat = entry.getValue().mat;
+
+            if(!partIndices.containsKey(partName)) return;
+
+            int partIndex = partIndices.get(partName);
+            orderedMatrices[partIndex] = mat;
+            overlays[partIndex] = entry.getValue().overlay;
+        }
+
+        EntityRenderState state;
+
+        if(renderStates.containsKey(entityName)) {
+            state = renderStates.get(entityName);
+        } else {
+            state = new EntityRenderState();
+            renderStates.put(entityName, state);
+        }
+
+        state.overlays.put(overlays);
 
         MatrixStack stack = new MatrixStack();
         stack.loadIdentity();
 
-        EntityRenderState state = renderStates.getOrDefault(entityName, new EntityRenderState());
-
         FloatBuffer floatBufTemp = FloatBuffer.allocate(16);
 
-        for(int i=0;i<partIndices.size();i++) {
-            ModelPartState modelPartState = entityModelPartStates[i];
+//        orderedMatrices[0] = stack.peek().getPositionMatrix();
 
-            if(modelPartState == null) modelPartState = new ModelPartState();
-
-            Matrix4f mat = modelPartState.mat;
-            state.overlayView.put(modelPartState.overlay);
-
+        for (Matrix4f orderedMatrix : orderedMatrices) {
+            Matrix4f mat = orderedMatrix;
             if (mat == null) {
                 mat = stack.peek().getPositionMatrix();
             }
             mat.writeColumnMajor(floatBufTemp);
 
             try {
-                state.matView.put(floatBufTemp);
+                state.buffer.put(floatBufTemp);
             } catch(BufferOverflowException e) {
-                int oldPosition = state.matView.position();
-
-                ByteBuffer oldBuffer = state.matBuffer;
-                state.matBuffer = ByteBuffer.allocateDirect(oldBuffer.capacity() + 40000);
-                state.matBuffer.put(oldBuffer);
-                state.matBuffer.position(0);
-
-                state.matView = state.matBuffer.asFloatBuffer();
-                state.matView.position(oldPosition);
-
-                state.matView.put(floatBufTemp);
+                FloatBuffer oldBuffer = state.buffer;
+                state.buffer = FloatBuffer.allocate(state.buffer.capacity() + 10000);
+                state.buffer.put(oldBuffer);
+                state.buffer.put(floatBufTemp);
             }
-
             floatBufTemp.position(0);
         }
 
@@ -91,21 +100,10 @@ public class EntityState {
 
     public static class EntityRenderState {
 
-        public ByteBuffer matBuffer = ByteBuffer.allocateDirect(100000 * 4);
-        public FloatBuffer matView = matBuffer.asFloatBuffer();
-
-        public final ByteBuffer overlays = ByteBuffer.allocateDirect(100000 * 4);
-        public final IntBuffer overlayView = overlays.asIntBuffer();
-
+        public FloatBuffer buffer = FloatBuffer.allocate(100000);
+        public final IntBuffer overlays = IntBuffer.allocate(100000);
         public int count = 0;
         public int textureId;
-
-        public void clear() {
-            this.matView.clear();
-            this.overlayView.clear();
-
-            this.count = 0;
-        }
 
     }
 
