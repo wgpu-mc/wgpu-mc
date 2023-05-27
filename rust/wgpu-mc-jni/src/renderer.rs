@@ -37,7 +37,7 @@ use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstance, InstanceVertex, UploadedEntityInstances};
 use wgpu_mc::texture::BindableTexture;
 
-use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC};
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC, GlTexture};
 use crate::{MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, MC_STATE, RENDERER, WINDOW, THREAD_POOL};
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
@@ -503,6 +503,12 @@ pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString
 
         let texture = {
             let gl_alloc = GL_ALLOC.read();
+
+            match gl_alloc.get(&(texture_id as u32)) {
+                None => return,
+                Some(GlTexture {bindable_texture: None, .. }) => return,
+                _ => {}
+            }
 
             gl_alloc.get(&(texture_id as u32)).unwrap().bindable_texture.as_ref().unwrap().clone()
         };
