@@ -143,6 +143,8 @@ impl Atlas {
                 resource_provider,
             );
         });
+
+
     }
 
     #[allow(clippy::too_many_arguments)]

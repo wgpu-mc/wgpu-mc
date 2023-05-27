@@ -18,7 +18,7 @@ use std::time::Instant;
 use std::{mem, thread};
 
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, AsRaw};
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::{Matrix4, Point3};
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -481,7 +481,7 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
         );
     }
 
-    let states = BLOCK_STATES.lock();
+    let mut states = BLOCK_STATES.lock();
 
     let block_manager = wm.mc.block_manager.write();
     let mut mappings = Vec::new();
@@ -559,6 +559,26 @@ pub fn cacheBlockStates(env: JNIEnv, _class: JClass) {
         )
         .unwrap();
     });
+
+    let instant = Instant::now();
+
+    let state_count = states.len();
+
+    states.clear();
+
+    let debug_message = format!("Released {} global refs to BlockState objects in {}ms", state_count, Instant::now().duration_since(instant).as_millis());
+
+    let debug_jstring = env.new_string(debug_message).unwrap();
+
+    env.call_static_method(
+        "dev/birb/wgpu/render/Wgpu",
+        "rustDebug",
+        "(Ljava/lang/String;)V",
+        &[
+            JValue::Object(unsafe { JObject::from_raw(debug_jstring.into_raw()) }),
+        ],
+    )
+        .unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

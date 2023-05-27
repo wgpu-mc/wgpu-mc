@@ -137,6 +137,10 @@ public class Wgpu {
         while(true) {}
     }
 
+    public static void rustDebug(String message) {
+        LOGGER.info("[Engine] " + message);
+    }
+
     public static void helperSetBlockStateIndex(Object o, int blockstateKey) {
         ((RustBlockStateAccessor) o).setRustBlockStateIndex(blockstateKey);
     }

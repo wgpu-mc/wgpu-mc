@@ -1,10 +1,8 @@
 package dev.birb.wgpu.mixin.render;
 
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.entity.EntityState;
-import dev.birb.wgpu.mixin.accessors.ThreadExecutorAccessor;
 import dev.birb.wgpu.mixin.accessors.WindowAccessor;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
@@ -18,29 +16,21 @@ import net.minecraft.client.util.WindowProvider;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.resource.ReloadableResourceManagerImpl;
 import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.ResourceReloader;
 import net.minecraft.resource.ResourceType;
-import net.minecraft.util.crash.CrashException;
-import net.minecraft.util.crash.CrashReport;
-import net.minecraft.util.crash.CrashReportSection;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import sun.misc.Unsafe;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Queue;
 
 import static dev.birb.wgpu.render.Wgpu.UNSAFE;
-import static net.minecraft.screen.PlayerScreenHandler.BLOCK_ATLAS_TEXTURE;
 //import jdk.internal.misc.Unsafe;
 
 @Mixin(MinecraftClient.class)
@@ -105,12 +95,9 @@ public abstract class MinecraftClientRenderMixin {
             String entity = entry.getKey();
             EntityState.EntityRenderState state = entry.getValue();
 
-            WgpuNative.setEntityInstanceBuffer(entity, state.buffer.array(), state.buffer.position(), state.overlays.array(), state.overlays.position(), state.count, state.textureId);
+            WgpuNative.setEntityInstanceBuffer(entity, state.matBuffer, state.matView.position(), state.overlays, state.overlayView.position(), state.count, state.textureId);
 
-            state.buffer.clear();
-            state.overlays.clear();
-
-            state.count = 0;
+            state.clear();
         }
 
         WgpuNative.submitCommands();

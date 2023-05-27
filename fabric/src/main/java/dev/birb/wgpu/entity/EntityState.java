@@ -6,12 +6,12 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.util.math.Matrix4f;
 
 import java.nio.BufferOverflowException;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class EntityState {
 
@@ -57,7 +57,7 @@ public class EntityState {
             if(modelPartState == null) modelPartState = new ModelPartState();
 
             Matrix4f mat = modelPartState.mat;
-            state.overlays.put(modelPartState.overlay);
+            state.overlayView.put(modelPartState.overlay);
 
             if (mat == null) {
                 mat = stack.peek().getPositionMatrix();
@@ -65,12 +65,21 @@ public class EntityState {
             mat.writeColumnMajor(floatBufTemp);
 
             try {
-                state.buffer.put(floatBufTemp);
+                state.matView.put(floatBufTemp);
             } catch(BufferOverflowException e) {
-                FloatBuffer oldBuffer = state.buffer;
-                state.buffer = FloatBuffer.allocate(state.buffer.capacity() + 10000);
-                state.buffer.put(oldBuffer);
+                int oldPosition = state.matView.position();
+
+                ByteBuffer oldBuffer = state.matBuffer;
+                state.matBuffer = ByteBuffer.allocateDirect(oldBuffer.capacity() + 40000);
+                state.matBuffer.put(oldBuffer);
+                state.matBuffer.position(0);
+
+                state.matView = state.matBuffer.asFloatBuffer();
+                state.matView.position(oldPosition);
+
+                state.matView.put(floatBufTemp);
             }
+
             floatBufTemp.position(0);
         }
 
@@ -82,10 +91,21 @@ public class EntityState {
 
     public static class EntityRenderState {
 
-        public FloatBuffer buffer = FloatBuffer.allocate(100000);
-        public final IntBuffer overlays = IntBuffer.allocate(100000);
+        public ByteBuffer matBuffer = ByteBuffer.allocateDirect(100000 * 4);
+        public FloatBuffer matView = matBuffer.asFloatBuffer();
+
+        public final ByteBuffer overlays = ByteBuffer.allocateDirect(100000 * 4);
+        public final IntBuffer overlayView = overlays.asIntBuffer();
+
         public int count = 0;
         public int textureId;
+
+        public void clear() {
+            this.matView.clear();
+            this.overlayView.clear();
+
+            this.count = 0;
+        }
 
     }
 

@@ -7,7 +7,7 @@ use std::{mem, slice, thread};
 use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
-use jni::objects::{JClass, ReleaseMode};
+use jni::objects::{JByteBuffer, JClass, JObject, ReleaseMode};
 use jni::sys::{jfloatArray, jint, jintArray};
 use jni::{
     objects::{JString, JValue},
@@ -447,22 +447,25 @@ pub fn identifyGlTexture(_env: JNIEnv, _class: JClass, texture: jint, gl_id: jin
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString, mat4_array: jfloatArray, position: jint, overlay_array: jintArray, overlay_array_position: jint, instance_count: jint, texture_id: jint) {
-    let mat4_array = env.get_float_array_elements(mat4_array, ReleaseMode::NoCopyBack).unwrap();
-    let overlay_array = env.get_int_array_elements(overlay_array, ReleaseMode::NoCopyBack).unwrap();
+pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString, mat4_array: JObject, position: jint, overlay_array: JObject, overlay_array_position: jint, instance_count: jint, texture_id: jint) {
+    return;
 
     let entity_name: String = env.get_string(entity_name).unwrap().into();
 
     if instance_count == 0 {
         ENTITY_INSTANCES.lock().remove(&entity_name);
+        return;
     }
 
+    let mat4_array_addr = env.get_direct_buffer_address(mat4_array.into()).unwrap();
+    let overlay_array_addr = env.get_direct_buffer_address(overlay_array.into()).unwrap();
+
     let transform_slice: &[u8] = bytemuck::cast_slice(unsafe {
-        slice::from_raw_parts(mat4_array.as_ptr(), mat4_array.size().unwrap() as usize)
+        slice::from_raw_parts(mat4_array_addr as *mut f32, position as usize)
     });
 
     let overlay_slice: &[u8] = bytemuck::cast_slice(unsafe {
-        slice::from_raw_parts(overlay_array.as_ptr(), overlay_array.size().unwrap() as usize)
+        slice::from_raw_parts(overlay_array_addr as *mut i32, overlay_array_position as usize)
     });
 
     let wm = RENDERER.get().unwrap();
@@ -500,7 +503,13 @@ pub fn setEntityInstanceBuffer(env: JNIEnv, _class: JClass, entity_name: JString
     let texture = {
         let gl_alloc = GL_ALLOC.read();
 
-        gl_alloc.get(&(texture_id as u32)).unwrap().bindable_texture.as_ref().unwrap().clone()
+        gl_alloc
+            .get(&(texture_id as u32))
+            .expect(&format!("GL texture {} did not exist", texture_id))
+            .bindable_texture
+            .as_ref()
+            .expect(&format!("GL texture slot {} had no texture bound", texture_id))
+            .clone()
     };
 
     let mut bundled_entity_instances = BundledEntityInstances::new(entity.clone(), instance_count as u32, texture);

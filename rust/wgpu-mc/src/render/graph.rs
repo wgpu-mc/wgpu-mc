@@ -259,7 +259,7 @@ impl ShaderGraph {
                         wm.wgpu_state
                             .device
                             .create_pipeline_layout(&PipelineLayoutDescriptor {
-                                label: None,
+                                label: Some(name),
                                 bind_group_layouts: &definition
                                     .uniforms
                                     .iter()
@@ -339,7 +339,7 @@ impl ShaderGraph {
                         wm.wgpu_state
                             .device
                             .create_render_pipeline(&RenderPipelineDescriptor {
-                                label: None,
+                                label: Some(name),
                                 layout: Some(&pipeline_layout),
                                 vertex: VertexState {
                                     module: &shader.shader,
