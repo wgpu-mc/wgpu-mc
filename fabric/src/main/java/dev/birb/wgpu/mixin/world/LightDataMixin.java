@@ -22,16 +22,9 @@ public abstract class LightDataMixin {
 
     private int readerIndex;
 
-    @Redirect(method = "<init>(Lnet/minecraft/network/PacketByteBuf;II)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/PacketByteBuf;readBoolean()Z"))
-    public boolean setIndex(PacketByteBuf instance) {
-        this.readerIndex = instance.readerIndex();
-        return instance.readBoolean();
-    }
-
-    @Inject(method = "<init>(Lnet/minecraft/network/PacketByteBuf;II)V", at = @At("RETURN"))
-    private void readPacket(PacketByteBuf buf, int x, int z, CallbackInfo ci) {
-        int index = readerIndex;
-        long lightData = WgpuNative.createAndDeserializeLightData(buf.array(), index);
+    @Inject(method = "<init>(Lnet/minecraft/network/PacketByteBuf;II)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/PacketByteBuf;readBoolean()Z", shift = At.Shift.BEFORE))
+    private void bindLight(PacketByteBuf buf, int x, int z, CallbackInfo ci) {
+        long lightData = WgpuNative.createAndDeserializeLightData(buf.array(), buf.arrayOffset() + buf.readerIndex());
 
         WgpuNative.bindLightData(lightData, x, z);
     }

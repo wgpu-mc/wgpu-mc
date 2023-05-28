@@ -25,11 +25,15 @@ struct BitSet {
 
 impl Debug for BitSet {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BitSet {{ [");
+        write!(f, "BitSet {{ [ ");
         self.longs.iter().for_each(|long| {
             write!(f, "{long:b}").unwrap();
         });
-        write!(f, "]")
+        write!(f, "/ ");
+        self.longs.iter().for_each(|long| {
+            write!(f, "{long} ").unwrap();
+        });
+        write!(f, "] }}")
     }
 }
 
@@ -156,6 +160,9 @@ pub fn createAndDeserializeLightData(
     let byte_array = env
         .get_byte_array_elements(array, ReleaseMode::NoCopyBack)
         .unwrap();
+
+    assert!(index >= 0);
+
     let slice = unsafe {
         std::slice::from_raw_parts(
             byte_array.as_ptr().offset(index as isize) as *mut u8,
@@ -164,6 +171,8 @@ pub fn createAndDeserializeLightData(
     };
 
     let light_data = LightData::from_buffer(slice).unwrap();
+
+    println!("{:?}", light_data);
 
     LIGHT_DATA.write().insert(light_data) as jlong
 }

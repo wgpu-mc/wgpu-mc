@@ -20,6 +20,7 @@ use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::{Matrix4, Point3};
+use cgmath::num_traits::Signed;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{
@@ -197,25 +198,33 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
             Some(light_data) => light_data,
         };
 
-        let calc = (((y as usize % CHUNK_SECTION_HEIGHT) << 8) | (((z.abs() % 16) as usize) << 4) | ((x.abs() % 16) as usize));
-        let index = calc / 2;
+        let light_x = ((x % 16) + 16) % 16;
+        let light_y = (y.max(0) % (CHUNK_SECTION_HEIGHT as i16)) as i32;
+        let light_z = ((z % 16) + 16) % 16;
 
-        let index_remainder = calc % 2;
-        let mask = if index_remainder == 0 { 0b00001111u8 } else { 0b11110000 };
-        let shift = if index_remainder == 0 { 0 } else { 4 };
+        // let calc = (((y as usize % CHUNK_SECTION_HEIGHT) << 8) | (((z.abs() % 16) as usize) << 4) | ((x.abs() % 16) as usize));
+        let calc = light_y << 8 | light_z << 4 | light_x;
 
-        let section = y as usize / CHUNK_SECTION_HEIGHT;
+        let index = calc >> 1; //divide by two
+
+        assert!(index >= 0, "index: {} calc: {} light xyz: {} {} {}", index, calc, light_x, light_y, light_z);
+
+        let occupies_smaller_bits = index & 1;
+
+        let shift = if occupies_smaller_bits == 0 { 0 } else { 4 };
+
+        let section = y.max(0).min((CHUNK_HEIGHT - 1) as i16) as usize / CHUNK_SECTION_HEIGHT;
         let sky_light = match &light_data.sky_light[section] {
             None => 0,
             Some(section) => {
-                (section[index] & mask) >> shift
+                (section[index as usize] >> shift) & 0xf
             }
         };
 
         let block_light = match &light_data.block_light[section] {
             None => 0,
             Some(section) => {
-                (section[index] & mask) >> shift
+                (section[index as usize] >> shift) & 0xf
             }
         };
 
