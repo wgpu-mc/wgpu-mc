@@ -70,12 +70,11 @@ impl RenderLayer for TerrainLayer {
                     vert.position[1] + y,
                     vert.position[2] + z,
                 ],
-                tex_coords: vert.tex_coords,
-                lightmap_coords: [light.get_block_level() as i32, light.get_sky_level() as i32],
+                lightmap_coords: light.byte,
                 normal: vert.normal,
-                // color: [mul_color, mul_color, mul_color, 1.0],
-                tangent: [0.0, 0.0, 0.0, 0.0],
+                color: 0xffffffff,
                 uv_offset: vert.animation_uv_offset,
+                uv: vert.tex_coords
             }
         }
     }
@@ -200,6 +199,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                         usage: BufferUsages::VERTEX | BufferUsages::INDEX | BufferUsages::COPY_DST,
                     }),
             ),
+            last_bytes: RwLock::new(None),
         }) as Box<dyn GeometryCallback>,
     );
 
@@ -228,7 +228,6 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
   
     {
         let tex_id = LIGHTMAP_GLID.lock().unwrap();
-        dbg!(&tex_id);
         let textures_read = GL_ALLOC.read();
         let lightmap = textures_read.get(&*tex_id).unwrap();
         let bindable = lightmap.bindable_texture.as_ref().unwrap();

@@ -29,6 +29,8 @@ public class Wgpu {
     }
     public static HashMap<Integer, Integer> keyStates = new HashMap<>();
 
+    public static int timesTexSubImageCalled = 0;
+
     public static Unsafe UNSAFE;
 
     public static int windowWidth = 1280;

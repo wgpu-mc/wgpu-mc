@@ -93,8 +93,6 @@ public class WgpuNative {
 
     public static native void setIndexBuffer(int[] buffer);
 
-    public static native void debugPalette(long storage, long palette);
-
     public static native void setVertexBuffer(byte[] buffer);
 
     public static native void setProjectionMatrix(float[] mat);
@@ -168,19 +166,9 @@ public class WgpuNative {
 
     public static native void bakeChunk(int x, int z);
 
-    public static native int piaGet(long ptr, int x, int y, int z);
-
-    public static native int piaGetByIndex(long ptr, int index);
-
-    public static native void debugBake();
-
     public static native void setMatrix(int type, float[] mat);
 
-    public static native void setChunkOffset(int x, int z);
-
     public static native void setCursorLocked(boolean locked);
-
-    public native static void centerCursor();
 
     public static native void clearChunks();
 
@@ -189,5 +177,7 @@ public class WgpuNative {
     public static native void bindLightData(long lightData, int x, int z);
 
     public static native void setLightmapID(int id);
+
+    public static native void debugLight(int x, int z);
 
 }
