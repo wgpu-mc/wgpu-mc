@@ -275,7 +275,6 @@ pub fn bake_section_layer<
         let absolute_z = (chunk.pos[1] * 16) + z;
 
         let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
-        let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z);
 
         if block_state.is_air() {
             continue;
@@ -313,7 +312,7 @@ pub fn bake_section_layer<
 
                 const INDICES: [u32; 6] = [0,1,2,3,4,5];
 
-                let mut extend_vertices = |face: &[u32; 6]| {
+                let mut extend_vertices = |face: &[u32; 6], light_level: LightLevel| {
                     let vec_index = vertices.len();
                     vertices.extend(
                         face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32, light_level))
@@ -325,30 +324,38 @@ pub fn bake_section_layer<
                 //We use those offsets to get the relevant vertices, and add them into the chunk vertices.
                 //We then add the starting offset into the vertices to the face indices so that they match up.
                 if let (true, Some(face)) = (render_north, &model.north) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z - 1);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_east, &model.east) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x + 1, y, absolute_z);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_south, &model.south) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z - 1);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_west, &model.west) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x - 1, y, absolute_z);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_up, &model.up) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y + 1, absolute_z);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_down, &model.down) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y - 1, absolute_z);
+                    extend_vertices(face, light_level);
                 }
             }
             CubeOrComplexMesh::Complex(faces) => {
+                let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z);
+
                 for model in faces {
                     let unwrapped_faces = [
                         model.north,
