@@ -33,6 +33,7 @@
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
+    "render.SpriteAtlasTextureMixin",
     "world.BlockStateMixin",
     "world.LightDataMixin",
     "DebugHudMixin"
