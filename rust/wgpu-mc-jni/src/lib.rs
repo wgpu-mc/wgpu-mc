@@ -1,5 +1,4 @@
 #![feature(once_cell)]
-#![feature(array_zip)]
 #![feature(core_panic)]
 
 use core::slice;
@@ -366,7 +365,7 @@ pub fn createChunk(
     write.insert(
         [x, z],
         ChunkHolder {
-            sections: palettes.zip(*storages).map(|(palette, storage)| {
+            sections: palettes.iter().zip(storages.iter()).map(|(&palette, &storage)| {
                 if palette == 0 || storage == 0 {
                     return None;
                 }
@@ -376,7 +375,10 @@ pub fn createChunk(
                     PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
                     PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
                 ))
-            }),
+            })
+            .collect::<Vec<Option<(JavaPalette, PackedIntegerArray)>>>()
+            .try_into()
+            .unwrap(), // This theoreticly could panic
         },
     );
 }
