@@ -88,6 +88,11 @@ public abstract class WorldRendererMixin {
     public void render(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f positionMatrix, CallbackInfo ci) {
         ChunkRendererRegionBuilder builder = new ChunkRendererRegionBuilder();
 
+        if(this.world != null) {
+            boolean bl = this.world.hasNoChunkUpdaters();
+            this.world.getChunkManager().getLightingProvider().doLightUpdates(Integer.MAX_VALUE, bl, true);
+        }
+
         Frustum frustum;
         if (this.capturedFrustum != null) {
             frustum = this.capturedFrustum;
