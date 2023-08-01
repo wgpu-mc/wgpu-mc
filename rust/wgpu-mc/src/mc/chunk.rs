@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::mem::size_of;
 use std::ops::Range;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BufferAddress, BufferDescriptor, BufferUsages};
 
@@ -25,8 +25,8 @@ use crate::mc::block::{
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 
-use crate::{WgpuState, WmRenderer};
 use crate::util::BindableBuffer;
+use crate::{WgpuState, WmRenderer};
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -73,7 +73,7 @@ pub trait RenderLayer: Send + Sync {
 #[derive(Debug)]
 pub struct ChunkBuffers {
     pub vertex_buffer: BindableBuffer,
-    pub index_buffer: BindableBuffer
+    pub index_buffer: BindableBuffer,
 }
 
 ///The struct representing a Chunk, with various render layers, split into sections
@@ -108,19 +108,21 @@ impl Chunk {
         let baked_layers = layers
             .iter()
             .map(|layer| {
-                let sections = (0..SECTIONS_PER_CHUNK).map(|index| {
-                    bake_section_layer(
-                        block_manager,
-                        self,
-                        layer.mapper(),
-                        layer.filter(),
-                        provider,
-                        index
-                    )
-                }).collect::<Vec<_>>();
+                let sections = (0..SECTIONS_PER_CHUNK)
+                    .map(|index| {
+                        bake_section_layer(
+                            block_manager,
+                            self,
+                            layer.mapper(),
+                            layer.filter(),
+                            provider,
+                            index,
+                        )
+                    })
+                    .collect::<Vec<_>>();
 
-                let ranges: [Range<u32>; SECTIONS_PER_CHUNK] = array_init::from_iter(
-                    sections.iter().map(|(vert, index)| {
+                let ranges: [Range<u32>; SECTIONS_PER_CHUNK] =
+                    array_init::from_iter(sections.iter().map(|(vert, index)| {
                         let offset = vertices as u32;
                         vertices += vert.len();
 
@@ -130,18 +132,20 @@ impl Chunk {
                         index_data.extend(index.iter().map(|i| *i + offset));
 
                         index_offset as u32..index_offset as u32 + index.len() as u32
-                    })
-                ).unwrap();
+                    }))
+                    .unwrap();
 
-                (
-                    layer.name().to_string(),
-                    ranges
-                )
+                (layer.name().to_string(), ranges)
             })
             .collect();
 
         let vertex_buffer = BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
-        let index_buffer = BindableBuffer::new(wm, bytemuck::cast_slice(&index_data), BufferUsages::STORAGE, "ssbo");
+        let index_buffer = BindableBuffer::new(
+            wm,
+            bytemuck::cast_slice(&index_data),
+            BufferUsages::STORAGE,
+            "ssbo",
+        );
 
         self.buffers.store(Arc::new(Some(ChunkBuffers {
             vertex_buffer,
@@ -194,7 +198,7 @@ pub fn bake_section_layer<
     mapper: Mapper,
     filter: Filter,
     state_provider: &Provider,
-    section_index: usize
+    section_index: usize,
 ) -> (Vec<T>, Vec<u32>) {
     //Generates the mesh for this chunk, culling faces whenever possible
     let mut vertices = Vec::new();
@@ -258,16 +262,14 @@ pub fn bake_section_layer<
                 let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
                 let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
 
-                let add_face = || {
-                    render_east
-                };
+                let add_face = || render_east;
 
-                const INDICES: [u32; 6] = [0,1,2,3,4,5];
+                const INDICES: [u32; 6] = [0, 1, 2, 3, 4, 5];
 
                 let mut extend_vertices = |face: &[u32; 6]| {
                     let vec_index = vertices.len();
                     vertices.extend(
-                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32))
+                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32)),
                     );
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 };
@@ -307,10 +309,17 @@ pub fn bake_section_layer<
                         model.south,
                         model.west,
                         model.up,
-                        model.down
-                    ].iter().filter_map(|face| *face).collect::<Vec<_>>();
+                        model.down,
+                    ]
+                    .iter()
+                    .filter_map(|face| *face)
+                    .collect::<Vec<_>>();
 
-                    vertices.extend(unwrapped_faces.iter().flatten().map(|index| mapper(&model.vertices[*index as usize], xf32, yf32, zf32)));
+                    vertices.extend(
+                        unwrapped_faces.iter().flatten().map(|index| {
+                            mapper(&model.vertices[*index as usize], xf32, yf32, zf32)
+                        }),
+                    );
                     indices.extend(unwrapped_faces.iter().flatten());
                 }
             }

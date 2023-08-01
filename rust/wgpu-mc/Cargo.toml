@@ -6,30 +6,30 @@ edition = "2021"
 
 [dependencies]
 # if you upgrade this, also change WmRenderer::get_backend_description in wgpu-mc/src/lib.rs
-wgpu = { version = "0.14.2", features = ["glsl"] }
+wgpu = { version = "0.17", features = ["glsl"] }
 image = "0.24"
 cgmath = "0.18"
-naga = "0.10.0"
-bytemuck = { version = "1.4", features = ["derive"] }
+naga = "0.13.0"
+bytemuck = { version = "1.13", features = ["derive"] }
 anyhow = "1.0"
-winit = "0.27.4"
+winit = "0.28.6"
 serde = "1.0.123"
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
 serde_yaml = "0.9.13"
 linked-hash-map = { version = "0.5.6", features = ["serde_impl"] }
-serde_derive = "1.0.145"
+serde_derive = "1.0"
 guillotiere = "0.6.0"
 raw-window-handle = "0.5.0"
 rayon = "1.5.2"
 dashmap = "5.4.0"
 parking_lot = "0.12.1"
 arc-swap = "1.4.0"
-indexmap = { version = "1.9.2", features = ["std"] }
+indexmap = { version = "2.0", features = ["std"] }
 multi-map = { git = "https://github.com/rust-embedded-community/multi-map.git" }
 tracing = "0.1.31"
 tracing-timing = "0.6.0"
-serde_with = "2.1.0"
+serde_with = "3.1.0"
 web-sys = "0.3.53"
 minecraft-assets = { git = "https://github.com/wgpu-mc/minecraft-assets.git" }
 get-size = { version = "0.1.1", features = ["derive"] }

@@ -1,7 +1,7 @@
 use std::slice;
 
-use jni::objects::{JClass, ReleaseMode};
-use jni::sys::{jint, jlong, jlongArray};
+use jni::objects::{JClass, JLongArray, ReleaseMode};
+use jni::sys::{jint, jlong};
 use jni::JNIEnv;
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
@@ -53,9 +53,9 @@ impl PackedIntegerArray {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn createPaletteStorage(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
-    data: jlongArray,
+    data: JLongArray,
     elements_per_long: jint,
     element_bits: jint,
     max_value: jlong,
@@ -68,15 +68,11 @@ pub fn createPaletteStorage(
     //     .get_long_array_elements(data, ReleaseMode::NoCopyBack)
     //     .unwrap();
 
-    let copy = env
-        .get_primitive_array_critical(data, ReleaseMode::NoCopyBack)
-        .unwrap();
+    let copy = unsafe { env.get_array_elements_critical(&data, ReleaseMode::NoCopyBack) }.unwrap();
 
     let packed_arr = PackedIntegerArray {
-        data: Vec::from(unsafe {
-            slice::from_raw_parts(copy.as_ptr() as *mut jlong, copy.size().unwrap() as usize)
-        })
-        .into_boxed_slice(),
+        data: Vec::from(unsafe { slice::from_raw_parts(copy.as_ptr() as *mut jlong, copy.len()) })
+            .into_boxed_slice(),
         elements_per_long,
         element_bits,
         max_value,

@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use treeculler::{BVol, Frustum, Vec3, AABB};
 
-use crate::mc::chunk::{Chunk, CHUNK_SECTION_HEIGHT, ChunkBuffers, ChunkPos, SECTIONS_PER_CHUNK};
+use crate::mc::chunk::{Chunk, ChunkBuffers, ChunkPos, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK};
 use crate::mc::resource::ResourcePath;
 use crate::render::pipeline::{QuadVertex, Vertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
@@ -27,7 +27,14 @@ use crate::WmRenderer;
 
 use crate::wgpu::QuerySetDescriptor;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, Face, FragmentState, FrontFace, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
+use wgpu::{
+    BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, Face,
+    FragmentState, FrontFace, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor,
+    PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass,
+    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+    RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
+    VertexBufferLayout, VertexState,
+};
 
 pub trait GeometryCallback: Send + Sync {
     fn render<'pass, 'resource: 'pass>(
@@ -283,11 +290,7 @@ impl ShaderGraph {
                                             }
                                         } else {
                                             layouts
-                                                .get(
-                                                    resource_types
-                                                        .get(uniform)
-                                                        .expect(uniform),
-                                                )
+                                                .get(resource_types.get(uniform).expect(uniform))
                                                 .unwrap()
                                         }
                                     })
@@ -313,12 +316,8 @@ impl ShaderGraph {
                         "wm_geo_terrain" => None,
                         "wm_geo_quad" => Some([QuadVertex::desc()]),
                         _ => {
-                            if let Some(additional_geometry) =
-                                &mut additional_geometry
-                            {
-                                Some([additional_geometry
-                                    .remove(&definition.geometry)
-                                    .unwrap()])
+                            if let Some(additional_geometry) = &mut additional_geometry {
+                                Some([additional_geometry.remove(&definition.geometry).unwrap()])
                             } else {
                                 unimplemented!("Unknown geometry");
                             }
@@ -336,8 +335,8 @@ impl ShaderGraph {
                                     entry_point: "vert",
                                     buffers: match &vertex_buffer {
                                         None => &[],
-                                        Some(buffer) => buffer
-                                    }
+                                        Some(buffer) => buffer,
+                                    },
                                 },
                                 primitive: PrimitiveState {
                                     topology: PrimitiveTopology::TriangleList,
@@ -780,7 +779,12 @@ impl ShaderGraph {
                                     (section_index * CHUNK_SECTION_HEIGHT) as f32,
                                     ((chunk.pos[1] + chunk_offset[1]) * 16) as f32,
                                 );
-                                let max = min + Vec3::new(16.0, ((section_index + 1) * CHUNK_SECTION_HEIGHT) as f32, 16.0);
+                                let max = min
+                                    + Vec3::new(
+                                        16.0,
+                                        ((section_index + 1) * CHUNK_SECTION_HEIGHT) as f32,
+                                        16.0,
+                                    );
 
                                 let aabb = AABB::<f32>::new(min, max);
 
@@ -790,17 +794,23 @@ impl ShaderGraph {
 
                                 let baked_layer = match sections.get(layer.name()) {
                                     None => continue,
-                                    Some(section) => &section[section_index]
+                                    Some(section) => &section[section_index],
                                 };
 
-                                bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, (*buffers).as_ref().as_ref());
+                                bind_uniforms(
+                                    config,
+                                    &resource_borrow,
+                                    &arena,
+                                    &mut render_pass,
+                                    (*buffers).as_ref().as_ref(),
+                                );
                                 set_push_constants(
                                     config,
                                     &mut render_pass,
                                     Some(chunk),
                                     surface_config,
                                     chunk_offset,
-                                    section_index
+                                    section_index,
                                 );
 
                                 render_pass.draw(baked_layer.clone(), 0..1);
@@ -817,13 +827,13 @@ impl ShaderGraph {
                         None,
                         surface_config,
                         chunk_offset,
-                        0
+                        0,
                     );
 
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
                     render_pass.set_vertex_buffer(0, self.quad.as_ref().unwrap().slice(..));
                     render_pass.draw(0..6, 0..1);
-                },
+                }
 
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {
@@ -854,18 +864,26 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
     resources: &'resource HashMap<&String, &'resource CustomResource>,
     arena: &WmArena<'pass>,
     render_pass: &mut RenderPass<'pass>,
-    chunk_buffers: Option<&'pass ChunkBuffers>
+    chunk_buffers: Option<&'pass ChunkBuffers>,
 ) {
     for (index, resource_name) in &config.uniforms {
         match &resource_name[..] {
             "wm_ssbo_chunk_vertices" => {
-                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().vertex_buffer.bind_group, &[]);
+                render_pass.set_bind_group(
+                    *index as u32,
+                    &chunk_buffers.unwrap().vertex_buffer.bind_group,
+                    &[],
+                );
                 continue;
-            },
+            }
             "wm_ssbo_chunk_indices" => {
-                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().index_buffer.bind_group, &[]);
+                render_pass.set_bind_group(
+                    *index as u32,
+                    &chunk_buffers.unwrap().index_buffer.bind_group,
+                    &[],
+                );
                 continue;
-            },
+            }
             _ => {}
         }
 
@@ -897,7 +915,7 @@ pub fn set_push_constants(
     chunk: Option<&Chunk>,
     surface_config: &SurfaceConfiguration,
     chunk_offset: ChunkPos,
-    section_y: usize
+    section_y: usize,
 ) {
     pipeline
         .push_constants

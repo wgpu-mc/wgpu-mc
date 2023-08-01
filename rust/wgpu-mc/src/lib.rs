@@ -49,15 +49,12 @@ pub use naga;
 use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, CompositeAlphaMode, Extent3d,
-    PresentMode, SurfaceConfiguration,
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, Extent3d, PresentMode};
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::graph::{GeometryCallback, ShaderGraph};
+use crate::render::graph::ShaderGraph;
 use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
 
@@ -69,7 +66,7 @@ pub mod util;
 /// Provides access to most of the wgpu structs relating directly to communicating/getting
 /// information about the gpu.
 pub struct WgpuState {
-    pub surface: RwLock<(Option<wgpu::Surface>, SurfaceConfiguration)>,
+    pub surface: RwLock<(Option<wgpu::Surface>, wgpu::SurfaceConfiguration)>,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -103,13 +100,16 @@ impl WmRenderer {
     /// initialize a [WmRenderer].
     pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(
         window: &W,
-        vsync: bool,
+        _vsync: bool,
     ) -> WgpuState {
         let size = window.get_window_size();
 
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::PRIMARY,
+            dx12_shader_compiler: wgpu::Dx12Compiler::default(),
+        });
 
-        let surface = unsafe { instance.create_surface(window) };
+        let surface = unsafe { instance.create_surface(window) }.unwrap();
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -138,18 +138,24 @@ impl WmRenderer {
             .await
             .unwrap();
 
+        let surface_caps = surface.get_capabilities(&adapter);
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
-            present_mode: PresentMode::Immediate,
+            present_mode: if surface_caps.present_modes.contains(&PresentMode::Immediate) {
+                PresentMode::Immediate
+            } else {
+                surface_caps.present_modes[0]
+            },
             // present_mode: if vsync {
             //     wgpu::PresentMode::AutoVsync
             // } else {
             //     wgpu::PresentMode::AutoNoVsync
             // },
-            alpha_mode: CompositeAlphaMode::Auto,
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
         };
 
         surface.configure(&device, &surface_config);
@@ -208,7 +214,7 @@ impl WmRenderer {
         &self,
         name: String,
         format: wgpu::TextureFormat,
-        config: &SurfaceConfiguration,
+        config: &wgpu::SurfaceConfiguration,
     ) -> TextureHandle {
         let tsv = TextureSamplerView::from_rgb_bytes(
             &self.wgpu_state,
@@ -320,7 +326,7 @@ impl WmRenderer {
         &self,
         graph: &ShaderGraph,
         output_texture_view: &wgpu::TextureView,
-        surface_config: &SurfaceConfiguration,
+        surface_config: &wgpu::SurfaceConfiguration,
     ) -> Result<(), wgpu::SurfaceError> {
         graph.render(self, output_texture_view, surface_config);
 
@@ -329,7 +335,7 @@ impl WmRenderer {
 
     pub fn get_backend_description(&self) -> String {
         format!(
-            "wgpu 0.14 ({:?})",
+            "wgpu 0.17 ({:?})",
             self.wgpu_state.adapter.get_info().backend
         )
     }

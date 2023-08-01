@@ -4,8 +4,8 @@ use std::io::Cursor;
 use std::num::NonZeroUsize;
 use std::slice;
 
-use jni::objects::{GlobalRef, JClass, JObject, JValue, ReleaseMode};
-use jni::sys::{jbyteArray, jint, jlong, jlongArray, jobject};
+use jni::objects::{GlobalRef, JByteArray, JClass, JLongArray, JObject, JValue, ReleaseMode};
+use jni::sys::{jint, jlong, jobject};
 use jni::JNIEnv;
 use jni_fn::jni_fn;
 use mc_varint::VarIntRead;
@@ -204,7 +204,7 @@ pub fn paletteGet(_env: JNIEnv, _class: JClass, palette_long: jlong, index: i32)
 
     match palette.get(index as usize) {
         Some((global_ref, _)) => {
-            return global_ref.as_obj().into_raw();
+            return global_ref.as_obj().as_raw();
         }
         None => {
             panic!("Palette index {index} was not occupied\nPalette:\n{palette:?}");
@@ -214,36 +214,33 @@ pub fn paletteGet(_env: JNIEnv, _class: JClass, palette_long: jlong, index: i32)
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn paletteReadPacket(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     palette_long: jlong,
-    array: jbyteArray,
+    array: JByteArray,
     current_position: jint,
-    blockstate_offsets: jlongArray,
+    blockstate_offsets: JLongArray,
 ) -> jint {
     let mut storage_access = PALETTE_STORAGE.write();
     let palette = storage_access.get_mut(palette_long as usize).unwrap();
-    let array = env
-        .get_byte_array_elements(array, ReleaseMode::NoCopyBack)
-        .unwrap();
+    let array = unsafe { env.get_array_elements(&array, ReleaseMode::NoCopyBack) }.unwrap();
 
-    let blockstate_offsets_array = env
-        .get_int_array_elements(blockstate_offsets, ReleaseMode::NoCopyBack)
-        .unwrap();
+    let blockstate_offsets_array =
+        unsafe { env.get_array_elements(&blockstate_offsets, ReleaseMode::NoCopyBack) }.unwrap();
 
     let id_list = unsafe { &*(palette.id_list.get() as *const IdList) };
 
     let blockstate_offsets = unsafe {
         slice::from_raw_parts(
             blockstate_offsets_array.as_ptr() as *mut i32,
-            blockstate_offsets_array.size().unwrap() as usize,
+            blockstate_offsets_array.len(),
         )
     };
 
     let vec = unsafe {
         slice::from_raw_parts(
             array.as_ptr().offset(current_position as isize) as *mut u8,
-            (array.size().unwrap() - current_position) as usize,
+            array.len() - current_position as usize,
         )
     };
 
@@ -269,7 +266,7 @@ pub fn paletteReadPacket(
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn debugPalette(env: JNIEnv, _class: JClass, _packed_integer_array: jlong, palette: jlong) {
+pub fn debugPalette(mut env: JNIEnv, _class: JClass, _packed_integer_array: jlong, palette: jlong) {
     let storage_access = PALETTE_STORAGE.read();
     let palette = storage_access.get(palette as usize).unwrap();
     palette.store.iter().for_each(|item| {

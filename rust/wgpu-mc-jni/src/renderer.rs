@@ -7,8 +7,8 @@ use std::{slice, thread};
 use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
-use jni::objects::{JClass, ReleaseMode};
-use jni::sys::{jfloatArray, jint};
+use jni::objects::{AutoElements, JClass, JFloatArray, JPrimitiveArray, ReleaseMode};
+use jni::sys::{jfloat, jfloatArray, jint};
 use jni::{
     objects::{JString, JValue},
     JNIEnv,
@@ -85,17 +85,11 @@ pub fn setChunkOffset(env: JNIEnv, _class: JClass, x: jint, z: jint) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setMatrix(env: JNIEnv, _class: JClass, id: jint, float_array: jfloatArray) {
-    let elements = env
-        .get_float_array_elements(float_array, ReleaseMode::NoCopyBack)
-        .unwrap();
+pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatArray) {
+    let elements: AutoElements<jfloat> =
+        unsafe { env.get_array_elements(&float_array, ReleaseMode::NoCopyBack) }.unwrap();
 
-    let slice = unsafe {
-        slice::from_raw_parts(
-            elements.as_ptr() as *mut f32,
-            elements.size().unwrap() as usize,
-        )
-    };
+    let slice = unsafe { slice::from_raw_parts(elements.as_ptr() as *mut f32, elements.len()) };
 
     let mut cursor = Cursor::new(bytemuck::cast_slice::<f32, u8>(slice));
     let mut converted = Vec::with_capacity(slice.len());
@@ -109,16 +103,22 @@ pub fn setMatrix(env: JNIEnv, _class: JClass, id: jint, float_array: jfloatArray
     MATRICES.lock().projection = slice_4x4;
 }
 
-pub fn start_rendering(env: JNIEnv, title: JString) {
-    let title: String = env.get_string(title).unwrap().into();
+pub fn start_rendering(mut env: JNIEnv, title: JString) {
+    let title: String = env.get_string(&title).unwrap().into();
 
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
     // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build
     let mut event_loop = EventLoopBuilder::new();
     #[cfg(target_os = "linux")]
     {
-        use winit::platform::unix::EventLoopBuilderExtUnix;
-        event_loop.with_any_thread(true);
+        // double hacky fix B)
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            use winit::platform::wayland::EventLoopBuilderExtWayland;
+            event_loop.with_any_thread(true);
+        } else {
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            event_loop.with_any_thread(true);
+        }
     }
     let event_loop = event_loop.build();
 
@@ -358,11 +358,7 @@ pub fn start_rendering(env: JNIEnv, title: JString) {
                             .send(RenderMessage::MouseState(*state, *button))
                             .unwrap();
                     }
-                    WindowEvent::CursorMoved {
-                        device_id,
-                        position,
-                        modifiers,
-                    } => {
+                    WindowEvent::CursorMoved { position, .. } => {
                         CHANNELS
                             .0
                             .send(RenderMessage::CursorMove(position.x, position.y))

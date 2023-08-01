@@ -26,7 +26,7 @@ pub struct Vertex {
     pub normal: [f32; 3],
     // pub lightmap_coords: u32,
     pub color: u32,
-    pub uv_offset: u32
+    pub uv_offset: u32,
 }
 
 impl Vertex {
@@ -98,7 +98,7 @@ impl Vertex {
             [0.0, -1.0, 0.0] => 0b00000101,
             [0.0, 0.0, 1.0] => 0b00000010,
             [0.0, 0.0, -1.0] => 0b00000110,
-            _ => unreachable!("Invalid vertex normal")
+            _ => unreachable!("Invalid vertex normal"),
         };
 
         //UV index and normal
