@@ -7,7 +7,6 @@ import net.minecraft.client.util.GlfwUtil;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.SmoothUtil;
 import net.minecraft.client.util.Window;
-import org.checkerframework.checker.units.qual.A;
 import org.lwjgl.glfw.GLFWDropCallback;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;

@@ -1,5 +1,5 @@
 plugins {
-    id("fabric-loom") version "0.11.29"
+    id("fabric-loom") version "1.3-SNAPSHOT"
     id("fr.stardustenterprises.rust.importer") version "2.1.0"
 }
 base {
@@ -45,6 +45,10 @@ tasks {
     }
 
     jar {
+        dependsOn("unpackExports", "deleteExports")
+    }
+
+    runClient {
         dependsOn("unpackExports", "deleteExports")
     }
 

@@ -5,7 +5,6 @@ import dev.birb.wgpu.rust.WgpuNative;
 import net.fabricmc.loader.impl.launch.knot.KnotClient;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.main.Main;
-import org.checkerframework.checker.units.qual.A;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
