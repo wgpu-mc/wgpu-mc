@@ -17,12 +17,9 @@ use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{
     AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject,
-    JPrimitiveArray, JString, JValue, ReleaseMode,
+    JString, JValue, ReleaseMode,
 };
-use jni::sys::{
-    jboolean, jbyte, jbyteArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jstring,
-    JNI_FALSE, JNI_TRUE,
-};
+use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
@@ -90,11 +87,10 @@ static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
 static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
+type Task = Box<dyn FnOnce() + Send + Sync>;
+
 static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
-static TASK_CHANNELS: Lazy<(
-    Sender<Box<dyn FnOnce() + Send + Sync>>,
-    Receiver<Box<dyn FnOnce() + Send + Sync>>,
-)> = Lazy::new(unbounded);
+static TASK_CHANNELS: Lazy<(Sender<Task>, Receiver<Task>)> = Lazy::new(unbounded);
 static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
     ArcSwap::new(Arc::new(MinecraftRenderState {
         _render_world: false,
@@ -370,10 +366,7 @@ pub fn createChunk(
                 })
                 .collect::<Vec<_>>()
                 .try_into()
-                .expect(&format!(
-                    "Expected a Vec of length 24, got {}",
-                    palettes.len()
-                )),
+                .unwrap_or_else(|_| panic!("Expected a Vec of length 24, got {}", palettes.len())),
         },
     );
 }
@@ -415,7 +408,7 @@ pub fn bake_chunk(x: i32, z: i32) {
                 air: *AIR,
             };
 
-            let instant = Instant::now();
+            let _instant = Instant::now();
 
             chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
         }
@@ -660,7 +653,7 @@ pub fn runHelperThread(mut env: JNIEnv, _class: JClass) {
 
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn centerCursor(env: JNIEnv, _class: JClass, locked: jboolean) {
+pub fn centerCursor(_env: JNIEnv, _class: JClass, _locked: jboolean) {
     if let Some(window) = WINDOW.get() {
         let inner = window.inner_position().unwrap();
         let size = window.inner_size();
@@ -675,7 +668,7 @@ pub fn centerCursor(env: JNIEnv, _class: JClass, locked: jboolean) {
 
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCursorLocked(env: JNIEnv, _class: JClass, locked: jboolean) {
+pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
     if let Some(window) = WINDOW.get() {
         window.set_cursor_grab(match locked {
             JNI_TRUE => {
@@ -780,7 +773,7 @@ pub fn submitCommands(_env: JNIEnv, _class: JClass) {
     let mut guard = GL_COMMANDS.write();
     let (command_stack, submitted) = &mut *guard;
 
-    std::mem::swap(command_stack, submitted);
+    mem::swap(command_stack, submitted);
 
     command_stack.clear();
 }
@@ -887,9 +880,9 @@ pub fn subImage2D(
         ))
     };
     let unpack_row_length = unpack_row_length as usize;
-    let unpack_skip_pixels = unpack_skip_pixels as usize;
-    let unpack_skip_rows = unpack_skip_rows as usize;
-    let unpack_alignment = unpack_alignment as usize;
+    let _unpack_skip_pixels = unpack_skip_pixels as usize;
+    let _unpack_skip_rows = unpack_skip_rows as usize;
+    let _unpack_alignment = unpack_alignment as usize;
     let width = width as usize;
     let height = height as usize;
 
@@ -899,7 +892,7 @@ pub fn subImage2D(
     };
 
     //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
-    let row_width = if unpack_row_length > 0 {
+    let _row_width = if unpack_row_length > 0 {
         unpack_row_length
     } else {
         width
@@ -922,8 +915,8 @@ pub fn subImage2D(
                 let pixel = pixels[x + y * width];
 
                 //Convert rgba to slice format. There's only support for rgba at the moment.
-                let mut rgba_array: [u8; 4] = [
-                    (pixel >> 0 & 0xFF) as u8,
+                let rgba_array: [u8; 4] = [
+                    (pixel & 0xFF) as u8,
                     (pixel >> 8 & 0xFF) as u8,
                     (pixel >> 16 & 0xFF) as u8,
                     (pixel >> 24 & 0xFF) as u8,
@@ -1034,7 +1027,7 @@ pub fn setProjectionMatrix(mut env: JNIEnv, _class: JClass, float_array: JFloatA
     let elements: AutoElements<jfloat> =
         unsafe { env.get_array_elements(&float_array, ReleaseMode::NoCopyBack) }.unwrap();
 
-    let slice = unsafe { slice::from_raw_parts(elements.as_ptr() as *mut f32, elements.len()) };
+    let slice = unsafe { slice::from_raw_parts(elements.as_ptr(), elements.len()) };
 
     let mut cursor = Cursor::new(bytemuck::cast_slice::<f32, u8>(slice));
     let mut converted = Vec::with_capacity(slice.len());

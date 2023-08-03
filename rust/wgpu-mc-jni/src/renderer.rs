@@ -1,5 +1,5 @@
 use byteorder::LittleEndian;
-use cgmath::{perspective, Deg, Matrix4, SquareMatrix, Vector3};
+use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
@@ -7,8 +7,8 @@ use std::{slice, thread};
 use std::{sync::Arc, time::Instant};
 
 use futures::executor::block_on;
-use jni::objects::{AutoElements, JClass, JFloatArray, JPrimitiveArray, ReleaseMode};
-use jni::sys::{jfloat, jfloatArray, jint};
+use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
+use jni::sys::{jfloat, jint};
 use jni::{
     objects::{JString, JValue},
     JNIEnv,
@@ -80,16 +80,16 @@ impl RenderLayer for TerrainLayer {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setChunkOffset(env: JNIEnv, _class: JClass, x: jint, z: jint) {
+pub fn setChunkOffset(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
     *RENDERER.get().unwrap().mc.chunks.chunk_offset.lock() = [x, z];
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatArray) {
+pub fn setMatrix(mut env: JNIEnv, _class: JClass, _id: jint, float_array: JFloatArray) {
     let elements: AutoElements<jfloat> =
         unsafe { env.get_array_elements(&float_array, ReleaseMode::NoCopyBack) }.unwrap();
 
-    let slice = unsafe { slice::from_raw_parts(elements.as_ptr() as *mut f32, elements.len()) };
+    let slice = unsafe { slice::from_raw_parts(elements.as_ptr(), elements.len()) };
 
     let mut cursor = Cursor::new(bytemuck::cast_slice::<f32, u8>(slice));
     let mut converted = Vec::with_capacity(slice.len());
@@ -214,7 +214,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         CustomResource {
             update: None,
             data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat.into() },
+                Mat4ValueOrMult::Value { value: mat },
                 Arc::new(RwLock::new(matrix)),
                 Arc::new(bindable_buffer),
             )),
@@ -235,7 +235,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         CustomResource {
             update: None,
             data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat.into() },
+                Mat4ValueOrMult::Value { value: mat },
                 Arc::new(RwLock::new(matrix)),
                 Arc::new(bindable_buffer),
             )),
@@ -266,7 +266,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         let wm = wm_clone;
 
         loop {
-            let mc_state = MC_STATE.load();
+            let _mc_state = MC_STATE.load();
 
             let surface_state = wm.wgpu_state.surface.read();
 
@@ -277,7 +277,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                     .get_mut("wm_mat4_projection")
                     .unwrap();
 
-                if let ResourceInternal::Mat4(val, lock, _) = &*res_mat_proj.data {
+                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_proj.data {
                     let matrix4: Matrix4<f32> = matrices.projection.into();
                     *lock.write() = perspective(
                         Deg(100.0),
@@ -293,7 +293,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
-                format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                format: Some(TextureFormat::Bgra8Unorm),
                 dimension: Some(wgpu::TextureViewDimension::D2),
                 aspect: Default::default(),
                 base_mip_level: 0,
@@ -401,15 +401,15 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                     _ => {}
                 }
             }
-            Event::DeviceEvent { device_id, event } => match event {
-                DeviceEvent::MouseMotion { delta } => {
-                    CHANNELS
-                        .0
-                        .send(RenderMessage::MouseMove(delta.0, delta.1))
-                        .unwrap();
-                }
-                _ => {}
-            },
+            Event::DeviceEvent {
+                device_id: _,
+                event: DeviceEvent::MouseMotion { delta },
+            } => {
+                CHANNELS
+                    .0
+                    .send(RenderMessage::MouseMove(delta.0, delta.1))
+                    .unwrap();
+            }
             _ => {}
         }
     });

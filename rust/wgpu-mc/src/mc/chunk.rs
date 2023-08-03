@@ -9,15 +9,15 @@
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
-use range_alloc::RangeAllocator;
+
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::mem::size_of;
+
 use std::ops::Range;
-use std::sync::atomic::{AtomicUsize, Ordering};
+
 use std::sync::Arc;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BufferAddress, BufferDescriptor, BufferUsages};
+
+use wgpu::{BufferUsages};
 
 use crate::mc::block::{
     BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
@@ -47,7 +47,7 @@ pub struct ChunkManager {
 
 impl ChunkManager {
     #[must_use]
-    pub fn new(wgpu_state: &WgpuState) -> Self {
+    pub fn new(_wgpu_state: &WgpuState) -> Self {
         ChunkManager {
             loaded_chunks: RwLock::new(HashMap::new()),
             chunk_offset: Mutex::new([0, 0]),
@@ -128,7 +128,7 @@ impl Chunk {
 
                         let index_offset = index_data.len();
 
-                        vertex_data.extend(vert.iter().map(Vertex::compressed).flatten());
+                        vertex_data.extend(vert.iter().flat_map(Vertex::compressed));
                         index_data.extend(index.iter().map(|i| *i + offset));
 
                         index_offset as u32..index_offset as u32 + index.len() as u32
@@ -262,7 +262,7 @@ pub fn bake_section_layer<
                 let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
                 let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
 
-                let add_face = || render_east;
+                let _add_face = || render_east;
 
                 const INDICES: [u32; 6] = [0, 1, 2, 3, 4, 5];
 

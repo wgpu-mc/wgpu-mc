@@ -38,6 +38,3 @@ logging_timer = "1.1.0"
 treeculler = "0.2.0"
 range-alloc = "0.1.2"
 array-init = "2.1.0"
-
-[profile.release]
-debug = true

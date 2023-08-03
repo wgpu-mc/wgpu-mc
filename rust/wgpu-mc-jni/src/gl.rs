@@ -1,34 +1,24 @@
-use std::cell::RefCell;
 use std::cmp::max;
-use std::vec::Vec;
-
-use parking_lot::RwLock;
-
-use wgpu_mc::texture::{BindableTexture, TextureHandle};
-
+use std::collections::HashMap;
+use std::mem::align_of;
+use std::ops::Range;
 use std::sync::Arc;
+use std::vec::Vec;
 
 use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Matrix, Matrix4, SquareMatrix};
-use once_cell::sync::{Lazy, OnceCell};
-use std::collections::HashMap;
-use std::convert::identity;
-use std::mem::{align_of, replace};
-use std::ops::Range;
-use wgpu_mc::mc::chunk::ChunkPos;
+use cgmath::{Matrix4, SquareMatrix};
+use once_cell::sync::Lazy;
+use parking_lot::RwLock;
+
 use wgpu_mc::render::graph::{
-    bind_uniforms, set_push_constants, CustomResource, GeometryCallback, ResourceInternal,
-    ShaderGraph, TextureResource,
+    bind_uniforms, set_push_constants, CustomResource, GeometryCallback, GeometryInfo,
+    ResourceInternal, TextureResource,
 };
-use wgpu_mc::render::shaderpack;
-use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, PipelineConfig};
+use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
+use wgpu_mc::texture::{BindableTexture, TextureHandle};
 use wgpu_mc::util::{BindableBuffer, WmArena};
-use wgpu_mc::wgpu::util::{align_to, BufferInitDescriptor, DeviceExt};
-use wgpu_mc::wgpu::{
-    vertex_attr_array, Buffer, BufferUsages, IndexFormat, RenderPass, ShaderStages,
-    SurfaceConfiguration,
-};
+use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
 use wgpu_mc::{wgpu, WmRenderer};
 
 pub static GL_ALLOC: Lazy<RwLock<HashMap<u32, GlTexture>>> =
@@ -81,9 +71,9 @@ impl ElectrumVertex {
             .map(|vert| {
                 let mut vertex = ElectrumVertex::zeroed();
 
-                (&mut vertex.pos[0..3]).copy_from_slice(&vert[0..3]);
+                vertex.pos[0..3].copy_from_slice(&vert[0..3]);
                 vertex.pos[3] = 1.0;
-                (&mut vertex.color[0..3]).copy_from_slice(&vert[3..6]);
+                vertex.color[0..3].copy_from_slice(&vert[3..6]);
                 vertex.color[3] = 1.0;
 
                 vertex
@@ -97,7 +87,7 @@ impl ElectrumVertex {
             .map(|vert| {
                 let mut vertex = ElectrumVertex::zeroed();
 
-                (&mut vertex.pos[0..3]).copy_from_slice(&vert[0..3]);
+                vertex.pos[0..3].copy_from_slice(&vert[0..3]);
                 vertex.pos[3] = 1.0;
                 vertex.uv.copy_from_slice(&vert[3..5]);
                 vertex.color = [1.0; 4];
@@ -114,7 +104,7 @@ impl ElectrumVertex {
             .map(|vert| {
                 let mut vertex = ElectrumVertex::zeroed();
 
-                (&mut vertex.pos[0..3]).copy_from_slice(&vert[0..3]);
+                vertex.pos[0..3].copy_from_slice(&vert[0..3]);
                 vertex.pos[3] = 1.0;
                 vertex.uv.copy_from_slice(&vert[3..5]);
 
@@ -138,7 +128,7 @@ impl ElectrumVertex {
             .map(|vert| {
                 let mut vertex = ElectrumVertex::zeroed();
 
-                (&mut vertex.pos[0..3]).copy_from_slice(&vert[0..3]);
+                vertex.pos[0..3].copy_from_slice(&vert[0..3]);
                 vertex.pos[3] = 1.0;
 
                 let color: u32 = bytemuck::cast(vert[3]);
@@ -228,7 +218,7 @@ fn augment_resources<'arena: 'resources, 'resources>(
 ) -> &'arena HashMap<&'arena String, &'resources CustomResource> {
     arena.alloc(
         resources
-            .into_iter()
+            .iter()
             .chain([
                 (
                     &*arena.alloc("wm_electrum_gl_texture".into()),
@@ -275,8 +265,8 @@ impl BufferPool {
 
         let len = self.data.len() as u64;
         self.data.extend(bytemuck::cast_slice(data));
-        let range = len..self.data.len() as u64;
-        range
+
+        len..self.data.len() as u64
     }
 }
 
@@ -288,17 +278,7 @@ pub struct ElectrumGeometry {
 }
 
 impl GeometryCallback for ElectrumGeometry {
-    fn render<'pass, 'resource: 'pass>(
-        &self,
-        wm: &WmRenderer,
-        render_pass: &mut RenderPass<'pass>,
-        graph: &'pass ShaderGraph,
-        config: &PipelineConfig,
-        resources: &'resource HashMap<String, CustomResource>,
-        arena: &'resource WmArena<'resource>,
-        surface_config: &SurfaceConfiguration,
-        chunk_offset: ChunkPos,
-    ) {
+    fn render(&self, info: GeometryInfo) {
         let mut buffer_pool = BufferPool { data: Vec::new() };
 
         let (_, commands) = {
@@ -356,8 +336,8 @@ impl GeometryCallback for ElectrumGeometry {
                 }
                 GLCommand::DrawIndexed(count) => {
                     calls.push(DrawCall::Indexed(IndexedDraw {
-                        vertex_buffer: replace(&mut vertex_buffer, vec![]),
-                        index_buffer: replace(&mut index_buffer, vec![]),
+                        vertex_buffer: std::mem::take(&mut vertex_buffer),
+                        index_buffer: std::mem::take(&mut index_buffer),
                         count,
                         matrix: matrix.into(),
                         texture: texture.take(),
@@ -366,7 +346,7 @@ impl GeometryCallback for ElectrumGeometry {
                 }
                 GLCommand::Draw(count) => {
                     calls.push(DrawCall::Verts(Draw {
-                        vertex_buffer: replace(&mut vertex_buffer, vec![]),
+                        vertex_buffer: std::mem::take(&mut vertex_buffer),
                         count,
                         matrix: matrix.into(),
                         texture: texture.take(),
@@ -414,17 +394,37 @@ impl GeometryCallback for ElectrumGeometry {
                         }
                     }
 
-                    let augmented_resources =
-                        augment_resources(wm, &resources, arena, texture, draw.matrix);
+                    let augmented_resources = augment_resources(
+                        info.wm,
+                        info.resources,
+                        info.arena,
+                        texture,
+                        draw.matrix,
+                    );
 
-                    bind_uniforms(config, augmented_resources, arena, render_pass, None);
-                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, 0);
+                    bind_uniforms(
+                        info.config,
+                        augmented_resources,
+                        info.arena,
+                        info.render_pass,
+                        None,
+                    );
+                    set_push_constants(
+                        info.config,
+                        info.render_pass,
+                        None,
+                        info.surface_config,
+                        info.chunk_offset,
+                        0,
+                    );
 
                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
 
-                    render_pass
-                        .set_vertex_buffer(0, arena.alloc(self.pool.clone()).slice(buffer_slice));
-                    render_pass.draw(0..draw.count, 0..1);
+                    info.render_pass.set_vertex_buffer(
+                        0,
+                        info.arena.alloc(self.pool.clone()).slice(buffer_slice),
+                    );
+                    info.render_pass.draw(0..draw.count, 0..1);
                 }
                 DrawCall::Indexed(draw) => {
                     let mut texture = self.blank.bindable_texture.load_full();
@@ -435,11 +435,29 @@ impl GeometryCallback for ElectrumGeometry {
                         }
                     }
 
-                    let augmented_resources =
-                        augment_resources(wm, &resources, arena, texture, draw.matrix);
+                    let augmented_resources = augment_resources(
+                        info.wm,
+                        info.resources,
+                        info.arena,
+                        texture,
+                        draw.matrix,
+                    );
 
-                    bind_uniforms(config, augmented_resources, arena, render_pass, None);
-                    set_push_constants(config, render_pass, None, surface_config, chunk_offset, 0);
+                    bind_uniforms(
+                        info.config,
+                        augmented_resources,
+                        info.arena,
+                        info.render_pass,
+                        None,
+                    );
+                    set_push_constants(
+                        info.config,
+                        info.render_pass,
+                        None,
+                        info.surface_config,
+                        info.chunk_offset,
+                        0,
+                    );
 
                     let vertices = match draw.pipeline_state {
                         PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
@@ -465,12 +483,13 @@ impl GeometryCallback for ElectrumGeometry {
 
                     let index_slice = buffer_pool.allocate(&draw.index_buffer);
 
-                    let pool_alloc = arena.alloc(self.pool.clone());
+                    let pool_alloc = info.arena.alloc(self.pool.clone());
 
-                    render_pass.set_vertex_buffer(0, pool_alloc.slice(vert_slice));
-                    render_pass
+                    info.render_pass
+                        .set_vertex_buffer(0, pool_alloc.slice(vert_slice));
+                    info.render_pass
                         .set_index_buffer(pool_alloc.slice(index_slice), IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..draw.count, 0, 0..1);
+                    info.render_pass.draw_indexed(0..draw.count, 0, 0..1);
                 }
             }
         }
@@ -484,7 +503,8 @@ impl GeometryCallback for ElectrumGeometry {
             }
         }
 
-        wm.wgpu_state
+        info.wm
+            .wgpu_state
             .queue
             .write_buffer(&self.pool, 0, &buffer_pool.data);
 
