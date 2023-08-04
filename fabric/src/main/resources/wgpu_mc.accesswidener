@@ -1,37 +1,43 @@
 accessWidener v1 named
-accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)V
-extendable class net/minecraft/world/chunk/PalettedContainer$DataProvider
-extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
-accessible class net/minecraft/world/chunk/PaletteResizeListener
-accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
-accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
-accessible method net/minecraft/client/Mouse onMouseButton (JIII)V
-accessible method net/minecraft/client/Mouse onCursorPos (JDD)V
-accessible method net/minecraft/client/Keyboard onChar (JII)V
 
-accessible field net/minecraft/client/Mouse x D
-accessible field net/minecraft/client/Mouse y D
-accessible field net/minecraft/world/chunk/PalettedContainer data Lnet/minecraft/world/chunk/PalettedContainer$Data;
-accessible field net/minecraft/util/collection/PackedIntegerArray elementsPerLong I
-accessible field net/minecraft/util/collection/PackedIntegerArray maxValue J
-accessible field net/minecraft/util/collection/PackedIntegerArray indexScale I
-accessible field net/minecraft/util/collection/PackedIntegerArray indexOffset I
-accessible field net/minecraft/util/collection/PackedIntegerArray indexShift I
-accessible field net/minecraft/world/chunk/PalettedContainer$Data storage Lnet/minecraft/util/collection/PaletteStorage;
-accessible field net/minecraft/world/chunk/PalettedContainer$Data palette Lnet/minecraft/world/chunk/Palette;
-accessible field net/minecraft/client/world/ClientChunkManager chunks Lnet/minecraft/client/world/ClientChunkManager$ClientChunkMap;
-accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkX I
-accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkZ I
-accessible field net/minecraft/state/State PROPERTY_MAP_PRINTER Ljava/util/function/Function;
-accessible field net/minecraft/world/chunk/PalettedContainer idList Lnet/minecraft/util/collection/IndexedIterable;
-accessible field net/minecraft/client/Mouse cursorDeltaX D
-accessible field net/minecraft/client/Mouse cursorDeltaY D
-accessible field net/minecraft/client/render/chunk/ChunkRendererRegionBuilder chunks Lit/unimi/dsi/fastutil/longs/Long2ObjectMap;
 accessible class net/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task
 accessible class net/minecraft/client/render/chunk/ChunkRendererRegionBuilder$ClientChunk
-accessible method net/minecraft/client/render/WorldRenderer updateChunks (Lnet/minecraft/client/render/Camera;)V
 accessible class net/minecraft/client/render/WorldRenderer$ChunkInfo
+accessible class net/minecraft/world/chunk/PaletteResizeListener
 
+accessible field net/minecraft/client/Mouse cursorDeltaX D
+accessible field net/minecraft/client/Mouse cursorDeltaY D
+accessible field net/minecraft/client/Mouse x D
+accessible field net/minecraft/client/Mouse y D
+accessible field net/minecraft/client/render/chunk/ChunkRendererRegionBuilder chunks Lit/unimi/dsi/fastutil/longs/Long2ObjectMap;
+accessible field net/minecraft/client/util/Window height I
+accessible field net/minecraft/client/util/Window width I
+accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkX I
+accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkZ I
+accessible field net/minecraft/client/world/ClientChunkManager chunks Lnet/minecraft/client/world/ClientChunkManager$ClientChunkMap;
+accessible field net/minecraft/state/State PROPERTY_MAP_PRINTER Ljava/util/function/Function;
+accessible field net/minecraft/util/collection/PackedIntegerArray elementsPerLong I
+accessible field net/minecraft/util/collection/PackedIntegerArray indexOffset I
+accessible field net/minecraft/util/collection/PackedIntegerArray indexScale I
+accessible field net/minecraft/util/collection/PackedIntegerArray indexShift I
+accessible field net/minecraft/util/collection/PackedIntegerArray maxValue J
+accessible field net/minecraft/world/chunk/PalettedContainer$Data palette Lnet/minecraft/world/chunk/Palette;
+accessible field net/minecraft/world/chunk/PalettedContainer$Data storage Lnet/minecraft/util/collection/PaletteStorage;
+accessible field net/minecraft/world/chunk/PalettedContainer data Lnet/minecraft/world/chunk/PalettedContainer$Data;
+accessible field net/minecraft/world/chunk/PalettedContainer idList Lnet/minecraft/util/collection/IndexedIterable;
 
-mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
+accessible method net/minecraft/client/Keyboard onChar (JII)V
+accessible method net/minecraft/client/Mouse onCursorPos (JDD)V
+accessible method net/minecraft/client/Mouse onMouseButton (JIII)V
+accessible method net/minecraft/client/font/TextRenderer drawLayer (Ljava/lang/String;FFIZLnet/minecraft/util/math/Matrix4f;Lnet/minecraft/client/render/VertexConsumerProvider;ZII)F
+accessible method net/minecraft/client/font/TextRenderer drawLayer (Lnet/minecraft/text/OrderedText;FFIZLnet/minecraft/util/math/Matrix4f;Lnet/minecraft/client/render/VertexConsumerProvider;ZII)F
+accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)V
+accessible method net/minecraft/client/render/WorldRenderer updateChunks (Lnet/minecraft/client/render/Camera;)V
+accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
+accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
+
+extendable class net/minecraft/world/chunk/PalettedContainer$DataProvider
+extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
+
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;
+mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;

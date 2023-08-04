@@ -1,6 +1,7 @@
 package dev.birb.wgpu.rust;
 
-import net.minecraft.client.MinecraftClient;
+import lombok.Getter;
+import lombok.Setter;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 
@@ -8,7 +9,9 @@ import java.io.IOException;
 
 public class WgpuResourceProvider {
 
-    public static ResourceManager manager;
+    @Getter
+    @Setter
+    private static ResourceManager manager;
 
     public static byte[] getResource(String path) {
         try {
@@ -16,7 +19,7 @@ public class WgpuResourceProvider {
                 manager.getResource(new Identifier(path)).getInputStream()
             );
         } catch(IOException e) {
-            return null;
+            return new byte[0];
         }
     }
 

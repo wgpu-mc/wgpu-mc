@@ -11,11 +11,12 @@ public class TextEnumWidget extends Widget implements IOptionWidget {
 
 	private final TextEnumOption option;
 
-	private Text valueName, previousValueName;
+	private Text valueName;
+	private Text previousValueName;
 	private double animation;
 
 	public TextEnumWidget(int x, int y, int width, TextEnumOption option) {
-		super(x, y, width, HEIGHT);
+		super(x, y, width, DEFAULT_HEIGHT);
 
 		this.option = option;
 		this.valueName = TextEnumOption.FORMATTER.apply(option);

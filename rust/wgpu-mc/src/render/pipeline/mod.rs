@@ -12,7 +12,6 @@ use std::sync::Arc;
 use crate::WmRenderer;
 
 use crate::mc::resource::ResourceProvider;
-use crate::render::atlas::ATLAS_DIMENSIONS;
 
 use crate::wgpu::RenderPipeline;
 
@@ -26,7 +25,7 @@ pub struct Vertex {
     pub normal: [f32; 3],
     // pub lightmap_coords: u32,
     pub color: u32,
-    pub uv_offset: u32
+    pub uv_offset: u32,
 }
 
 impl Vertex {
@@ -91,6 +90,7 @@ impl Vertex {
         array[8] = self.uv[1].to_le_bytes()[0];
         array[9] = self.uv[1].to_le_bytes()[1];
 
+        #[allow(illegal_floating_point_literal_pattern)]
         let normal_bits: u8 = match self.normal {
             [-1.0, 0.0, 0.0] => 0b00000100,
             [1.0, 0.0, 0.0] => 0b00000000,
@@ -98,7 +98,7 @@ impl Vertex {
             [0.0, -1.0, 0.0] => 0b00000101,
             [0.0, 0.0, 1.0] => 0b00000010,
             [0.0, 0.0, -1.0] => 0b00000110,
-            _ => unreachable!("Invalid vertex normal")
+            _ => unreachable!("Invalid vertex normal"),
         };
 
         //UV index and normal
@@ -303,7 +303,7 @@ impl WmPipelines {
         {
             self.bind_group_layouts
                 .write()
-                .extend(Self::create_bind_group_layouts(&wm.wgpu_state.device).into_iter())
+                .extend(Self::create_bind_group_layouts(&wm.wgpu_state.device))
         }
     }
 }

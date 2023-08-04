@@ -11,6 +11,7 @@ public class GLXMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite(remap = false)
     public static LongSupplier _initGlfw() {

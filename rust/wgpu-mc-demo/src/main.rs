@@ -195,7 +195,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
     let mut frame_start = Instant::now();
 
     let mut forward = 0.0;
-    let mut spin: f32 = 0.0;
+    let mut _spin: f32 = 0.0;
     let mut _frame: u32 = 0;
 
     let pack = serde_yaml::from_str(
@@ -387,7 +387,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                     bytemuck::cast_slice(&rot_mat),
                 );
 
-                spin += 0.5;
+                _spin += 0.5;
                 _frame += 1;
 
                 let surface_state = wm.wgpu_state.surface.read();

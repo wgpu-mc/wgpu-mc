@@ -4,7 +4,7 @@ import dev.birb.wgpu.gui.WidgetRenderer;
 import net.minecraft.text.Text;
 
 public class TextWidget extends Widget {
-    public static final int HEIGHT = Widget.HEIGHT;
+    public static final int HEIGHT = Widget.DEFAULT_HEIGHT;
 
     private final Text text;
 

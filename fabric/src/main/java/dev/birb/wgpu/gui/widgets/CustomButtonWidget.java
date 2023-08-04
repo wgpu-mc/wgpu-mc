@@ -12,11 +12,13 @@ public class CustomButtonWidget extends Widget {
     private final BooleanSupplier visible;
     private final Runnable action;
 
-    private Text text, previousText;
-    private double visibleAnimation, textAnimation;
+    private Text text;
+    private Text previousText;
+    private double visibleAnimation;
+    private double textAnimation;
 
     public CustomButtonWidget(int x, int y, Supplier<Text> textSupplier, int width, BooleanSupplier visible, Runnable action) {
-        super(x, y, width, HEIGHT);
+        super(x, y, width, DEFAULT_HEIGHT);
 
         this.textSupplier = textSupplier;
         this.visible = visible;

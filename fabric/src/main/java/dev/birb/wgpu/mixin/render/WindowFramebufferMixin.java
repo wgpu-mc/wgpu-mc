@@ -9,6 +9,7 @@ public class WindowFramebufferMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     private void initSize(int width, int height) {

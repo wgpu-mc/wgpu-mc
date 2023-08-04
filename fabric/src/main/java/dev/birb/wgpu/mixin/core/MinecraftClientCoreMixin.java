@@ -14,8 +14,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import static dev.birb.wgpu.render.Wgpu.wmIdentity;
-
 @Mixin(MinecraftClient.class)
 public abstract class MinecraftClientCoreMixin {
 
@@ -31,21 +29,21 @@ public abstract class MinecraftClientCoreMixin {
     @Inject(method = "getWindowTitle", at = @At(value = "RETURN"), cancellable = true)
     public void getWindowTitleAddWgpu(CallbackInfoReturnable<String> cir) {
         String title = cir.getReturnValue();
-        if(!Wgpu.INITIALIZED) {
+        if (!Wgpu.isInitialized()) {
             title += " + Wgpu";
         } else {
-            if (wmIdentity == null) {
-                wmIdentity = WgpuNative.getBackend();
+            if (Wgpu.getWmIdentity() == null) {
+                Wgpu.setWmIdentity(WgpuNative.getBackend());
             }
-            title += " + " + wmIdentity;
+            title += " + " + Wgpu.getWmIdentity();
         }
         cir.setReturnValue(title);
     }
 
     @Inject(method = "run", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/MinecraftClient;render(Z)V"))
     public void run(CallbackInfo ci) {
-        if(Wgpu.EXCEPTION != null) {
-            CrashReport report = new CrashReport(Wgpu.EXCEPTION.getMessage(), Wgpu.EXCEPTION);
+        if (Wgpu.getException() != null) {
+            CrashReport report = new CrashReport(Wgpu.getException().getMessage(), Wgpu.getException());
             report.addElement("This crash was caused by the Fabric mod Electrum within native Rust code. Please report this crash to the wgpu-mc developers by opening an issue and attaching this crash log at https://github.com/wgpu-mc/wgpu-mc/issues");
             throw new CrashException(report);
         }
@@ -53,6 +51,7 @@ public abstract class MinecraftClientCoreMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public boolean shouldRenderAsync() {
@@ -62,7 +61,7 @@ public abstract class MinecraftClientCoreMixin {
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/resource/ResourceReloadLogger;reload(Lnet/minecraft/client/resource/ResourceReloadLogger$ReloadReason;Ljava/util/List;)V", shift = At.Shift.AFTER))
     public void injectWindowHook(RunArgs args, CallbackInfo ci) {
         //Register blocks
-        Wgpu.MAY_INITIALIZE = true;
+        Wgpu.setMayInitialize(true);
     }
 
 }

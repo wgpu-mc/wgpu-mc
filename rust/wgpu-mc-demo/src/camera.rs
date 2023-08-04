@@ -1,4 +1,4 @@
-use cgmath::{Point3, Transform, Vector3};
+use cgmath::{Point3, Vector3};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {

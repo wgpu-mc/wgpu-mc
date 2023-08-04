@@ -1,22 +1,33 @@
 package dev.birb.wgpu.render;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class GlWmState {
 
-    public static List<WmTexture> generatedTextures = new ArrayList<>();
-    public static HashMap<Integer, Integer> textureSlots = new HashMap<>();
-    public static HashMap<Integer, Integer> pixelStore = new HashMap<>();
+    @Getter
+    private static final List<WmTexture> generatedTextures = new ArrayList<>();
+    @Getter
+    private static final Map<Integer, Integer> textureSlots = new HashMap<>();
+    @Getter
+    private static final Map<Integer, Integer> pixelStore = new HashMap<>();
 
-    public static int activeTexture = 0;
+    @Getter
+    @Setter
+    private static int activeTexture = 0;
 
+    @Getter
+    @Setter
     public static class WmTexture {
-        public ByteBuffer buffer;
-        public int width;
-        public int height;
+        private ByteBuffer buffer;
+        private int width;
+        private int height;
 
         public WmTexture() {
             this(null);
@@ -25,7 +36,5 @@ public class GlWmState {
         public WmTexture(ByteBuffer buffer) {
             this.buffer = buffer;
         }
-
     }
-
 }

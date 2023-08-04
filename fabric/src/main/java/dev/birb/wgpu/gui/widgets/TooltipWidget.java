@@ -9,7 +9,8 @@ import net.minecraft.util.math.MathHelper;
 
 public class TooltipWidget extends Widget {
     private Option<?> option;
-    private double animation, timer;
+    private double animation;
+    private double timer;
 
     public TooltipWidget(int x, int y) {
         super(x, y, OPTION_WIDTH, 0);
@@ -63,6 +64,8 @@ public class TooltipWidget extends Widget {
     }
 
     private Option<?> getHoveredOption(int mouseX, int mouseY) {
+        if (MinecraftClient.getInstance().currentScreen == null) return null;
+
         Element element = MinecraftClient.getInstance().currentScreen.hoveredElement(mouseX, mouseY).orElse(null);
         if (element instanceof IOptionWidget widget) return widget.getOption();
         return null;

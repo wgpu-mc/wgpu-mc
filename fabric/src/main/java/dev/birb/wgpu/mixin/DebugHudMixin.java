@@ -12,10 +12,10 @@ import java.util.List;
 @Mixin(DebugHud.class)
 public class DebugHudMixin {
 
-    @Inject(method = "getRightText", cancellable = true, at = @At("RETURN"))
+    @Inject(method = "getRightText", at = @At("RETURN"))
     public void getRightText(CallbackInfoReturnable<List<String>> cir) {
-        cir.getReturnValue().add("[Electrum] texSubImage2D call count: " + Wgpu.timesTexSubImageCalled);
-        cir.getReturnValue().add("[Electrum] Draw calls: " + Wgpu.timesTexSubImageCalled);
+        cir.getReturnValue().add("[Electrum] texSubImage2D call count: " + Wgpu.getTimesTexSubImageCalled());
+        cir.getReturnValue().add("[Electrum] Draw calls: " + Wgpu.getTimesTexSubImageCalled());
     }
 
 }

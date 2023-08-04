@@ -73,7 +73,7 @@ impl<'a> WmArena<'a> {
             length: RefCell::new(0),
             objects: RefCell::new(Vec::new()),
             heaps: RefCell::new(vec![(heap, capacity)]),
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }
     }
 
@@ -193,10 +193,7 @@ impl<'a> Drop for WmArena<'a> {
             });
 
         self.heaps.take().iter().for_each(|heap| unsafe {
-            dealloc(
-                heap.0 as *mut u8,
-                Layout::from_size_align(heap.1, ALIGN).unwrap(),
-            );
+            dealloc(heap.0, Layout::from_size_align(heap.1, ALIGN).unwrap());
         });
     }
 }

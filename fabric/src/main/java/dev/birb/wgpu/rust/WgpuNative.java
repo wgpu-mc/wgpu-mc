@@ -19,8 +19,8 @@ public class WgpuNative {
     public static void loadWm() {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
-        } catch (Throwable e) {
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -34,7 +34,7 @@ public class WgpuNative {
      * @throws ResourceNotFoundException Library not found in resources
      * @throws IOException               Cannot move library out of Jar
      */
-    public static void load(String name, boolean forceOverwrite) throws ResourceNotFoundException, IOException {
+    public static void load(String name, boolean forceOverwrite) throws IOException {
         name = System.mapLibraryName(name);
         File libDir = new File("lib");
         if (!libDir.exists()) libDir.mkdirs();
@@ -77,9 +77,9 @@ public class WgpuNative {
 
     public static native void setWorldRenderState(boolean render);
 
-    public static native void texImage2D(int textureId, int target, int level, int internalFormat, int width, int height, int border, int format, int _type, long pixels_ptr);
+    public static native void texImage2D(int textureId, int target, int level, int internalFormat, int width, int height, int border, int format, int type, long pixelsPtr);
 
-    public static native void subImage2D(int texId, int target, int level, int offsetX, int offsetY, int width, int height, int format, int _type, int[] pixels, int unpack_pixel_skip_rows, int unpack_skip_pixels, int unpack_skip_rows, int unpack_alignment);
+    public static native void subImage2D(int texId, int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, int[] pixels, int unpackPixelSkipRows, int unpackSkipPixels, int unpackSkipRows, int unpackAlignment);
 
     public static native void submitCommands();
 
@@ -180,7 +180,7 @@ public class WgpuNative {
 
     public static native void setCursorLocked(boolean locked);
 
-    public native static void centerCursor();
+    public static native void centerCursor();
 
     public static native void clearChunks();
     

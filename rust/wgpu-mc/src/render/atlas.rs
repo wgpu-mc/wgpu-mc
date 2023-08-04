@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
@@ -268,8 +267,8 @@ impl Atlas {
             self.image.read().as_raw(),
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(4 * size),
-                rows_per_image: NonZeroU32::new(size),
+                bytes_per_row: Some(4 * size),
+                rows_per_image: Some(size),
             },
             Extent3d {
                 width: size,

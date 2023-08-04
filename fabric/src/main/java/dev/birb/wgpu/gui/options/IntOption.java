@@ -11,9 +11,10 @@ import java.util.function.Supplier;
 
 public class IntOption extends Option<Integer> {
 
-	public static Function<Integer, Text> STANDARD_FORMATTER = integer -> new LiteralText(String.valueOf(integer));
+    public static final Function<Integer, Text> STANDARD_FORMATTER = integer -> new LiteralText(String.valueOf(integer));
 	public final Function<Integer, Text> formatter;
-	public final int min, max;
+    public final int min;
+    public final int max;
 	public final int step;
 
 	public IntOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Integer> getter, Consumer<Integer> setter, int min, int max, int step, Function<Integer, Text> formatter) {
@@ -32,7 +33,8 @@ public class IntOption extends Option<Integer> {
 
     public static class Builder extends Option.Builder<Builder, Integer> {
 		private Function<Integer, Text> formatter = STANDARD_FORMATTER;
-		private int min, max;
+        private int min;
+        private int max;
         private int step = 1;
 
         public Builder setFormatter(Function<Integer, Text> formatter) {

@@ -15,7 +15,7 @@ public class FloatWidget extends Widget implements IOptionWidget {
 	private boolean dragging;
 
 	public FloatWidget(int x, int y, int width, FloatOption option) {
-		super(x, y, width, HEIGHT);
+		super(x, y, width, DEFAULT_HEIGHT);
 
 		this.option = option;
 	}

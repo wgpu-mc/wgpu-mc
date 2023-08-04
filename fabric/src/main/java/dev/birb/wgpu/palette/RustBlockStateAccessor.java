@@ -2,8 +2,8 @@ package dev.birb.wgpu.palette;
 
 public interface RustBlockStateAccessor {
 
-    int getRustBlockStateIndex();
+    int wgpu_mc$getRustBlockStateIndex();
 
-    void setRustBlockStateIndex(int l);
+    void wgpu_mc$setRustBlockStateIndex(int l);
 
 }

@@ -1,5 +1,4 @@
 use arc_swap::ArcSwap;
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use image::GenericImageView;
@@ -71,6 +70,7 @@ impl TextureSamplerView {
             usage: wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
         });
 
         if !bytes.is_empty() {
@@ -84,8 +84,8 @@ impl TextureSamplerView {
                 bytes,
                 wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: NonZeroU32::new(size.width * 4),
-                    rows_per_image: NonZeroU32::new(size.height),
+                    bytes_per_row: Some(size.width * 4),
+                    rows_per_image: Some(size.height),
                 },
                 size,
             );

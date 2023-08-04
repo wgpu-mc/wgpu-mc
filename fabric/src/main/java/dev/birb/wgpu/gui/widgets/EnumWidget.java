@@ -7,14 +7,15 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
 import org.lwjgl.glfw.GLFW;
 
-public class EnumWidget<T extends Enum<?>> extends Widget implements IOptionWidget {
+public class EnumWidget<T extends Enum<T>> extends Widget implements IOptionWidget {
     private final EnumOption<T> option;
 
-    private Text valueName, previousValueName;
+    private Text valueName;
+    private Text previousValueName;
     private double animation;
 
     public EnumWidget(int x, int y, int width, EnumOption<T> option) {
-        super(x, y, width, HEIGHT);
+        super(x, y, width, DEFAULT_HEIGHT);
 
         this.option = option;
         this.valueName = option.formatter.apply(option.get());

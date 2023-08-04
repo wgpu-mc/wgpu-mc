@@ -1,5 +1,6 @@
 package dev.birb.wgpu.mixin.world;
 
+import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.rust.WmChunk;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.network.PacketByteBuf;
@@ -14,15 +15,13 @@ import java.util.function.Consumer;
 
 @Mixin(WorldChunk.class)
 public abstract class WorldChunkMixin {
-
     @Inject(method = "loadFromPacket", at = @At("RETURN"))
     public void loadFromPacket(PacketByteBuf buf, NbtCompound nbt, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfo ci) {
         WmChunk chunk = new WmChunk((WorldChunk) (Object) this);
         try {
             chunk.uploadAndBake();
-//            chunk.bake();
         } catch(ClassCastException e) {
-            e.printStackTrace();
+            WgpuMcMod.LOGGER.error("Could not upload and bake chunk", e);
         }
     }
 

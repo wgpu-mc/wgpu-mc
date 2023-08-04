@@ -1,11 +1,11 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Deg, Matrix3, Matrix4, SquareMatrix, Vector3, Vector4};
+use cgmath::{Deg, Matrix4, Vector3, Vector4};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::mc::resource::ResourceProvider;
-use crate::render::atlas::{Atlas, ATLAS_DIMENSIONS};
+use crate::render::atlas::Atlas;
 use crate::texture::UV;
 
 use super::resource::ResourcePath;
@@ -412,19 +412,19 @@ impl ModelMesh {
                             south: south.map(|_| {[
                                 0,3,1,1,3,2
                             ]}),
-                            west: west.map(|west| {[
+                            west: west.map(|_west| {[
                                 4,7,5,5,7,6
                             ]}),
-                            north: north.map(|north| {[
+                            north: north.map(|_north| {[
                                 9,11,8,10,11,9
                             ]}),
-                            east: east.map(|east| {[
+                            east: east.map(|_east| {[
                                 13,15,12,14,15,13
                             ]}),
-                            up: up.map(|up| {[
+                            up: up.map(|_up| {[
                                 16,17,18,16,18,19
                             ]}),
-                            down: down.map(|down| {[
+                            down: down.map(|_down| {[
                                 22,21,20,20,21,23
                             ]}),
                         };

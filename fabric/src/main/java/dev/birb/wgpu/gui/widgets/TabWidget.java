@@ -9,7 +9,7 @@ import net.minecraft.util.math.MathHelper;
 import java.util.function.BooleanSupplier;
 
 public class TabWidget extends Widget {
-    public static int WIDTH = 120;
+    public static final int WIDTH = 120;
 
     private final OptionPages.Page page;
     private final BooleanSupplier selected;
@@ -17,7 +17,7 @@ public class TabWidget extends Widget {
     private double animation;
 
     public TabWidget(int x, int y, OptionPages.Page page, BooleanSupplier selected) {
-        super(x, y, WIDTH, HEIGHT + 4);
+        super(x, y, WIDTH, DEFAULT_HEIGHT + 4);
 
         this.page = page;
         this.selected = selected;
@@ -26,8 +26,8 @@ public class TabWidget extends Widget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (isMouseOver(mouseX, mouseY)) {
-            ((OptionPageScreen) MinecraftClient.getInstance().currentScreen).setPage(page);
+        if (isMouseOver(mouseX, mouseY) && MinecraftClient.getInstance().currentScreen instanceof OptionPageScreen screen) {
+            screen.setCurrentPage(page);
             playClickSound();
             return true;
         }

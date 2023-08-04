@@ -3,19 +3,27 @@
 //! This is about the rendering pipeline, and implements the logic behind
 //! [shaderpack::ShaderPackConfig].
 
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::Arc;
+
 use arc_swap::ArcSwap;
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::ops::Range;
-use std::sync::Arc;
-
 use treeculler::{BVol, Frustum, Vec3, AABB};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::{
+    BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, Face,
+    FragmentState, FrontFace, LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode,
+    PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline,
+    RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
+    VertexBufferLayout, VertexState,
+};
 
-use crate::mc::chunk::{Chunk, CHUNK_SECTION_HEIGHT, ChunkBuffers, ChunkPos, SECTIONS_PER_CHUNK};
+use crate::mc::chunk::{Chunk, ChunkBuffers, ChunkPos, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK};
 use crate::mc::resource::ResourcePath;
-use crate::render::pipeline::{QuadVertex, Vertex, BLOCK_ATLAS};
+use crate::render::pipeline::{QuadVertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
 use crate::render::shaderpack::{
     LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig,
@@ -25,22 +33,19 @@ use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
-use crate::wgpu::QuerySetDescriptor;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BufferUsages, ColorTargetState, CommandEncoderDescriptor, DepthStencilState, Face, FragmentState, FrontFace, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState};
+pub struct GeometryInfo<'pass, 'resource: 'pass, 'renderer> {
+    pub wm: &'renderer WmRenderer,
+    pub render_pass: &'renderer mut RenderPass<'pass>,
+    pub graph: &'pass ShaderGraph,
+    pub config: &'renderer PipelineConfig,
+    pub resources: &'resource HashMap<String, CustomResource>,
+    pub arena: &'resource WmArena<'resource>,
+    pub surface_config: &'renderer SurfaceConfiguration,
+    pub chunk_offset: ChunkPos,
+}
 
 pub trait GeometryCallback: Send + Sync {
-    fn render<'pass, 'resource: 'pass>(
-        &self,
-        wm: &WmRenderer,
-        pass: &mut RenderPass<'pass>,
-        graph: &'pass ShaderGraph,
-        config: &PipelineConfig,
-        resources: &'resource HashMap<String, CustomResource>,
-        arena: &'resource WmArena<'resource>,
-        surface_config: &SurfaceConfiguration,
-        chunk_offset: ChunkPos,
-    );
+    fn render(&self, info: GeometryInfo);
 }
 
 fn mat3_update(
@@ -129,9 +134,11 @@ pub enum ResourceInternal {
     I64(i64, BindableBuffer),
 }
 
+type UpdateCallback = fn(&CustomResource, &WmRenderer, &HashMap<String, CustomResource>);
+
 pub struct CustomResource {
     //If this resource is updated each frame, this is what needs to be called
-    pub update: Option<fn(&Self, &WmRenderer, &HashMap<String, CustomResource>)>,
+    pub update: Option<UpdateCallback>,
     pub data: Arc<ResourceInternal>,
 }
 
@@ -283,11 +290,7 @@ impl ShaderGraph {
                                             }
                                         } else {
                                             layouts
-                                                .get(
-                                                    resource_types
-                                                        .get(uniform)
-                                                        .expect(uniform),
-                                                )
+                                                .get(resource_types.get(uniform).expect(uniform))
                                                 .unwrap()
                                         }
                                     })
@@ -313,12 +316,8 @@ impl ShaderGraph {
                         "wm_geo_terrain" => None,
                         "wm_geo_quad" => Some([QuadVertex::desc()]),
                         _ => {
-                            if let Some(additional_geometry) =
-                                &mut additional_geometry
-                            {
-                                Some([additional_geometry
-                                    .remove(&definition.geometry)
-                                    .unwrap()])
+                            if let Some(additional_geometry) = &mut additional_geometry {
+                                Some([additional_geometry.remove(&definition.geometry).unwrap()])
                             } else {
                                 unimplemented!("Unknown geometry");
                             }
@@ -336,8 +335,8 @@ impl ShaderGraph {
                                     entry_point: "vert",
                                     buffers: match &vertex_buffer {
                                         None => &[],
-                                        Some(buffer) => buffer
-                                    }
+                                        Some(buffer) => buffer,
+                                    },
                                 },
                                 primitive: PrimitiveState {
                                     topology: PrimitiveTopology::TriangleList,
@@ -391,7 +390,7 @@ impl ShaderGraph {
                 _ => unimplemented!("{}", self.pack.support),
             });
 
-        self.resources.extend(resources.into_iter());
+        self.resources.extend(resources);
     }
 
     /// Matches on the definition, inserting the resource depending on which variant it is.
@@ -687,9 +686,9 @@ impl ShaderGraph {
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
 
-        let mut query_index = 0;
-
-        for (name, config) in &self.pack.pipelines.pipelines {
+        for (_query_index, (name, config)) in
+            (&self.pack.pipelines.pipelines).into_iter().enumerate()
+        {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
                 color_attachments: &config
@@ -699,17 +698,16 @@ impl ShaderGraph {
                         let resource_definition = self.pack.resources.resources.get(texture_name);
 
                         //TODO: If the texture resource is defined as being cleared after each frame. Should use a HashMap to replace the should_clear_depth variable
-                        let _clear = match resource_definition {
+                        let _clear = matches!(
+                            resource_definition,
                             Some(&ShorthandResourceConfig::Longhand(LonghandResourceConfig {
-                                typed:
-                                    TypeResourceConfig::Texture2d {
-                                        clear_after_frame: true,
-                                        ..
-                                    },
+                                typed: TypeResourceConfig::Texture2d {
+                                    clear_after_frame: true,
+                                    ..
+                                },
                                 ..
-                            })) => true,
-                            _ => false,
-                        };
+                            }))
+                        );
 
                         Some(RenderPassColorAttachment {
                             view: match &texture_name[..] {
@@ -760,7 +758,6 @@ impl ShaderGraph {
                 }),
             });
 
-            query_index += 1;
             render_pass.set_pipeline(self.pipelines.get(name).unwrap());
 
             match &config.geometry[..] {
@@ -769,7 +766,7 @@ impl ShaderGraph {
                     let chunks = wm.mc.chunks.loaded_chunks.read();
 
                     for layer in &**layers {
-                        for (_pos, chunk_swap) in &*chunks {
+                        for (_pos, chunk_swap) in chunks.iter() {
                             let chunk = arena.alloc(chunk_swap.load());
                             let buffers = arena.alloc(chunk.buffers.load_full());
                             let sections = chunk.sections.read();
@@ -780,7 +777,12 @@ impl ShaderGraph {
                                     (section_index * CHUNK_SECTION_HEIGHT) as f32,
                                     ((chunk.pos[1] + chunk_offset[1]) * 16) as f32,
                                 );
-                                let max = min + Vec3::new(16.0, ((section_index + 1) * CHUNK_SECTION_HEIGHT) as f32, 16.0);
+                                let max = min
+                                    + Vec3::new(
+                                        16.0,
+                                        ((section_index + 1) * CHUNK_SECTION_HEIGHT) as f32,
+                                        16.0,
+                                    );
 
                                 let aabb = AABB::<f32>::new(min, max);
 
@@ -790,17 +792,23 @@ impl ShaderGraph {
 
                                 let baked_layer = match sections.get(layer.name()) {
                                     None => continue,
-                                    Some(section) => &section[section_index]
+                                    Some(section) => &section[section_index],
                                 };
 
-                                bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, (*buffers).as_ref().as_ref());
+                                bind_uniforms(
+                                    config,
+                                    &resource_borrow,
+                                    &arena,
+                                    &mut render_pass,
+                                    (*buffers).as_ref().as_ref(),
+                                );
                                 set_push_constants(
                                     config,
                                     &mut render_pass,
                                     Some(chunk),
                                     surface_config,
                                     chunk_offset,
-                                    section_index
+                                    section_index,
                                 );
 
                                 render_pass.draw(baked_layer.clone(), 0..1);
@@ -817,27 +825,27 @@ impl ShaderGraph {
                         None,
                         surface_config,
                         chunk_offset,
-                        0
+                        0,
                     );
 
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
                     render_pass.set_vertex_buffer(0, self.quad.as_ref().unwrap().slice(..));
                     render_pass.draw(0..6, 0..1);
-                },
+                }
 
                 _ => {
                     if let Some(geo) = self.geometry.get(&config.geometry) {
                         render_pass.set_pipeline(self.pipelines.get(name).unwrap());
-                        geo.render(
+                        geo.render(GeometryInfo {
                             wm,
-                            &mut render_pass,
-                            self,
+                            render_pass: &mut render_pass,
+                            graph: self,
                             config,
-                            &self.resources,
-                            &arena,
+                            resources: &self.resources,
+                            arena: &arena,
                             surface_config,
                             chunk_offset,
-                        );
+                        });
                     } else {
                         unimplemented!("Unknown geometry {}", &config.geometry);
                     }
@@ -854,18 +862,26 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
     resources: &'resource HashMap<&String, &'resource CustomResource>,
     arena: &WmArena<'pass>,
     render_pass: &mut RenderPass<'pass>,
-    chunk_buffers: Option<&'pass ChunkBuffers>
+    chunk_buffers: Option<&'pass ChunkBuffers>,
 ) {
     for (index, resource_name) in &config.uniforms {
         match &resource_name[..] {
             "wm_ssbo_chunk_vertices" => {
-                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().vertex_buffer.bind_group, &[]);
+                render_pass.set_bind_group(
+                    *index as u32,
+                    &chunk_buffers.unwrap().vertex_buffer.bind_group,
+                    &[],
+                );
                 continue;
-            },
+            }
             "wm_ssbo_chunk_indices" => {
-                render_pass.set_bind_group(*index as u32, &chunk_buffers.unwrap().index_buffer.bind_group, &[]);
+                render_pass.set_bind_group(
+                    *index as u32,
+                    &chunk_buffers.unwrap().index_buffer.bind_group,
+                    &[],
+                );
                 continue;
-            },
+            }
             _ => {}
         }
 
@@ -897,7 +913,7 @@ pub fn set_push_constants(
     chunk: Option<&Chunk>,
     surface_config: &SurfaceConfiguration,
     chunk_offset: ChunkPos,
-    section_y: usize
+    section_y: usize,
 ) {
     pipeline
         .push_constants
