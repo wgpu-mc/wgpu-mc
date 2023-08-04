@@ -7,24 +7,20 @@
 //! Minecraft splits chunks into 16-block tall pieces called chunk sections, for
 //! rendering purposes.
 
-use arc_swap::ArcSwap;
-use parking_lot::{Mutex, RwLock};
-
 use std::collections::HashMap;
 use std::fmt::Debug;
-
 use std::ops::Range;
-
 use std::sync::Arc;
 
-use wgpu::{BufferUsages};
+use arc_swap::ArcSwap;
+use parking_lot::{Mutex, RwLock};
+use wgpu::BufferUsages;
 
 use crate::mc::block::{
     BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
 };
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
-
 use crate::util::BindableBuffer;
 use crate::{WgpuState, WmRenderer};
 

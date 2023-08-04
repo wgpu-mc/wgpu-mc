@@ -5,7 +5,7 @@ use minecraft_assets::schemas;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::mc::resource::ResourceProvider;
-use crate::render::atlas::{Atlas};
+use crate::render::atlas::Atlas;
 use crate::texture::UV;
 
 use super::resource::ResourcePath;

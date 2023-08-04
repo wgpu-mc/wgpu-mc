@@ -5,7 +5,7 @@ use wgpu_mc::mc::entity::{
     PartTransform,
 };
 use wgpu_mc::mc::resource::ResourcePath;
-use wgpu_mc::render::atlas::{Atlas};
+use wgpu_mc::render::atlas::Atlas;
 use wgpu_mc::WmRenderer;
 
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, EntityInstances) {
