@@ -5,6 +5,7 @@ import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.main.Main;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -12,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Main.class)
 public class MainMixin {
-
+    @Unique
     private static boolean directorySent = false;
 
     @Inject(method = "main", at = @At("HEAD"))
@@ -28,11 +29,11 @@ public class MainMixin {
         }
 
         //Block until the game is initialized enough for wgpu-mc to kick in
-        while (!Wgpu.MAY_INITIALIZE) {
+        while (!Wgpu.isMayInitialize()) {
             try {
                 Thread.sleep(50);
             } catch (InterruptedException e) {
-                Thread.interrupted();
+                Thread.currentThread().interrupt();
             }
         }
 

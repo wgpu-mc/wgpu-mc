@@ -10,10 +10,11 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class FloatOption extends Option<Double> {
-	public static Function<Double, Text> STANDARD_FORMATTER = fl -> new LiteralText(String.valueOf(fl));
-	public final double min, max;
+	public static final Function<Double, Text> STANDARD_FORMATTER = fl -> new LiteralText(String.valueOf(fl));
+	public final double min;
+	public final double max;
 	public final double step;
-	public Function<Double, Text> formatter;
+	public final Function<Double, Text> formatter;
 
 	public FloatOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Double> getter, Consumer<Double> setter, double min, double max, double step, Function<Double, Text> formatter) {
 		super(name, tooltip, requiresRestart, getter, setter);
@@ -31,7 +32,8 @@ public class FloatOption extends Option<Double> {
 
 	public static class Builder extends Option.Builder<FloatOption.Builder, Double> {
 		private Function<Double, Text> formatter = STANDARD_FORMATTER;
-		private double min, max;
+		private double min;
+		private double max;
 		private double step = 1;
 
 		public FloatOption.Builder setFormatter(Function<Double, Text> formatter) {

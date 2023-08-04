@@ -3,30 +3,17 @@ package dev.birb.wgpu.gui;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import dev.birb.wgpu.gui.options.BoolOption;
-import dev.birb.wgpu.gui.options.EnumOption;
-import dev.birb.wgpu.gui.options.IntOption;
 import dev.birb.wgpu.gui.options.Option;
-import dev.birb.wgpu.gui.options.RustOptionInfo;
+import dev.birb.wgpu.gui.options.*;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.AoMode;
-import net.minecraft.client.option.AttackIndicator;
-import net.minecraft.client.option.CloudRenderMode;
-import net.minecraft.client.option.GameOptions;
-import net.minecraft.client.option.GraphicsMode;
-import net.minecraft.client.option.ParticlesMode;
+import net.minecraft.client.option.*;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 public class OptionPages implements Iterable<OptionPages.Page> {
 	private static final TypeToken<Map<String, RustOptionInfo>> SETTINGS_STRUCTURE_TYPE_TOKEN = new TypeToken<>() {
@@ -159,7 +146,7 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 				.setAccessors(() -> options.bobView, aBoolean -> options.bobView = aBoolean)
 				.build()
 		);
-		page.add(new EnumOption.Builder<AttackIndicator>()
+		page.add(new EnumOption.Builder<>(AttackIndicator.class)
 				.setName(new TranslatableText("options.attackIndicator"))
 				.setAccessors(() -> options.attackIndicator, attackIndicator -> options.attackIndicator = attackIndicator)
 				.setFormatter(attackIndicator -> new TranslatableText(attackIndicator.getTranslationKey()))
@@ -195,7 +182,7 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 		GameOptions options = mc.options;
 
 		// 1
-		page.add(new EnumOption.Builder<GraphicsMode>()
+		page.add(new EnumOption.Builder<>(GraphicsMode.class)
 				.setName(new TranslatableText("options.graphics"))
 				.setAccessors(() -> options.graphicsMode, graphicsMode -> {
 					options.graphicsMode = graphicsMode;
@@ -207,19 +194,19 @@ public class OptionPages implements Iterable<OptionPages.Page> {
 
 		// 2
 		page.space();
-		page.add(new EnumOption.Builder<CloudRenderMode>()
+		page.add(new EnumOption.Builder<>(CloudRenderMode.class)
 				.setName(new TranslatableText("options.renderClouds"))
 				.setAccessors(() -> options.cloudRenderMode, cloudRenderMode -> options.cloudRenderMode = cloudRenderMode)
 				.setFormatter(cloudRenderMode -> new TranslatableText(cloudRenderMode.getTranslationKey()))
 				.build()
 		);
-		page.add(new EnumOption.Builder<ParticlesMode>()
+		page.add(new EnumOption.Builder<>(ParticlesMode.class)
 				.setName(new TranslatableText("options.particles"))
 				.setAccessors(() -> options.particles, particlesMode -> options.particles = particlesMode)
 				.setFormatter(particlesMode -> new TranslatableText(particlesMode.getTranslationKey()))
 				.build()
 		);
-		page.add(new EnumOption.Builder<AoMode>()
+		page.add(new EnumOption.Builder<>(AoMode.class)
 				.setName(new TranslatableText("options.ao"))
 				.setAccessors(() -> options.ao, aoMode -> {
 					options.ao = aoMode;

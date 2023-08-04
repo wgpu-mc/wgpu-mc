@@ -90,12 +90,12 @@ public class WidgetRenderer extends DrawableHelper {
 
     private void drawText(String text, float x, float y, int color) {
         VertexConsumerProvider.Immediate immediate = VertexConsumerProvider.immediate(Tessellator.getInstance().getBuffer());
-        ((TextRendererAccessor) textRenderer()).electrum_drawLayer(text, x, y, color, false, MATRIX, immediate, false, 0, LightmapTextureManager.MAX_LIGHT_COORDINATE);
+        textRenderer().drawLayer(text, x, y, color, false, MATRIX, immediate, false, 0, LightmapTextureManager.MAX_LIGHT_COORDINATE);
         immediate.draw();
     }
     private void drawText(OrderedText text, float x, float y, int color) {
         VertexConsumerProvider.Immediate immediate = VertexConsumerProvider.immediate(Tessellator.getInstance().getBuffer());
-        ((TextRendererAccessor) textRenderer()).electrum_drawLayer(text, x, y, color, false, MATRIX, immediate, false, 0, LightmapTextureManager.MAX_LIGHT_COORDINATE);
+        textRenderer().drawLayer(text, x, y, color, false, MATRIX, immediate, false, 0, LightmapTextureManager.MAX_LIGHT_COORDINATE);
         immediate.draw();
     }
 

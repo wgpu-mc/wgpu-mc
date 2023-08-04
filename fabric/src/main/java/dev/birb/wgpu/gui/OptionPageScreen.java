@@ -2,6 +2,7 @@ package dev.birb.wgpu.gui;
 
 import dev.birb.wgpu.gui.options.Option;
 import dev.birb.wgpu.gui.widgets.*;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.util.math.MatrixStack;
@@ -18,7 +19,7 @@ public class OptionPageScreen extends Screen {
     private final Screen parent;
 
     private final OptionPages pages;
-    private OptionPages.Page page;
+    private OptionPages.Page currentPage;
     private double animation;
 
     private final List<Widget> widgets = new ArrayList<>();
@@ -27,21 +28,22 @@ public class OptionPageScreen extends Screen {
 
     private TooltipWidget tooltipWidget;
 
-    private int previousWidth, previousHeight;
+    private int previousWidth;
+    private int previousHeight;
 
     public OptionPageScreen(Screen parent) {
         super(new LiteralText("Options"));
 
         this.parent = parent;
         this.pages = new OptionPages();
-        this.page = pages.getDefault();
+        this.currentPage = pages.getDefault();
         this.animation = 1;
     }
 
-    public void setPage(OptionPages.Page page) {
-        if (this.page == page) return;
+    public void setCurrentPage(OptionPages.Page currentPage) {
+        if (this.currentPage == currentPage) return;
 
-        this.page = page;
+        this.currentPage = currentPage;
 
         previousOptionWidgets.clear();
         previousOptionWidgets.addAll(optionWidgets);
@@ -70,10 +72,10 @@ public class OptionPageScreen extends Screen {
 
         int width = getOptimalWidth();
 
-        for (List<Option<?>> group : page) {
+        for (List<Option<?>> group : currentPage) {
             for (Option<?> option : group) {
                 add(option.createWidget(alignX(x), y, width - x - 8));
-                y += Widget.HEIGHT;
+                y += Widget.DEFAULT_HEIGHT;
             }
 
             y += 4;
@@ -94,7 +96,7 @@ public class OptionPageScreen extends Screen {
 
         // Tabs
         for (OptionPages.Page page : pages) {
-            y += add(new TabWidget(alignX(x), y, page, () -> page == this.page)).height;
+            y += add(new TabWidget(alignX(x), y, page, () -> page == this.currentPage)).height;
         }
 
         // Tooltip
@@ -102,7 +104,7 @@ public class OptionPageScreen extends Screen {
 
         // Buttons in bottom right
         x = width - 8;
-        y = height - 8 - Widget.HEIGHT;
+        y = height - 8 - Widget.DEFAULT_HEIGHT;
         int w = 100;
 
         add(new CustomButtonWidget(alignX(x - w), y, () -> new LiteralText(pages.isChanged() ? "Apply and close" : "Close"), w, () -> true, () -> {
@@ -113,7 +115,7 @@ public class OptionPageScreen extends Screen {
     }
 
     private int getOptimalWidth() {
-        return Math.min(this.width, (int) (MAX_WIDTH / client.getWindow().getScaleFactor()));
+        return Math.min(this.width, (int) (MAX_WIDTH / MinecraftClient.getInstance().getWindow().getScaleFactor()));
     }
 
     private int alignX(int x) {
@@ -179,6 +181,6 @@ public class OptionPageScreen extends Screen {
 
     @Override
     public void onClose() {
-        client.setScreen(parent);
+        MinecraftClient.getInstance().setScreen(parent);
     }
 }

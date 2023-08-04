@@ -8,9 +8,6 @@ import net.minecraft.client.util.Window;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.io.InputStream;
 import java.util.Optional;
@@ -23,6 +20,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void setVsync(boolean vsync) {
@@ -31,6 +29,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void setRawMouseMotion(boolean rawMouseMotion) {
@@ -39,6 +38,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void logOnGlError() {
@@ -47,6 +47,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void setIcon(InputStream icon16, InputStream icon32) {
@@ -55,6 +56,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public boolean shouldClose() {
@@ -64,6 +66,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int getRefreshRate() {
@@ -73,6 +76,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void swapBuffers() {
@@ -81,22 +85,25 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int getWidth() {
-        return Wgpu.INITIALIZED ? Wgpu.windowWidth : 1280;
+        return Wgpu.isInitialized() ? Wgpu.getWindowWidth() : 1280;
     }
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int getHeight() {
-        return Wgpu.INITIALIZED ? Wgpu.windowHeight : 720;
+        return Wgpu.isInitialized() ? Wgpu.getWindowHeight() : 720;
     }
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int getFramebufferWidth() {
@@ -105,6 +112,7 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int getFramebufferHeight() {
@@ -113,45 +121,48 @@ public class WindowMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int getScaledWidth() {
-        return (int) ((double)this.getWidth() / this.scaleFactor);
+        return (int) (this.getWidth() / this.scaleFactor);
     }
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int getScaledHeight() {
-        return (int) ((double)this.getHeight() / this.scaleFactor);
+        return (int) (this.getHeight() / this.scaleFactor);
     }
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void setWindowedSize(int width, int height) {
         //TODO
-        //WgpuNative.setWindowedSize(width, height);
     }
 
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public int calculateScaleFactor(int guiScale, boolean forceUnicodeFont) {
-        if(guiScale < 1) return 1;
-        return guiScale;
+        return Math.max(guiScale, 1);
     }
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public Optional<VideoMode> getVideoMode() {
-        if(Wgpu.INITIALIZED) {
+        if (Wgpu.isInitialized()) {
             return VideoMode.fromString(WgpuNative.getVideoMode());
         } else {
             return VideoMode.fromString("1920x1080@60:8");

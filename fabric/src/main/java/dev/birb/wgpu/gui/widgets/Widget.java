@@ -11,7 +11,7 @@ import net.minecraft.util.math.ColorHelper;
 
 public abstract class Widget implements Element, Selectable {
     public static final int OPTION_WIDTH = 200;
-    public static final int HEIGHT = 21;
+    public static final int DEFAULT_HEIGHT = 21;
 
     protected static final int BG = getColor(0, 0, 0, 125);
     protected static final int BG_HOVERED = getColor(0, 0, 0, 175);
@@ -19,10 +19,12 @@ public abstract class Widget implements Element, Selectable {
     protected static final int ACCENT = getColor(225, 220, 144, 255);
     protected static final int RED = getColor(225, 25, 25, 255);
 
-    public int x, y;
-    public int width, height;
+    public int x;
+    public int y;
+    public int width;
+    public int height;
 
-    public Widget(int x, int y, int width, int height) {
+    protected Widget(int x, int y, int width, int height) {
         this.x = x;
         this.y = y;
         this.width = width;

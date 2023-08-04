@@ -3,13 +3,13 @@ package dev.birb.wgpu.mixin.render;
 import net.minecraft.client.gl.Framebuffer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
-import org.spongepowered.asm.mixin.injection.Inject;
 
 @Mixin(Framebuffer.class)
 public class FramebufferMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void resize(int width, int height, boolean getError) {
@@ -18,6 +18,7 @@ public class FramebufferMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void draw(int width, int height) {
@@ -26,6 +27,7 @@ public class FramebufferMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void delete() {
@@ -43,6 +45,7 @@ public class FramebufferMixin {
 
     /**
      * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
      */
     @Overwrite
     public void checkFramebufferStatus() {

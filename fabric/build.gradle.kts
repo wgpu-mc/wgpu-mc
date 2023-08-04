@@ -1,6 +1,9 @@
 plugins {
     id("fabric-loom") version "1.3-SNAPSHOT"
+    id("io.github.juuxel.loom-vineflower") version "1.11.0"
+
     id("fr.stardustenterprises.rust.importer") version "2.1.0"
+    id("io.freefair.lombok") version "8.1.0"
 }
 base {
     val archivesBaseName: String by project

@@ -1,11 +1,11 @@
-use byteorder::LittleEndian;
-use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
 use std::{slice, thread};
 use std::{sync::Arc, time::Instant};
 
+use byteorder::LittleEndian;
+use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use futures::executor::block_on;
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint};
@@ -161,7 +161,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     env.set_static_field(
         "dev/birb/wgpu/render/Wgpu",
-        ("dev/birb/wgpu/render/Wgpu", "INITIALIZED", "Z"),
+        ("dev/birb/wgpu/render/Wgpu", "initialized", "Z"),
         JValue::Bool(true.into()),
     )
     .unwrap();
