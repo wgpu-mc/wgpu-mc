@@ -4,9 +4,9 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import dev.birb.wgpu.render.GlWmState;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
-import net.minecraft.util.math.Matrix4f;
-import net.minecraft.util.math.Vec3f;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
@@ -565,7 +565,7 @@ public class GlStateManagerMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite(remap = false)
-    public static void setupLevelDiffuseLighting(Vec3f vec3f, Vec3f vec3f2, Matrix4f matrix4f) {
+    public static void setupLevelDiffuseLighting(Vector3f vec3f, Vector3f vec3f2, Matrix4f matrix4f) {
     }
 
     /**
@@ -573,7 +573,7 @@ public class GlStateManagerMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite(remap = false)
-    public static void setupGuiFlatDiffuseLighting(Vec3f vec3f, Vec3f vec3f2) {
+    public static void setupGuiFlatDiffuseLighting(Vector3f vec3f, Vector3f vec3f2) {
     }
 
     /**
@@ -581,7 +581,7 @@ public class GlStateManagerMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite(remap = false)
-    public static void setupGui3DDiffuseLighting(Vec3f vec3f, Vec3f vec3f2) {
+    public static void setupGui3DDiffuseLighting(Vector3f vec3f, Vector3f vec3f2) {
     }
 
     /**
@@ -675,22 +675,6 @@ public class GlStateManagerMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite(remap = false)
-    public static void _enableTexture() {
-    }
-
-    /**
-     * @author wgpu-mc
-     * @reason replaced with wgpu equivalent
-     */
-    @Overwrite(remap = false)
-    public static void _disableTexture() {
-    }
-
-    /**
-     * @author wgpu-mc
-     * @reason replaced with wgpu equivalent
-     */
-    @Overwrite(remap = false)
     public static void _texParameter(int target, int pname, float param) {
     }
 
@@ -756,15 +740,6 @@ public class GlStateManagerMixin {
     @Overwrite(remap = false)
     public static void _bindTexture(int texture) {
         GlWmState.getTextureSlots().put(GlWmState.getActiveTexture(), texture);
-    }
-
-    /**
-     * @author wgpu-mc
-     * @reason replaced with wgpu equivalent
-     */
-    @Overwrite(remap = false)
-    public static int _getTextureId(int texture) {
-        return GlWmState.getTextureSlots().get(texture);
     }
 
     /**

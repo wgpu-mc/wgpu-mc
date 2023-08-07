@@ -1,6 +1,8 @@
 package dev.birb.wgpu.gui.widgets;
 
 import dev.birb.wgpu.gui.WidgetRenderer;
+import lombok.Getter;
+import lombok.Setter;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.Selectable;
@@ -23,6 +25,9 @@ public abstract class Widget implements Element, Selectable {
     public int y;
     public int width;
     public int height;
+    @Getter
+    @Setter
+    private boolean focused;
 
     protected Widget(int x, int y, int width, int height) {
         this.x = x;

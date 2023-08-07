@@ -4,28 +4,18 @@ import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import it.unimi.dsi.fastutil.floats.FloatStack;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawableHelper;
-import net.minecraft.client.render.LightmapTextureManager;
-import net.minecraft.client.render.Tessellator;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.OrderedText;
 import net.minecraft.text.StringVisitable;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.ColorHelper;
-import net.minecraft.util.math.Matrix4f;
 
-public class WidgetRenderer extends DrawableHelper {
-    private static final MatrixStack MATRICES = new MatrixStack();
-    private static final Matrix4f MATRIX = new Matrix4f();
-
-    static {
-        MATRIX.loadIdentity();
-    }
-
+public class WidgetRenderer {
+    private final DrawContext context;
     private final FloatStack alphaStack = new FloatArrayList();
 
-    public WidgetRenderer() {
+    public WidgetRenderer(DrawContext context) {
+        this.context = context;
         alphaStack.push(1);
     }
 
@@ -38,7 +28,7 @@ public class WidgetRenderer extends DrawableHelper {
     }
 
     public void rect(int x1, int y1, int x2, int y2, int color) {
-        fill(MATRICES, x1, y1, x2, y2, applyAlpha(color));
+        context.fill(x1, y1, x2, y2, applyAlpha(color));
     }
 
     public void text(String text, int x, int y, int color) {
@@ -88,15 +78,12 @@ public class WidgetRenderer extends DrawableHelper {
         );
     }
 
-    private void drawText(String text, float x, float y, int color) {
-        VertexConsumerProvider.Immediate immediate = VertexConsumerProvider.immediate(Tessellator.getInstance().getBuffer());
-        textRenderer().drawLayer(text, x, y, color, false, MATRIX, immediate, false, 0, LightmapTextureManager.MAX_LIGHT_COORDINATE);
-        immediate.draw();
+    private void drawText(String text, int x, int y, int color) {
+        context.drawText(textRenderer(), text, x, y, color, false);
     }
-    private void drawText(OrderedText text, float x, float y, int color) {
-        VertexConsumerProvider.Immediate immediate = VertexConsumerProvider.immediate(Tessellator.getInstance().getBuffer());
-        textRenderer().drawLayer(text, x, y, color, false, MATRIX, immediate, false, 0, LightmapTextureManager.MAX_LIGHT_COORDINATE);
-        immediate.draw();
+
+    private void drawText(OrderedText text, int x, int y, int color) {
+        context.drawText(textRenderer(), text, x, y, color, false);
     }
 
     private TextRenderer textRenderer() {

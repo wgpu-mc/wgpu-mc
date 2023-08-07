@@ -3,13 +3,14 @@ package dev.birb.wgpu.mixin.render;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.util.Icons;
 import net.minecraft.client.util.VideoMode;
 import net.minecraft.client.util.Window;
+import net.minecraft.resource.ResourcePack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 
-import java.io.InputStream;
 import java.util.Optional;
 
 @Mixin(Window.class)
@@ -50,7 +51,7 @@ public class WindowMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite
-    public void setIcon(InputStream icon16, InputStream icon32) {
+    public void setIcon(ResourcePack resourcePack, Icons icons) {
 
     }
 

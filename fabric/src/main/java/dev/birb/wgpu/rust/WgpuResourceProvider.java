@@ -6,6 +6,7 @@ import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 
 import java.io.IOException;
+import java.util.NoSuchElementException;
 
 public class WgpuResourceProvider {
 
@@ -16,9 +17,9 @@ public class WgpuResourceProvider {
     public static byte[] getResource(String path) {
         try {
             return WgpuNative.digestInputStream(
-                manager.getResource(new Identifier(path)).getInputStream()
+                    manager.getResource(new Identifier(path)).orElseThrow().getInputStream()
             );
-        } catch(IOException e) {
+        } catch (IOException | NoSuchElementException e) {
             return new byte[0];
         }
     }

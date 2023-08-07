@@ -5,13 +5,13 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.client.util.math.Vector3d;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.math.Matrix4f;
+import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.Vec3f;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
+import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -77,7 +77,7 @@ public abstract class WorldRendererMixin {
     }
 
     @Inject(method = "render", cancellable = true, at = @At("HEAD"))
-    public void render(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f positionMatrix, CallbackInfo ci) {
+    public void render(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f projectionMatrix, CallbackInfo ci) {
         Frustum currentFrustum;
         if (this.capturedFrustum != null) {
             currentFrustum = this.capturedFrustum;
@@ -98,10 +98,10 @@ public abstract class WorldRendererMixin {
         if(player != null) {
             Vec3d translate = camera.getPos();
 
-            stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_X.getDegreesQuaternion(camera.getPitch()));
-            stack.peek().getPositionMatrix().multiply(Vec3f.POSITIVE_Y.getDegreesQuaternion(camera.getYaw() + 180.0f));
+            stack.multiplyPositionMatrix(new Matrix4f().rotation(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch())));
+            stack.multiplyPositionMatrix(new Matrix4f().rotation(RotationAxis.POSITIVE_Y.rotationDegrees(camera.getYaw() + 180.0f)));
 
-            stack.peek().getPositionMatrix().multiply(Matrix4f.translate(
+            stack.multiplyPositionMatrix(new Matrix4f().translation(
                     (float) -translate.x,
                     (float) -translate.y - 64.0f,
                     (float) -translate.z
@@ -110,7 +110,7 @@ public abstract class WorldRendererMixin {
 
         FloatBuffer floatBuffer = FloatBuffer.allocate(16);
         float[] out = new float[16];
-        stack.peek().getPositionMatrix().writeColumnMajor(floatBuffer);
+        stack.peek().getPositionMatrix().get(floatBuffer);
         floatBuffer.get(out);
 
         WgpuNative.setMatrix(0, out);

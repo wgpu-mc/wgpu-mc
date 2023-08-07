@@ -3,6 +3,7 @@ package dev.birb.wgpu.gui.options;
 import com.google.gson.*;
 import dev.birb.wgpu.gui.OptionPages;
 import dev.birb.wgpu.gui.widgets.Widget;
+import net.minecraft.client.option.SimpleOption;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -57,9 +58,7 @@ public abstract class Option<T> {
 
     public Text getName() {
         if (isChanged()) {
-            MutableText name = this.name.copy();
-            name.append(" *").formatted(Formatting.ITALIC);
-            return name;
+            return name.copy().append(" *").formatted(Formatting.ITALIC);
         }
 
         return name;
@@ -94,6 +93,23 @@ public abstract class Option<T> {
             return (B) this;
         }
 
+        // Simple wrapper around minecraft 1.19's SimpleOption, to be reflected on how to handle for wgpu-mc's config
+        public B setOption(SimpleOption<T> option, Consumer<T> callback) {
+            this.getter = option::getValue;
+            this.setter = v -> {
+                option.setValue(v);
+                callback.accept(v);
+            };
+
+            return (B) this;
+        }
+
+        public B setOption(SimpleOption<T> option) {
+            this.getter = option::getValue;
+            this.setter = option::setValue;
+            return (B) this;
+        }
+
         public abstract Option<T> build();
     }
 
@@ -107,7 +123,7 @@ public abstract class Option<T> {
             switch (typeString) {
                 case "bool" -> {
                     boolean value = jsonObject.get("value").getAsJsonPrimitive().getAsBoolean();
-                    return new BoolOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(), () -> value, bool -> {
+                    return new BoolOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> value, bool -> {
                     });
                 }
                 case "float" -> {
@@ -116,7 +132,7 @@ public abstract class Option<T> {
                     double max = jsonObject.get("max").getAsJsonPrimitive().getAsDouble();
                     double step = jsonObject.get("step").getAsJsonPrimitive().getAsDouble();
 
-                    return new FloatOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(), () -> value, i -> {
+                    return new FloatOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> value, i -> {
                     }, min, max, step, FloatOption.STANDARD_FORMATTER);
                 }
                 case "int" -> {
@@ -125,12 +141,12 @@ public abstract class Option<T> {
                     int max = jsonObject.get("max").getAsJsonPrimitive().getAsInt();
                     int step = jsonObject.get("step").getAsJsonPrimitive().getAsInt();
 
-                    return new IntOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(), () -> value, i -> {
+                    return new IntOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> value, i -> {
                     }, min, max, step, IntOption.STANDARD_FORMATTER);
                 }
                 case "enum" -> {
                     int selected = jsonObject.get("selected").getAsJsonPrimitive().getAsInt();
-                    return new TextEnumOption(Text.of(name), Text.of(structure.getDesc()), structure.needsRestart(), () -> selected, i -> {
+                    return new TextEnumOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> selected, i -> {
                     }, structure.getVariants());
                 }
                 default -> throw new JsonParseException("Unexpected value: " + typeString);
@@ -159,7 +175,7 @@ public abstract class Option<T> {
             JsonObject root = new JsonObject();
 
             for (Option<?> option : src) {
-                root.add(option.name.asString(), serializeOption(option));
+                root.add(option.name.getString(), serializeOption(option));
             }
 
             return root;
