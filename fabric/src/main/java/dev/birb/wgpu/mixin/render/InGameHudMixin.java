@@ -1,5 +1,6 @@
 package dev.birb.wgpu.mixin.render;
 
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -11,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class InGameHudMixin {
 
     @Inject(method = "renderVignetteOverlay", cancellable = true, at = @At("HEAD"))
-    public void pleaseDoNotTheVignette(Entity entity, CallbackInfo ci) {
+    public void pleaseDoNotTheVignette(DrawContext context, Entity entity, CallbackInfo ci) {
         ci.cancel();
     }
 
