@@ -20,7 +20,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.nio.FloatBuffer;
 import java.util.Objects;
 
 @Mixin(WorldRenderer.class)
@@ -108,10 +107,8 @@ public abstract class WorldRendererMixin {
             ));
         }
 
-        FloatBuffer floatBuffer = FloatBuffer.allocate(16);
         float[] out = new float[16];
-        stack.peek().getPositionMatrix().get(floatBuffer);
-        floatBuffer.get(out);
+        stack.peek().getPositionMatrix().get(out);
 
         WgpuNative.setMatrix(0, out);
 

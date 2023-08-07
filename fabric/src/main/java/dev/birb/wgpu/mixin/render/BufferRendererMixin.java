@@ -8,7 +8,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 
 @Mixin(BufferRenderer.class)
 public class BufferRendererMixin {
@@ -17,7 +16,7 @@ public class BufferRendererMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite
-    public static void draw(BufferBuilder.BuiltBuffer builtBuffer) {
+    private static void drawWithGlobalProgramInternal(BufferBuilder.BuiltBuffer builtBuffer) {
         ByteBuffer buffer = builtBuffer.getVertexBuffer();
         BufferBuilder.DrawParameters parameters = builtBuffer.getParameters();
 
@@ -47,13 +46,11 @@ public class BufferRendererMixin {
 
         mat.mul(mat1);
 
-        FloatBuffer floatBuffer = FloatBuffer.allocate(16);
         float[] out = new float[16];
-        mat.get(floatBuffer);
-        floatBuffer.get(out);
+        mat.get(out);
         WgpuNative.setProjectionMatrix(out);
 
-        int count = parameters.indexCount();
+        int count = parameters.vertexCount();
         byte[] bytes = new byte[count * vertexFormat.getVertexSizeByte()];
         buffer.get(bytes);
 
@@ -76,6 +73,8 @@ public class BufferRendererMixin {
         } else if (parameters.mode() == VertexFormat.DrawMode.TRIANGLES) {
             WgpuNative.draw(parameters.vertexCount());
         }
+
+        builtBuffer.release();
     }
 
 }
