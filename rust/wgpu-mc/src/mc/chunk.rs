@@ -39,8 +39,6 @@ pub const CHUNK_SECTION_HEIGHT: usize = 16;
 pub const SECTIONS_PER_CHUNK: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
-pub const CHUNK_ALLOCATOR_SIZE: usize = 1024 * 1024 * 1024;
-
 pub type ChunkPos = [i32; 2];
 
 pub struct ChunkManager {

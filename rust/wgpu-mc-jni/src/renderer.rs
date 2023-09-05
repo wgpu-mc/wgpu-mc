@@ -64,6 +64,10 @@ impl RenderLayer for TerrainLayer {
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
         |vert, x, y, z, light| {
+            // if light.get_block_level() != 0 {
+            //     println!("{x} {y} {z}");
+            // }
+
             Vertex {
                 position: [
                     vert.position[0] + x,

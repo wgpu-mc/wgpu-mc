@@ -93,7 +93,7 @@ fn vert(
 }
 
 fn minecraft_sample_lighting(uv: vec2<u32> ) -> f32 {
-    return f32(min(uv.x + uv.y, 15u)) / 15.0;
+    return f32(min(uv.x, uv.y)) / 15.0;
 }
 
 @fragment
