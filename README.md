@@ -46,7 +46,7 @@ Minecraft
 - [x] Terrain rendering
     - [ ] Lighting integration
     - [x] Chunk updates
-- [ ] Integrate entities (being worked on)
+- [x] Integrate entities (Bugged but mostly works)
 - [ ] Item rendering
 - [ ] Implement FRAPI/FREX
 - [ ] Particles
