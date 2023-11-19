@@ -34,3 +34,9 @@ classes/
 target/
 
 *.log
+
+# direnv
+.direnv/
+
+# nix
+result
