@@ -1,9 +1,9 @@
 package dev.birb.wgpu.rust;
 
-import net.minecraft.resource.ResourceNotFoundException;
 import net.minecraft.util.collection.IndexedIterable;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -31,8 +31,8 @@ public class WgpuNative {
      *
      * @param name           Library to load
      * @param forceOverwrite Force overwrite the library file
-     * @throws ResourceNotFoundException Library not found in resources
-     * @throws IOException               Cannot move library out of Jar
+     * @throws FileNotFoundException Library not found in resources
+     * @throws IOException           Cannot move library out of Jar
      */
     public static void load(String name, boolean forceOverwrite) throws IOException {
         name = System.mapLibraryName(name);
@@ -41,7 +41,7 @@ public class WgpuNative {
         File object = new File("lib", name);
         if (forceOverwrite || !object.exists()) {
             InputStream is = WgpuNative.class.getClassLoader().getResourceAsStream("META-INF/natives/" + name);
-            if (is == null) throw new ResourceNotFoundException(object, "Could not find lib " + name + " in jar");
+            if (is == null) throw new FileNotFoundException("Could not find lib " + name + " in jar");
 
             Files.copy(is, object.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
@@ -128,12 +128,12 @@ public class WgpuNative {
     public static native long createPaletteStorage(long[] copy, int elementsPerLong, int elementBits, long maxValue, int indexScale, int indexOffset, int indexShift, int size);
 
     public static long uploadIdList(IndexedIterable<Object> idList) {
-        if(!idLists.containsKey(idList)) {
+        if (!idLists.containsKey(idList)) {
             long rustIdList = createIdList();
 
             idLists.put(idList, rustIdList);
 
-            for(Object entry : idList) {
+            for (Object entry : idList) {
                 int id = idList.getRawId(entry);
                 addIdListEntry(rustIdList, id, entry);
             }
@@ -183,5 +183,5 @@ public class WgpuNative {
     public static native void centerCursor();
 
     public static native void clearChunks();
-    
+
 }

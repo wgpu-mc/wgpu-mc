@@ -2,7 +2,6 @@ package dev.birb.wgpu.gui.options;
 
 import dev.birb.wgpu.gui.widgets.IntWidget;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 
 import java.util.function.Consumer;
@@ -11,7 +10,7 @@ import java.util.function.Supplier;
 
 public class IntOption extends Option<Integer> {
 
-    public static final Function<Integer, Text> STANDARD_FORMATTER = integer -> new LiteralText(String.valueOf(integer));
+    public static final Function<Integer, Text> STANDARD_FORMATTER = integer -> Text.of(String.valueOf(integer));
 	public final Function<Integer, Text> formatter;
     public final int min;
     public final int max;

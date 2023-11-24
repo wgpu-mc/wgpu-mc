@@ -4,7 +4,6 @@ import dev.birb.wgpu.gui.WidgetRenderer;
 import dev.birb.wgpu.gui.options.IntOption;
 import dev.birb.wgpu.gui.options.Option;
 import net.minecraft.client.util.TextCollector;
-import net.minecraft.text.LiteralText;
 import net.minecraft.text.StringVisitable;
 import net.minecraft.text.Text;
 import net.minecraft.util.Language;
@@ -83,7 +82,7 @@ public class IntWidget extends Widget implements IOptionWidget {
         else renderer.text(option.getName(), x + 6, centerTextY(renderer), WHITE);
 
         // Value
-        Text valueText = hovered ? new LiteralText(String.valueOf(option.get())) : option.formatter.apply(option.get());
+        Text valueText = hovered ? Text.of(String.valueOf(option.get())) : option.formatter.apply(option.get());
         renderer.text(valueText, alignRight(renderer.textWidth(valueText), hovered ? halfWidth : width), centerTextY(renderer), WHITE);
 
         if (hovered) {

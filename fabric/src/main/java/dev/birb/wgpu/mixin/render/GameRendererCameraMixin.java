@@ -3,6 +3,9 @@ package dev.birb.wgpu.mixin.render;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.resource.ResourceFactory;
 import net.minecraft.resource.ResourceManager;
+import net.minecraft.resource.ResourceReloader;
+import net.minecraft.resource.SinglePreparationResourceReloader;
+import net.minecraft.util.profiler.Profiler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
@@ -14,7 +17,7 @@ public abstract class GameRendererCameraMixin {
      * @reason do no such thing
      */
     @Overwrite
-    public void preloadShaders(ResourceFactory factory) {
+    public void preloadPrograms(ResourceFactory factory) {
 
     }
 
@@ -23,7 +26,18 @@ public abstract class GameRendererCameraMixin {
      * @reason do no such thing
      */
     @Overwrite
-    public void reload(ResourceManager manager) {
-    }
+    public ResourceReloader createProgramReloader() {
+        // created just not to make it null, I wouldn't want minecraft to explode because of this
+        return new SinglePreparationResourceReloader<>() {
+            @Override
+            protected Object prepare(ResourceManager manager, Profiler profiler) {
+                return null;
+            }
 
+            @Override
+            protected void apply(Object prepared, ResourceManager manager, Profiler profiler) {
+
+            }
+        };
+    }
 }

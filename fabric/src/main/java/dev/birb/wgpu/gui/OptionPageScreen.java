@@ -3,17 +3,16 @@ package dev.birb.wgpu.gui;
 import dev.birb.wgpu.gui.options.Option;
 import dev.birb.wgpu.gui.widgets.*;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.LiteralText;
+import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class OptionPageScreen extends Screen {
-    private static final WidgetRenderer RENDERER = new WidgetRenderer();
     private static final int MAX_WIDTH = 1000;
 
     private final Screen parent;
@@ -32,7 +31,7 @@ public class OptionPageScreen extends Screen {
     private int previousHeight;
 
     public OptionPageScreen(Screen parent) {
-        super(new LiteralText("Options"));
+        super(Text.of("Options"));
 
         this.parent = parent;
         this.pages = new OptionPages();
@@ -92,7 +91,7 @@ public class OptionPageScreen extends Screen {
         int x = 8;
         int y = 8;
 
-        y += add(new TextWidget(alignX(x), y, width - 16, new LiteralText("Video Options"))).height + 8;
+        y += add(new TextWidget(alignX(x), y, width - 16, Text.of("Video Options"))).height + 8;
 
         // Tabs
         for (OptionPages.Page page : pages) {
@@ -107,11 +106,11 @@ public class OptionPageScreen extends Screen {
         y = height - 8 - Widget.DEFAULT_HEIGHT;
         int w = 100;
 
-        add(new CustomButtonWidget(alignX(x - w), y, () -> new LiteralText(pages.isChanged() ? "Apply and close" : "Close"), w, () -> true, () -> {
+        add(new CustomButtonWidget(alignX(x - w), y, () -> Text.of(pages.isChanged() ? "Apply and close" : "Close"), w, () -> true, () -> {
             pages.apply();
-            onClose();
+            close();
         }));
-        add(new CustomButtonWidget(alignX(x - w - 4 - w), y, () -> new LiteralText("Undo"), w, pages::isChanged, pages::undo));
+        add(new CustomButtonWidget(alignX(x - w - 4 - w), y, () -> Text.of("Undo"), w, pages::isChanged, pages::undo));
     }
 
     private int getOptimalWidth() {
@@ -138,8 +137,8 @@ public class OptionPageScreen extends Screen {
     }
 
     @Override
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        renderBackground(matrices);
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        renderBackground(context);
 
         var optionWidget = getHoveredOptionWidget(mouseX, mouseY);
         if (optionWidget != null) {
@@ -151,17 +150,18 @@ public class OptionPageScreen extends Screen {
         delta /= 20;
         animation = MathHelper.clamp(animation + delta * 6, 0, 1);
 
+        WidgetRenderer renderer = new WidgetRenderer(context);
         if (animation < 1) {
-            RENDERER.pushAlpha(1 - animation);
-            for (Widget widget : previousOptionWidgets) widget.render(RENDERER, mouseX, mouseY, delta);
-            RENDERER.popAlpha();
+            renderer.pushAlpha(1 - animation);
+            for (Widget widget : previousOptionWidgets) widget.render(renderer, mouseX, mouseY, delta);
+            renderer.popAlpha();
         }
 
-        RENDERER.pushAlpha(animation);
-        for (Widget widget : optionWidgets) widget.render(RENDERER, mouseX, mouseY, delta);
-        RENDERER.popAlpha();
+        renderer.pushAlpha(animation);
+        for (Widget widget : optionWidgets) widget.render(renderer, mouseX, mouseY, delta);
+        renderer.popAlpha();
 
-        for (Widget widget : widgets) widget.render(RENDERER, mouseX, mouseY, delta);
+        for (Widget widget : widgets) widget.render(renderer, mouseX, mouseY, delta);
     }
 
     @Override
@@ -180,7 +180,7 @@ public class OptionPageScreen extends Screen {
     }
 
     @Override
-    public void onClose() {
+    public void close() {
         MinecraftClient.getInstance().setScreen(parent);
     }
 }

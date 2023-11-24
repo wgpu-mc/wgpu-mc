@@ -2,7 +2,6 @@ package dev.birb.wgpu.gui.options;
 
 import dev.birb.wgpu.gui.widgets.EnumWidget;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
@@ -45,7 +44,7 @@ public class EnumOption<T extends Enum<T>> extends Option<T> {
     }
 
     public static class Builder<T extends Enum<T>> extends Option.Builder<Builder<T>, T> {
-        private Function<T, Text> formatter = t -> new LiteralText(t.toString());
+        private Function<T, Text> formatter = t -> Text.of(t.toString());
         private final Class<T> enumClass;
 
         public Builder(Class<T> enumClass) {

@@ -2,7 +2,6 @@ package dev.birb.wgpu.gui.options;
 
 import dev.birb.wgpu.gui.widgets.FloatWidget;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 
 import java.util.function.Consumer;
@@ -10,7 +9,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class FloatOption extends Option<Double> {
-	public static final Function<Double, Text> STANDARD_FORMATTER = fl -> new LiteralText(String.valueOf(fl));
+	public static final Function<Double, Text> STANDARD_FORMATTER = fl -> Text.of(String.valueOf(fl));
 	public final double min;
 	public final double max;
 	public final double step;

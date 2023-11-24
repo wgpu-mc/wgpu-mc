@@ -30,7 +30,7 @@
   "depends": {
     "fabricloader": ">=0.13",
     "fabric": "*",
-    "minecraft": "1.18.1"
+    "minecraft": "1.20.1"
   },
   "custom": {
     "fabric-renderer-api-v1:contains_renderer": "true"

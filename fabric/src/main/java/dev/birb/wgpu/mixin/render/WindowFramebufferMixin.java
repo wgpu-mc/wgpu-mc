@@ -12,7 +12,7 @@ public class WindowFramebufferMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite
-    private void initSize(int width, int height) {
+    private void init(int width, int height) {
     }
 
 }
