@@ -1,8 +1,10 @@
 use core::fmt::Debug;
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 use std::io::Cursor;
 use std::num::NonZeroUsize;
 use std::slice;
+use fxhash::{FxBuildHasher, FxHasher32, FxHashMap};
 
 use jni::objects::{GlobalRef, JByteArray, JClass, JLongArray, JObject, JValue, ReleaseMode};
 use jni::sys::{jint, jlong, jobject};
@@ -92,7 +94,7 @@ impl DebugPalette {
 #[derive(Clone)]
 pub struct JavaPalette {
     pub store: Vec<(GlobalRef, BlockstateKey)>,
-    pub indices: HashMap<BlockstateKey, usize>,
+    pub indices: HashMap<BlockstateKey, usize, BuildHasherDefault<FxHasher32>>,
     pub id_list: NonZeroUsize,
 }
 
@@ -100,7 +102,7 @@ impl JavaPalette {
     pub fn new(id_list: NonZeroUsize) -> Self {
         Self {
             store: Vec::with_capacity(5),
-            indices: HashMap::new(),
+            indices: HashMap::<_, _, BuildHasherDefault<FxHasher32>>::default(),
             id_list,
         }
     }

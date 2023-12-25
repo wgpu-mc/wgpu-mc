@@ -1,7 +1,7 @@
 //! Serde implementation of the [shaderpack specification](https://github.com/wgpu-mc/shader-spec)
 
 use linked_hash_map::LinkedHashMap;
-use serde_derive::*;
+use serde::Deserialize;
 
 /// semver
 pub const CONFIG_VERSION: &str = "v0.0.1";

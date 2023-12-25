@@ -38,7 +38,7 @@ public abstract class MouseMixin {
     @Overwrite
     public void lockCursor() {
         this.cursorLocked = true;
-        WgpuNative.setCursorLocked(true);
+//        WgpuNative.setCursorLocked(true);
     }
 
     /**
@@ -48,7 +48,7 @@ public abstract class MouseMixin {
     @Overwrite
     public void unlockCursor() {
         this.cursorLocked = false;
-        WgpuNative.setCursorLocked(false);
+//        WgpuNative.setCursorLocked(false);
     }
 
 }

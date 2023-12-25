@@ -29,9 +29,6 @@ use raw_window_handle::{
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
-use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton};
-use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
@@ -61,7 +58,6 @@ mod settings;
 enum RenderMessage {
     SetTitle(String),
     KeyPressed(u32),
-    MouseState(ElementState, MouseButton),
     KeyState(u32, u32, u32, u32),
     CharTyped(char, u32),
     MouseMove(f64, f64),
@@ -84,7 +80,6 @@ struct MouseState {
 
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
-static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
 type Task = Box<dyn FnOnce() + Send + Sync>;
@@ -186,31 +181,6 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         }
 
         self.center.sections[index].is_none()
-    }
-}
-
-struct WinitWindowWrapper<'a> {
-    window: &'a Window,
-}
-
-impl HasWindowSize for WinitWindowWrapper<'_> {
-    fn get_window_size(&self) -> WindowSize {
-        WindowSize {
-            width: self.window.inner_size().width,
-            height: self.window.inner_size().height,
-        }
-    }
-}
-
-unsafe impl HasRawWindowHandle for WinitWindowWrapper<'_> {
-    fn raw_window_handle(&self) -> RawWindowHandle {
-        self.window.raw_window_handle()
-    }
-}
-
-unsafe impl HasRawDisplayHandle for WinitWindowWrapper<'_> {
-    fn raw_display_handle(&self) -> RawDisplayHandle {
-        self.window.raw_display_handle()
     }
 }
 
@@ -411,6 +381,8 @@ pub fn bake_chunk(x: i32, z: i32) {
             let _instant = Instant::now();
 
             chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+
+            println!("{}", Instant::now().duration_since(_instant).as_millis());
         }
     });
 }
@@ -438,8 +410,8 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) {
-    renderer::start_rendering(env, title);
+pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) -> jlong {
+    renderer::start_rendering(env, title)
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -560,128 +532,6 @@ pub fn runHelperThread(mut env: JNIEnv, _class: JClass) {
             task()
         }
     });
-
-    let rx = &CHANNELS.1;
-
-    for render_message in rx.iter() {
-        match render_message {
-            RenderMessage::SetTitle(title) => WINDOW.get().unwrap().set_title(&title),
-            RenderMessage::KeyPressed(_) => {}
-            RenderMessage::MouseMove(x, y) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "mouseMove",
-                    "(DD)V",
-                    &[JValue::Double(x), JValue::Double(y)],
-                )
-                .unwrap();
-            }
-            RenderMessage::CursorMove(x, y) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "cursorMove",
-                    "(DD)V",
-                    &[JValue::Double(x), JValue::Double(y)],
-                )
-                .unwrap();
-            }
-            RenderMessage::MouseState(element_state, mouse_button) => {
-                let button = match mouse_button {
-                    MouseButton::Left => 0,
-                    MouseButton::Right => 1,
-                    MouseButton::Middle => 2,
-                    MouseButton::Other(_) => 0,
-                };
-
-                let action = match element_state {
-                    ElementState::Pressed => 1,
-                    ElementState::Released => 0,
-                };
-
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "mouseAction",
-                    "(II)V",
-                    &[JValue::Int(button), JValue::Int(action)],
-                )
-                .unwrap();
-            }
-            RenderMessage::Resized(width, height) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "onResize",
-                    "(II)V",
-                    &[JValue::Int(width as i32), JValue::Int(height as i32)],
-                )
-                .unwrap();
-            }
-            RenderMessage::KeyState(key, scancode, action, modifiers) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "keyState",
-                    "(IIII)V",
-                    &[
-                        JValue::Int(key as i32),
-                        JValue::Int(scancode as i32),
-                        JValue::Int(action as i32),
-                        JValue::Int(modifiers as i32),
-                    ],
-                )
-                .unwrap();
-            }
-            RenderMessage::CharTyped(ch, modifiers) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "onChar",
-                    "(II)V",
-                    &[JValue::Int(ch as i32), JValue::Int(modifiers as i32)],
-                )
-                .unwrap();
-            }
-            RenderMessage::Focused(focused) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "windowFocused",
-                    "(Z)V",
-                    &[JValue::Bool(if focused { JNI_TRUE } else { JNI_FALSE })],
-                )
-                .unwrap();
-            }
-        };
-    }
-}
-
-#[allow(unused_must_use)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn centerCursor(_env: JNIEnv, _class: JClass, _locked: jboolean) {
-    if let Some(window) = WINDOW.get() {
-        let inner = window.inner_position().unwrap();
-        let size = window.inner_size();
-        window
-            .set_cursor_position(PhysicalPosition::new(
-                inner.x + (size.width as i32 / 2),
-                inner.y + (size.height as i32 / 2),
-            ))
-            .unwrap();
-    }
-}
-
-#[allow(unused_must_use)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
-    if let Some(window) = WINDOW.get() {
-        window.set_cursor_grab(match locked {
-            JNI_TRUE => {
-                window.set_cursor_visible(false);
-                CursorGrabMode::Confined
-            }
-            JNI_FALSE => {
-                window.set_cursor_visible(true);
-                CursorGrabMode::None
-            }
-            _ => unreachable!(),
-        });
-    }
 }
 
 #[allow(unused_must_use)]
@@ -749,16 +599,6 @@ pub fn digestInputStream(mut env: JNIEnv, _class: JClass, input_stream: JObject)
     }
 
     bytes.as_raw()
-}
-
-#[allow(unused_must_use)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn updateWindowTitle(mut env: JNIEnv, _class: JClass, jtitle: JString) {
-    let tx = &CHANNELS.0;
-
-    let title: String = env.get_string(&jtitle).unwrap().into();
-
-    tx.send(RenderMessage::SetTitle(title));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1002,27 +842,6 @@ pub fn wmUsePipeline(_env: JNIEnv, _class: JClass, pipeline: jint) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn getVideoMode(env: JNIEnv, _class: JClass) -> jstring {
-    let video_mode = WINDOW
-        .get()
-        .unwrap()
-        .current_monitor()
-        .unwrap()
-        .video_modes()
-        .find(|_| true)
-        .unwrap();
-    env.new_string(format!(
-        "{}x{}@{}:{}",
-        video_mode.size().width,
-        video_mode.size().height,
-        video_mode.refresh_rate_millihertz() / 1000,
-        video_mode.bit_depth()
-    ))
-    .unwrap()
-    .into_raw()
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setProjectionMatrix(mut env: JNIEnv, _class: JClass, float_array: JFloatArray) {
     let elements: AutoElements<jfloat> =
         unsafe { env.get_array_elements(&float_array, ReleaseMode::NoCopyBack) }.unwrap();
@@ -1115,59 +934,6 @@ pub fn addIdListEntry(
             .map
             .insert(index, env.new_global_ref(object).unwrap())
     };
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCursorPosition(_env: JNIEnv, _class: JClass, x: f64, y: f64) {
-    WINDOW
-        .get()
-        .unwrap()
-        .set_cursor_position(PhysicalPosition { x, y })
-        .unwrap();
-}
-
-const GLFW_CURSOR_NORMAL: i32 = 212993;
-const GLFW_CURSOR_HIDDEN: i32 = 212994;
-const GLFW_CURSOR_DISABLED: i32 = 212995;
-
-/// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
-    match mode {
-        GLFW_CURSOR_NORMAL => {
-            WINDOW
-                .get()
-                .unwrap()
-                .set_cursor_grab(CursorGrabMode::None)
-                .unwrap();
-            WINDOW.get().unwrap().set_cursor_visible(true);
-        }
-        GLFW_CURSOR_HIDDEN => {
-            WINDOW
-                .get()
-                .unwrap()
-                .set_cursor_grab(CursorGrabMode::None)
-                .unwrap();
-            WINDOW.get().unwrap().set_cursor_visible(false);
-        }
-        GLFW_CURSOR_DISABLED => {
-            WINDOW
-                .get()
-                .unwrap()
-                .set_cursor_grab(CursorGrabMode::Confined)
-                .or_else(|_e| {
-                    WINDOW
-                        .get()
-                        .unwrap()
-                        .set_cursor_grab(CursorGrabMode::Locked)
-                })
-                .unwrap();
-            WINDOW.get().unwrap().set_cursor_visible(false);
-        }
-        _ => {
-            log::warn!("Set cursor mode had an invalid mode.")
-        }
-    }
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

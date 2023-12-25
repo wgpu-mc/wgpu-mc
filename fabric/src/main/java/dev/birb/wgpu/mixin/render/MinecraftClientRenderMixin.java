@@ -36,6 +36,8 @@ public abstract class MinecraftClientRenderMixin {
     private Window redirectWindow(WindowProvider windowProvider, WindowSettings settings, String videoMode, String title) throws InstantiationException {
         //Warning, zero-initialized!
         Window window = (Window) Wgpu.getUnsafe().allocateInstance(Window.class);
+        assert WgpuNative.WINDOW != 0;
+        window.handle = WgpuNative.WINDOW;
         window.width = 1280;
         window.height = 720;
 

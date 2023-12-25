@@ -161,13 +161,13 @@ public class WindowMixin {
      * @author wgpu-mc
      * @reason replaced with wgpu equivalent
      */
-    @Overwrite
-    public Optional<VideoMode> getVideoMode() {
-        if (Wgpu.isInitialized()) {
-            return VideoMode.fromString(WgpuNative.getVideoMode());
-        } else {
-            return VideoMode.fromString("1920x1080@60:8");
-        }
-    }
+//    @Overwrite
+//    public Optional<VideoMode> getVideoMode() {
+//        if (Wgpu.isInitialized()) {
+//            return VideoMode.fromString(WgpuNative.getVideoMode());
+//        } else {
+//            return VideoMode.fromString("1920x1080@60:8");
+//        }
+//    }
 
 }

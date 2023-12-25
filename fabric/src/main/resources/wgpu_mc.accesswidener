@@ -41,3 +41,5 @@ extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
 
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
+mutable field net/minecraft/client/util/Window handle J
+accessible field net/minecraft/client/util/Window handle J

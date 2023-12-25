@@ -23,7 +23,7 @@ public class InputUtilMixin {
      */
     @Overwrite
     public static void setCursorParameters(long handler, int inputModeValue, double x, double y) {
-        WgpuNative.setCursorPosition(x, y);
-        WgpuNative.setCursorMode(inputModeValue);
+//        WgpuNative.setCursorPosition(x, y);
+//        WgpuNative.setCursorMode(inputModeValue);
     }
 }

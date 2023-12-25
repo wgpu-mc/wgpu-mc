@@ -98,12 +98,12 @@ impl WmRenderer {
     ///
     /// This takes in a raw window handle and returns a [WgpuState], which is then used to
     /// initialize a [WmRenderer].
-    pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(
+    pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle>(
         window: &W,
+        width: u32,
+        height: u32,
         _vsync: bool,
     ) -> WgpuState {
-        let size = window.get_window_size();
-
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             dx12_shader_compiler: wgpu::Dx12Compiler::default(),
@@ -142,8 +142,8 @@ impl WmRenderer {
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8Unorm,
-            width: size.width,
-            height: size.height,
+            width,
+            height,
             present_mode: if surface_caps.present_modes.contains(&PresentMode::Immediate) {
                 PresentMode::Immediate
             } else {
@@ -165,7 +165,10 @@ impl WmRenderer {
             adapter,
             device,
             queue,
-            size: Some(ArcSwap::new(Arc::new(size))),
+            size: Some(ArcSwap::new(Arc::new(WindowSize {
+                width,
+                height,
+            }))),
         }
     }
 

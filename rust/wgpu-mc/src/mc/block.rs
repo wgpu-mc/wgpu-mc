@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use cgmath::{Deg, Matrix4, Vector3, Vector4};
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;

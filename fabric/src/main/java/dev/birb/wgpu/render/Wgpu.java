@@ -71,7 +71,7 @@ public class Wgpu {
     public static void startRendering() {
         if (!initialized) {
             linkRenderDoc();
-            WgpuNative.startRendering("Minecraft");
+            WgpuNative.WINDOW = WgpuNative.startRendering("Minecraft");
         } else {
             throw new IllegalStateException("wgpu-mc has already been initialized");
         }

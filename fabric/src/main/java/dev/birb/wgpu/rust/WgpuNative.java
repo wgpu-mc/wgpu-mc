@@ -12,6 +12,8 @@ import java.util.HashMap;
 
 public class WgpuNative {
 
+    public static volatile long WINDOW;
+
     static {
         loadWm();
     }
@@ -61,11 +63,9 @@ public class WgpuNative {
 
     public static native int getTextureId(String identifier);
 
-    public static native void startRendering(String title);
+    public static native long startRendering(String title);
 
     public static native void setPanicHook();
-
-    public static native void updateWindowTitle(String title);
 
     public static native void registerBlockState(Object state, String blockId, String stateKey);
 
@@ -111,8 +111,6 @@ public class WgpuNative {
 
     public static native void runHelperThread();
 
-    public static native String getVideoMode();
-
     public static native long createPalette(long idList);
 
     public static native void destroyPalette(long rustPalettePointer);
@@ -148,10 +146,6 @@ public class WgpuNative {
 
     private static native void addIdListEntry(long idList, int id, Object object);
 
-    public static native void setCursorPosition(double x, double y);
-
-    public static native void setCursorMode(int mode);
-
     public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, int[] blockstateOffsets);
 
     public static native void registerBlock(String name);
@@ -175,12 +169,7 @@ public class WgpuNative {
     public static native void debugBake();
 
     public static native void setMatrix(int type, float[] mat);
-
     public static native void setChunkOffset(int x, int z);
-
-    public static native void setCursorLocked(boolean locked);
-
-    public static native void centerCursor();
 
     public static native void clearChunks();
 

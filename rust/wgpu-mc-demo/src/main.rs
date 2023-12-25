@@ -100,7 +100,7 @@ fn main() {
         .join("assets")
         .join("minecraft");
 
-    let wgpu_state = block_on(WmRenderer::init_wgpu(&wrapper, false));
+    let wgpu_state = block_on(WmRenderer::init_wgpu(&wrapper, 100, 100, false));
 
     let wm = WmRenderer::new(wgpu_state, rsp);
 

@@ -22,7 +22,6 @@ public abstract class MinecraftClientCoreMixin {
 
     @Inject(method = "updateWindowTitle", at = @At("HEAD"), cancellable = true)
     public void modifyUpdateWindowTitle(CallbackInfo ci) {
-        WgpuNative.updateWindowTitle(this.getWindowTitle());
         ci.cancel();
     }
 
