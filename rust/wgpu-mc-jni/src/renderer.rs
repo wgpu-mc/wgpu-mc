@@ -368,7 +368,10 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                             for c in s.chars() {
                                 CHANNELS
                                     .0
-                                    .send(RenderMessage::CharTyped(c, current_modifiers.bits()))
+                                    .send(RenderMessage::CharTyped(
+                                        c,
+                                        modifiers_to_glfw(current_modifiers),
+                                    ))
                                     .unwrap();
                             }
                         }
@@ -391,7 +394,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                             ElementState::Pressed => 1,  // GLFW_PRESS
                                             ElementState::Released => 0, // GLFW_RELEASE
                                         },
-                                        current_modifiers.bits(),
+                                        modifiers_to_glfw(current_modifiers),
                                     ))
                                     .unwrap();
                             }
@@ -543,4 +546,27 @@ fn keycode_to_glfw(code: KeyCode) -> u32 {
         KeyCode::ContextMenu => 348,
         _ => 0,
     }
+}
+
+fn modifiers_to_glfw(state: ModifiersState) -> u32 {
+    if state.is_empty() {
+        return 0;
+    }
+
+    let mut mods = 0;
+
+    if state.shift_key() {
+        mods |= 1;
+    }
+    if state.control_key() {
+        mods |= 2;
+    }
+    if state.alt_key() {
+        mods |= 4;
+    }
+    if state.super_key() {
+        mods |= 8;
+    }
+
+    mods
 }
