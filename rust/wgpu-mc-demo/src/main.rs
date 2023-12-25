@@ -24,8 +24,9 @@ use wgpu_mc::util::BindableBuffer;
 
 use wgpu_mc::wgpu::BufferUsages;
 use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
-use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
+use winit::event_loop::EventLoop;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use crate::chunk::make_chunks;
@@ -76,7 +77,7 @@ unsafe impl HasRawDisplayHandle for WinitWindowWrapper {
 fn main() {
     env_logger::init();
 
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let title = "wgpu-mc test";
     let window = winit::window::WindowBuilder::new()
         .with_title(title)
@@ -282,144 +283,138 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
     graph.init(&wm, None, None);
 
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
-        match event {
-            Event::MainEventsCleared => window.request_redraw(),
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == window.id() => {
-                match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::KeyboardInput { input, .. } => match input {
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Space),
-                            ..
-                        } => {
-                            //Update a block and re-generate the chunk mesh for testing
+    event_loop
+        .run(move |event, target| {
+            match event {
+                Event::AboutToWait => window.request_redraw(),
+                Event::WindowEvent {
+                    ref event,
+                    window_id,
+                } if window_id == window.id() => {
+                    match event {
+                        WindowEvent::CloseRequested => target.exit(),
+                        WindowEvent::KeyboardInput { event, .. } => match event {
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::Space),
+                                ..
+                            } => {
+                                //Update a block and re-generate the chunk mesh for testing
 
-                            //removed atm
+                                //removed atm
+                            }
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::Escape),
+                                ..
+                            } => target.exit(),
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::KeyW),
+                                ..
+                            } => {
+                                forward = 1.0;
+                            }
+                            KeyEvent {
+                                state: ElementState::Released,
+                                physical_key: PhysicalKey::Code(KeyCode::KeyW),
+                                ..
+                            } => {
+                                forward = 0.0;
+                            }
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::KeyS),
+                                ..
+                            } => {
+                                forward = -1.0;
+                            }
+                            KeyEvent {
+                                state: ElementState::Released,
+                                physical_key: PhysicalKey::Code(KeyCode::KeyS),
+                                ..
+                            } => {
+                                forward = 0.0;
+                            }
+                            _ => {}
+                        },
+                        WindowEvent::Resized(physical_size) => {
+                            wm.resize(WindowSize {
+                                width: physical_size.width,
+                                height: physical_size.height,
+                            });
                         }
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                            ..
-                        } => {
-                            *control_flow = ControlFlow::Exit;
-                        }
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::W),
-                            ..
-                        } => {
-                            forward = 1.0;
-                        }
-                        KeyboardInput {
-                            state: ElementState::Released,
-                            virtual_keycode: Some(VirtualKeyCode::W),
-                            ..
-                        } => {
-                            forward = 0.0;
-                        }
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::S),
-                            ..
-                        } => {
-                            forward = -1.0;
-                        }
-                        KeyboardInput {
-                            state: ElementState::Released,
-                            virtual_keycode: Some(VirtualKeyCode::S),
-                            ..
-                        } => {
-                            forward = 0.0;
+                        WindowEvent::RedrawRequested => {
+                            let frame_time =
+                                Instant::now().duration_since(frame_start).as_secs_f32();
+
+                            camera.position += camera.get_direction() * forward * frame_time * 40.0;
+
+                            {
+                                *projection_matrix.write() = camera.build_perspective_matrix();
+                                *view_matrix.write() = camera.build_view_matrix();
+                                *rotation_matrix.write() = camera.build_rotation_matrix();
+                            }
+
+                            let proj_mat: Mat4 = camera.build_perspective_matrix().into();
+                            let view_mat: Mat4 = camera.build_view_matrix().into();
+                            let rot_mat: Mat4 = camera.build_rotation_matrix().into();
+
+                            wm.wgpu_state.queue.write_buffer(
+                                &projection_bindable.buffer,
+                                0,
+                                bytemuck::cast_slice(&proj_mat),
+                            );
+
+                            wm.wgpu_state.queue.write_buffer(
+                                &view_bindable.buffer,
+                                0,
+                                bytemuck::cast_slice(&view_mat),
+                            );
+
+                            wm.wgpu_state.queue.write_buffer(
+                                &rotation_bindable.buffer,
+                                0,
+                                bytemuck::cast_slice(&rot_mat),
+                            );
+
+                            _spin += 0.5;
+                            _frame += 1;
+
+                            let surface_state = wm.wgpu_state.surface.read();
+                            let surface = surface_state.0.as_ref().unwrap();
+                            let texture = surface.get_current_texture().unwrap();
+                            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+                                label: None,
+                                format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                                dimension: Some(wgpu::TextureViewDimension::D2),
+                                aspect: Default::default(),
+                                base_mip_level: 0,
+                                mip_level_count: None,
+                                base_array_layer: 0,
+                                array_layer_count: None,
+                            });
+
+                            let _ = wm.render(&graph, &view, &surface_state.1);
+
+                            texture.present();
+
+                            frame_start = Instant::now();
                         }
                         _ => {}
-                    },
-                    WindowEvent::Resized(physical_size) => {
-                        wm.resize(WindowSize {
-                            width: physical_size.width,
-                            height: physical_size.height,
-                        });
                     }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        wm.resize(WindowSize {
-                            width: new_inner_size.width,
-                            height: new_inner_size.height,
-                        });
-                    }
-                    _ => {}
                 }
-            }
-            Event::RedrawRequested(_) => {
-                let frame_time = Instant::now().duration_since(frame_start).as_secs_f32();
-
-                camera.position += camera.get_direction() * forward * frame_time * 40.0;
-
-                {
-                    *projection_matrix.write() = camera.build_perspective_matrix();
-                    *view_matrix.write() = camera.build_view_matrix();
-                    *rotation_matrix.write() = camera.build_rotation_matrix();
+                // Event::DeviceEvent { event: DeviceEvent::Added {..}, ..} => {}
+                // Event::DeviceEvent { event: DeviceEvent::Removed {..}, ..} => {}
+                Event::DeviceEvent {
+                    event: DeviceEvent::MouseMotion { delta },
+                    ..
+                } => {
+                    camera.yaw += (delta.0 / 100.0) as f32;
+                    camera.pitch -= (delta.1 / 100.0) as f32;
                 }
-
-                let proj_mat: Mat4 = camera.build_perspective_matrix().into();
-                let view_mat: Mat4 = camera.build_view_matrix().into();
-                let rot_mat: Mat4 = camera.build_rotation_matrix().into();
-
-                wm.wgpu_state.queue.write_buffer(
-                    &projection_bindable.buffer,
-                    0,
-                    bytemuck::cast_slice(&proj_mat),
-                );
-
-                wm.wgpu_state.queue.write_buffer(
-                    &view_bindable.buffer,
-                    0,
-                    bytemuck::cast_slice(&view_mat),
-                );
-
-                wm.wgpu_state.queue.write_buffer(
-                    &rotation_bindable.buffer,
-                    0,
-                    bytemuck::cast_slice(&rot_mat),
-                );
-
-                _spin += 0.5;
-                _frame += 1;
-
-                let surface_state = wm.wgpu_state.surface.read();
-                let surface = surface_state.0.as_ref().unwrap();
-                let texture = surface.get_current_texture().unwrap();
-                let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: None,
-                    format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                    dimension: Some(wgpu::TextureViewDimension::D2),
-                    aspect: Default::default(),
-                    base_mip_level: 0,
-                    mip_level_count: None,
-                    base_array_layer: 0,
-                    array_layer_count: None,
-                });
-
-                let _ = wm.render(&graph, &view, &surface_state.1);
-
-                texture.present();
-
-                frame_start = Instant::now();
+                _ => {}
             }
-            // Event::DeviceEvent { event: DeviceEvent::Added {..}, ..} => {}
-            // Event::DeviceEvent { event: DeviceEvent::Removed {..}, ..} => {}
-            Event::DeviceEvent {
-                event: DeviceEvent::MouseMotion { delta },
-                ..
-            } => {
-                camera.yaw += (delta.0 / 100.0) as f32;
-                camera.pitch -= (delta.1 / 100.0) as f32;
-            }
-            _ => {}
-        }
-    });
+        })
+        .unwrap();
 }

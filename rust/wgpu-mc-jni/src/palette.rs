@@ -126,7 +126,7 @@ impl JavaPalette {
     }
 
     pub fn get(&self, index: usize) -> Option<&(GlobalRef, BlockstateKey)> {
-        self.store.get(index).or_else(|| self.store.get(0))
+        self.store.get(index).or_else(|| self.store.first())
     }
 
     pub fn clear(&mut self) {

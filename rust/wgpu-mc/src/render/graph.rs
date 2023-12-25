@@ -17,7 +17,7 @@ use wgpu::{
     FragmentState, FrontFace, LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode,
     PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment,
     RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, ShaderStages, SurfaceConfiguration, TextureFormat,
+    RenderPipelineDescriptor, ShaderStages, StoreOp, SurfaceConfiguration, TextureFormat,
     VertexBufferLayout, VertexState,
 };
 
@@ -686,11 +686,11 @@ impl ShaderGraph {
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
 
-        for (_query_index, (name, config)) in
-            (&self.pack.pipelines.pipelines).into_iter().enumerate()
-        {
+        for (name, config) in (&self.pack.pipelines.pipelines).into_iter() {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: None,
+                label: None, // TODO maybe use the pipeline name or something? for easier debugging if needed
+                occlusion_query_set: None,
+                timestamp_writes: None,
                 color_attachments: &config
                     .output
                     .iter()
@@ -728,7 +728,7 @@ impl ShaderGraph {
                             resolve_target: None,
                             ops: Operations {
                                 load: LoadOp::Load,
-                                store: true,
+                                store: StoreOp::Store,
                             },
                         })
                     })
@@ -751,7 +751,11 @@ impl ShaderGraph {
                         depth_ops: Some(Operations {
                             // load: if will_clear_depth { LoadOp::Clear(1.0) } else { LoadOp::Load },
                             load: LoadOp::Clear(1.0),
-                            store: will_clear_depth,
+                            store: if will_clear_depth {
+                                StoreOp::Store
+                            } else {
+                                StoreOp::Discard
+                            },
                         }),
                         stencil_ops: None,
                     }

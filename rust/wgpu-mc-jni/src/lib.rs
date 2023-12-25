@@ -2,7 +2,6 @@
 
 use core::slice;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::mem::size_of;
@@ -453,8 +452,7 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
             .map(|identifier| {
                 (
                     identifier.clone(),
-                    ResourcePath::try_from(&identifier[..])
-                        .unwrap()
+                    ResourcePath::from(&identifier[..])
                         .prepend("blockstates/")
                         .append(".json"),
                 )
@@ -590,7 +588,7 @@ pub fn runHelperThread(mut env: JNIEnv, _class: JClass) {
                     MouseButton::Left => 0,
                     MouseButton::Right => 1,
                     MouseButton::Middle => 2,
-                    MouseButton::Other(_) => 0,
+                    _ => 0,
                 };
 
                 let action = match element_state {

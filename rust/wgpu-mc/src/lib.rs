@@ -107,6 +107,8 @@ impl WmRenderer {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             dx12_shader_compiler: wgpu::Dx12Compiler::default(),
+            flags: wgpu::InstanceFlags::debugging(),
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
         });
 
         let surface = unsafe { instance.create_surface(window) }.unwrap();
