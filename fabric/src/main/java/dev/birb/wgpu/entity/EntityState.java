@@ -4,6 +4,7 @@ import net.minecraft.client.render.entity.model.EntityModelLayer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EntityType;
 import org.joml.Matrix4f;
+import org.lwjgl.BufferUtils;
 
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
@@ -70,7 +71,11 @@ public class EntityState {
         MatrixStack stack = new MatrixStack();
         stack.loadIdentity();
 
-        FloatBuffer floatBufTemp = FloatBuffer.allocate(16);
+//        ByteBuffer byteBuf = ByteBuffer.allocateDirect(64);
+//        FloatBuffer floatBufTemp = byteBuf.asFloatBuffer();
+//        FloatBuffer floatBufTemp = FloatBuffer.allocate(16);
+
+        float[] floatBuf = new float[16];
 
 //        orderedMatrices[0] = stack.peek().getPositionMatrix();
 
@@ -80,18 +85,16 @@ public class EntityState {
                 mat = stack.peek().getPositionMatrix();
             }
 
-            floatBufTemp.clear();
-            mat.get(floatBufTemp);
+            mat.get(floatBuf);
 
             try {
-                state.buffer.put(floatBufTemp);
+                state.buffer.put(floatBuf);
             } catch(BufferOverflowException e) {
                 FloatBuffer oldBuffer = state.buffer;
                 state.buffer = FloatBuffer.allocate(state.buffer.capacity() + 10000);
                 state.buffer.put(oldBuffer);
-                state.buffer.put(floatBufTemp);
+                state.buffer.put(floatBuf);
             }
-            floatBufTemp.position(0);
         }
 
         state.textureId = textureId;

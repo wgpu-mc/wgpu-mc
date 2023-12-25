@@ -16,6 +16,7 @@ import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
+import org.lwjgl.BufferUtils;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -134,11 +135,11 @@ public abstract class WorldRendererMixin {
             }
         }
 
-        FloatBuffer floatBuffer = FloatBuffer.allocate(16);
+        float[] floatBuffer = new float[16];
 
         cameraStack.peek().getPositionMatrix().get(floatBuffer);
 
-        WgpuNative.setMatrix(0, floatBuffer.array());
+        WgpuNative.setMatrix(0, floatBuffer);
 
         ci.cancel();
     }
