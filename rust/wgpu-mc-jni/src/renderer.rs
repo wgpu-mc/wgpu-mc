@@ -16,12 +16,13 @@ use jni::{
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::{Mutex, RwLock};
-use winit::event::DeviceEvent;
+use winit::event::{DeviceEvent, Ime, KeyEvent};
 use winit::event_loop::EventLoopBuilder;
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+use winit::platform::scancode::PhysicalKeyExtScancode;
 use winit::{
     dpi::PhysicalSize,
-    event::{ElementState, Event, ModifiersState, WindowEvent},
-    event_loop::ControlFlow,
+    event::{ElementState, Event, WindowEvent},
 };
 
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
@@ -109,6 +110,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
     // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build
     let mut event_loop = EventLoopBuilder::new();
+
     #[cfg(target_os = "linux")]
     {
         // double hacky fix B)
@@ -120,7 +122,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             event_loop.with_any_thread(true);
         }
     }
-    let event_loop = event_loop.build();
+
+    let event_loop = event_loop.build().unwrap();
 
     let window = Arc::new(
         winit::window::WindowBuilder::new()
@@ -318,99 +321,226 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         )))
         .unwrap();
 
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
-        match event {
-            Event::MainEventsCleared => window.request_redraw(),
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == window.id() => {
-                match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        wm.resize(wgpu_mc::WindowSize {
-                            width: physical_size.width,
-                            height: physical_size.height,
-                        });
-                        CHANNELS
-                            .0
-                            .send(RenderMessage::Resized(
-                                physical_size.width,
-                                physical_size.height,
-                            ))
-                            .unwrap();
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        wm.resize(wgpu_mc::WindowSize {
-                            width: new_inner_size.width,
-                            height: new_inner_size.height,
-                        });
-                    }
-                    WindowEvent::MouseInput {
-                        device_id: _,
-                        state,
-                        button,
-                        ..
-                    } => {
-                        CHANNELS
-                            .0
-                            .send(RenderMessage::MouseState(*state, *button))
-                            .unwrap();
-                    }
-                    WindowEvent::CursorMoved { position, .. } => {
-                        CHANNELS
-                            .0
-                            .send(RenderMessage::CursorMove(position.x, position.y))
-                            .unwrap();
-                    }
-                    WindowEvent::ReceivedCharacter(c) => {
-                        CHANNELS
-                            .0
-                            .send(RenderMessage::CharTyped(*c, current_modifiers.bits()))
-                            .unwrap();
-                    }
-                    WindowEvent::KeyboardInput {
-                        device_id: _,
-                        input,
-                        is_synthetic: _,
-                    } => {
-                        // input.scancode
-                        match input.virtual_keycode {
-                            None => {}
-                            Some(keycode) => CHANNELS
+    event_loop
+        .run(move |event, target| {
+            match event {
+                Event::AboutToWait => window.request_redraw(),
+                Event::WindowEvent {
+                    ref event,
+                    window_id,
+                } if window_id == window.id() => {
+                    match event {
+                        WindowEvent::CloseRequested => target.exit(),
+                        WindowEvent::Resized(physical_size) => {
+                            wm.resize(wgpu_mc::WindowSize {
+                                width: physical_size.width,
+                                height: physical_size.height,
+                            });
+                            CHANNELS
                                 .0
-                                .send(RenderMessage::KeyState(
-                                    keycode as u32,
-                                    input.scancode,
-                                    match input.state {
-                                        ElementState::Pressed => 0,
-                                        ElementState::Released => 1,
-                                    },
-                                    current_modifiers.bits(),
+                                .send(RenderMessage::Resized(
+                                    physical_size.width,
+                                    physical_size.height,
                                 ))
-                                .unwrap(),
+                                .unwrap();
                         }
+                        WindowEvent::MouseInput {
+                            device_id: _,
+                            state,
+                            button,
+                            ..
+                        } => {
+                            CHANNELS
+                                .0
+                                .send(RenderMessage::MouseState(*state, *button))
+                                .unwrap();
+                        }
+                        WindowEvent::CursorMoved { position, .. } => {
+                            CHANNELS
+                                .0
+                                .send(RenderMessage::CursorMove(position.x, position.y))
+                                .unwrap();
+                        }
+                        WindowEvent::Ime(Ime::Commit(s)) => {
+                            // could have multiple chars, see winit docs
+                            // TODO check if this still works as intended
+                            // TODO might want to move the for loop to the java side? to avoid multiple jni calls
+                            for c in s.chars() {
+                                CHANNELS
+                                    .0
+                                    .send(RenderMessage::CharTyped(c, current_modifiers.bits()))
+                                    .unwrap();
+                            }
+                        }
+                        WindowEvent::KeyboardInput {
+                            event:
+                                KeyEvent {
+                                    physical_key: PhysicalKey::Code(key),
+                                    state,
+                                    ..
+                                },
+                            ..
+                        } => {
+                            if let Some(scancode) = key.to_scancode() {
+                                CHANNELS
+                                    .0
+                                    .send(RenderMessage::KeyState(
+                                        keycode_to_glfw(*key),
+                                        scancode,
+                                        match state {
+                                            ElementState::Pressed => 1,  // GLFW_PRESS
+                                            ElementState::Released => 0, // GLFW_RELEASE
+                                        },
+                                        current_modifiers.bits(),
+                                    ))
+                                    .unwrap();
+                            }
+                        }
+                        WindowEvent::ModifiersChanged(new_modifiers) => {
+                            current_modifiers = new_modifiers.state();
+                        }
+                        WindowEvent::Focused(focused) => {
+                            CHANNELS.0.send(RenderMessage::Focused(*focused)).unwrap();
+                        }
+                        _ => {}
                     }
-                    WindowEvent::ModifiersChanged(new_modifiers) => {
-                        current_modifiers = *new_modifiers;
-                    }
-                    WindowEvent::Focused(focused) => {
-                        CHANNELS.0.send(RenderMessage::Focused(*focused)).unwrap();
-                    }
-                    _ => {}
                 }
+                Event::DeviceEvent {
+                    device_id: _,
+                    event: DeviceEvent::MouseMotion { delta },
+                } => {
+                    CHANNELS
+                        .0
+                        .send(RenderMessage::MouseMove(delta.0, delta.1))
+                        .unwrap();
+                }
+                _ => {}
             }
-            Event::DeviceEvent {
-                device_id: _,
-                event: DeviceEvent::MouseMotion { delta },
-            } => {
-                CHANNELS
-                    .0
-                    .send(RenderMessage::MouseMove(delta.0, delta.1))
-                    .unwrap();
-            }
-            _ => {}
-        }
-    });
+        })
+        .unwrap();
+}
+
+fn keycode_to_glfw(code: KeyCode) -> u32 {
+    match code {
+        KeyCode::Space => 32,
+        KeyCode::Quote => 39,
+        KeyCode::Comma => 44,
+        KeyCode::Minus => 45,
+        KeyCode::Period => 46,
+        KeyCode::Slash => 47,
+        KeyCode::Digit0 => 48,
+        KeyCode::Digit1 => 49,
+        KeyCode::Digit2 => 50,
+        KeyCode::Digit3 => 51,
+        KeyCode::Digit4 => 52,
+        KeyCode::Digit5 => 53,
+        KeyCode::Digit6 => 54,
+        KeyCode::Digit7 => 55,
+        KeyCode::Digit8 => 56,
+        KeyCode::Digit9 => 57,
+        KeyCode::Semicolon => 59,
+        KeyCode::Equal => 61,
+        KeyCode::KeyA => 65,
+        KeyCode::KeyB => 66,
+        KeyCode::KeyC => 67,
+        KeyCode::KeyD => 68,
+        KeyCode::KeyE => 69,
+        KeyCode::KeyF => 70,
+        KeyCode::KeyG => 71,
+        KeyCode::KeyH => 72,
+        KeyCode::KeyI => 73,
+        KeyCode::KeyJ => 74,
+        KeyCode::KeyK => 75,
+        KeyCode::KeyL => 76,
+        KeyCode::KeyM => 77,
+        KeyCode::KeyN => 78,
+        KeyCode::KeyO => 79,
+        KeyCode::KeyP => 80,
+        KeyCode::KeyQ => 81,
+        KeyCode::KeyR => 82,
+        KeyCode::KeyS => 83,
+        KeyCode::KeyT => 84,
+        KeyCode::KeyU => 85,
+        KeyCode::KeyV => 86,
+        KeyCode::KeyW => 87,
+        KeyCode::KeyX => 88,
+        KeyCode::KeyY => 89,
+        KeyCode::KeyZ => 90,
+        KeyCode::BracketLeft => 91,
+        KeyCode::Backslash => 92,
+        KeyCode::BracketRight => 93,
+        KeyCode::Backquote => 96,
+        // what the fuck are WORLD_1 (161) and WORLD_2 (162)
+        KeyCode::Escape => 256,
+        KeyCode::Enter => 257,
+        KeyCode::Tab => 258,
+        KeyCode::Backspace => 259,
+        KeyCode::Insert => 260,
+        KeyCode::Delete => 261,
+        KeyCode::ArrowRight => 262,
+        KeyCode::ArrowLeft => 263,
+        KeyCode::ArrowDown => 264,
+        KeyCode::ArrowUp => 265,
+        KeyCode::PageUp => 266,
+        KeyCode::PageDown => 267,
+        KeyCode::Home => 268,
+        KeyCode::End => 269,
+        KeyCode::CapsLock => 280,
+        KeyCode::ScrollLock => 281,
+        KeyCode::NumLock => 282,
+        KeyCode::PrintScreen => 283,
+        KeyCode::Pause => 284,
+        KeyCode::F1 => 290,
+        KeyCode::F2 => 291,
+        KeyCode::F3 => 292,
+        KeyCode::F4 => 293,
+        KeyCode::F5 => 294,
+        KeyCode::F6 => 295,
+        KeyCode::F7 => 296,
+        KeyCode::F8 => 297,
+        KeyCode::F9 => 298,
+        KeyCode::F10 => 299,
+        KeyCode::F11 => 300,
+        KeyCode::F12 => 301,
+        KeyCode::F13 => 302,
+        KeyCode::F14 => 303,
+        KeyCode::F15 => 304,
+        KeyCode::F16 => 305,
+        KeyCode::F17 => 306,
+        KeyCode::F18 => 307,
+        KeyCode::F19 => 308,
+        KeyCode::F20 => 309,
+        KeyCode::F21 => 310,
+        KeyCode::F22 => 311,
+        KeyCode::F23 => 312,
+        KeyCode::F24 => 313,
+        KeyCode::F25 => 314,
+        KeyCode::Numpad0 => 320,
+        KeyCode::Numpad1 => 321,
+        KeyCode::Numpad2 => 322,
+        KeyCode::Numpad3 => 323,
+        KeyCode::Numpad4 => 324,
+        KeyCode::Numpad5 => 325,
+        KeyCode::Numpad6 => 326,
+        KeyCode::Numpad7 => 327,
+        KeyCode::Numpad8 => 328,
+        KeyCode::Numpad9 => 329,
+        KeyCode::NumpadDecimal => 330,
+        KeyCode::NumpadDivide => 331,
+        KeyCode::NumpadMultiply => 332,
+        KeyCode::NumpadSubtract => 333,
+        KeyCode::NumpadAdd => 334,
+        KeyCode::NumpadEnter => 335,
+        KeyCode::NumpadEqual => 336,
+        KeyCode::ShiftLeft => 340,
+        KeyCode::ControlLeft => 341,
+        KeyCode::AltLeft => 342,
+        KeyCode::SuperLeft => 343,
+        KeyCode::ShiftRight => 344,
+        KeyCode::ControlRight => 345,
+        KeyCode::AltRight => 346,
+        KeyCode::SuperRight => 347,
+        KeyCode::ContextMenu => 348,
+        _ => 0,
+    }
 }

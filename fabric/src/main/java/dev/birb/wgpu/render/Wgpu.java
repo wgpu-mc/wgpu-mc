@@ -6,7 +6,6 @@ import dev.birb.wgpu.rust.WgpuTextureManager;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.MinecraftClient;
-import org.lwjgl.glfw.GLFW;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
@@ -14,7 +13,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
-import static dev.birb.wgpu.input.WgpuKeys.convertKeyCode;
 import static dev.birb.wgpu.input.WgpuKeys.convertModifiers;
 
 public class Wgpu {
@@ -67,7 +65,6 @@ public class Wgpu {
         }
     }
 
-
     public static void startRendering() {
         if (!initialized) {
             linkRenderDoc();
@@ -105,12 +102,10 @@ public class Wgpu {
     @SuppressWarnings("unused") // called from rust
     public static void keyState(int key, int scancode, int state, int modifiers) {
         MinecraftClient client = MinecraftClient.getInstance();
-        int convertedKey = convertKeyCode(key);
         int convertedModifier = convertModifiers(modifiers);
-        int convertedState = state == 0 ? GLFW.GLFW_PRESS : GLFW.GLFW_RELEASE;
-        Wgpu.keyStates.put(convertedKey, state);
+        Wgpu.keyStates.put(key, state);
 
-        client.execute(() -> client.keyboard.onKey(0, convertedKey, scancode, convertedState, convertedModifier));
+        client.execute(() -> client.keyboard.onKey(0, key, scancode, state, convertedModifier));
     }
 
     @SuppressWarnings("unused") // called from rust
