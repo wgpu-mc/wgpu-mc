@@ -686,9 +686,7 @@ impl ShaderGraph {
 
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
 
-        for (_query_index, (name, config)) in
-            (&self.pack.pipelines.pipelines).into_iter().enumerate()
-        {
+        for (name, config) in (&self.pack.pipelines.pipelines).into_iter() {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None, // TODO maybe use the pipeline name or something? for easier debugging if needed
                 occlusion_query_set: None,
