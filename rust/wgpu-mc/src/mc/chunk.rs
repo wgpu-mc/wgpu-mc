@@ -135,19 +135,21 @@ impl Chunk {
             })
             .collect();
 
-        let vertex_buffer = BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
-        let index_buffer = BindableBuffer::new(
-            wm,
-            bytemuck::cast_slice(&index_data),
-            BufferUsages::STORAGE,
-            "ssbo",
-        );
+        if vertex_data.len() > 0 {
+            let vertex_buffer = BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
+            let index_buffer = BindableBuffer::new(
+                wm,
+                bytemuck::cast_slice(&index_data),
+                BufferUsages::STORAGE,
+                "ssbo",
+            );
 
-        self.buffers.store(Arc::new(Some(ChunkBuffers {
-            vertex_buffer,
-            index_buffer,
-        })));
-        *self.sections.write() = baked_layers;
+            self.buffers.store(Arc::new(Some(ChunkBuffers {
+                vertex_buffer,
+                index_buffer,
+            })));
+            *self.sections.write() = baked_layers;
+        }
     }
 }
 

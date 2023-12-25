@@ -14,6 +14,7 @@
     "core.MouseMixin",
     "core.OptionsScreenMixin",
     "core.RegistryMixin",
+    "core.GlTimerMixin",
     "render.BufferRendererMixin",
     "render.BuiltChunkMixin",
     "render.FramebufferMixin",
@@ -25,6 +26,7 @@
     "render.WindowFramebufferMixin",
     "render.WindowMixin",
     "render.WorldRendererMixin",
+    "render.ItemRendererMixin",
     "world.BlockStateMixin"
   ],
   "injectors": {

@@ -24,6 +24,8 @@ impl BindableBuffer {
         let layouts = pipelines.bind_group_layouts.read();
         let layout = layouts.get(layout_name).unwrap();
 
+        assert_ne!(data.len(), 0);
+
         let buffer = wm
             .wgpu_state
             .device
