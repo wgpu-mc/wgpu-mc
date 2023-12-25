@@ -9,6 +9,8 @@ import java.util.Objects;
 
 @Getter
 public class RustPalette {
+
+    @Getter
     private final long slabIndex;
     private final IndexedIterable<?> idList;
 

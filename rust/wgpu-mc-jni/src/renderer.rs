@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
-use std::{slice, thread};
+use std::{mem, slice, thread};
 use std::{sync::Arc, time::Instant};
 
 use byteorder::LittleEndian;
 use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use futures::executor::block_on;
-use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
-use jni::sys::{jfloat, jint};
+use jni::objects::{AutoElements, JClass, JFloatArray, JIntArray, ReleaseMode};
+use jni::sys::{jfloat, jfloatArray, jint, jintArray, jlong};
 use jni::{
     objects::{JString, JValue},
     JNIEnv,
@@ -16,30 +16,31 @@ use jni::{
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::{Mutex, RwLock};
-use winit::event::{DeviceEvent, Ime, KeyEvent};
+use winit::dpi::PhysicalSize;
+use winit::event::{DeviceEvent, ElementState, Event, Ime, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoopBuilder;
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::platform::scancode::PhysicalKeyExtScancode;
-use winit::{
-    dpi::PhysicalSize,
-    event::{ElementState, Event, WindowEvent},
-};
 
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::mc::entity::{
+    BundledEntityInstances, EntityInstance, InstanceVertex, UploadedEntityInstances,
+};
 use wgpu_mc::render::graph::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
+use wgpu_mc::texture::BindableTexture;
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::{render::atlas::Atlas, WmRenderer};
 
-use crate::gl::{ElectrumGeometry, ElectrumVertex};
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
 use crate::{
-    entity::ENTITY_ATLAS, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
-    CHANNELS, MC_STATE, RENDERER, WINDOW,
+    MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, MC_STATE,
+    RENDERER, THREAD_POOL, WINDOW,
 };
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
@@ -135,8 +136,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             .build(&event_loop)
             .unwrap(),
     );
-
-    log::info!("Opened window");
 
     WINDOW.set(window.clone()).unwrap();
 
@@ -256,11 +255,11 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     geometry_layouts.insert(
         "wm_geo_electrum_gui".into(),
-        wgpu::VertexBufferLayout {
+        vec![wgpu::VertexBufferLayout {
             array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &ElectrumVertex::VAO,
-        },
+        }],
     );
 
     shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
@@ -307,19 +306,19 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             let _instant = Instant::now();
 
-            wm.render(&shader_graph, &view, &surface_state.1).unwrap();
+            let entity_instances = ENTITY_INSTANCES.lock();
+
+            wm.render(
+                &mut shader_graph,
+                &view,
+                &surface_state.1,
+                &entity_instances,
+            )
+            .unwrap();
 
             texture.present();
         }
     });
-
-    ENTITY_ATLAS
-        .set(Arc::new(Atlas::new(
-            &wm.wgpu_state,
-            &wm.pipelines.load(),
-            false,
-        )))
-        .unwrap();
 
     event_loop
         .run(move |event, target| {
@@ -569,4 +568,149 @@ fn modifiers_to_glfw(state: ModifiersState) -> u32 {
     }
 
     mods
+}
+
+struct EntityRenderState {
+    pub instance_buffer: Vec<u8>,
+    pub instance_count: u32,
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+pub enum MCTextureId {
+    BLOCK_ATLAS,
+    LIGHTMAP,
+}
+
+pub static ENTITY_INSTANCES: Lazy<Mutex<HashMap<String, BundledEntityInstances>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+pub static MC_TEXTURES: Lazy<Mutex<HashMap<MCTextureId, Arc<BindableTexture>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn clearEntities(_env: JNIEnv, _class: JClass) {
+    THREAD_POOL.spawn(|| ENTITY_INSTANCES.lock().clear());
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn identifyGlTexture(_env: JNIEnv, _class: JClass, texture: jint, gl_id: jint) {
+    let alloc_read = GL_ALLOC.read();
+    let gl_texture = alloc_read.get(&(gl_id as u32)).unwrap();
+
+    let mut mc_textures = MC_TEXTURES.lock();
+    mc_textures.insert(
+        match texture {
+            0 => MCTextureId::BLOCK_ATLAS,
+            1 => MCTextureId::LIGHTMAP,
+            _ => unreachable!(),
+        },
+        gl_texture.bindable_texture.as_ref().unwrap().clone(),
+    );
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setEntityInstanceBuffer(
+    mut env: JNIEnv,
+    _class: JClass,
+    entity_name: JString,
+    mat4_float_array: JFloatArray,
+    position: jint,
+    overlay_array: JIntArray,
+    overlay_array_position: jint,
+    instance_count: jint,
+    texture_id: jint,
+) -> jlong {
+    let now = Instant::now();
+
+    let entity_name: String = env.get_string(&entity_name).unwrap().into();
+
+    if instance_count == 0 {
+        THREAD_POOL.spawn(move || {
+            ENTITY_INSTANCES.lock().remove(&entity_name);
+        });
+        return Instant::now().duration_since(now).as_nanos() as jlong;
+    }
+
+    let mat4s_array = unsafe {
+        env.get_array_elements(&mat4_float_array, ReleaseMode::NoCopyBack)
+            .unwrap()
+    };
+    let mat4s: Vec<f32> = mat4s_array.iter().copied().collect();
+
+    let overlay_array = unsafe {
+        env.get_array_elements(&overlay_array, ReleaseMode::NoCopyBack)
+            .unwrap()
+    };
+    let overlay: Vec<i32> = overlay_array.iter().copied().collect();
+
+    THREAD_POOL.spawn(move || {
+        let wm = RENDERER.get().unwrap();
+
+        let models = wm.mc.entity_models.read();
+        let entity = models.get(&entity_name).unwrap();
+
+        let instance_vertices: Vec<InstanceVertex> = (0..instance_count as u32)
+            .map(|index| InstanceVertex {
+                entity_index: index,
+                uv_offset: [0, 0],
+            })
+            .collect();
+
+        let instance_buffer = Arc::new(wm.wgpu_state.device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&instance_vertices),
+                usage: BufferUsages::VERTEX,
+            },
+        ));
+
+        let transform_ssbo = Arc::new(BindableBuffer::new(
+            &wm,
+            bytemuck::cast_slice(&mat4s),
+            BufferUsages::STORAGE,
+            "ssbo",
+        ));
+
+        let overlay_ssbo = Arc::new(BindableBuffer::new(
+            &wm,
+            bytemuck::cast_slice(&overlay),
+            BufferUsages::STORAGE,
+            "ssbo",
+        ));
+
+        let texture = {
+            let gl_alloc = GL_ALLOC.read();
+
+            match gl_alloc.get(&(texture_id as u32)) {
+                None => return,
+                Some(GlTexture {
+                    bindable_texture: None,
+                    ..
+                }) => return,
+                _ => {}
+            }
+
+            gl_alloc
+                .get(&(texture_id as u32))
+                .unwrap()
+                .bindable_texture
+                .as_ref()
+                .unwrap()
+                .clone()
+        };
+
+        let mut bundled_entity_instances =
+            BundledEntityInstances::new(entity.clone(), instance_count as u32, texture);
+
+        bundled_entity_instances.uploaded = Some(UploadedEntityInstances {
+            transform_ssbo,
+            instance_vbo: instance_buffer,
+            overlay_ssbo,
+            count: instance_count as u32,
+        });
+
+        let mut instances = ENTITY_INSTANCES.lock();
+        instances.insert(entity_name, bundled_entity_instances);
+    });
+
+    return Instant::now().duration_since(now).as_nanos() as jlong;
 }

@@ -1,14 +1,19 @@
+use jni::objects::{JClass, JObject, JString, JValue};
+use jni::sys::jint;
+use jni::JNIEnv;
+use jni_fn::jni_fn;
 use std::{collections::HashMap, sync::Arc};
 
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
 
+use crate::RENDERER;
+use wgpu_mc::mc::entity::Entity;
+use wgpu_mc::render::pipeline::ENTITY_ATLAS;
 use wgpu_mc::{
     mc::entity::{Cuboid, CuboidUV, EntityPart, PartTransform},
     render::atlas::Atlas,
 };
-
-pub static ENTITY_ATLAS: OnceCell<Arc<Atlas>> = OnceCell::new();
 
 #[derive(Debug, Deserialize)]
 pub struct ModelCuboidData {
@@ -61,9 +66,26 @@ pub struct TexturedModelData {
     pub dimensions: TextureDimensions,
 }
 
-pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
+#[derive(Debug, Copy, Clone)]
+pub struct AtlasPosition {
+    pub width: u32,
+    pub height: u32,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl AtlasPosition {
+    pub fn map(&self, pos: (f32, f32)) -> (f32, f32) {
+        (
+            (self.x + pos.0) / (self.width as f32),
+            (self.y + pos.1) / (self.height as f32),
+        )
+    }
+}
+
+pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: [u16; 2]) -> Option<EntityPart> {
     Some(EntityPart {
-        name: Arc::new("".into()),
+        name,
         transform: PartTransform {
             x: 0.0,
             y: 0.0,
@@ -82,6 +104,16 @@ pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
             .cuboid_data
             .iter()
             .map(|cuboid_data| {
+                let pos = [
+                    *cuboid_data.texture_uv.get("x").unwrap() as u16,
+                    *cuboid_data.texture_uv.get("y").unwrap() as u16,
+                ];
+                let dimensions = [
+                    *cuboid_data.dimensions.get("x").unwrap() as u16,
+                    *cuboid_data.dimensions.get("y").unwrap() as u16,
+                    *cuboid_data.dimensions.get("z").unwrap() as u16,
+                ];
+
                 Some(Cuboid {
                     x: *cuboid_data.offset.get("x")?,
                     y: *cuboid_data.offset.get("y")?,
@@ -90,21 +122,118 @@ pub fn tmd_to_wm(part: &ModelPartData) -> Option<EntityPart> {
                     height: *cuboid_data.dimensions.get("y")?,
                     length: *cuboid_data.dimensions.get("z")?,
                     textures: CuboidUV {
-                        //TODO
-                        north: ((0, 0), (0, 0)),
-                        east: ((0, 0), (0, 0)),
-                        south: ((0, 0), (0, 0)),
-                        west: ((0, 0), (0, 0)),
-                        up: ((0, 0), (0, 0)),
-                        down: ((0, 0), (0, 0)),
+                        west: (
+                            (
+                                pos[0] + dimensions[0],
+                                pos[1] + (dimensions[2] + dimensions[1]),
+                            ),
+                            (pos[0], pos[1] + dimensions[2]),
+                        ),
+                        east: (
+                            (
+                                pos[0] + (dimensions[0] * 3),
+                                pos[1] + dimensions[2] + dimensions[1],
+                            ),
+                            ((pos[0] + (dimensions[0] * 2)), pos[1] + dimensions[2]),
+                        ),
+                        north: (
+                            (
+                                pos[0] + (dimensions[0] * 2),
+                                pos[1] + dimensions[2] + dimensions[1],
+                            ),
+                            (pos[0] + dimensions[0], pos[1] + dimensions[2]),
+                        ),
+                        south: (
+                            (
+                                (pos[0] + (dimensions[0] * 4)),
+                                pos[1] + (dimensions[2] + dimensions[1]),
+                            ),
+                            ((pos[0] + (dimensions[0] * 3)), pos[1] + dimensions[2]),
+                        ),
+                        up: (
+                            ((pos[0] + (dimensions[0] * 3)), pos[1] + (dimensions[2])),
+                            ((pos[0] + (dimensions[0] * 2)), pos[1]),
+                        ),
+                        down: (
+                            (pos[0] + (dimensions[0] * 2), pos[1] + dimensions[2]),
+                            (pos[0] + dimensions[0], pos[1]),
+                        ),
                     },
                 })
             })
             .collect::<Option<Vec<Cuboid>>>()?,
         children: part
             .children
-            .values()
-            .map(tmd_to_wm)
+            .iter()
+            .map(|(name, part)| tmd_to_wm(name.clone(), part, ap))
             .collect::<Option<Vec<EntityPart>>>()?,
     })
+}
+
+#[derive(Deserialize)]
+pub struct Wrapper2 {
+    data: ModelPartData,
+}
+
+#[derive(Deserialize)]
+pub struct Wrapper1 {
+    data: Wrapper2,
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
+    let wm = RENDERER.get().unwrap();
+
+    let entities_json_javastr = env.get_string(&string).unwrap();
+    let entities_json: String = entities_json_javastr.into();
+
+    let mpd: HashMap<String, ModelPartData> =
+        serde_json::from_str::<HashMap<String, Wrapper1>>(&entities_json)
+            .unwrap()
+            .into_iter()
+            .map(|(name, wrapper)| (name, wrapper.data.data))
+            .collect();
+
+    let atlases = wm.mc.texture_manager.atlases.load();
+    let atlas = atlases.get(ENTITY_ATLAS).unwrap();
+
+    let entities: HashMap<String, Arc<Entity>> = mpd
+        .iter()
+        .map(|(name, mpd)| {
+            let entity_part = tmd_to_wm("root".into(), mpd, [0, 0]).unwrap();
+
+            (
+                name.clone(),
+                Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state)),
+            )
+        })
+        .collect();
+
+    entities.iter().for_each(|(entity_name, entity)| {
+        let entity_string = env.new_string(&entity.name).unwrap();
+        let entity_string_raw = entity_string.into_raw();
+
+        entity.parts.iter().for_each(|(name, index)| {
+            let part_string = env.new_string(name).unwrap();
+
+            let entity_string_object = unsafe { JObject::from_raw(entity_string_raw) };
+            let part_string_object = unsafe { JObject::from_raw(part_string.into_raw()) };
+
+            env.call_static_method(
+                "dev/birb/wgpu/render/Wgpu",
+                "helperSetPartIndex",
+                "(Ljava/lang/String;Ljava/lang/String;I)V",
+                unsafe {
+                    &[
+                        JValue::Object(&entity_string_object),
+                        JValue::Object(&part_string_object),
+                        JValue::Int(*index as jint),
+                    ]
+                },
+            )
+            .unwrap();
+        });
+    });
+
+    *wm.mc.entity_models.write() = entities;
 }

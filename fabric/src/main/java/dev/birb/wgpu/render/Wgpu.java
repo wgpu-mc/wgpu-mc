@@ -1,5 +1,6 @@
 package dev.birb.wgpu.render;
 
+import dev.birb.wgpu.entity.EntityState;
 import dev.birb.wgpu.palette.RustBlockStateAccessor;
 import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
@@ -9,8 +10,8 @@ import net.minecraft.client.MinecraftClient;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 
@@ -26,15 +27,19 @@ public class Wgpu {
     @Setter
     private static volatile boolean mayInitialize = false;
 
+    public static HashMap<String, Integer> blocks;
+    public static WgpuTextureManager getTextureManager() {
+        return textureManager;
+    }
+    public static HashMap<Integer, Integer> keyStates = new HashMap<>();
+    public static ArrayList<Runnable> injectPartIds = new ArrayList<>();
+
     @Getter
     private static RuntimeException exception;
 
     @Getter
     @Setter
     private static String wmIdentity;
-
-    @Getter
-    private static final Map<Integer, Integer> keyStates = new HashMap<>();
 
     @Getter
     private static int timesTexSubImageCalled = 0;
@@ -116,7 +121,7 @@ public class Wgpu {
 
     @SuppressWarnings("unused") // called from rust
     public static void rustPanic(String message) {
-        exception = new RuntimeException(message);
+        RuntimeException exception = new RuntimeException(message);
         LOGGER.error(message);
         while (true) {
             // wait for main loop to catch this
@@ -124,13 +129,22 @@ public class Wgpu {
     }
 
     @SuppressWarnings("unused") // called from rust
+    public static void rustDebug(String message) {
+        LOGGER.info("[Engine] " + message);
+    }
+
     public static void helperSetBlockStateIndex(Object o, int blockstateKey) {
         ((RustBlockStateAccessor) o).wgpu_mc$setRustBlockStateIndex(blockstateKey);
     }
 
-    @SuppressWarnings("unused") // called from rust
-    public static void debug(Object o) {
-        LOGGER.info("{}", o);
+    public static void helperSetPartIndex(String entity, String part, int index) {
+
+
+        if(!EntityState.matrixIndices.containsKey(entity)) {
+            EntityState.matrixIndices.put(entity, new HashMap<>());
+        }
+
+        EntityState.matrixIndices.get(entity).put(part, index);
     }
 
     @SuppressWarnings("unused") // called from rust
@@ -141,4 +155,5 @@ public class Wgpu {
     public static void incrementTexSubImageCount() {
         timesTexSubImageCalled++;
     }
+
 }

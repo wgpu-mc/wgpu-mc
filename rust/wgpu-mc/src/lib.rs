@@ -43,6 +43,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::mc::entity::BundledEntityInstances;
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
 pub use naga;
@@ -324,13 +325,14 @@ impl WmRenderer {
         );
     }
 
-    pub fn render(
+    pub fn render<'graph: 'resources, 'resources>(
         &self,
         graph: &ShaderGraph,
         output_texture_view: &wgpu::TextureView,
         surface_config: &wgpu::SurfaceConfiguration,
+        entity_instances: &'resources HashMap<String, BundledEntityInstances>,
     ) -> Result<(), wgpu::SurfaceError> {
-        graph.render(self, output_texture_view, surface_config);
+        graph.render(self, output_texture_view, surface_config, entity_instances);
 
         Ok(())
     }

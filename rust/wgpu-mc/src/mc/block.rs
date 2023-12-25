@@ -146,7 +146,6 @@ fn resolve_model(
 
 fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Option<UV> {
     let atlas_map = block_atlas.uv_map.read();
-
     // let atlas_uv = atlas_map.get(&(&face.texture.0).into())?;
     //
     // const ATLAS: f32 = ATLAS_DIMENSIONS as f32;

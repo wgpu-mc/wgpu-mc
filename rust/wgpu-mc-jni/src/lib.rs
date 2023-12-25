@@ -1,5 +1,7 @@
 #![feature(core_panic)]
 
+pub extern crate wgpu_mc;
+
 use core::slice;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -49,7 +51,7 @@ use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
-mod entity;
+pub mod entity;
 mod gl;
 mod palette;
 mod pia;
@@ -467,7 +469,7 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
         );
     }
 
-    let states = BLOCK_STATES.lock();
+    let mut states = BLOCK_STATES.lock();
 
     let block_manager = wm.mc.block_manager.write();
     let mut mappings = Vec::new();
@@ -545,6 +547,30 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
         )
         .unwrap();
     });
+
+    let instant = Instant::now();
+
+    let state_count = states.len();
+
+    states.clear();
+
+    let debug_message = format!(
+        "Released {} global refs to BlockState objects in {}ms",
+        state_count,
+        Instant::now().duration_since(instant).as_millis()
+    );
+
+    let debug_jstring = env.new_string(debug_message).unwrap();
+
+    env.call_static_method(
+        "dev/birb/wgpu/render/Wgpu",
+        "rustDebug",
+        "(Ljava/lang/String;)V",
+        &[JValue::Object(&unsafe {
+            JObject::from_raw(debug_jstring.into_raw())
+        })],
+    )
+    .unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1166,13 +1192,4 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
             log::warn!("Set cursor mode had an invalid mode.")
         }
     }
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn registerEntityModel(mut env: JNIEnv, _class: JClass, json_jstring: JString) {
-    let _renderer = RENDERER.get().unwrap();
-
-    let json_string: String = env.get_string(&json_jstring).unwrap().into();
-    let model_data: TexturedModelData = serde_json::from_str(&json_string).unwrap();
-    let _entity_part = tmd_to_wm(&model_data.data.data);
 }

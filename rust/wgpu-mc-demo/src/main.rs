@@ -1,6 +1,5 @@
-extern crate wgpu_mc;
-
 use std::collections::HashMap;
+use std::f32::consts::PI;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -16,6 +15,7 @@ use raw_window_handle::{
 };
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstance, PartTransform};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
@@ -30,7 +30,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use crate::chunk::make_chunks;
-use crate::entity::describe_entity;
+use crate::entity::{describe_entity, ENTITY_NAME};
 
 mod camera;
 mod chunk;
@@ -176,7 +176,13 @@ impl RenderLayer for TerrainLayer {
 }
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
-    let (_entity, _instances) = describe_entity(&wm);
+    let (entity, instances) = describe_entity(&wm);
+
+    let mut instances_map = HashMap::new();
+
+    instances_map.insert(ENTITY_NAME.into(), instances);
+
+    // wm.mc.entity_models.write().push(entity.clone());
 
     wm.pipelines
         .load_full()
@@ -348,6 +354,37 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                             let frame_time =
                                 Instant::now().duration_since(frame_start).as_secs_f32();
 
+                            // let mut part_transforms = vec![PartTransform::identity(); entity.parts.len()];
+                            // let lid_index = *entity.parts.get("lid").unwrap();
+                            // part_transforms[lid_index] = PartTransform {
+                            //     x: 0.0,
+                            //     y: 0.0,
+                            //     z: 0.0,
+                            //     pivot_x: (1.0 / 16.0),
+                            //     pivot_y: (10.0 / 16.0),
+                            //     pivot_z: (1.0 / 16.0),
+                            //     yaw: 0.0,
+                            //     pitch: ((spin * 15.0).sin() * PI).to_degrees() * 0.25 - 45.0,
+                            //     roll: 0.0,
+                            //     scale_x: 1.0,
+                            //     scale_y: 1.0,
+                            //     scale_z: 1.0,
+                            // };
+
+                            // let gpu_instance = EntityInstances::new(
+                            //     entity.clone(),
+                            //     vec![EntityInstanceTransforms {
+                            //         position: (0.0, 0.0, 0.0),
+                            //         looking_yaw: 0.0,
+                            //         uv_offset: (0.0, 0.0),
+                            //         part_transforms,
+                            //     }],
+                            // );
+
+                            // gpu_instance.upload(&wm);
+
+                            // instances_map.insert(ENTITY_NAME.into(), gpu_instance);
+
                             camera.position += camera.get_direction() * forward * frame_time * 40.0;
 
                             {
@@ -378,9 +415,6 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                                 bytemuck::cast_slice(&rot_mat),
                             );
 
-                            _spin += 0.5;
-                            _frame += 1;
-
                             let surface_state = wm.wgpu_state.surface.read();
                             let surface = surface_state.0.as_ref().unwrap();
                             let texture = surface.get_current_texture().unwrap();
@@ -395,7 +429,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                                 array_layer_count: None,
                             });
 
-                            let _ = wm.render(&graph, &view, &surface_state.1);
+                            let _ = wm.render(&graph, &view, &surface_state.1, &instances_map);
 
                             texture.present();
 
