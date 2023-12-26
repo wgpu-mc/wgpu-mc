@@ -150,6 +150,8 @@ impl Chunk {
                 index_buffer,
             })));
             *self.sections.write() = baked_layers;
+        } else {
+            self.buffers.store(Arc::new(None));
         }
     }
 }
@@ -166,7 +168,7 @@ fn is_block_not_fully_opaque(
     let state = get_block(block_manager, state_provider.get_state(x, y, z));
 
     match state {
-        Some(mesh) => mesh.models[0].1,
+        Some(mesh) => mesh.transparent,
         None => true,
     }
 }
@@ -182,7 +184,7 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
             .blocks
             .get_index(key.block as usize)?
             .1
-            .get_model(key.augment),
+            .get_model(key.augment, 0),
     )
 }
 
@@ -231,12 +233,9 @@ pub fn bake_section_layer<
 
         let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
 
-        if block_state.is_air() {
-            continue;
-        }
 
         let state_key = match block_state {
-            ChunkBlockState::Air => unreachable!(),
+            ChunkBlockState::Air => continue,
             ChunkBlockState::State(key) => key,
         };
 
@@ -245,10 +244,18 @@ pub fn bake_section_layer<
         }
 
         let mesh = get_block(block_manager, block_state).unwrap();
+        let block_entry = block_manager.blocks.get_index(state_key.block as usize).unwrap();
 
         // TODO: randomly select a mesh if there are multiple
 
-        match &mesh.models[0].0 {
+        // dbg!(&mesh, block_entry.0, block_index);
+        // dbg!(render_east, render_west, rener_up, render_down, render_south, render_north, block_index);
+
+        // if block_index == end_index {
+        //     dbg!(&mesh, block_entry.0, block_index);
+        // }
+
+        match &mesh.model {
             CubeOrComplexMesh::Cube(model) => {
                 let baked_should_render_face = |x_: i32, y_: i16, z_: i32| {
                     is_block_not_fully_opaque(block_manager, state_provider, x_, y_, z_)
@@ -260,8 +267,6 @@ pub fn bake_section_layer<
                 let render_down = baked_should_render_face(absolute_x, y - 1, absolute_z);
                 let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
                 let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
-
-                let _add_face = || render_east;
 
                 const INDICES: [u32; 6] = [0, 1, 2, 3, 4, 5];
 

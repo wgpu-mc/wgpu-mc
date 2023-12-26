@@ -1,7 +1,9 @@
 use bytemuck::{Pod, Zeroable};
 use cgmath::{Deg, Matrix4, Vector3, Vector4};
+use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
+use minecraft_assets::schemas::blockstates::ModelProperties;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::mc::resource::ResourceProvider;
@@ -77,9 +79,8 @@ pub struct BlockModelFaces {
 }
 
 #[derive(Debug)]
-///Makes chunk mesh baking a bit faster
 pub enum CubeOrComplexMesh {
-    ///Known to be a simple cube. Only cubes are eligible for sides to be culled depending on the state of it's neighbours
+    ///Known to be a simple cube. Only cubes are eligible for sides to be culled depending on the state of its neighbours
     Cube(Box<BlockModelFaces>),
     ///Something other than a simple cube, such as an anvil, slab, or enchanting table.
     Complex(Vec<BlockModelFaces>),
@@ -182,22 +183,22 @@ pub enum MeshBakeError {
 /// A block model which has been baked into a mesh and is ready for rendering
 /// The bool is true when the blocks next to this block should be rendered,
 /// i.e. when this block does not fully obscure all six faces.
-/// NOTE: Currently, only the first bool in the Vec is actually
-/// important for the implementation.
 #[derive(Debug)]
 pub struct ModelMesh {
-    pub models: Vec<(CubeOrComplexMesh, bool)>,
+    pub model: CubeOrComplexMesh,
+    pub transparent: bool
 }
 
 impl ModelMesh {
     pub fn bake<'a>(
-        variants: impl IntoIterator<Item = &'a schemas::blockstates::Variant>,
+        model_properties: impl IntoIterator<Item = &'a schemas::blockstates::ModelProperties>,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
     ) -> Result<Self, MeshBakeError> {
-        let models = variants.into_iter()
-            .flat_map(|variant| variant.models())
-            .map(|model_properties| {
+        let mut all_elements_are_full_cubes = true;
+
+        let mut mesh = model_properties.into_iter()
+            .map(|model_properties: &ModelProperties| {
                 let model_resource_path = ResourcePath::from(&model_properties.model).prepend("models/").append(".json");
 
                 //Recursively resolve the model using it's parents if it has any
@@ -428,21 +429,32 @@ impl ModelMesh {
                             ]}),
                         };
 
+                        let current_element_is_full_cube = element.from[0] == 0.0
+                            && element.from[1] == 0.0
+                            && element.from[2] == 0.0
+                            && element.to[0] == 16.0
+                            && element.to[1] == 16.0
+                            && element.to[2] == 16.0;
+
+                        all_elements_are_full_cubes &= current_element_is_full_cube;
+
                         Ok(faces)
-                    }).collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>()?;
+                    }).collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>();
 
-                //TODO
-                let has_transparency = false;
+                results
+            })
+            .flatten_ok()
+            .collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>()?;
 
-                Ok((if is_cube {
-                        CubeOrComplexMesh::Cube(Box::new(results.pop().unwrap()))
-                    } else {
-                        CubeOrComplexMesh::Complex(results)
-                    },
-                    !is_cube || has_transparency
-                ))
-            }).collect::<Result<Vec<_>, MeshBakeError>>()?;
+        let is_cube = all_elements_are_full_cubes && mesh.len() == 1;
 
-        Ok(Self { models })
+        Ok(Self {
+            model: if is_cube {
+                CubeOrComplexMesh::Cube(Box::new(mesh.remove(0)))
+            } else {
+                CubeOrComplexMesh::Complex(mesh)
+            },
+            transparent: !is_cube,
+        })
     }
 }

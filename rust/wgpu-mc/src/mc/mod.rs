@@ -36,11 +36,11 @@ pub struct BlockManager {
 #[derive(Debug)]
 pub enum Block {
     Multipart(Multipart),
-    Variants(IndexMap<String, Arc<ModelMesh>>),
+    Variants(IndexMap<String, Vec<Arc<ModelMesh>>>),
 }
 
 impl Block {
-    pub fn get_model(&self, key: u16) -> Arc<ModelMesh> {
+    pub fn get_model(&self, key: u16, _seed: u8) -> Arc<ModelMesh> {
         match &self {
             Block::Multipart(multipart) => multipart
                 .keys
@@ -49,7 +49,8 @@ impl Block {
                 .unwrap()
                 .1
                 .clone(),
-            Block::Variants(variants) => variants.get_index(key as usize).unwrap().1.clone(),
+            //TODO, random variant selection through weight and seed
+            Block::Variants(variants) => variants.get_index(key as usize).unwrap().1[0].clone(),
         }
     }
 
@@ -59,6 +60,8 @@ impl Block {
             + Clone,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
+        //TODO use this
+        _seed: u8
     ) -> Option<(Arc<ModelMesh>, u16)> {
         let key_string = key
             .clone()
@@ -98,7 +101,7 @@ impl Block {
             }
             Block::Variants(variants) => {
                 let full = variants.get_full(&key_string)?;
-                Some((full.2.clone(), full.0 as u16))
+                Some((full.2[0].clone(), full.0 as u16))
             }
         }
     }
@@ -120,13 +123,13 @@ impl Multipart {
     ) -> Arc<ModelMesh> {
         let apply_variants = self.cases.iter().filter_map(|case| {
             if case.applies(key.clone()) {
-                Some(&case.apply)
+                Some(case.apply.models())
             } else {
                 None
             }
         });
 
-        let mesh = ModelMesh::bake(apply_variants, resource_provider, block_atlas).unwrap();
+        let mesh = ModelMesh::bake(apply_variants.into_iter().flatten(), resource_provider, block_atlas).unwrap();
 
         Arc::new(mesh)
     }
@@ -222,16 +225,16 @@ impl MinecraftState {
 
                 let block = match &blockstates {
                     schemas::BlockStates::Variants { variants } => {
-                        let meshes: IndexMap<String, Arc<ModelMesh>> = variants
+                        let meshes: IndexMap<String, Vec<Arc<ModelMesh>>> = variants
                             .iter()
                             .map(|(variant_id, variant)| {
-                                let mesh = ModelMesh::bake(
-                                    [variant],
-                                    &*self.resource_provider,
-                                    &block_atlas,
-                                )
-                                .unwrap();
-                                (variant_id.clone(), Arc::new(mesh))
+                                (variant_id.clone(), variant.models().iter().map(|variation| {
+                                    Arc::new(ModelMesh::bake(
+                                        std::slice::from_ref(variation),
+                                        &*self.resource_provider,
+                                        &block_atlas
+                                    ).unwrap())
+                                }).collect::<Vec<Arc<ModelMesh>>>())
                             })
                             .collect();
 

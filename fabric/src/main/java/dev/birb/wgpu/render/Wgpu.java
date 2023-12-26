@@ -100,7 +100,7 @@ public class Wgpu {
     @SuppressWarnings("unused") // called from rust
     public static void onChar(int codepoint, int modifiers) {
         MinecraftClient client = MinecraftClient.getInstance();
-        client.execute(() -> client.keyboard.onChar(0, codepoint, modifiers));
+        client.execute(() -> client.keyboard.onChar(client.getWindow().getHandle(), codepoint, modifiers));
     }
 
     @SuppressWarnings("unused") // called from rust
@@ -108,7 +108,7 @@ public class Wgpu {
         MinecraftClient client = MinecraftClient.getInstance();
         Wgpu.keyStates.put(key, state);
 
-        client.execute(() -> client.keyboard.onKey(0, key, scancode, state, modifiers));
+        client.execute(() -> client.keyboard.onKey(client.getWindow().getHandle(), key, scancode, state, modifiers));
     }
 
     @SuppressWarnings("unused") // called from rust

@@ -360,24 +360,11 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                 .send(RenderMessage::CursorMove(position.x, position.y))
                                 .unwrap();
                         }
-                        WindowEvent::Ime(Ime::Commit(s)) => {
-                            // could have multiple chars, see winit docs
-                            // TODO check if this still works as intended
-                            // TODO might want to move the for loop to the java side? to avoid multiple jni calls
-                            for c in s.chars() {
-                                CHANNELS
-                                    .0
-                                    .send(RenderMessage::CharTyped(
-                                        c,
-                                        modifiers_to_glfw(current_modifiers),
-                                    ))
-                                    .unwrap();
-                            }
-                        }
                         WindowEvent::KeyboardInput {
                             event:
                                 KeyEvent {
                                     physical_key: PhysicalKey::Code(key),
+                                    text,
                                     state,
                                     ..
                                 },
@@ -396,6 +383,18 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                         modifiers_to_glfw(current_modifiers),
                                     ))
                                     .unwrap();
+
+                                if let Some(text) = text {
+                                    for c in text.chars() {
+                                        CHANNELS
+                                            .0
+                                            .send(RenderMessage::CharTyped(
+                                            c,
+                                            modifiers_to_glfw(current_modifiers),
+                                            ))
+                                            .unwrap();
+                                    }
+                                }
                             }
                         }
                         WindowEvent::ModifiersChanged(new_modifiers) => {
