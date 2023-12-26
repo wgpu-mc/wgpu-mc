@@ -44,7 +44,8 @@ public abstract class MinecraftClientCoreMixin {
     public void run(CallbackInfo ci) {
         if (Wgpu.getException() != null) {
             CrashReport report = new CrashReport(Wgpu.getException().getMessage(), Wgpu.getException());
-            report.addElement("This crash was caused by the Fabric mod Electrum within native Rust code. Please report this crash to the wgpu-mc developers by opening an issue and attaching this crash log at https://github.com/wgpu-mc/wgpu-mc/issues");
+            report.addElement(
+                    "This crash was caused by the Fabric mod Electrum within native Rust code. Please report this crash to the wgpu-mc developers by opening an issue and attaching this crash log at https://github.com/wgpu-mc/wgpu-mc/issues");
             throw new CrashException(report);
         }
     }
@@ -60,8 +61,12 @@ public abstract class MinecraftClientCoreMixin {
 
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/resource/ResourceReloadLogger;reload(Lnet/minecraft/client/resource/ResourceReloadLogger$ReloadReason;Ljava/util/List;)V", shift = At.Shift.AFTER))
     public void injectWindowHook(RunArgs args, CallbackInfo ci) {
-        //Register blocks
+        // Register blocks
         Wgpu.setMayInitialize(true);
     }
 
+    @Inject(method = "scheduleStop", at = @At("HEAD"))
+    public void scheduleRustStop(CallbackInfo ci) {
+        WgpuNative.scheduleStop();
+    }
 }

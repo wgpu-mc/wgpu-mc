@@ -184,4 +184,5 @@ public class WgpuNative {
 
     public static native void clearChunks();
 
+    public static native void scheduleStop();
 }

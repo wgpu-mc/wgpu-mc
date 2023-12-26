@@ -14,7 +14,7 @@ use jni::{
     JNIEnv,
 };
 use jni_fn::jni_fn;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
 use winit::event::{DeviceEvent, Ime, KeyEvent};
 use winit::event_loop::EventLoopBuilder;
@@ -48,6 +48,8 @@ pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
         view: [[0.0; 4]; 4],
     })
 });
+
+static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 
 pub struct Matrices {
     pub projection: [[f32; 4]; 4],
@@ -102,6 +104,11 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, _id: jint, float_array: JFloat
 
     let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(bytemuck::cast_slice(&converted));
     MATRICES.lock().projection = slice_4x4;
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn scheduleStop(_env: JNIEnv, _class: JClass) {
+    let _ = SHOULD_STOP.set(());
 }
 
 pub fn start_rendering(mut env: JNIEnv, title: JString) {
@@ -323,6 +330,10 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     event_loop
         .run(move |event, target| {
+            if SHOULD_STOP.get().is_some() {
+                target.exit();
+            }
+
             match event {
                 Event::AboutToWait => window.request_redraw(),
                 Event::WindowEvent {
