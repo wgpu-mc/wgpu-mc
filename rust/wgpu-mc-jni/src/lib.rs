@@ -1,5 +1,3 @@
-#![feature(core_panic)]
-
 pub extern crate wgpu_mc;
 
 use core::slice;
