@@ -63,8 +63,6 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, BundledEntityInstances)
         &wm.wgpu_state,
     ));
 
-    println!("{:?}", entity.parts);
-
     let one_transform = EntityInstance {
         position: (0.0, 0.0, 0.0),
         looking_yaw: 0.0,

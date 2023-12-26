@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Deg, Matrix4, Vector3, Vector4};
+use cgmath::{Deg, Matrix2, Matrix4, Vector2, Vector3, Vector4};
 use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
@@ -76,14 +76,7 @@ pub struct BlockModelFaces {
     pub west: Option<[u32; 6]>,
     pub up: Option<[u32; 6]>,
     pub down: Option<[u32; 6]>,
-}
-
-#[derive(Debug)]
-pub enum CubeOrComplexMesh {
-    ///Known to be a simple cube. Only cubes are eligible for sides to be culled depending on the state of its neighbours
-    Cube(Box<BlockModelFaces>),
-    ///Something other than a simple cube, such as an anvil, slab, or enchanting table.
-    Complex(Vec<BlockModelFaces>),
+    pub cube: bool
 }
 
 fn recurse_model_parents(
@@ -147,23 +140,30 @@ fn resolve_model(
 
 fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Option<UV> {
     let atlas_map = block_atlas.uv_map.read();
-    // let atlas_uv = atlas_map.get(&(&face.texture.0).into())?;
+
+    // atlas_map.get(&(&face.texture.0).into()).copied().map(|uv| {
+    //     let u = Vector2::new(uv.0.0 as i32, uv.0.1 as i32);
+    //     let v = Vector2::new(uv.1.0 as i32, uv.1.1 as i32);
     //
-    // const ATLAS: f32 = ATLAS_DIMENSIONS as f32;
+    //     let d = v - u;
+    //     let center = u + (d / 2);
     //
-    // let _middle_x = atlas_uv.0 .0 + (atlas_uv.1 .0 / 2.0);
-    // let _middle_y = atlas_uv.0 .1 + (atlas_uv.1 .1 / 2.0);
+    //     let u_shift = u - center;
+    //     let v_shift = v - center;
     //
-    // // let mat = Matrix3::from_translation([middle_x, middle_y].into())
-    // //     * Matrix3::from_angle_x(Deg((90 * face.rotation) as f32))
-    // //     * Matrix3::from_translation([-middle_x, -middle_y].into());
+    //     let matrix = match face.rotation {
+    //         0 => Matrix2::new(1.0, 0.0, 0.0, 1.0),
+    //         90 => Matrix2::new(0.0, 1.0, -1.0, 0.0),
+    //         180 => Matrix2::new(-1.0, 0.0, 0.0, -1.0),
+    //         270 => Matrix2::new(0.0, -1.0, 1.0, 0.0),
+    //         _ => unreachable!()
+    //     };
     //
-    // let mat = Matrix3::identity();
+    //     let u = matrix * u_shift.cast::<f32>().unwrap();
+    //     let v = matrix * v_shift.cast::<f32>().unwrap();
     //
-    // let uv1 = mat * Vector3::new((atlas_uv.0 .0) / ATLAS, (atlas_uv.0 .1) / ATLAS, 1.0);
-    // let uv2 = mat * Vector3::new((atlas_uv.1 .0) / ATLAS, (atlas_uv.1 .1) / ATLAS, 1.0);
-    //
-    // Some(((uv1.x, uv1.y), (uv2.x, uv2.y)))
+    //     ((u.x as u16 + center.x as u16, u.y as u16 + center.y as u16), (v.x as u16 + center.x as u16, v.y as u16 + center.y as u16))
+    // })
 
     atlas_map.get(&(&face.texture.0).into()).copied()
 }
@@ -185,13 +185,13 @@ pub enum MeshBakeError {
 /// i.e. when this block does not fully obscure all six faces.
 #[derive(Debug)]
 pub struct ModelMesh {
-    pub model: CubeOrComplexMesh,
+    pub mesh: Vec<BlockModelFaces>,
     pub transparent: bool
 }
 
 impl ModelMesh {
     pub fn bake<'a>(
-        model_properties: impl IntoIterator<Item = &'a schemas::blockstates::ModelProperties>,
+        model_properties: impl IntoIterator<Item = &'a ModelProperties>,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
     ) -> Result<Self, MeshBakeError> {
@@ -376,6 +376,13 @@ impl ModelMesh {
                         let up_face = up.unwrap_or(NO_UV);
                         let down_face = down.unwrap_or(NO_UV);
 
+                        let current_element_is_full_cube = element.from[0] == 0.0
+                            && element.from[1] == 0.0
+                            && element.from[2] == 0.0
+                            && element.to[0] == 16.0
+                            && element.to[1] == 16.0
+                            && element.to[2] == 16.0;
+
                         #[rustfmt::skip]
                         let faces = BlockModelFaces {
                             vertices: [
@@ -427,14 +434,8 @@ impl ModelMesh {
                             down: down.map(|_down| {[
                                 22,21,20,20,21,23
                             ]}),
+                            cube: current_element_is_full_cube,
                         };
-
-                        let current_element_is_full_cube = element.from[0] == 0.0
-                            && element.from[1] == 0.0
-                            && element.from[2] == 0.0
-                            && element.to[0] == 16.0
-                            && element.to[1] == 16.0
-                            && element.to[2] == 16.0;
 
                         all_elements_are_full_cubes &= current_element_is_full_cube;
 
@@ -446,15 +447,9 @@ impl ModelMesh {
             .flatten_ok()
             .collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>()?;
 
-        let is_cube = all_elements_are_full_cubes && mesh.len() == 1;
-
         Ok(Self {
-            model: if is_cube {
-                CubeOrComplexMesh::Cube(Box::new(mesh.remove(0)))
-            } else {
-                CubeOrComplexMesh::Complex(mesh)
-            },
-            transparent: !is_cube,
+            mesh,
+            transparent: !all_elements_are_full_cubes,
         })
     }
 }

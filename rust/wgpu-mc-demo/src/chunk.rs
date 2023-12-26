@@ -47,23 +47,22 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
 
     let (index, _, block) = bm.blocks.get_full("minecraft:grass_block").unwrap();
 
-    // let (_, augment) = block
-    //     .get_model_by_key(
-    //         [
-    //             ("facing", &StateValue::String("north".into())),
-    //             ("lit", &StateValue::Bool(true)),
-    //         ],
-    //         &*wm.mc.resource_provider,
-    //         &atlas,
-    //         0
-    //     )
-    //     .unwrap();
+    let (_, augment) = block
+        .get_model_by_key(
+            [
+                ("snowy", &StateValue::Bool(false)),
+            ],
+            &*wm.mc.resource_provider,
+            &atlas,
+            0
+        )
+        .unwrap();
 
     let provider = SimpleBlockstateProvider(
         wm.mc.clone(),
         BlockstateKey {
             block: index as u16,
-            augment: 0,
+            augment,
         },
     );
 

@@ -412,6 +412,8 @@ pub fn bake_chunk(x: i32, z: i32) {
             let _instant = Instant::now();
 
             chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+
+            // println!("Baked and uploaded chunk in {}ms", Instant::now().duration_since(instant).as_millis());
         }
     });
 }
