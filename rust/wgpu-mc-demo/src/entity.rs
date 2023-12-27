@@ -1,18 +1,17 @@
-use arc_swap::ArcSwap;
-use cgmath::{Matrix4, SquareMatrix};
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
+
+use arc_swap::ArcSwap;
+use serde::Deserialize;
+
 use wgpu_mc::mc::entity::{BundledEntityInstances, Entity, EntityInstance, PartTransform};
 use wgpu_mc::mc::resource::ResourcePath;
-use wgpu_mc::render::atlas::{Atlas, ATLAS_DIMENSIONS};
-use wgpu_mc::texture::TextureSamplerView;
+use wgpu_mc::render::atlas::Atlas;
+use wgpu_mc::WmRenderer;
+use wgpu_mc_jni::entity::{tmd_to_wm, ModelPartData};
 
 const ENTITY_JSON: &str = include_str!("../dumped_entities.json");
-
-use wgpu_mc::WmRenderer;
-use wgpu_mc_jni::entity::{tmd_to_wm, AtlasPosition, ModelPartData};
 
 #[derive(Deserialize)]
 pub struct Wrapper2 {
@@ -55,7 +54,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, BundledEntityInstances)
     let texture_bytes = wm.mc.resource_provider.get_bytes(&texture_rp).unwrap();
 
     entity_atlas_guard.allocate([(&texture_rp, &texture_bytes)], &*wm.mc.resource_provider);
-    entity_atlas_guard.upload(&wm);
+    entity_atlas_guard.upload(wm);
 
     let entity = Arc::new(Entity::new(
         ENTITY_NAME.into(),

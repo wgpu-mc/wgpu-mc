@@ -1,6 +1,7 @@
 package dev.birb.wgpu.mixin;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
@@ -12,6 +13,7 @@ import net.minecraft.client.render.entity.model.EntityModelLayer;
 import net.minecraft.client.render.entity.model.EntityModels;
 import net.minecraft.client.texture.TextureManager;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -22,7 +24,10 @@ import static net.minecraft.screen.PlayerScreenHandler.BLOCK_ATLAS_TEXTURE;
 
 @Mixin(TitleScreen.class)
 public class TitleScreenMixin {
+    @Unique
+    private static final Gson GSON = new Gson();
 
+    @Unique
     private boolean updatedTitle = false;
 
     @Inject(method = "render", at = @At("HEAD"))
@@ -34,25 +39,11 @@ public class TitleScreenMixin {
 
             long millis = System.currentTimeMillis();
 
-            StringBuilder builder = new StringBuilder();
-
-            builder.append("{");
-            boolean first = true;
-
             Map<EntityModelLayer, TexturedModelData> models = EntityModels.getModels();
 
-            for(Map.Entry<EntityModelLayer, TexturedModelData> entry : models.entrySet()) {
-                if(!first) {
-                    builder.append(",");
-                }
-                first = false;
-                String dumped = (new Gson()).toJson(entry.getValue());
-                builder.append("\"").append(entry.getKey()).append("\":");
-                builder.append(dumped);
-            }
-            builder.append("}");
-
-            WgpuNative.registerEntities(builder.toString());
+            JsonObject json = new JsonObject();
+            models.forEach((layer, data) -> json.add(layer.toString(), GSON.toJsonTree(data)));
+            WgpuNative.registerEntities(json.toString());
 
             WgpuMcMod.MAY_INJECT_PART_IDS = true;
 
@@ -66,5 +57,4 @@ public class TitleScreenMixin {
             WgpuMcMod.ENTITIES_UPLOADED = true;
         }
     }
-
 }

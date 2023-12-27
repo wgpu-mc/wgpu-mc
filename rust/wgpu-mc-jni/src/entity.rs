@@ -4,16 +4,12 @@ use jni::JNIEnv;
 use jni_fn::jni_fn;
 use std::{collections::HashMap, sync::Arc};
 
-use once_cell::sync::OnceCell;
 use serde::Deserialize;
 
 use crate::RENDERER;
 use wgpu_mc::mc::entity::Entity;
+use wgpu_mc::mc::entity::{Cuboid, CuboidUV, EntityPart, PartTransform};
 use wgpu_mc::render::pipeline::ENTITY_ATLAS;
-use wgpu_mc::{
-    mc::entity::{Cuboid, CuboidUV, EntityPart, PartTransform},
-    render::atlas::Atlas,
-};
 
 #[derive(Debug, Deserialize)]
 pub struct ModelCuboidData {
@@ -195,7 +191,7 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
             .collect();
 
     let atlases = wm.mc.texture_manager.atlases.load();
-    let atlas = atlases.get(ENTITY_ATLAS).unwrap();
+    let _atlas = atlases.get(ENTITY_ATLAS).unwrap();
 
     let entities: HashMap<String, Arc<Entity>> = mpd
         .iter()
@@ -204,12 +200,12 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
 
             (
                 name.clone(),
-                Arc::new(Entity::new(name.clone(), entity_part, &*wm.wgpu_state)),
+                Arc::new(Entity::new(name.clone(), entity_part, &wm.wgpu_state)),
             )
         })
         .collect();
 
-    entities.iter().for_each(|(entity_name, entity)| {
+    entities.iter().for_each(|(_entity_name, entity)| {
         let entity_string = env.new_string(&entity.name).unwrap();
         let entity_string_raw = entity_string.into_raw();
 
@@ -223,13 +219,11 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
                 "dev/birb/wgpu/render/Wgpu",
                 "helperSetPartIndex",
                 "(Ljava/lang/String;Ljava/lang/String;I)V",
-                unsafe {
-                    &[
-                        JValue::Object(&entity_string_object),
-                        JValue::Object(&part_string_object),
-                        JValue::Int(*index as jint),
-                    ]
-                },
+                &[
+                    JValue::Object(&entity_string_object),
+                    JValue::Object(&part_string_object),
+                    JValue::Int(*index as jint),
+                ],
             )
             .unwrap();
         });

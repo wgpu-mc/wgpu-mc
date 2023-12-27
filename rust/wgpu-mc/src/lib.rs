@@ -1,6 +1,3 @@
-#![feature(iterator_try_collect)]
-#![feature(portable_simd)]
-
 /*!
 # wgpu-mc
 wgpu-mc is a pure-Rust crate which is designed to be usable by anyone who needs to render
@@ -109,9 +106,7 @@ impl WmRenderer {
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
-            dx12_shader_compiler: wgpu::Dx12Compiler::default(),
-            flags: wgpu::InstanceFlags::debugging(),
-            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
+            ..Default::default()
         });
 
         let surface = unsafe { instance.create_surface(window) }.unwrap();

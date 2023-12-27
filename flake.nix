@@ -38,8 +38,7 @@
           nativeBuildInputs = [pkg-config];
 
           buildInputs = [
-            # TODO: use rust-toolchain.toml to pinpoint nightly version to avoid breakage
-            (rust-bin.nightly.latest.default.override {
+            (rust-bin.stable.latest.default.override {
               extensions = ["rust-analyzer" "rust-src"];
             })
 

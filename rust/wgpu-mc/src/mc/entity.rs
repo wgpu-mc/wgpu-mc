@@ -1,20 +1,19 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::render::atlas::Atlas;
-use crate::texture::{BindableTexture, UV};
-
-use crate::render::entity::EntityVertex;
-use crate::render::pipeline::WmPipelines;
-use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use crate::{WgpuState, WmRenderer};
 use arc_swap::ArcSwap;
+use bytemuck::{Pod, Zeroable};
 use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
 use parking_lot::RwLock;
-use std::collections::HashMap;
-
-use crate::util::BindableBuffer;
-use bytemuck::{Pod, Zeroable};
 use wgpu::BufferUsages;
+
+use crate::render::atlas::Atlas;
+use crate::render::entity::EntityVertex;
+use crate::render::pipeline::WmPipelines;
+use crate::texture::{BindableTexture, UV};
+use crate::util::BindableBuffer;
+use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use crate::{WgpuState, WmRenderer};
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -523,8 +522,7 @@ impl BundledEntityInstances {
 
         let overlays: Vec<u32> = instances
             .iter()
-            .map(|instance| &instance.overlays)
-            .flatten()
+            .flat_map(|instance| &instance.overlays)
             .cloned()
             .collect();
 
@@ -548,14 +546,14 @@ impl BundledEntityInstances {
         ));
 
         let transform_ssbo = Arc::new(BindableBuffer::new(
-            &wm,
+            wm,
             bytemuck::cast_slice(&matrices),
             BufferUsages::STORAGE,
             "ssbo",
         ));
 
         let overlay_ssbo = Arc::new(BindableBuffer::new(
-            &wm,
+            wm,
             bytemuck::cast_slice(&overlays),
             BufferUsages::STORAGE,
             "ssbo",
@@ -628,7 +626,7 @@ fn recurse_transforms(
 
     let mut slice = &instance_transforms[1..];
 
-    if slice.len() == 0 {
+    if slice.is_empty() {
         return;
     }
 

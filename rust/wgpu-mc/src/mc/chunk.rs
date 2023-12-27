@@ -163,7 +163,7 @@ impl Chunk {
             })
             .collect();
 
-        if vertex_data.len() > 0 {
+        if !vertex_data.is_empty() {
             let vertex_buffer =
                 BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
             let index_buffer = BindableBuffer::new(
@@ -271,7 +271,7 @@ pub fn bake_section_layer<
         }
 
         let model_mesh = get_block(block_manager, block_state).unwrap();
-        let block_entry = block_manager
+        let _block_entry = block_manager
             .blocks
             .get_index(state_key.block as usize)
             .unwrap();

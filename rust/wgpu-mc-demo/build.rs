@@ -1,9 +1,6 @@
-use std::collections::HashMap;
 use std::env;
 use std::io;
 use std::path::PathBuf;
-
-use serde::Deserialize;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = env::var("OUT_DIR")?;

@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Deg, Matrix2, Matrix4, Vector2, Vector3, Vector4};
+use cgmath::{Deg, Matrix4, Vector3, Vector4};
 use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
@@ -197,7 +197,7 @@ impl ModelMesh {
     ) -> Result<Self, MeshBakeError> {
         let mut all_elements_are_full_cubes = true;
 
-        let mut mesh = model_properties.into_iter()
+        let mesh = model_properties.into_iter()
             .map(|model_properties: &ModelProperties| {
                 let model_resource_path = ResourcePath::from(&model_properties.model).prepend("models/").append(".json");
 
@@ -250,7 +250,7 @@ impl ModelMesh {
                     * Matrix4::from_angle_y(Deg(model_properties.y as f32 + 180.0))
                     * Matrix4::from_translation(Vector3::new(-0.5, -0.5, -0.5));
 
-                let is_cube = model.elements.iter().len() == 1 && {
+                let _is_cube = model.elements.iter().len() == 1 && {
                     match model.elements.iter().flatten().next() {
                         Some(first) => {
                             first.from[0] == 0.0
@@ -264,7 +264,7 @@ impl ModelMesh {
                     }
                 };
 
-                let mut results = model
+                let results = model
                     .elements
                     .iter()
                     .flatten()

@@ -1,6 +1,3 @@
-#![feature(core_panic)]
-#![feature(cursor_remaining)]
-
 pub extern crate wgpu_mc;
 
 use core::slice;
@@ -35,7 +32,6 @@ use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
 use winit::window::{CursorGrabMode, Window};
 
-use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{
     BlockStateProvider, Chunk, ChunkPos, LightLevel, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT,
@@ -49,7 +45,6 @@ use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
-use crate::entity::tmd_to_wm;
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::lighting::DeserializedLightData;
 use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};

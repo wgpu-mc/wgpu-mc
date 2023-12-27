@@ -7,8 +7,6 @@ use crate::mc::chunk::RenderLayer;
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::ops::Mul;
-use std::simd::{f32x16, f32x4, Simd};
 use std::sync::Arc;
 
 use crate::WmRenderer;

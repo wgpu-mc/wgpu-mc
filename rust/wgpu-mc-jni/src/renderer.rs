@@ -342,13 +342,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             let entity_instances = ENTITY_INSTANCES.lock();
 
-            wm.render(
-                &mut shader_graph,
-                &view,
-                &surface_state.1,
-                &entity_instances,
-            )
-            .unwrap();
+            wm.render(&shader_graph, &view, &surface_state.1, &entity_instances)
+                .unwrap();
 
             texture.present();
         }
@@ -614,8 +609,8 @@ struct EntityRenderState {
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub enum MCTextureId {
-    BLOCK_ATLAS,
-    LIGHTMAP,
+    BlockAtlas,
+    Lightmap,
 }
 
 #[derive(Clone)]
@@ -648,8 +643,8 @@ pub fn identifyGlTexture(_env: JNIEnv, _class: JClass, texture: jint, gl_id: jin
     let mut mc_textures = MC_TEXTURES.lock();
     mc_textures.insert(
         match texture {
-            0 => MCTextureId::BLOCK_ATLAS,
-            1 => MCTextureId::LIGHTMAP,
+            0 => MCTextureId::BlockAtlas,
+            1 => MCTextureId::Lightmap,
             _ => unreachable!(),
         },
         gl_texture.bindable_texture.as_ref().unwrap().clone(),
@@ -662,9 +657,9 @@ pub fn setEntityInstanceBuffer(
     _class: JClass,
     entity_name: JString,
     mat4_float_array: JFloatArray,
-    position: jint,
+    _position: jint,
     overlay_array: JIntArray,
-    overlay_array_position: jint,
+    _overlay_array_position: jint,
     instance_count: jint,
     texture_id: jint,
 ) -> jlong {
@@ -731,14 +726,14 @@ pub fn setEntityInstanceBuffer(
         ));
 
         let transform_ssbo = Arc::new(BindableBuffer::new(
-            &wm,
+            wm,
             bytemuck::cast_slice(&entity_buffers.transforms),
             BufferUsages::STORAGE,
             "ssbo",
         ));
 
         let overlay_ssbo = Arc::new(BindableBuffer::new(
-            &wm,
+            wm,
             bytemuck::cast_slice(&entity_buffers.overlays),
             BufferUsages::STORAGE,
             "ssbo",
@@ -775,12 +770,12 @@ pub fn setEntityInstanceBuffer(
             transform_ssbo,
             instance_vbo: instance_buffer,
             overlay_ssbo,
-            count: instance_count as u32,
+            count: instance_count,
         });
 
         let mut instances = ENTITY_INSTANCES.lock();
         instances.insert(entity_name, bundled_entity_instances);
     });
 
-    return Instant::now().duration_since(now).as_nanos() as jlong;
+    Instant::now().duration_since(now).as_nanos() as jlong
 }

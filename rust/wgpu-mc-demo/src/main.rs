@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::f32::consts::PI;
+
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use raw_window_handle::{
 };
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
-use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstance, PartTransform};
+
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
@@ -177,7 +177,7 @@ impl RenderLayer for TerrainLayer {
 }
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
-    let (entity, instances) = describe_entity(&wm);
+    let (_entity, instances) = describe_entity(&wm);
 
     let mut instances_map = HashMap::new();
 
