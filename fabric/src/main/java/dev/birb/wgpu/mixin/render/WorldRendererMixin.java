@@ -96,6 +96,8 @@ public abstract class WorldRendererMixin {
         }
 
         Objects.requireNonNull(this.world).runQueuedChunkUpdates();
+        this.world.getChunkManager().getLightingProvider().doLightUpdates();
+
         this.setupTerrain(camera, currentFrustum, this.capturedFrustum != null, this.client.player != null && this.client.player.isSpectator());
         this.updateChunks(camera);
 

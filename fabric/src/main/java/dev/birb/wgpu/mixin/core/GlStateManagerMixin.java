@@ -5,6 +5,7 @@ import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.render.GlWmState;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
+import net.minecraft.client.texture.NativeImage;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -17,6 +18,7 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static dev.birb.wgpu.WgpuMcMod.LOGGER;
 
@@ -1013,4 +1015,15 @@ public class GlStateManagerMixin {
     public static int _getInteger(int pname) {
         return -1;
     }
+
+    /**
+     * @author wgpu-mc
+     * @reason replaced with wgpu equivalent
+     */
+    @Overwrite
+    public static void upload(int level, int offsetX, int offsetY, int width, int height, NativeImage.Format format, IntBuffer pixels, Consumer<IntBuffer> closer) {
+
+    }
+
+
 }

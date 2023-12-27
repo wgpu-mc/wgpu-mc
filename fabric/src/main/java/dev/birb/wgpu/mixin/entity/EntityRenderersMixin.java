@@ -13,52 +13,20 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.util.Map;
 
 @Mixin(EntityRenderers.class)
 public class EntityRenderersMixin {
 
-    @Shadow @Final private static Map<EntityType<?>, EntityRendererFactory<?>> RENDERER_FACTORIES;
-
-    @Shadow @Final private static Map<String, EntityRendererFactory<AbstractClientPlayerEntity>> PLAYER_RENDERER_FACTORIES;
-
-    /**
-     * @author wgpu-mc
-     * @reason we need to mixin into a lambda
-     */
-    @Overwrite
-    public static Map<EntityType<?>, EntityRenderer<?>> reloadEntityRenderers(EntityRendererFactory.Context ctx) {
-        ImmutableMap.Builder<EntityType<?>, EntityRenderer<?>> builder = ImmutableMap.builder();
-        RENDERER_FACTORIES.forEach((entityType, factory) -> {
-            try {
-                EntityState.builderType = entityType;
-                EntityState.registeringRoot = true;
-                builder.put(entityType, factory.create(ctx));
-            } catch (Exception var5) {
-                throw new IllegalArgumentException("Failed to create model for  ");
-            }
-        });
-        return builder.build();
+    @Inject(locals = LocalCapture.CAPTURE_FAILEXCEPTION, method = "method_32174", at = @At(value = "INVOKE", target = "Lcom/google/common/collect/ImmutableMap$Builder;put(Ljava/lang/Object;Ljava/lang/Object;)Lcom/google/common/collect/ImmutableMap$Builder;", shift = At.Shift.BEFORE))
+    private static void reloadEntityRenderers(ImmutableMap.Builder builder, EntityRendererFactory.Context context, EntityType entityType, EntityRendererFactory factory, CallbackInfo ci) {
+        EntityState.builderType = entityType;
+        EntityState.registeringRoot = true;
     }
-
-//    /**
-//     * @author wgpu-mc
-//     * @reason we need to mixin into a lambda
-//     */
-//    @Overwrite
-//    public static Map<SkinTextures.Model, EntityRenderer<? extends PlayerEntity>> reloadPlayerRenderers(EntityRendererFactory.Context ctx) {
-//        ImmutableMap.Builder builder = ImmutableMap.builder();
-//        PLAYER_RENDERER_FACTORIES.forEach((model, factory) -> {
-//            try {
-//                EntityState.builderType = EntityType.PLAYER;
-//                EntityState.registeringRoot = true;
-//                builder.put(model, factory.create(ctx));
-//            } catch (Exception exception) {
-//                throw new IllegalArgumentException("Failed to create player model for " + model, exception);
-//            }
-//        });
-//        return builder.build();
-//    }
 
 }
