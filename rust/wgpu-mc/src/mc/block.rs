@@ -76,7 +76,7 @@ pub struct BlockModelFaces {
     pub west: Option<[u32; 6]>,
     pub up: Option<[u32; 6]>,
     pub down: Option<[u32; 6]>,
-    pub cube: bool
+    pub cube: bool,
 }
 
 fn recurse_model_parents(
@@ -186,7 +186,7 @@ pub enum MeshBakeError {
 #[derive(Debug)]
 pub struct ModelMesh {
     pub mesh: Vec<BlockModelFaces>,
-    pub transparent: bool
+    pub transparent: bool,
 }
 
 impl ModelMesh {

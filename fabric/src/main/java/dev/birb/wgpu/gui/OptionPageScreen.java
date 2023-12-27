@@ -138,7 +138,7 @@ public class OptionPageScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context);
+        renderBackground(context, mouseX, mouseY, delta);
 
         var optionWidget = getHoveredOptionWidget(mouseX, mouseY);
         if (optionWidget != null) {

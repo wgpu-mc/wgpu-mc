@@ -14,7 +14,7 @@ use jni::{
     JNIEnv,
 };
 use jni_fn::jni_fn;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
 use winit::dpi::PhysicalSize;
 use winit::event::{DeviceEvent, ElementState, Event, Ime, KeyEvent, WindowEvent};
@@ -49,6 +49,8 @@ pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
         view: [[0.0; 4]; 4],
     })
 });
+
+static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 
 pub struct Matrices {
     pub projection: [[f32; 4]; 4],
@@ -103,6 +105,11 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, _id: jint, float_array: JFloat
 
     let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(bytemuck::cast_slice(&converted));
     MATRICES.lock().projection = slice_4x4;
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn scheduleStop(_env: JNIEnv, _class: JClass) {
+    let _ = SHOULD_STOP.set(());
 }
 
 pub fn start_rendering(mut env: JNIEnv, title: JString) {
@@ -322,6 +329,10 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     event_loop
         .run(move |event, target| {
+            if SHOULD_STOP.get().is_some() {
+                target.exit();
+            }
+
             match event {
                 Event::AboutToWait => window.request_redraw(),
                 Event::WindowEvent {
@@ -389,8 +400,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                         CHANNELS
                                             .0
                                             .send(RenderMessage::CharTyped(
-                                            c,
-                                            modifiers_to_glfw(current_modifiers),
+                                                c,
+                                                modifiers_to_glfw(current_modifiers),
                                             ))
                                             .unwrap();
                                     }
@@ -580,8 +591,20 @@ pub enum MCTextureId {
     LIGHTMAP,
 }
 
+#[derive(Clone)]
+pub struct EntityBuffers {
+    verts: Vec<InstanceVertex>,
+    transforms: Vec<f32>,
+    overlays: Vec<i32>,
+    instance_count: u32,
+}
+
 pub static ENTITY_INSTANCES: Lazy<Mutex<HashMap<String, BundledEntityInstances>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+
+pub static ENTITY_BUFFERS: Lazy<Mutex<HashMap<String, EntityBuffers>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
 pub static MC_TEXTURES: Lazy<Mutex<HashMap<MCTextureId, Arc<BindableTexture>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
@@ -618,8 +641,13 @@ pub fn setEntityInstanceBuffer(
     instance_count: jint,
     texture_id: jint,
 ) -> jlong {
+    assert!(instance_count >= 0);
+    let instance_count = instance_count as u32;
+
+    let wm = RENDERER.get().unwrap();
     let now = Instant::now();
 
+    //TODO this is slow, let's use an integer id somewhere
     let entity_name: String = env.get_string(&entity_name).unwrap().into();
 
     if instance_count == 0 {
@@ -633,45 +661,58 @@ pub fn setEntityInstanceBuffer(
         env.get_array_elements(&mat4_float_array, ReleaseMode::NoCopyBack)
             .unwrap()
     };
-    let mat4s: Vec<f32> = mat4s_array.iter().copied().collect();
+    let transforms: Vec<f32> = mat4s_array.iter().copied().collect();
 
     let overlay_array = unsafe {
         env.get_array_elements(&overlay_array, ReleaseMode::NoCopyBack)
             .unwrap()
     };
-    let overlay: Vec<i32> = overlay_array.iter().copied().collect();
+    let overlays: Vec<i32> = overlay_array.iter().copied().collect();
+
+    let verts: Vec<InstanceVertex> = (0..instance_count)
+        .map(|index| InstanceVertex {
+            entity_index: index,
+            uv_offset: [0, 0],
+        })
+        .collect();
+
+    let entity_buffers = EntityBuffers {
+        verts,
+        transforms,
+        overlays,
+        instance_count,
+    };
+
+    {
+        let mut entity_buffers_map = ENTITY_BUFFERS.lock();
+
+        entity_buffers_map.insert(entity_name.clone(), entity_buffers);
+    }
 
     THREAD_POOL.spawn(move || {
-        let wm = RENDERER.get().unwrap();
-
-        let models = wm.mc.entity_models.read();
-        let entity = models.get(&entity_name).unwrap();
-
-        let instance_vertices: Vec<InstanceVertex> = (0..instance_count as u32)
-            .map(|index| InstanceVertex {
-                entity_index: index,
-                uv_offset: [0, 0],
-            })
-            .collect();
+        let entity_buffers = {
+            let entity_buffers_map = ENTITY_BUFFERS.lock();
+            entity_buffers_map.get(&entity_name).unwrap().clone()
+        };
 
         let instance_buffer = Arc::new(wm.wgpu_state.device.create_buffer_init(
             &BufferInitDescriptor {
                 label: None,
-                contents: bytemuck::cast_slice(&instance_vertices),
+                contents: bytemuck::cast_slice(&entity_buffers.verts),
                 usage: BufferUsages::VERTEX,
             },
         ));
 
         let transform_ssbo = Arc::new(BindableBuffer::new(
             &wm,
-            bytemuck::cast_slice(&mat4s),
+            bytemuck::cast_slice(&entity_buffers.transforms),
             BufferUsages::STORAGE,
             "ssbo",
         ));
 
         let overlay_ssbo = Arc::new(BindableBuffer::new(
             &wm,
-            bytemuck::cast_slice(&overlay),
+            bytemuck::cast_slice(&entity_buffers.overlays),
             BufferUsages::STORAGE,
             "ssbo",
         ));
@@ -697,8 +738,11 @@ pub fn setEntityInstanceBuffer(
                 .clone()
         };
 
+        let models = wm.mc.entity_models.read();
+        let entity = models.get(&entity_name).unwrap();
+
         let mut bundled_entity_instances =
-            BundledEntityInstances::new(entity.clone(), instance_count as u32, texture);
+            BundledEntityInstances::new(entity.clone(), entity_buffers.instance_count, texture);
 
         bundled_entity_instances.uploaded = Some(UploadedEntityInstances {
             transform_ssbo,

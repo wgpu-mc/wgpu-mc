@@ -15,12 +15,14 @@
     "core.OptionsScreenMixin",
     "core.RegistryMixin",
     "core.GlTimerMixin",
+
     "entity.EntityModelLoaderMixin",
     "entity.EntityRenderDispatcherMixin",
     "entity.EntityRendererFactoryMixin",
     "entity.EntityRenderersMixin",
     "entity.ModelPartDataMixin",
     "entity.ModelPartMixin",
+
     "render.BufferRendererMixin",
     "render.BuiltChunkMixin",
     "render.FramebufferMixin",

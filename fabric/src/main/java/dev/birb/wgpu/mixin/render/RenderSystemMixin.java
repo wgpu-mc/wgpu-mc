@@ -22,7 +22,7 @@ public class RenderSystemMixin {
      */
     @Overwrite(remap = false)
     public static String getBackendDescription() {
-        return "wgpu 0.14";
+        return "wgpu 0.18";
     }
 
     /**

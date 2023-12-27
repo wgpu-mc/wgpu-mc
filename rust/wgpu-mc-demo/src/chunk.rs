@@ -49,12 +49,10 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
 
     let (_, augment) = block
         .get_model_by_key(
-            [
-                ("snowy", &StateValue::Bool(false)),
-            ],
+            [("snowy", &StateValue::Bool(false))],
             &*wm.mc.resource_provider,
             &atlas,
-            0
+            0,
         )
         .unwrap();
 

@@ -6,6 +6,7 @@ import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.client.render.entity.EntityRenderers;
+import net.minecraft.client.util.SkinTextures;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.player.PlayerEntity;
 import org.spongepowered.asm.mixin.Final;
@@ -41,23 +42,23 @@ public class EntityRenderersMixin {
         return builder.build();
     }
 
-    /**
-     * @author wgpu-mc
-     * @reason we need to mixin into a lambda
-     */
-    @Overwrite
-    public static Map<String, EntityRenderer<? extends PlayerEntity>> reloadPlayerRenderers(EntityRendererFactory.Context ctx) {
-        ImmutableMap.Builder<String, EntityRenderer<? extends PlayerEntity>> builder = ImmutableMap.builder();
-        PLAYER_RENDERER_FACTORIES.forEach((type, factory) -> {
-            try {
-                EntityState.builderType = EntityType.PLAYER;
-                EntityState.registeringRoot = true;
-                builder.put(type, factory.create(ctx));
-            } catch (Exception var5) {
-                throw new IllegalArgumentException("Failed to create player model for " + type, var5);
-            }
-        });
-        return builder.build();
-    }
+//    /**
+//     * @author wgpu-mc
+//     * @reason we need to mixin into a lambda
+//     */
+//    @Overwrite
+//    public static Map<SkinTextures.Model, EntityRenderer<? extends PlayerEntity>> reloadPlayerRenderers(EntityRendererFactory.Context ctx) {
+//        ImmutableMap.Builder builder = ImmutableMap.builder();
+//        PLAYER_RENDERER_FACTORIES.forEach((model, factory) -> {
+//            try {
+//                EntityState.builderType = EntityType.PLAYER;
+//                EntityState.registeringRoot = true;
+//                builder.put(model, factory.create(ctx));
+//            } catch (Exception exception) {
+//                throw new IllegalArgumentException("Failed to create player model for " + model, exception);
+//            }
+//        });
+//        return builder.build();
+//    }
 
 }

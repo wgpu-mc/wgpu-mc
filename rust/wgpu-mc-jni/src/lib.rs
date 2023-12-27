@@ -520,7 +520,7 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
                     .map(|(a, b)| (*a, b)),
                 &*wm.mc.resource_provider,
                 &atlas,
-                0
+                0,
             );
             let fallback_key = block_manager.blocks.get_full("minecraft:bedrock").unwrap();
 

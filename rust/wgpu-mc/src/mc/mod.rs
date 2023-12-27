@@ -61,7 +61,7 @@ impl Block {
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
         //TODO use this
-        _seed: u8
+        _seed: u8,
     ) -> Option<(Arc<ModelMesh>, u16)> {
         let key_string = key
             .clone()
@@ -129,7 +129,12 @@ impl Multipart {
             }
         });
 
-        let mesh = ModelMesh::bake(apply_variants.into_iter().flatten(), resource_provider, block_atlas).unwrap();
+        let mesh = ModelMesh::bake(
+            apply_variants.into_iter().flatten(),
+            resource_provider,
+            block_atlas,
+        )
+        .unwrap();
 
         Arc::new(mesh)
     }
@@ -228,13 +233,23 @@ impl MinecraftState {
                         let meshes: IndexMap<String, Vec<Arc<ModelMesh>>> = variants
                             .iter()
                             .map(|(variant_id, variant)| {
-                                (variant_id.clone(), variant.models().iter().map(|variation| {
-                                    Arc::new(ModelMesh::bake(
-                                        std::slice::from_ref(variation),
-                                        &*self.resource_provider,
-                                        &block_atlas
-                                    ).unwrap())
-                                }).collect::<Vec<Arc<ModelMesh>>>())
+                                (
+                                    variant_id.clone(),
+                                    variant
+                                        .models()
+                                        .iter()
+                                        .map(|variation| {
+                                            Arc::new(
+                                                ModelMesh::bake(
+                                                    std::slice::from_ref(variation),
+                                                    &*self.resource_provider,
+                                                    &block_atlas,
+                                                )
+                                                .unwrap(),
+                                            )
+                                        })
+                                        .collect::<Vec<Arc<ModelMesh>>>(),
+                                )
                             })
                             .collect();
 

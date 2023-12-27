@@ -193,5 +193,7 @@ public class WgpuNative {
     public static native void clearEntities();
 
     public static native void identifyGlTexture(int texture, int glId);
-    
+
+    public static native void scheduleStop();
+
 }

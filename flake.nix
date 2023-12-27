@@ -34,27 +34,29 @@
         };
 
         # TODO: maybe add proper nix package derivations, to have patchelf-ed versions of the mod?
-        devShells.default = pkgs.mkShell {
-          # needed to compile and run stuff correctly
-          LD_LIBRARY_PATH = with pkgs;
-            lib.makeLibraryPath [
-              openssl
-              glfw
-              xorg.libX11
-            ];
+        devShells.default = with pkgs; mkShell rec {
+          nativeBuildInputs = [pkg-config];
 
-          buildInputs = with pkgs; [
+          buildInputs = [
             # TODO: use rust-toolchain.toml to pinpoint nightly version to avoid breakage
             (rust-bin.nightly.latest.default.override {
               extensions = ["rust-analyzer" "rust-src"];
             })
 
-            openssl
-            pkg-config
+            # rust deps
+            openssl vulkan-loader
+            xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr # x11
+            libxkbcommon wayland # wayland
 
             jdk17
           ];
+
+          packages = [nil];
+
+          LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs; # im lazy
         };
+
+        formatter = pkgs.alejandra;
       };
     };
 }

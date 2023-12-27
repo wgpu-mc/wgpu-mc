@@ -127,11 +127,10 @@ public abstract class WorldRendererMixin {
         if(this.world != null) {
             MatrixStack entityStack = new MatrixStack();
             entityStack.loadIdentity();
-            entityStack.scale(2.0f, 2.0f, 2.0f);
             VertexConsumerProvider dummyProvider = layer -> new DummyVertexConsumer();
 
             for(Entity entity : this.world.getEntities()) {
-                this.renderEntity(entity, camera.getPos().x, camera.getPos().y, camera.getPos().z, tickDelta, entityStack, dummyProvider);
+                this.renderEntity(entity, 0.0, 64.0, 0.0, tickDelta, entityStack, dummyProvider);
             }
         }
 

@@ -766,13 +766,12 @@ impl ShaderGraph {
                             .tsv
                             .view,
                         depth_ops: Some(Operations {
-                            // load: if will_clear_depth { LoadOp::Clear(1.0) } else { LoadOp::Load },
-                            load: LoadOp::Clear(1.0),
-                            store: if will_clear_depth {
-                                StoreOp::Store
+                            load: if will_clear_depth {
+                                LoadOp::Clear(1.0)
                             } else {
-                                StoreOp::Discard
+                                LoadOp::Load
                             },
+                            store: StoreOp::Store,
                         }),
                         stencil_ops: None,
                     }

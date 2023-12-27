@@ -28,7 +28,7 @@ public class MainMixin {
             directorySent = true;
         }
 
-        //Block until the game is initialized enough for wgpu-mc to kick in
+        // Block until the game is initialized enough for wgpu-mc to kick in
         while (!Wgpu.isMayInitialize()) {
             try {
                 Thread.sleep(50);
@@ -44,8 +44,8 @@ public class MainMixin {
 
         Wgpu.startRendering();
 
-        //Never actually reached
-        return true;
+        // Reached when the winit event loop returns
+        return false;
     }
 
 }

@@ -16,9 +16,7 @@ use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
 use wgpu::BufferUsages;
 
-use crate::mc::block::{
-    BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh,
-};
+use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 use crate::util::BindableBuffer;
@@ -233,7 +231,6 @@ pub fn bake_section_layer<
 
         let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
 
-
         let state_key = match block_state {
             ChunkBlockState::Air => continue,
             ChunkBlockState::State(key) => key,
@@ -244,7 +241,10 @@ pub fn bake_section_layer<
         }
 
         let model_mesh = get_block(block_manager, block_state).unwrap();
-        let block_entry = block_manager.blocks.get_index(state_key.block as usize).unwrap();
+        let block_entry = block_manager
+            .blocks
+            .get_index(state_key.block as usize)
+            .unwrap();
 
         // TODO: randomly select a mesh if there are multiple models in a variant
 
@@ -305,15 +305,16 @@ pub fn bake_section_layer<
                     model.west,
                     model.up,
                     model.down,
-                ].iter()
-                    .filter_map(|face| *face)
-                    .for_each(|face| {
-                        let vec_index = vertices.len();
-                        vertices.extend(
-                            face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32)),
-                        );
-                        indices.extend(INDICES.map(|index| index + (vec_index as u32)));
-                    });
+                ]
+                .iter()
+                .filter_map(|face| *face)
+                .for_each(|face| {
+                    let vec_index = vertices.len();
+                    vertices.extend(
+                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32)),
+                    );
+                    indices.extend(INDICES.map(|index| index + (vec_index as u32)));
+                });
             }
         }
     }
