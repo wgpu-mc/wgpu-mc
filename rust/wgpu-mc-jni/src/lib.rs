@@ -1,4 +1,5 @@
 #![feature(core_panic)]
+#![feature(cursor_remaining)]
 
 pub extern crate wgpu_mc;
 
@@ -16,10 +17,7 @@ use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use jni::objects::{
-    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject,
-    JString, JValue, ReleaseMode,
-};
+use jni::objects::{AutoElements, GlobalRef, JByteArray, JByteBuffer, JClass, JFloatArray, JIntArray, JLongArray, JObject, JString, JValue, ReleaseMode};
 use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
@@ -36,7 +34,7 @@ use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, SECTIONS_PER_CHUNK};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, LightLevel, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
@@ -47,6 +45,7 @@ use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
 use crate::entity::tmd_to_wm;
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
+use crate::lighting::DeserializedLightData;
 use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
@@ -57,6 +56,7 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
+mod lighting;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -125,6 +125,7 @@ pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 #[derive(Debug)]
 struct ChunkHolder {
     pub sections: [Option<(JavaPalette, PackedIntegerArray)>; 24],
+    pub light_data: Option<DeserializedLightData>
 }
 
 #[derive(Debug)]
@@ -179,6 +180,37 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         } else {
             ChunkBlockState::State(*block)
         }
+    }
+
+    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
+        let chunk = self.center;
+
+        let light_data = match &chunk.light_data {
+            None => return LightLevel::from_sky_and_block(15, 15),
+            Some(light_data) => light_data,
+        };
+
+        let light_x = ((x % 16) + 16) % 16;
+        let light_y = (y.max(0) % (CHUNK_SECTION_HEIGHT as i16)) as i32;
+        let light_z = ((z % 16) + 16) % 16;
+
+        // let calc = (((y as usize % CHUNK_SECTION_HEIGHT) << 8) | (((z.abs() % 16) as usize) << 4) | ((x.abs() % 16) as usize));
+        let calc = light_y << 8 | light_z << 4 | light_x;
+
+        let index = calc >> 1; //divide by two
+
+        assert!(index >= 0, "index: {} calc: {} light xyz: {} {} {}", index, calc, light_x, light_y, light_z);
+
+        let occupies_smaller_bits = index & 1;
+
+        let shift = if occupies_smaller_bits == 0 { 0 } else { 4 };
+
+        let section = y.max(0).min((CHUNK_HEIGHT - 1) as i16) as usize / CHUNK_SECTION_HEIGHT;
+
+        let sky_light = (light_data.sky_light[(section * 2048) + index as usize] >> shift) & 0xf;
+        let block_light = (light_data.block_light[(section * 2048) + index as usize] >> shift) & 0xf;
+
+        LightLevel::from_sky_and_block(sky_light, block_light)
     }
 
     fn is_section_empty(&self, index: usize) -> bool {
@@ -323,6 +355,8 @@ pub fn createChunk(
     z: jint,
     palettes: JLongArray,
     storages: JLongArray,
+    block_light_nibbles: JByteBuffer,
+    sky_light_nibbles: JByteBuffer,
 ) {
     let palette_elements: AutoElements<jlong> =
         unsafe { env.get_array_elements(&palettes, ReleaseMode::NoCopyBack) }.unwrap();
@@ -340,36 +374,59 @@ pub fn createChunk(
     let storage_elements =
         unsafe { slice::from_raw_parts(storage_elements.as_ptr(), storage_elements.len()) };
 
+    let block_light_nibbles_slice = {
+        let addr = env.get_direct_buffer_address(&block_light_nibbles).unwrap();
+        let len = env.get_direct_buffer_capacity(&block_light_nibbles).unwrap();
+
+        unsafe { slice::from_raw_parts(addr, len) }
+    };
+
+    let sky_light_nibbles_slice = {
+        let addr = env.get_direct_buffer_address(&sky_light_nibbles).unwrap();
+        let len = env.get_direct_buffer_capacity(&sky_light_nibbles).unwrap();
+
+        unsafe { slice::from_raw_parts(addr, len) }
+    };
+
     assert_eq!(size_of::<usize>(), 8);
 
     let storages: &[usize; 24] = bytemuck::cast_slice::<_, usize>(storage_elements)
         .try_into()
         .unwrap();
 
+    let holder = ChunkHolder {
+        sections: palettes
+            .iter()
+            .zip(storages.iter())
+            .map(|(&palette, &storage)| {
+                if palette == 0 || storage == 0 {
+                    return None;
+                }
+
+                //The indices are incremented by one in Java so that 0 means null/None
+                Some((
+                    PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
+                    PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
+                ))
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap_or_else(|_| panic!("Expected a Vec of length 24, got {}", palettes.len())),
+        light_data: Some(
+            DeserializedLightData {
+                block_light: Vec::from(block_light_nibbles_slice).try_into().unwrap(),
+                sky_light: Vec::from(sky_light_nibbles_slice).try_into().unwrap()
+            }
+        )
+    };
+
     let mut write = CHUNKS.write();
 
     write.insert(
         [x, z],
-        ChunkHolder {
-            sections: palettes
-                .iter()
-                .zip(storages.iter())
-                .map(|(&palette, &storage)| {
-                    if palette == 0 || storage == 0 {
-                        return None;
-                    }
-
-                    //The indices are incremented by one in Java so that 0 means null/None
-                    Some((
-                        PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
-                        PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
-                    ))
-                })
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap_or_else(|_| panic!("Expected a Vec of length 24, got {}", palettes.len())),
-        },
+        holder
     );
+
 }
 
 pub fn bake_chunk(x: i32, z: i32) {
@@ -394,6 +451,7 @@ pub fn bake_chunk(x: i32, z: i32) {
             let chunks = CHUNKS.read();
 
             let center = chunks.get(&[x, z]).unwrap();
+
             let north = chunks.get(&[x, z - 1]);
             let south = chunks.get(&[x, z + 1]);
             let west = chunks.get(&[x - 1, z]);
@@ -1195,4 +1253,9 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
             log::warn!("Set cursor mode had an invalid mode.")
         }
     }
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn debugLight(env: JNIEnv, _class: JClass, x: jint, z: jint) {
+    dbg!(CHUNKS.read().get(&[x, z]).unwrap().light_data);
 }

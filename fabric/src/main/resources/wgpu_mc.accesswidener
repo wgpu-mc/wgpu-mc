@@ -34,11 +34,22 @@ accessible method net/minecraft/client/font/TextRenderer drawLayer (Ljava/lang/S
 accessible method net/minecraft/client/font/TextRenderer drawLayer (Lnet/minecraft/text/OrderedText;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/render/VertexConsumerProvider;Lnet/minecraft/client/font/TextRenderer$TextLayerType;II)F
 accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)Lnet/minecraft/client/gl/VertexBuffer;
 accessible method net/minecraft/client/render/WorldRenderer updateChunks (Lnet/minecraft/client/render/Camera;)V
+
 accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
 accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
 
 extendable class net/minecraft/world/chunk/PalettedContainer$DataProvider
 extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
 
+#accessible field net/minecraft/client/render/LightMapTextureManager texture Lnet/minecraft/client/texture/NativeImageBackedTexture;
+accessible field net/minecraft/client/render/LightmapTextureManager texture Lnet/minecraft/client/texture/NativeImageBackedTexture;
+
 mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
+
+accessible field net/minecraft/world/chunk/light/LightingProvider blockLightProvider Lnet/minecraft/world/chunk/light/ChunkLightProvider;
+accessible field net/minecraft/world/chunk/light/LightingProvider skyLightProvider Lnet/minecraft/world/chunk/light/ChunkLightProvider;
+accessible field net/minecraft/world/chunk/light/ChunkLightProvider lightStorage Lnet/minecraft/world/chunk/light/LightStorage;
+accessible field net/minecraft/world/chunk/light/LightStorage storage Lnet/minecraft/world/chunk/ChunkToNibbleArrayMap;
+accessible field net/minecraft/world/chunk/light/LightStorage uncachedStorage Lnet/minecraft/world/chunk/ChunkToNibbleArrayMap;
+accessible class net/minecraft/world/chunk/light/SkyLightStorage$Data

@@ -29,6 +29,7 @@
     "render.GameRendererCameraMixin",
     "render.GLXMixin",
     "render.InGameHudMixin",
+    "render.LightmapTextureManagerMixin",
     "render.MinecraftClientRenderMixin",
     "render.RenderSystemMixin",
     "render.SpriteAtlasTextureMixin",
@@ -36,7 +37,8 @@
     "render.WindowMixin",
     "render.WorldRendererMixin",
     "render.ItemRendererMixin",
-    "world.BlockStateMixin"
+    "world.BlockStateMixin",
+    "DebugHudMixin"
   ],
   "injectors": {
     "defaultRequire": 1

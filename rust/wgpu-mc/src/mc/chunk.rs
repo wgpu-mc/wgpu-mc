@@ -9,8 +9,15 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io::stdout;
+use std::iter::repeat;
+use std::mem::size_of;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
+use wgpu::util::{align_to, BufferInitDescriptor, DeviceExt};
+use wgpu::{BufferAddress, BufferDescriptor};
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
@@ -30,8 +37,6 @@ pub const CHUNK_SECTION_HEIGHT: usize = 16;
 pub const SECTIONS_PER_CHUNK: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
-pub const CHUNK_ALLOCATOR_SIZE: usize = 1024 * 1024 * 1024;
-
 pub type ChunkPos = [i32; 2];
 
 pub struct ChunkManager {
@@ -49,9 +54,34 @@ impl ChunkManager {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct LightLevel {
+    pub byte: u8
+}
+
+impl LightLevel {
+
+    pub const fn from_sky_and_block(sky: u8, block: u8) -> Self {
+        Self {
+            byte: (sky << 4) | (block & 0b1111),
+        }
+    }
+
+    pub fn get_sky_level(&self) -> u8 {
+        self.byte >> 4
+    }
+
+    pub fn get_block_level(&self) -> u8 {
+        self.byte & 0b1111
+    }
+
+}
+
 /// Return a [ChunkBlockState] within the provided world coordinates.
-pub trait BlockStateProvider: Send + Sync + Debug {
+pub trait BlockStateProvider: Send + Sync {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
+
+    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel;
 
     fn is_section_empty(&self, index: usize) -> bool;
 }
@@ -59,7 +89,7 @@ pub trait BlockStateProvider: Send + Sync + Debug {
 pub trait RenderLayer: Send + Sync {
     fn filter(&self) -> fn(BlockstateKey) -> bool;
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex;
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex;
 
     fn name(&self) -> &str;
 }
@@ -98,6 +128,8 @@ impl Chunk {
         let mut vertices = 0;
         let mut vertex_data = Vec::new();
         let mut index_data = Vec::new();
+
+        // let mut out = stdout().lock();
 
         let baked_layers = layers
             .iter()
@@ -190,7 +222,7 @@ pub fn bake_section_layer<
     T,
     Provider: BlockStateProvider,
     Filter: Fn(BlockstateKey) -> bool,
-    Mapper: Fn(&BlockMeshVertex, f32, f32, f32) -> T,
+    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> T,
 >(
     block_manager: &BlockManager,
     chunk: &Chunk,
@@ -263,10 +295,10 @@ pub fn bake_section_layer<
                 let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
                 let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
 
-                let mut extend_vertices = |face: &[u32; 6]| {
+                let mut extend_vertices = |face: &[u32; 6], light_level: LightLevel| {
                     let vec_index = vertices.len();
                     vertices.extend(
-                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32)),
+                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32, light_level)),
                     );
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 };
@@ -275,29 +307,37 @@ pub fn bake_section_layer<
                 //We use those offsets to get the relevant vertices, and add them into the chunk vertices.
                 //We then add the starting offset into the vertices to the face indices so that they match up.
                 if let (true, Some(face)) = (render_north, &model.north) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z - 1);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_east, &model.east) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x + 1, y, absolute_z);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_south, &model.south) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z - 1);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_west, &model.west) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x - 1, y, absolute_z);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_up, &model.up) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y + 1, absolute_z);
+                    extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_down, &model.down) {
-                    extend_vertices(face);
+                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y - 1, absolute_z);
+                    extend_vertices(face, light_level);
                 }
             } else {
+                let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z);
+
                 [
                     model.north,
                     model.east,
@@ -311,7 +351,7 @@ pub fn bake_section_layer<
                 .for_each(|face| {
                     let vec_index = vertices.len();
                     vertices.extend(
-                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32)),
+                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32, light_level)),
                     );
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 });

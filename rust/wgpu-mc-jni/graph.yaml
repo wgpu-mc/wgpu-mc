@@ -20,6 +20,7 @@ pipelines:
       1: wm_texture_atlas_blocks
       2: wm_ssbo_chunk_vertices
       3: wm_ssbo_chunk_indices
+      4: wm_tex_electrum_lightmap
   entity:
     geometry: wm_geo_entities
     depth: wm_framebuffer_depth

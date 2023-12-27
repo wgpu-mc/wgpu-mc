@@ -7,6 +7,8 @@ use crate::mc::chunk::RenderLayer;
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::ops::Mul;
+use std::simd::{f32x16, f32x4, Simd};
 use std::sync::Arc;
 
 use crate::WmRenderer;
@@ -23,31 +25,13 @@ pub struct Vertex {
     pub position: [f32; 3],
     pub uv: [u16; 2],
     pub normal: [f32; 3],
-    // pub lightmap_coords: u32,
     pub color: u32,
     pub uv_offset: u32,
+    pub lightmap_coords: u8
 }
 
 impl Vertex {
-    const VAA: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-        0 => Float32x3,
-        1 => Float32x2,
-        2 => Uint32,
-        3 => Uint32,
-        4 => Uint32
-    ];
-
-    pub const VERTEX_LENGTH: usize = 12;
-
-    #[must_use]
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::VAA,
-        }
-    }
+    pub const VERTEX_LENGTH: usize = 16;
 
     pub fn compressed(&self) -> [u8; Self::VERTEX_LENGTH] {
         // XYZ: 4 bytes (1 for each axis)
@@ -56,9 +40,10 @@ impl Vertex {
         // UV: 4 bytes
         // Animated UV index: 10 bits
         // XYZ add one flag: 3 bits
+        // Block light nibble: 1 byte (4 bits for block, 4 bits for sky)
 
-        // Total: 93 bits (12 bytes)
-        let mut array = [0; 12];
+        // Total: 101 bits (13 bytes)
+        let mut array = [0; Self::VERTEX_LENGTH];
 
         let x = self.position[0] * 16.0;
         let y = self.position[1] * 16.0;
@@ -105,6 +90,7 @@ impl Vertex {
         //UV index and normal
         array[10] = self.uv_offset as u8;
         array[11] = (((self.uv_offset >> 8) as u8) & 0b11) | (normal_bits << 2) | (flag_byte << 5);
+        array[12] = self.lightmap_coords;
 
         array
     }

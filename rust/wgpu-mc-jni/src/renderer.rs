@@ -1,31 +1,33 @@
+use std::{slice, thread};
+use std::{sync::Arc, time::Instant};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
-use std::{mem, slice, thread};
-use std::{sync::Arc, time::Instant};
 
+use arc_swap::ArcSwap;
 use byteorder::LittleEndian;
-use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
+use cgmath::{Deg, Matrix4, perspective, SquareMatrix};
 use futures::executor::block_on;
-use jni::objects::{AutoElements, JClass, JFloatArray, JIntArray, ReleaseMode};
-use jni::sys::{jfloat, jfloatArray, jint, jintArray, jlong};
 use jni::{
-    objects::{JString, JValue},
     JNIEnv,
+    objects::{JString, JValue},
 };
+use jni::objects::{AutoElements, JClass, JFloatArray, JIntArray, ReleaseMode};
+use jni::sys::{jfloat, jint, jlong};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
 use winit::dpi::PhysicalSize;
-use winit::event::{DeviceEvent, ElementState, Event, Ime, KeyEvent, WindowEvent};
+use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoopBuilder;
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::platform::scancode::PhysicalKeyExtScancode;
 
+use wgpu_mc::WmRenderer;
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
-use wgpu_mc::mc::chunk::RenderLayer;
+use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{
-    BundledEntityInstances, EntityInstance, InstanceVertex, UploadedEntityInstances,
+    BundledEntityInstances, InstanceVertex, UploadedEntityInstances,
 };
 use wgpu_mc::render::graph::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;
@@ -33,15 +35,15 @@ use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::BindableTexture;
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu;
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
-use wgpu_mc::{render::atlas::Atlas, WmRenderer};
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 
-use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
 use crate::{
-    MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, MC_STATE,
-    RENDERER, THREAD_POOL, WINDOW,
+    CHANNELS, MC_STATE, MinecraftResourceManagerAdapter, RENDERER, RenderMessage,
+    THREAD_POOL, WINDOW, WinitWindowWrapper,
 };
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC, GlTexture};
+use crate::lighting::LIGHTMAP_GLID;
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
@@ -64,17 +66,24 @@ impl RenderLayer for TerrainLayer {
         |_| true
     }
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32) -> Vertex {
-        |vert, x, y, z| Vertex {
-            position: [
-                vert.position[0] + x,
-                vert.position[1] + y,
-                vert.position[2] + z,
-            ],
-            uv: vert.tex_coords,
-            normal: [vert.normal[0], vert.normal[1], vert.normal[2]],
-            color: u32::MAX,
-            uv_offset: vert.animation_uv_offset,
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
+        |vert, x, y, z, light| {
+            // if light.get_block_level() != 0 {
+            //     println!("{x} {y} {z}");
+            // }
+
+            Vertex {
+                position: [
+                    vert.position[0] + x,
+                    vert.position[1] + y,
+                    vert.position[2] + z,
+                ],
+                lightmap_coords: light.byte,
+                normal: vert.normal,
+                color: 0xffffffff,
+                uv_offset: vert.animation_uv_offset,
+                uv: vert.tex_coords
+            }
         }
     }
 
@@ -229,6 +238,23 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             )),
         },
     );
+  
+    {
+        let tex_id = LIGHTMAP_GLID.lock().unwrap();
+        let textures_read = GL_ALLOC.read();
+        let lightmap = textures_read.get(&*tex_id).unwrap();
+        let bindable = lightmap.bindable_texture.as_ref().unwrap();
+        let asaa = ArcSwap::new(bindable.clone());
+        resources.insert(
+            "wm_tex_electrum_lightmap".into(),
+            CustomResource {
+                update: None,
+                data: Arc::new(ResourceInternal::Texture(wgpu_mc::render::graph::TextureResource::Bindable(asaa.into()), false)),
+            },
+        );
+        println!("Added resources");
+    }
+  
 
     let matrix = Matrix4::identity();
     let mat: Mat4 = matrix.into();
@@ -257,6 +283,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     types.insert("wm_electrum_mat4".into(), "matrix".into());
     types.insert("wm_electrum_gl_texture".into(), "texture".into());
+    types.insert("wm_tex_electrum_lightmap".into(), "texture".into());
 
     let mut geometry_layouts = HashMap::new();
 

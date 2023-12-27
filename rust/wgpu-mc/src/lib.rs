@@ -1,4 +1,6 @@
 #![feature(iterator_try_collect)]
+#![feature(portable_simd)]
+
 /*!
 # wgpu-mc
 wgpu-mc is a pure-Rust crate which is designed to be usable by anyone who needs to render
@@ -124,6 +126,7 @@ impl WmRenderer {
 
         let limits = wgpu::Limits {
             max_push_constant_size: 128,
+            max_bind_groups: 8,
             ..Default::default()
         };
 

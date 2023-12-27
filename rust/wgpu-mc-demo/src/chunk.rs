@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, LightLevel};
 use wgpu_mc::mc::MinecraftState;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 
@@ -21,6 +21,10 @@ impl BlockStateProvider for SimpleBlockstateProvider {
         } else {
             ChunkBlockState::Air
         }
+    }
+
+    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
+        LightLevel::from_sky_and_block(15, 15)
     }
 
     fn is_section_empty(&self, _index: usize) -> bool {

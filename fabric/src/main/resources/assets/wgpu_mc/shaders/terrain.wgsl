@@ -36,13 +36,18 @@ var<push_constant> push_constants: PushConstants;
 @group(2) @binding(0) var<storage> vertex_data: array<u32>;
 @group(3) @binding(0) var<storage> index_data: array<u32>;
 
+@group(4) @binding(0) var lightmap_texture: texture_2d<f32>;
+@group(4) @binding(1) var lightmap_sampler: sampler;
+
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
     @location(1) tex_coords2: vec2<f32>,
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
-    @location(4) world_pos: vec3<f32>
+    @location(4) world_pos: vec3<f32>,
+    @location(5) light_coords: vec2<u32>,
+    @location(6) light_coordsf: vec2<f32>
 };
 
 @vertex
@@ -55,9 +60,10 @@ fn vert(
 
     var index: u32 = index_data[vertex_index];
 
-    var v1 = vertex_data[index * 3u];
-    var v2 = vertex_data[(index * 3u) + 1u];
-    var v3 = vertex_data[(index * 3u) + 2u];
+    var v1 = vertex_data[index * 4u];
+    var v2 = vertex_data[(index * 4u) + 1u];
+    var v3 = vertex_data[(index * 4u) + 2u];
+    var v4 = vertex_data[(index * 4u) + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
@@ -84,8 +90,15 @@ fn vert(
 
     vr.pos = camera_uniform.view_proj * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
+    vr.light_coords = vec2<u32>(v4 & 15u, (v4 >> 4u) & 15u);
+    vr.blend = 0.0;
+    vr.light_coordsf = vec2(f32(vr.light_coords.x) / 15.0, f32(vr.light_coords.y) / 15.0);
 
     return vr;
+}
+
+fn minecraft_sample_lighting(uv: vec2<u32> ) -> f32 {
+    return f32(max(uv.x, uv.y)) / 15.0;
 }
 
 @fragment
@@ -93,9 +106,8 @@ fn frag(
     in: VertexResult
 ) -> @location(0) vec4<f32> {
     let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
-    let col2 = textureSample(t_texture, t_sampler, in.tex_coords2);
 
-    let col = mix(col1, col2, in.blend);
+    let light = textureSample(lightmap_texture, lightmap_sampler, in.light_coordsf);
 
-    return col1;
+    return light * col1;
 }

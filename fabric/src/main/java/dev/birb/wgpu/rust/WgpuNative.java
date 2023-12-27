@@ -95,8 +95,6 @@ public class WgpuNative {
 
     public static native void setIndexBuffer(int[] buffer);
 
-    public static native void debugPalette(long storage, long palette);
-
     public static native void setVertexBuffer(byte[] buffer);
 
     public static native void setProjectionMatrix(float[] mat);
@@ -160,7 +158,7 @@ public class WgpuNative {
 
     public static native void clearPalette(long l);
 
-    public static native void createChunk(int x, int z, long[] pointers, long[] storagePointers);
+    public static native void createChunk(int x, int z, long[] pointers, long[] storagePointers, ByteBuffer blockLight, ByteBuffer skyLight);
 
     public static native void destroyPaletteStorage(long paletteStorage);
 
@@ -170,15 +168,7 @@ public class WgpuNative {
 
     public static native void bakeChunk(int x, int z);
 
-    public static native int piaGet(long ptr, int x, int y, int z);
-
-    public static native int piaGetByIndex(long ptr, int index);
-
-    public static native void debugBake();
-
     public static native void setMatrix(int type, float[] mat);
-
-    public static native void setChunkOffset(int x, int z);
 
     public static native void setCursorLocked(boolean locked);
 
@@ -195,5 +185,13 @@ public class WgpuNative {
     public static native void identifyGlTexture(int texture, int glId);
 
     public static native void scheduleStop();
+
+    public static native long createAndDeserializeLightData(byte[] array, int index);
+
+    public static native void bindLightData(long lightData, int x, int z);
+
+    public static native void setLightmapID(int id);
+
+    public static native void debugLight(int x, int z);
 
 }
