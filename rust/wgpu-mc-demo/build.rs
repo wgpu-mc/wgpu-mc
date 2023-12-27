@@ -1,6 +1,9 @@
+use std::collections::HashMap;
 use std::env;
 use std::io;
 use std::path::PathBuf;
+
+use serde::Deserialize;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = env::var("OUT_DIR")?;
@@ -46,6 +49,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("copy shader source code");
     fs_extra::dir::copy("./res/wgpu_mc", &resources_root, &copy_options)?;
+
+    // let dumped_entities = include_str!("./dumped_entities.json");
+    // let dumped_e: Vec<Wrapper> = serde_json::from_str(dumped_entities).unwrap();
+
+    // panic!("{:#?}", dumped_e);
 
     Ok(())
 }

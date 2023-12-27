@@ -87,6 +87,7 @@ impl Vertex {
         //U
         array[6] = self.uv[0].to_le_bytes()[0];
         array[7] = self.uv[0].to_le_bytes()[1];
+        //V
         array[8] = self.uv[1].to_le_bytes()[0];
         array[9] = self.uv[1].to_le_bytes()[1];
 

@@ -14,7 +14,7 @@ public class InputUtilMixin {
      */
     @Overwrite
     public static boolean isKeyPressed(long handle, int code) {
-        return Wgpu.getKeyStates().getOrDefault(code, 1) == 0;
+        return Wgpu.keyStates.getOrDefault(code, 0) == 1;
     }
 
     /**
