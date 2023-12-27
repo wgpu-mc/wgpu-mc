@@ -1,6 +1,7 @@
 package dev.birb.wgpu.mixin.core;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.render.GlWmState;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
@@ -762,8 +763,8 @@ public class GlStateManagerMixin {
         int texId = GlWmState.getTextureSlots().get(GlWmState.getActiveTexture());
         GlWmState.WmTexture texture = GlWmState.getGeneratedTextures().get(texId);
 
-        if (width < texture.getWidth() || height < texture.getHeight()) {
-            LOGGER.warn("Tried to make texture smaller?");
+        if(width < texture.getWidth() || height < texture.getHeight()) {
+            WgpuMcMod.LOGGER.debug("_texImage2D tried to make a texture smaller?");
             return;
         }
 
@@ -804,9 +805,24 @@ public class GlStateManagerMixin {
                     int currentX = x + unpackSkipPixels;
                     int currentY = (y + unpackSkipRows) * (unpackRowLength > 0 ? unpackRowLength : width);
 
+//<<<<<<< HEAD
                     //TODO row_byte_offset proper impl || let row_byte_offset = if pixel_size >= unpack_alignment
                     long offset = (currentX + currentY) * pixelSize;
                     pixelArray[x + y * width] = MemoryUtil.memGetInt(pixels + offset);
+//=======
+//            long pixel_size = 4L; //TODO support more formats..?
+//            for (int y = 0; y < height; y++) {
+//                for (int x = 0; x < width; x++) {
+//                    int current_x = x + unpack_skip_pixels;
+//                    int current_y = (y + unpack_skip_rows) *
+//                            (unpack_row_length > 0 ? unpack_row_length : width);
+//
+//                    //TODO row_byte_offset proper impl || let row_byte_offset = if pixel_size >= unpack_alignment
+//                    long offset = (current_x + current_y) * pixel_size;
+//
+////                    intBuf.put(x + y * width, MemoryUtil.memGetInt(pixels+offset));
+//                    pixel_array[x + y * width] = MemoryUtil.memGetInt(pixels + offset);
+//>>>>>>> e61f847689629ff02bf2135cc266992744d3c54e
                 }
             }
 

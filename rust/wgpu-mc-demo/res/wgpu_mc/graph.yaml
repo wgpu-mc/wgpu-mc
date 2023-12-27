@@ -15,24 +15,28 @@ resources:
     type: mat4
     mult: [wm_mat4_rotation]
 pipelines:
-#  shadow_terrain:
-#    geometry: wm_geo_terrain
-#    depth: shadow_depth
-#    output: []
-#    uniforms:
-#      0: mvp_mat4
-#  quad:
-#    geometry: wm_geo_quad
+  quad:
+    geometry: wm_geo_quad
+    depth: wm_framebuffer_depth
+    output: [wm_framebuffer_texture]
+    push_constants:
+      0: wm_pc_framebuffer_size
+    uniforms:
+      0: rot
+  entity:
+    geometry: wm_geo_entities
 #    depth: wm_framebuffer_depth
-#    output: [wm_framebuffer_texture]
-#    pc:
-#      0: wm_pc_framebuffer_size
-#    uniforms:
-#      0: rot
+    output: [wm_framebuffer_texture]
+    push_constants:
+      0: wm_pc_parts_per_entity
+    uniforms:
+      0: mvp_mat4
+      1: wm_ssbo_entity_part_transforms
+      2: wm_texture_entities
   terrain:
     geometry: wm_geo_terrain
     depth: wm_framebuffer_depth
-    output: [wm_framebuffer_texture]
+    output: [ wm_framebuffer_texture ]
     blending: premultiplied_alpha_blending
     push_constants:
       0: wm_pc_chunk_position

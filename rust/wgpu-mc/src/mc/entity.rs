@@ -8,11 +8,13 @@ use crate::render::pipeline::WmPipelines;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{WgpuState, WmRenderer};
 use arc_swap::ArcSwap;
-use cgmath::{Matrix4, SquareMatrix, Vector4};
+use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 
+use crate::util::BindableBuffer;
 use bytemuck::{Pod, Zeroable};
+use wgpu::BufferUsages;
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -388,7 +390,7 @@ impl Cuboid {
 /// of their respective parents
 #[derive(Clone, Debug)]
 pub struct EntityPart {
-    pub name: Arc<String>,
+    pub name: String,
     pub transform: PartTransform,
     pub cuboids: Vec<Cuboid>,
     pub children: Vec<EntityPart>,
@@ -397,12 +399,12 @@ pub struct EntityPart {
 ///A struct that represents an entity model and it's mesh along with corresponding data
 #[derive(Debug)]
 pub struct Entity {
+    pub name: String,
     pub model_root: EntityPart,
-    pub texture: Arc<BindableTexture>,
     /// Names of each part referencing an index for applicable transforms
     pub parts: HashMap<String, usize>,
     pub mesh: Arc<wgpu::Buffer>,
-    pub vertices: u32,
+    pub vertex_count: u32,
 }
 
 fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id: &mut u32) {
@@ -424,7 +426,7 @@ fn recurse_get_mesh(part: &EntityPart, vertices: &mut Vec<EntityVertex>, part_id
 }
 
 fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<String, usize>) {
-    names.insert((*part.name).clone(), *index);
+    names.insert(part.name.clone(), *index);
     *index += 1;
     part.children
         .iter()
@@ -433,7 +435,7 @@ fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<S
 
 impl Entity {
     ///Create an entity from an [EntityPart] and upload it's mesh to the GPU
-    pub fn new(root: EntityPart, wgpu_state: &WgpuState, texture: Arc<BindableTexture>) -> Self {
+    pub fn new(name: String, root: EntityPart, wgpu_state: &WgpuState) -> Self {
         let mut parts = HashMap::new();
 
         recurse_get_names(&root, &mut 0, &mut parts);
@@ -444,72 +446,71 @@ impl Entity {
         recurse_get_mesh(&root, &mut mesh, &mut part_id);
 
         Self {
+            name,
             model_root: root,
-            texture,
             parts,
             mesh: Arc::new(wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(&mesh[..]),
                 usage: wgpu::BufferUsages::VERTEX,
             })),
-            vertices: mesh.len() as u32,
+            vertex_count: mesh.len() as u32,
         }
     }
 }
 
-#[allow(dead_code)]
-#[derive(Clone)]
-pub(crate) struct UploadedEntityInstances {
-    pub(crate) transform_ssbo: (Arc<wgpu::Buffer>, Arc<wgpu::BindGroup>),
-    pub(crate) instance_vbo: Arc<wgpu::Buffer>,
-    pub(crate) count: u32,
+pub struct UploadedEntityInstances {
+    pub transform_ssbo: Arc<BindableBuffer>,
+    pub instance_vbo: Arc<wgpu::Buffer>,
+    pub overlay_ssbo: Arc<BindableBuffer>,
+    pub count: u32,
 }
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
-/// POD representation of an entity instance that is used in the instance VBO
-pub(crate) struct EntityInstanceVBOEntry {
-    /// Index into mat4[]
-    pub(crate) entity_index: u32,
-    pub(crate) uv_offset: [f32; 2],
-    pub(crate) parts_per_entity: u32,
+pub struct InstanceVertex {
+    /// Index into the mat4[] contained by [UploadedEntityInstances].transform_ssbo
+    pub entity_index: u32,
+    pub uv_offset: [u16; 2],
 }
 
-impl EntityInstanceVBOEntry {
-    const _VAA: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![
+impl InstanceVertex {
+    const VAA: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
         4 => Uint32,
-        5 => Float32x2,
-        6 => Uint32
+        5 => Float32x2
     ];
 
-    pub fn _desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<EntityInstanceVBOEntry>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<InstanceVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &Self::_VAA,
+            attributes: &Self::VAA,
         }
     }
 }
 
-pub struct EntityInstances {
-    pub(crate) entity: Arc<Entity>,
-    pub instances: Vec<EntityInstanceTransforms>,
-    pub(crate) uploaded: RwLock<Option<UploadedEntityInstances>>,
+pub struct BundledEntityInstances {
+    pub entity: Arc<Entity>,
+    pub texture: Arc<BindableTexture>,
+    pub uploaded: Option<UploadedEntityInstances>,
+    pub count: u32,
 }
 
-impl EntityInstances {
-    pub fn new(entity: Arc<Entity>, instances: Vec<EntityInstanceTransforms>) -> Self {
+impl BundledEntityInstances {
+    pub fn new(entity: Arc<Entity>, count: u32, texture: Arc<BindableTexture>) -> Self {
         Self {
             entity,
-            instances,
-            uploaded: RwLock::new(None),
+            texture,
+            uploaded: None,
+            count,
         }
     }
 
-    pub fn upload(&self, wm: &WmRenderer) {
-        let matrices = self
-            .instances
+    pub fn upload(&mut self, wm: &WmRenderer, instances: &[EntityInstance]) {
+        self.count = instances.len() as u32;
+
+        let matrices = instances
             .iter()
             .flat_map(|transforms| {
                 transforms
@@ -520,14 +521,19 @@ impl EntityInstances {
             })
             .collect::<Vec<f32>>();
 
-        let instances: Vec<EntityInstanceVBOEntry> = self
-            .instances
+        let overlays: Vec<u32> = instances
+            .iter()
+            .map(|instance| &instance.overlays)
+            .flatten()
+            .cloned()
+            .collect();
+
+        let instances: Vec<InstanceVertex> = instances
             .iter()
             .enumerate()
-            .map(|(index, instance)| EntityInstanceVBOEntry {
+            .map(|(index, instance)| InstanceVertex {
                 entity_index: index as u32,
-                uv_offset: [instance.uv_offset.0, instance.uv_offset.1],
-                parts_per_entity: self.entity.parts.len() as u32,
+                uv_offset: [instance.uv_offset[0], instance.uv_offset[1]],
             })
             .collect();
 
@@ -537,51 +543,44 @@ impl EntityInstances {
             &BufferInitDescriptor {
                 label: None,
                 contents: instances_bytes,
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: BufferUsages::VERTEX,
             },
         ));
 
-        let transform_buffer = wm
-            .wgpu_state
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&matrices[..]),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
+        let transform_ssbo = Arc::new(BindableBuffer::new(
+            &wm,
+            bytemuck::cast_slice(&matrices),
+            BufferUsages::STORAGE,
+            "ssbo",
+        ));
 
-        let pipelines = wm.pipelines.load();
+        let overlay_ssbo = Arc::new(BindableBuffer::new(
+            &wm,
+            bytemuck::cast_slice(&overlays),
+            BufferUsages::STORAGE,
+            "ssbo",
+        ));
 
-        let transform_bind_group =
-            wm.wgpu_state
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: pipelines.bind_group_layouts.read().get("ssbo").unwrap(),
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: transform_buffer.as_entire_binding(),
-                    }],
-                });
-
-        *self.uploaded.write() = Some(UploadedEntityInstances {
-            transform_ssbo: (Arc::new(transform_buffer), Arc::new(transform_bind_group)),
+        self.uploaded = Some(UploadedEntityInstances {
+            transform_ssbo,
             instance_vbo,
-            count: self.instances.len() as u32,
+            overlay_ssbo,
+            count: self.count,
         });
     }
 }
 
-pub struct EntityInstanceTransforms {
+pub struct EntityInstance {
     ///Index
     pub position: Position,
     ///Rotation around the Y axis
     pub looking_yaw: f32,
-    pub uv_offset: (f32, f32),
+    pub uv_offset: [u16; 2],
     pub part_transforms: Vec<PartTransform>,
+    pub overlays: Vec<u32>,
 }
 
-impl EntityInstanceTransforms {
+impl EntityInstance {
     pub fn get_matrices(&self, entity: &Entity) -> Vec<[[f32; 4]; 4]> {
         let transforms: Vec<Matrix4<f32>> = self
             .part_transforms
@@ -593,11 +592,14 @@ impl EntityInstanceTransforms {
 
         // let mut index = 0;
         recurse_transforms(
-            Matrix4::from_translation(cgmath::Vector3::new(
-                self.position.0,
-                self.position.1,
-                self.position.2,
-            )) * Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw)),
+            Matrix4::from_translation(Vector3::new(0.5, 0.5, 0.5))
+                * Matrix4::from_angle_y(cgmath::Deg(self.looking_yaw))
+                * Matrix4::from_translation(Vector3::new(-0.5, -0.5, -0.5))
+                * Matrix4::from_translation(cgmath::Vector3::new(
+                    self.position.0,
+                    self.position.1,
+                    self.position.2,
+                )),
             &entity.model_root,
             &mut vec,
             // &mut index,
@@ -612,7 +614,6 @@ fn recurse_transforms(
     mat: Matrix4<f32>,
     part: &EntityPart,
     vec: &mut Vec<Matrix4<f32>>,
-    // index: &mut usize,
     instance_transforms: &[Matrix4<f32>],
 ) {
     let instance_part_transform = instance_transforms[0];
@@ -627,9 +628,11 @@ fn recurse_transforms(
 
     let mut slice = &instance_transforms[1..];
 
+    if slice.len() == 0 {
+        return;
+    }
+
     part.children.iter().for_each(|child| {
-        // *index += 1;
-        // recurse_transforms(new_mat, child, vec, index, instance_transforms);
         recurse_transforms(new_mat, child, vec, slice);
         slice = &slice[1..];
     });

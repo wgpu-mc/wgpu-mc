@@ -7,6 +7,3 @@ members = [
     "wgpu-mc-jni",
     "wgpu-mc-demo"
 ]
-
-[profile.release]
-debug = true

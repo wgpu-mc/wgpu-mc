@@ -24,6 +24,8 @@ accessible field net/minecraft/world/chunk/PalettedContainer$Data palette Lnet/m
 accessible field net/minecraft/world/chunk/PalettedContainer$Data storage Lnet/minecraft/util/collection/PaletteStorage;
 accessible field net/minecraft/world/chunk/PalettedContainer data Lnet/minecraft/world/chunk/PalettedContainer$Data;
 accessible field net/minecraft/world/chunk/PalettedContainer idList Lnet/minecraft/util/collection/IndexedIterable;
+accessible method net/minecraft/client/render/entity/LivingEntityRenderer getAnimationCounter (Lnet/minecraft/entity/LivingEntity;F)F
+accessible field net/minecraft/client/model/ModelPart children Ljava/util/Map;
 
 accessible method net/minecraft/client/Keyboard onChar (JII)V
 accessible method net/minecraft/client/Mouse onCursorPos (JDD)V

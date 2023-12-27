@@ -415,7 +415,8 @@ impl GeometryCallback for ElectrumGeometry {
                         None,
                         info.surface_config,
                         info.chunk_offset,
-                        0,
+                        None,
+                        None,
                     );
 
                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
@@ -456,7 +457,8 @@ impl GeometryCallback for ElectrumGeometry {
                         None,
                         info.surface_config,
                         info.chunk_offset,
-                        0,
+                        None,
+                        None,
                     );
 
                     let vertices = match draw.pipeline_state {

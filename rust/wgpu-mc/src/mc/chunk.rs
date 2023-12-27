@@ -16,9 +16,7 @@ use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
 use wgpu::BufferUsages;
 
-use crate::mc::block::{
-    BlockMeshVertex, BlockstateKey, ChunkBlockState, CubeOrComplexMesh, ModelMesh,
-};
+use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 use crate::util::BindableBuffer;
@@ -135,19 +133,24 @@ impl Chunk {
             })
             .collect();
 
-        let vertex_buffer = BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
-        let index_buffer = BindableBuffer::new(
-            wm,
-            bytemuck::cast_slice(&index_data),
-            BufferUsages::STORAGE,
-            "ssbo",
-        );
+        if vertex_data.len() > 0 {
+            let vertex_buffer =
+                BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
+            let index_buffer = BindableBuffer::new(
+                wm,
+                bytemuck::cast_slice(&index_data),
+                BufferUsages::STORAGE,
+                "ssbo",
+            );
 
-        self.buffers.store(Arc::new(Some(ChunkBuffers {
-            vertex_buffer,
-            index_buffer,
-        })));
-        *self.sections.write() = baked_layers;
+            self.buffers.store(Arc::new(Some(ChunkBuffers {
+                vertex_buffer,
+                index_buffer,
+            })));
+            *self.sections.write() = baked_layers;
+        } else {
+            self.buffers.store(Arc::new(None));
+        }
     }
 }
 
@@ -163,7 +166,7 @@ fn is_block_not_fully_opaque(
     let state = get_block(block_manager, state_provider.get_state(x, y, z));
 
     match state {
-        Some(mesh) => mesh.models[0].1,
+        Some(mesh) => mesh.transparent,
         None => true,
     }
 }
@@ -179,7 +182,7 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
             .blocks
             .get_index(key.block as usize)?
             .1
-            .get_model(key.augment),
+            .get_model(key.augment, 0),
     )
 }
 
@@ -228,12 +231,8 @@ pub fn bake_section_layer<
 
         let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
 
-        if block_state.is_air() {
-            continue;
-        }
-
         let state_key = match block_state {
-            ChunkBlockState::Air => unreachable!(),
+            ChunkBlockState::Air => continue,
             ChunkBlockState::State(key) => key,
         };
 
@@ -241,12 +240,18 @@ pub fn bake_section_layer<
             continue;
         }
 
-        let mesh = get_block(block_manager, block_state).unwrap();
+        let model_mesh = get_block(block_manager, block_state).unwrap();
+        let block_entry = block_manager
+            .blocks
+            .get_index(state_key.block as usize)
+            .unwrap();
 
-        // TODO: randomly select a mesh if there are multiple
+        // TODO: randomly select a mesh if there are multiple models in a variant
 
-        match &mesh.models[0].0 {
-            CubeOrComplexMesh::Cube(model) => {
+        const INDICES: [u32; 6] = [0, 1, 2, 3, 4, 5];
+
+        for model in &model_mesh.mesh {
+            if model.cube {
                 let baked_should_render_face = |x_: i32, y_: i16, z_: i32| {
                     is_block_not_fully_opaque(block_manager, state_provider, x_, y_, z_)
                 };
@@ -257,10 +262,6 @@ pub fn bake_section_layer<
                 let render_down = baked_should_render_face(absolute_x, y - 1, absolute_z);
                 let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
                 let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
-
-                let _add_face = || render_east;
-
-                const INDICES: [u32; 6] = [0, 1, 2, 3, 4, 5];
 
                 let mut extend_vertices = |face: &[u32; 6]| {
                     let vec_index = vertices.len();
@@ -296,28 +297,24 @@ pub fn bake_section_layer<
                 if let (true, Some(face)) = (render_down, &model.down) {
                     extend_vertices(face);
                 }
-            }
-            CubeOrComplexMesh::Complex(faces) => {
-                for model in faces {
-                    let unwrapped_faces = [
-                        model.north,
-                        model.east,
-                        model.south,
-                        model.west,
-                        model.up,
-                        model.down,
-                    ]
-                    .iter()
-                    .filter_map(|face| *face)
-                    .collect::<Vec<_>>();
-
+            } else {
+                [
+                    model.north,
+                    model.east,
+                    model.south,
+                    model.west,
+                    model.up,
+                    model.down,
+                ]
+                .iter()
+                .filter_map(|face| *face)
+                .for_each(|face| {
+                    let vec_index = vertices.len();
                     vertices.extend(
-                        unwrapped_faces.iter().flatten().map(|index| {
-                            mapper(&model.vertices[*index as usize], xf32, yf32, zf32)
-                        }),
+                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32)),
                     );
-                    indices.extend(unwrapped_faces.iter().flatten());
-                }
+                    indices.extend(INDICES.map(|index| index + (vec_index as u32)));
+                });
             }
         }
     }

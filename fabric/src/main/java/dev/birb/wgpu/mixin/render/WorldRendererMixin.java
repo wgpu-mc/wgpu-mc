@@ -1,17 +1,22 @@
 package dev.birb.wgpu.mixin.render;
 
+import dev.birb.wgpu.entity.DummyVertexConsumer;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.*;
+import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
+import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
+import org.lwjgl.BufferUtils;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -20,6 +25,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.nio.FloatBuffer;
 import java.util.Objects;
 
 @Mixin(WorldRenderer.class)
@@ -39,6 +45,10 @@ public abstract class WorldRendererMixin {
     @Shadow @Final private Vector3d capturedFrustumPosition;
 
     @Shadow private @Nullable ClientWorld world;
+
+    @Shadow @Final private EntityRenderDispatcher entityRenderDispatcher;
+
+    @Shadow protected abstract void renderEntity(Entity entity, double cameraX, double cameraY, double cameraZ, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers);
 
     /**
      * @author wgpu-mc
@@ -89,28 +99,46 @@ public abstract class WorldRendererMixin {
         this.setupTerrain(camera, currentFrustum, this.capturedFrustum != null, this.client.player != null && this.client.player.isSpectator());
         this.updateChunks(camera);
 
-        MatrixStack stack = new MatrixStack();
-        stack.loadIdentity();
+        // -- Camera --
+
+        MatrixStack cameraStack = new MatrixStack();
+        cameraStack.loadIdentity();
 
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
 
         if(player != null) {
             Vec3d translate = camera.getPos();
 
-            stack.multiplyPositionMatrix(new Matrix4f().rotation(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch())));
-            stack.multiplyPositionMatrix(new Matrix4f().rotation(RotationAxis.POSITIVE_Y.rotationDegrees(camera.getYaw() + 180.0f)));
+            cameraStack.multiplyPositionMatrix(new Matrix4f().rotation(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch())));
+            cameraStack.multiplyPositionMatrix(new Matrix4f().rotation(RotationAxis.POSITIVE_Y.rotationDegrees(camera.getYaw() + 180.0f)));
 
-            stack.multiplyPositionMatrix(new Matrix4f().translation(
+            cameraStack.multiplyPositionMatrix(new Matrix4f().translation(
                     (float) -translate.x,
                     (float) -translate.y - 64.0f,
                     (float) -translate.z
             ));
         }
 
-        float[] out = new float[16];
-        stack.peek().getPositionMatrix().get(out);
+        // -- Entities --
 
-        WgpuNative.setMatrix(0, out);
+//        this.blockEntityRenderDispatcher.configure(this.world, camera, this.client.crosshairTarget);
+        this.entityRenderDispatcher.configure(this.world, camera, this.client.targetedEntity);
+
+        if(this.world != null) {
+            MatrixStack entityStack = new MatrixStack();
+            entityStack.loadIdentity();
+            VertexConsumerProvider dummyProvider = layer -> new DummyVertexConsumer();
+
+            for(Entity entity : this.world.getEntities()) {
+                this.renderEntity(entity, 0.0, 64.0, 0.0, tickDelta, entityStack, dummyProvider);
+            }
+        }
+
+        float[] floatBuffer = new float[16];
+
+        cameraStack.peek().getPositionMatrix().get(floatBuffer);
+
+        WgpuNative.setMatrix(0, floatBuffer);
 
         ci.cancel();
     }
