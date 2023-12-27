@@ -14,8 +14,8 @@ use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
-use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstance, PartTransform};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
+use wgpu_mc::mc::entity::{BundledEntityInstances, EntityInstance, PartTransform};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::Vertex;

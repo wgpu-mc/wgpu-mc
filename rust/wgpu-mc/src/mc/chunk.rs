@@ -13,8 +13,8 @@ use std::io::stdout;
 use std::iter::repeat;
 use std::mem::size_of;
 use std::ops::Range;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 use wgpu::util::{align_to, BufferInitDescriptor, DeviceExt};
 use wgpu::{BufferAddress, BufferDescriptor};
@@ -56,11 +56,10 @@ impl ChunkManager {
 
 #[derive(Clone, Copy, Debug)]
 pub struct LightLevel {
-    pub byte: u8
+    pub byte: u8,
 }
 
 impl LightLevel {
-
     pub const fn from_sky_and_block(sky: u8, block: u8) -> Self {
         Self {
             byte: (sky << 4) | (block & 0b1111),
@@ -74,7 +73,6 @@ impl LightLevel {
     pub fn get_block_level(&self) -> u8 {
         self.byte & 0b1111
     }
-
 }
 
 /// Return a [ChunkBlockState] within the provided world coordinates.
@@ -297,9 +295,15 @@ pub fn bake_section_layer<
 
                 let mut extend_vertices = |face: &[u32; 6], light_level: LightLevel| {
                     let vec_index = vertices.len();
-                    vertices.extend(
-                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32, light_level)),
-                    );
+                    vertices.extend(face.map(|index| {
+                        mapper(
+                            &model.vertices[index as usize],
+                            xf32,
+                            yf32,
+                            zf32,
+                            light_level,
+                        )
+                    }));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 };
 
@@ -307,36 +311,43 @@ pub fn bake_section_layer<
                 //We use those offsets to get the relevant vertices, and add them into the chunk vertices.
                 //We then add the starting offset into the vertices to the face indices so that they match up.
                 if let (true, Some(face)) = (render_north, &model.north) {
-                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z - 1);
+                    let light_level: LightLevel =
+                        state_provider.get_light_level(absolute_x, y, absolute_z - 1);
                     extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_east, &model.east) {
-                    let light_level: LightLevel = state_provider.get_light_level(absolute_x + 1, y, absolute_z);
+                    let light_level: LightLevel =
+                        state_provider.get_light_level(absolute_x + 1, y, absolute_z);
                     extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_south, &model.south) {
-                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z - 1);
+                    let light_level: LightLevel =
+                        state_provider.get_light_level(absolute_x, y, absolute_z - 1);
                     extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_west, &model.west) {
-                    let light_level: LightLevel = state_provider.get_light_level(absolute_x - 1, y, absolute_z);
+                    let light_level: LightLevel =
+                        state_provider.get_light_level(absolute_x - 1, y, absolute_z);
                     extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_up, &model.up) {
-                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y + 1, absolute_z);
+                    let light_level: LightLevel =
+                        state_provider.get_light_level(absolute_x, y + 1, absolute_z);
                     extend_vertices(face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_down, &model.down) {
-                    let light_level: LightLevel = state_provider.get_light_level(absolute_x, y - 1, absolute_z);
+                    let light_level: LightLevel =
+                        state_provider.get_light_level(absolute_x, y - 1, absolute_z);
                     extend_vertices(face, light_level);
                 }
             } else {
-                let light_level: LightLevel = state_provider.get_light_level(absolute_x, y, absolute_z);
+                let light_level: LightLevel =
+                    state_provider.get_light_level(absolute_x, y, absolute_z);
 
                 [
                     model.north,
@@ -350,9 +361,15 @@ pub fn bake_section_layer<
                 .filter_map(|face| *face)
                 .for_each(|face| {
                     let vec_index = vertices.len();
-                    vertices.extend(
-                        face.map(|index| mapper(&model.vertices[index as usize], xf32, yf32, zf32, light_level)),
-                    );
+                    vertices.extend(face.map(|index| {
+                        mapper(
+                            &model.vertices[index as usize],
+                            xf32,
+                            yf32,
+                            zf32,
+                            light_level,
+                        )
+                    }));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 });
             }

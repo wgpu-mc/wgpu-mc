@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use crate::{ChunkHolder, CHUNKS};
 use byteorder::{BigEndian, LittleEndian, NetworkEndian, ReadBytesExt};
 use futures::lock::Mutex;
 use jni::objects::{JClass, ReleaseMode};
@@ -9,14 +9,14 @@ use mc_varint::{VarInt, VarIntRead};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use slab::Slab;
+use std::fmt::{Debug, Formatter};
 use std::io::{Cursor, Read};
 use std::mem::size_of;
 use tracing_timing::HashMap;
 use wgpu_mc::mc::chunk::SECTIONS_PER_CHUNK;
-use crate::{ChunkHolder, CHUNKS};
 
 pub static LIGHT_DATA: Lazy<RwLock<Slab<LightData>>> = Lazy::new(|| RwLock::new(Slab::new()));
-pub static LIGHTMAP_GLID: Lazy<std::sync::Mutex<u32>> = Lazy::new(||std::sync::Mutex::new(0));
+pub static LIGHTMAP_GLID: Lazy<std::sync::Mutex<u32>> = Lazy::new(|| std::sync::Mutex::new(0));
 #[derive(Clone)]
 struct BitSet {
     longs: Vec<i64>,
@@ -37,7 +37,6 @@ impl Debug for BitSet {
 }
 
 impl BitSet {
-
     fn from_reader<R: Read>(mut r: R) -> Option<Self> {
         let len = r.read_var_int().ok()?;
         let as_i32: i32 = len.into();
@@ -49,13 +48,13 @@ impl BitSet {
     }
 
     pub fn is_set(&self, bit_index: usize) -> bool {
-        ((bit_index / 64) < self.longs.len()) && (self.longs[bit_index / 64] & (1i64 << (bit_index % 64))) != 0
+        ((bit_index / 64) < self.longs.len())
+            && (self.longs[bit_index / 64] & (1i64 << (bit_index % 64))) != 0
     }
 
     pub fn count_bits(&self) -> u32 {
         self.longs.iter().map(|long| long.count_ones()).sum()
     }
-
 }
 
 fn read_nibble_arrays<const N: usize, R: Read>(mut r: R) -> Option<Vec<[u8; N]>> {
@@ -78,7 +77,7 @@ fn read_nibble_arrays<const N: usize, R: Read>(mut r: R) -> Option<Vec<[u8; N]>>
 #[derive(Copy, Clone, Debug)]
 pub struct DeserializedLightData {
     pub sky_light: [u8; 2048 * SECTIONS_PER_CHUNK],
-    pub block_light: [u8; 2048 * SECTIONS_PER_CHUNK]
+    pub block_light: [u8; 2048 * SECTIONS_PER_CHUNK],
 }
 
 // impl DeserializedLightData {
@@ -136,7 +135,11 @@ impl LightData {
         let mut cursor = Cursor::new(bytes);
 
         Some(Self {
-            non_edge: if cursor.read_u8().ok()? == 1 { true } else { false },
+            non_edge: if cursor.read_u8().ok()? == 1 {
+                true
+            } else {
+                false
+            },
             inited_sky: BitSet::from_reader(&mut cursor)?,
             inited_block: BitSet::from_reader(&mut cursor)?,
             uninited_sky: BitSet::from_reader(&mut cursor)?,
@@ -145,8 +148,6 @@ impl LightData {
             block_nibbles: read_nibble_arrays(&mut cursor)?,
         })
     }
-
-
 }
 
 // #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

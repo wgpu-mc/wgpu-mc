@@ -17,7 +17,10 @@ use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use jni::objects::{AutoElements, GlobalRef, JByteArray, JByteBuffer, JClass, JFloatArray, JIntArray, JLongArray, JObject, JString, JValue, ReleaseMode};
+use jni::objects::{
+    AutoElements, GlobalRef, JByteArray, JByteBuffer, JClass, JFloatArray, JIntArray, JLongArray,
+    JObject, JString, JValue, ReleaseMode,
+};
 use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
@@ -34,7 +37,10 @@ use winit::window::{CursorGrabMode, Window};
 
 use entity::TexturedModelData;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, ChunkPos, CHUNK_HEIGHT, LightLevel, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK};
+use wgpu_mc::mc::chunk::{
+    BlockStateProvider, Chunk, ChunkPos, LightLevel, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT,
+    SECTIONS_PER_CHUNK,
+};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
@@ -52,11 +58,11 @@ use crate::settings::Settings;
 
 pub mod entity;
 mod gl;
+mod lighting;
 mod palette;
 mod pia;
 mod renderer;
 mod settings;
-mod lighting;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -125,7 +131,7 @@ pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 #[derive(Debug)]
 struct ChunkHolder {
     pub sections: [Option<(JavaPalette, PackedIntegerArray)>; 24],
-    pub light_data: Option<DeserializedLightData>
+    pub light_data: Option<DeserializedLightData>,
 }
 
 #[derive(Debug)]
@@ -199,7 +205,15 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
 
         let index = calc >> 1; //divide by two
 
-        assert!(index >= 0, "index: {} calc: {} light xyz: {} {} {}", index, calc, light_x, light_y, light_z);
+        assert!(
+            index >= 0,
+            "index: {} calc: {} light xyz: {} {} {}",
+            index,
+            calc,
+            light_x,
+            light_y,
+            light_z
+        );
 
         let occupies_smaller_bits = index & 1;
 
@@ -208,7 +222,8 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         let section = y.max(0).min((CHUNK_HEIGHT - 1) as i16) as usize / CHUNK_SECTION_HEIGHT;
 
         let sky_light = (light_data.sky_light[(section * 2048) + index as usize] >> shift) & 0xf;
-        let block_light = (light_data.block_light[(section * 2048) + index as usize] >> shift) & 0xf;
+        let block_light =
+            (light_data.block_light[(section * 2048) + index as usize] >> shift) & 0xf;
 
         LightLevel::from_sky_and_block(sky_light, block_light)
     }
@@ -376,7 +391,9 @@ pub fn createChunk(
 
     let block_light_nibbles_slice = {
         let addr = env.get_direct_buffer_address(&block_light_nibbles).unwrap();
-        let len = env.get_direct_buffer_capacity(&block_light_nibbles).unwrap();
+        let len = env
+            .get_direct_buffer_capacity(&block_light_nibbles)
+            .unwrap();
 
         unsafe { slice::from_raw_parts(addr, len) }
     };
@@ -412,21 +429,15 @@ pub fn createChunk(
             .collect::<Vec<_>>()
             .try_into()
             .unwrap_or_else(|_| panic!("Expected a Vec of length 24, got {}", palettes.len())),
-        light_data: Some(
-            DeserializedLightData {
-                block_light: Vec::from(block_light_nibbles_slice).try_into().unwrap(),
-                sky_light: Vec::from(sky_light_nibbles_slice).try_into().unwrap()
-            }
-        )
+        light_data: Some(DeserializedLightData {
+            block_light: Vec::from(block_light_nibbles_slice).try_into().unwrap(),
+            sky_light: Vec::from(sky_light_nibbles_slice).try_into().unwrap(),
+        }),
     };
 
     let mut write = CHUNKS.write();
 
-    write.insert(
-        [x, z],
-        holder
-    );
-
+    write.insert([x, z], holder);
 }
 
 pub fn bake_chunk(x: i32, z: i32) {

@@ -27,7 +27,7 @@ pub struct Vertex {
     pub normal: [f32; 3],
     pub color: u32,
     pub uv_offset: u32,
-    pub lightmap_coords: u8
+    pub lightmap_coords: u8,
 }
 
 impl Vertex {
