@@ -789,7 +789,7 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
         let jvm = unsafe { JavaVM::from_raw(jvm_ptr as _).unwrap() };
         let mut env = jvm.attach_current_thread_permanently().unwrap();
 
-        let message = format!("wgpu-mc has panicked. The JVM will now exit.\n{panic_info}");
+        let message = format!("wgpu-mc has panicked. Minecraft will now exit.\n{panic_info}");
         let jstring = env.new_string(message).unwrap();
 
         //Does not return

@@ -7,6 +7,7 @@ import dev.birb.wgpu.rust.WgpuTextureManager;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.util.crash.CrashReport;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
@@ -33,9 +34,6 @@ public class Wgpu {
     }
     public static HashMap<Integer, Integer> keyStates = new HashMap<>();
     public static ArrayList<Runnable> injectPartIds = new ArrayList<>();
-
-    @Getter
-    private static RuntimeException exception;
 
     @Getter
     @Setter
@@ -121,10 +119,17 @@ public class Wgpu {
 
     @SuppressWarnings("unused") // called from rust
     public static void rustPanic(String message) {
-        RuntimeException exception = new RuntimeException(message);
         LOGGER.error(message);
-        while (true) {
-            // wait for main loop to catch this
+
+        if (MinecraftClient.getInstance() != null) {
+            CrashReport report = new CrashReport(message, new RuntimeException());
+            report.addElement("This crash was caused by the Fabric mod Electrum within native Rust code. " +
+                    "Please report this crash to the wgpu-mc developers by opening an issue and attaching this crash log at https://github.com/wgpu-mc/wgpu-mc/issues");
+
+            // this calls System#exit
+            MinecraftClient.getInstance().printCrashReport(report);
+        } else {
+            System.exit(1);
         }
     }
 
