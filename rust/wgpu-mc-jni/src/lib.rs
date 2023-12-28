@@ -186,39 +186,34 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
     fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
         let chunk = self.center;
 
+        if y as usize >= CHUNK_HEIGHT {
+            return LightLevel::from_sky_and_block(15, 0);
+        } else if y < 0 {
+            return LightLevel::from_sky_and_block(0, 0);
+        }
+
         let light_data = match &chunk.light_data {
-            None => return LightLevel::from_sky_and_block(15, 15),
+            None => return LightLevel::from_sky_and_block(0, 0),
             Some(light_data) => light_data,
         };
 
-        let light_x = ((x % 16) + 16) % 16;
-        let light_y = (y.max(0) % (CHUNK_SECTION_HEIGHT as i16)) as i32;
-        let light_z = ((z % 16) + 16) % 16;
+        let local_x = x & 0b1111;
+        let local_y = y as i32 & 0b1111;
+        let local_z = z & 0b1111;
 
-        // let calc = (((y as usize % CHUNK_SECTION_HEIGHT) << 8) | (((z.abs() % 16) as usize) << 4) | ((x.abs() % 16) as usize));
-        let calc = light_y << 8 | light_z << 4 | light_x;
+        let packed_coords = ((local_y << 8) | (local_z << 4) | (local_x)) as usize;
 
-        let index = calc >> 1; //divide by two
+        let shift = (packed_coords & 1) << 2;
 
-        assert!(
-            index >= 0,
-            "index: {} calc: {} light xyz: {} {} {}",
-            index,
-            calc,
-            light_x,
-            light_y,
-            light_z
-        );
+        let section = y as usize / CHUNK_SECTION_HEIGHT;
 
-        let occupies_smaller_bits = index & 1;
+        let array_index = packed_coords >> 1;
+        let absolute_index = (section * 2048) + array_index;
 
-        let shift = if occupies_smaller_bits == 0 { 0 } else { 4 };
+        let sky_light = (light_data.sky_light[absolute_index] >> shift) & 0b1111;
+        let block_light = (light_data.block_light[absolute_index] >> shift) & 0b1111;
 
-        let section = y.max(0).min((CHUNK_HEIGHT - 1) as i16) as usize / CHUNK_SECTION_HEIGHT;
-
-        let sky_light = (light_data.sky_light[(section * 2048) + index as usize] >> shift) & 0xf;
-        let block_light =
-            (light_data.block_light[(section * 2048) + index as usize] >> shift) & 0xf;
+        // dbg!(x,y,z, light_data.sky_light[absolute_index], light_data.sky_light[absolute_index] >> shift, shift, array_index, sky_light, block_light);
 
         LightLevel::from_sky_and_block(sky_light, block_light)
     }
@@ -431,6 +426,15 @@ pub fn createChunk(
     };
 
     let mut write = CHUNKS.write();
+
+    match write.get(&[x, z]) {
+        None => {}
+        Some(old_holder) => {
+            if old_holder.light_data != holder.light_data {
+                println!("Diff @ {x},{z}")
+            }
+        }
+    };
 
     write.insert([x, z], holder);
 }
@@ -1262,6 +1266,23 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn debugLight(env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    dbg!(CHUNKS.read().get(&[x, z]).unwrap().light_data);
+pub fn debugLight(env: JNIEnv, _class: JClass, x: jint, y: jint, z: jint) {
+    let data = CHUNKS.read().get(&[x >> 4,z >> 4]).unwrap().light_data.unwrap();
+
+    let local_x = x & 15;
+    let local_y = y & 15;
+    let local_z = z & 15;
+
+    let packed_coords = (local_y << 8 | local_z << 4 | local_x) as usize;
+
+    let shift = (packed_coords & 1) << 2;
+
+    let section = (y + 64).clamp(0, CHUNK_HEIGHT as i32 - 1) as usize / CHUNK_SECTION_HEIGHT;
+
+    let array_index = packed_coords >> 1;
+    let absolute_index = (section * 2048) + array_index;
+
+    let sky_light = (data.sky_light[absolute_index] >> shift) & 0xf;
+    let block_light = (data.block_light[absolute_index] >> shift) & 0xf;
+    dbg!(&data.sky_light[(section * 2048)..((section + 1) * 2048)], array_index, sky_light, block_light);
 }

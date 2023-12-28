@@ -186,7 +186,7 @@ impl Chunk {
 
 /// Returns true if the block at the given coordinates is either not a full cube or has transparency
 #[inline]
-fn is_block_not_fully_opaque(
+fn block_allows_neighbor_render(
     block_manager: &BlockManager,
     state_provider: &impl BlockStateProvider,
     x: i32,
@@ -196,11 +196,12 @@ fn is_block_not_fully_opaque(
     let state = get_block(block_manager, state_provider.get_state(x, y, z));
 
     match state {
-        Some(mesh) => mesh.transparent,
+        Some(mesh) => !mesh.is_cube,
         None => true,
     }
 }
 
+#[inline]
 fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc<ModelMesh>> {
     let key = match state {
         ChunkBlockState::Air => return None,
@@ -283,7 +284,7 @@ pub fn bake_section_layer<
         for model in &model_mesh.mesh {
             if model.cube {
                 let baked_should_render_face = |x_: i32, y_: i16, z_: i32| {
-                    is_block_not_fully_opaque(block_manager, state_provider, x_, y_, z_)
+                    block_allows_neighbor_render(block_manager, state_provider, x_, y_, z_)
                 };
 
                 let render_east = baked_should_render_face(absolute_x + 1, y, absolute_z);
@@ -306,6 +307,8 @@ pub fn bake_section_layer<
                     }));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 };
+
+                // dbg!(absolute_x, absolute_z, render_up, render_down, render_north, render_south, render_west, render_east);
 
                 //"face" contains offsets into the array containing the model vertices.
                 //We use those offsets to get the relevant vertices, and add them into the chunk vertices.

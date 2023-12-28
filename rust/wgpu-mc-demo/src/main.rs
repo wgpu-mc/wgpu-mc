@@ -177,11 +177,11 @@ impl RenderLayer for TerrainLayer {
 }
 
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
-    let (_entity, instances) = describe_entity(&wm);
+    // let (_entity, instances) = describe_entity(&wm);
 
-    let mut instances_map = HashMap::new();
-
-    instances_map.insert(ENTITY_NAME.into(), instances);
+    // let mut instances_map = HashMap::new();
+    //
+    // instances_map.insert(ENTITY_NAME.into(), instances);
 
     // wm.mc.entity_models.write().push(entity.clone());
 
@@ -289,6 +289,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
     let mut graph = ShaderGraph::new(pack, resources, HashMap::new());
 
     graph.init(&wm, None, None);
+
+    let instances = HashMap::new();
 
     event_loop
         .run(move |event, target| {
@@ -430,7 +432,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                                 array_layer_count: None,
                             });
 
-                            let _ = wm.render(&graph, &view, &surface_state.1, &instances_map);
+                            let _ = wm.render(&graph, &view, &surface_state.1, &instances);
 
                             texture.present();
 

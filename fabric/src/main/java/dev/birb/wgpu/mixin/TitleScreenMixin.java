@@ -33,7 +33,11 @@ public class TitleScreenMixin {
     @Inject(method = "render", at = @At("HEAD"))
     private void render(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if (!updatedTitle && Wgpu.isInitialized()) {
-            WgpuNative.cacheBlockStates();
+
+            Thread bakeBlocks = new Thread(WgpuNative::cacheBlockStates);
+            bakeBlocks.setContextClassLoader(Thread.currentThread().getContextClassLoader());
+            bakeBlocks.start();
+
             MinecraftClient.getInstance().updateWindowTitle();
             updatedTitle = true;
 

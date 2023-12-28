@@ -789,7 +789,13 @@ impl ShaderGraph {
                         for (_pos, chunk_swap) in chunks.iter() {
                             let chunk = arena.alloc(chunk_swap.load());
                             let buffers = arena.alloc(chunk.buffers.load_full());
+                            let chunk_buffers  = (*buffers).as_ref().as_ref();
+
                             let sections = chunk.sections.read();
+
+                            if chunk_buffers.is_none() {
+                                continue;
+                            }
 
                             for section_index in 0..SECTIONS_PER_CHUNK {
                                 let min = Vec3::new(
@@ -820,7 +826,7 @@ impl ShaderGraph {
                                     &resource_borrow,
                                     &arena,
                                     &mut render_pass,
-                                    (*buffers).as_ref().as_ref(),
+                                    chunk_buffers,
                                 );
                                 set_push_constants(
                                     config,

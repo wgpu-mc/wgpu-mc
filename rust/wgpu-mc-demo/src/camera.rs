@@ -22,8 +22,8 @@ impl Camera {
             up: Vector3::unit_y(),
             aspect,
             fovy: 110.0,
-            znear: 0.1,
-            zfar: 1000.0,
+            znear: 0.001,
+            zfar: 10.0,
         }
     }
 

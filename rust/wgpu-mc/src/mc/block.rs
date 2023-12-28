@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Deg, Matrix4, Vector3, Vector4};
+use cgmath::{Deg, Matrix4, Rad, SquareMatrix, Vector3, Vector4};
 use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
@@ -186,7 +186,7 @@ pub enum MeshBakeError {
 #[derive(Debug)]
 pub struct ModelMesh {
     pub mesh: Vec<BlockModelFaces>,
-    pub transparent: bool,
+    pub is_cube: bool,
 }
 
 impl ModelMesh {
@@ -245,10 +245,8 @@ impl ModelMesh {
                     }
                 };
 
-                let matrix =
-                    Matrix4::from_translation(Vector3::new(0.5, 0.5, 0.5))
-                    * Matrix4::from_angle_y(Deg(model_properties.y as f32 + 180.0))
-                    * Matrix4::from_translation(Vector3::new(-0.5, -0.5, -0.5));
+                // let matrix = Matrix4::from_angle_y(Deg(45.0));
+                let matrix = Matrix4::identity();
 
                 let _is_cube = model.elements.iter().len() == 1 && {
                     match model.elements.iter().flatten().next() {
@@ -416,17 +414,17 @@ impl ModelMesh {
                                 BlockMeshVertex { position: a, tex_coords: [down_face.0.1.0, down_face.0.0.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
                                 BlockMeshVertex { position: f, tex_coords: [down_face.0.0.0, down_face.0.1.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
                             ],
+                            north: north.map(|_| {[
+                                9,11,8,10,11,9
+                            ]}),
+                            east: east.map(|_| {[
+                                13,15,12,14,15,13
+                            ]}),
                             south: south.map(|_| {[
                                 0,3,1,1,3,2
                             ]}),
-                            west: west.map(|_west| {[
+                            west: west.map(|_| {[
                                 4,7,5,5,7,6
-                            ]}),
-                            north: north.map(|_north| {[
-                                9,11,8,10,11,9
-                            ]}),
-                            east: east.map(|_east| {[
-                                13,15,12,14,15,13
                             ]}),
                             up: up.map(|_up| {[
                                 16,17,18,16,18,19
@@ -449,7 +447,7 @@ impl ModelMesh {
 
         Ok(Self {
             mesh,
-            transparent: !all_elements_are_full_cubes,
+            is_cube: all_elements_are_full_cubes,
         })
     }
 }

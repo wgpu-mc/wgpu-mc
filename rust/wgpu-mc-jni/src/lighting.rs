@@ -74,7 +74,7 @@ fn read_nibble_arrays<const N: usize, R: Read>(mut r: R) -> Option<Vec<[u8; N]>>
         .collect::<Option<Vec<_>>>()
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct DeserializedLightData {
     pub sky_light: [u8; 2048 * SECTIONS_PER_CHUNK],
     pub block_light: [u8; 2048 * SECTIONS_PER_CHUNK],

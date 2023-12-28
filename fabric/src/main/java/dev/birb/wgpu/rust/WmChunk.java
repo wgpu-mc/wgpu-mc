@@ -37,6 +37,13 @@ public class WmChunk {
         this.worldChunk = worldChunk;
     }
 
+    private static int getLightLevelDirect(ChunkNibbleArray array, int x, int y, int z) {
+        int index = ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);
+        int arrayIndex = index >> 1;
+        int shift = (index & 1) == 0 ? 0 : 4;
+        return (array.asByteArray()[arrayIndex] >> shift) & 15;
+    }
+
     public void uploadAndBake() throws ClassCastException {
         long[] paletteIndices = new long[24];
         long[] storageIndices = new long[24];
@@ -52,11 +59,6 @@ public class WmChunk {
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
         ChunkPos pos = player.getChunkPos();
 
-        if(this.worldChunk.getPos().equals(pos)) {
-            int blockLight = this.worldChunk.getWorld().getLightLevel(player.getBlockPos());
-            int a = blockLight;
-        }
-
         for (int i = 0; i < 24; i++) {
             Palette<?> palette;
             PalettedContainer<?> container;
@@ -67,12 +69,21 @@ public class WmChunk {
                 continue;
             }
 
-            BlockPos chunkBlockPos = this.worldChunk.getPos().getBlockPos(0, (i * 16) - 64, 0);
-            long sectionPos = ChunkSectionPos.fromBlockPos(chunkBlockPos.asLong());
+            long sectionPos = ChunkSectionPos.from(pos, i - 4).asLong();
 
             if(skyLightProvider != null && blockLightProvider != null) {
                 ChunkNibbleArray skyNibble = skyLightProvider.lightStorage.uncachedStorage.get(sectionPos);
                 ChunkNibbleArray blockNibble = blockLightProvider.lightStorage.uncachedStorage.get(sectionPos);
+
+                if(this.worldChunk.getPos().equals(pos) && ((player.getBlockY() + 64) >> 4) == i) {
+                    int lightLevel = this.worldChunk.getWorld().getLightLevel(player.getBlockPos());
+
+                    int directBlockLight = getLightLevelDirect(blockNibble, player.getBlockX(), player.getBlockY(), player.getBlockZ());
+                    int directSkyLight = getLightLevelDirect(blockNibble, player.getBlockX(), player.getBlockY(), player.getBlockZ());
+
+                    boolean uhOh = lightLevel != Math.max(directBlockLight, directSkyLight);
+                    boolean a = uhOh;
+                }
 
                 if(skyNibble != null) {
                     byte[] sectionSkyLightBytes = skyNibble.asByteArray();

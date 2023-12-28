@@ -192,6 +192,6 @@ public class WgpuNative {
 
     public static native void setLightmapID(int id);
 
-    public static native void debugLight(int x, int z);
+    public static native void debugLight(int x, int y, int z);
 
 }

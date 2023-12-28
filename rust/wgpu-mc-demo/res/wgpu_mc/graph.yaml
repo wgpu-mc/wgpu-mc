@@ -17,7 +17,7 @@ resources:
 pipelines:
   quad:
     geometry: wm_geo_quad
-    depth: wm_framebuffer_depth
+#    depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
     push_constants:
       0: wm_pc_framebuffer_size
@@ -25,7 +25,7 @@ pipelines:
       0: rot
   entity:
     geometry: wm_geo_entities
-#    depth: wm_framebuffer_depth
+    depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
     push_constants:
       0: wm_pc_parts_per_entity

@@ -14,9 +14,7 @@ struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
-        if (0..16).contains(&x) && (0..16).contains(&z) && y == 0 {
-            // if x == 0 && y == 0 && z == 0 {
-            // ChunkBlockState::State(self.1)
+        if (0..1).contains(&x) && (0..1).contains(&z) && y == 0 {
             ChunkBlockState::State(self.1)
         } else {
             ChunkBlockState::Air
@@ -49,11 +47,11 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         .unwrap()
         .load();
 
-    let (index, _, block) = bm.blocks.get_full("minecraft:grass_block").unwrap();
+    let (index, _, block) = bm.blocks.get_full("minecraft:furnace").unwrap();
 
     let (_, augment) = block
         .get_model_by_key(
-            [("snowy", &StateValue::Bool(false))],
+            [("facing", &StateValue::String("east".into())), ("lit", &StateValue::Bool(true))],
             &*wm.mc.resource_provider,
             &atlas,
             0,
