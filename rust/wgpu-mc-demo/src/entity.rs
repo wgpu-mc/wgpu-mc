@@ -9,7 +9,7 @@ use wgpu_mc::mc::entity::{BundledEntityInstances, Entity, EntityInstance, PartTr
 use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::render::atlas::Atlas;
 use wgpu_mc::WmRenderer;
-use wgpu_mc_jni::entity::{tmd_to_wm, ModelPartData};
+use wgpu_mc_jni::entity::{ModelPartData, tmd_to_wm};
 
 const ENTITY_JSON: &str = include_str!("../dumped_entities.json");
 
@@ -23,9 +23,12 @@ pub struct Wrapper1 {
     data: Wrapper2,
 }
 
+#[allow(unused)]
 pub const ENTITY_NAME: &str = "minecraft:creeper#main";
+#[allow(unused)]
 const TEXTURE_LOCATION: &str = "minecraft:textures/entity/creeper/creeper.png";
 
+#[allow(unused)]
 pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, BundledEntityInstances) {
     let instant = Instant::now();
     let entities: HashMap<String, Wrapper1> = serde_json::from_str(ENTITY_JSON).unwrap();

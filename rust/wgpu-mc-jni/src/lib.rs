@@ -213,8 +213,6 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         let sky_light = (light_data.sky_light[absolute_index] >> shift) & 0b1111;
         let block_light = (light_data.block_light[absolute_index] >> shift) & 0b1111;
 
-        // dbg!(x,y,z, light_data.sky_light[absolute_index], light_data.sky_light[absolute_index] >> shift, shift, array_index, sky_light, block_light);
-
         LightLevel::from_sky_and_block(sky_light, block_light)
     }
 
@@ -426,15 +424,6 @@ pub fn createChunk(
     };
 
     let mut write = CHUNKS.write();
-
-    match write.get(&[x, z]) {
-        None => {}
-        Some(old_holder) => {
-            if old_holder.light_data != holder.light_data {
-                println!("Diff @ {x},{z}")
-            }
-        }
-    };
 
     write.insert([x, z], holder);
 }
@@ -1263,26 +1252,4 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
             log::warn!("Set cursor mode had an invalid mode.")
         }
     }
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn debugLight(env: JNIEnv, _class: JClass, x: jint, y: jint, z: jint) {
-    let data = CHUNKS.read().get(&[x >> 4,z >> 4]).unwrap().light_data.unwrap();
-
-    let local_x = x & 15;
-    let local_y = y & 15;
-    let local_z = z & 15;
-
-    let packed_coords = (local_y << 8 | local_z << 4 | local_x) as usize;
-
-    let shift = (packed_coords & 1) << 2;
-
-    let section = (y + 64).clamp(0, CHUNK_HEIGHT as i32 - 1) as usize / CHUNK_SECTION_HEIGHT;
-
-    let array_index = packed_coords >> 1;
-    let absolute_index = (section * 2048) + array_index;
-
-    let sky_light = (data.sky_light[absolute_index] >> shift) & 0xf;
-    let block_light = (data.block_light[absolute_index] >> shift) & 0xf;
-    dbg!(&data.sky_light[(section * 2048)..((section + 1) * 2048)], array_index, sky_light, block_light);
 }

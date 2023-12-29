@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Deg, Matrix4, Rad, SquareMatrix, Vector3, Vector4};
+use cgmath::{Matrix4, SquareMatrix, Vector4};
 use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;

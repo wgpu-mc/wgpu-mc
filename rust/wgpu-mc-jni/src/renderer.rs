@@ -304,7 +304,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         loop {
             let _mc_state = MC_STATE.load();
 
-            let surface_state = wm.wgpu_state.surface.read();
+            let surface_state = wm.wgpu_state.surface.write();
 
             {
                 let matrices = MATRICES.lock();
@@ -600,11 +600,6 @@ fn modifiers_to_glfw(state: ModifiersState) -> u32 {
     }
 
     mods
-}
-
-struct EntityRenderState {
-    pub instance_buffer: Vec<u8>,
-    pub instance_count: u32,
 }
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]

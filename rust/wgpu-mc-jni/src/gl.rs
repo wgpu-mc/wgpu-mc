@@ -11,15 +11,15 @@ use cgmath::{Matrix4, SquareMatrix};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
+use wgpu_mc::{wgpu, WmRenderer};
 use wgpu_mc::render::graph::{
-    bind_uniforms, set_push_constants, CustomResource, GeometryCallback, GeometryInfo,
-    ResourceInternal, TextureResource,
+    bind_uniforms, CustomResource, GeometryCallback, GeometryInfo, ResourceInternal,
+    set_push_constants, TextureResource,
 };
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
 use wgpu_mc::texture::{BindableTexture, TextureHandle};
 use wgpu_mc::util::{BindableBuffer, WmArena};
-use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
-use wgpu_mc::{wgpu, WmRenderer};
+use wgpu_mc::wgpu::{Buffer, BufferUsages, IndexFormat, vertex_attr_array};
 
 pub static GL_ALLOC: Lazy<RwLock<HashMap<u32, GlTexture>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
@@ -34,6 +34,7 @@ pub enum GLCommand {
     SetVertexBuffer(Vec<u8>),
     SetIndexBuffer(Vec<u32>),
     DrawIndexed(u32),
+    #[allow(unused)]
     Draw(u32),
     AttachTexture(u32, i32),
 }
@@ -181,7 +182,6 @@ struct Draw {
     count: u32,
     matrix: [[f32; 4]; 4],
     texture: Option<u32>,
-    pipeline_state: PipelineState,
 }
 
 #[derive(Debug)]
@@ -349,8 +349,7 @@ impl GeometryCallback for ElectrumGeometry {
                         vertex_buffer: std::mem::take(&mut vertex_buffer),
                         count,
                         matrix: matrix.into(),
-                        texture: texture.take(),
-                        pipeline_state: pipeline_state.take().unwrap(),
+                        texture: texture.take()
                     }));
                 }
                 GLCommand::AttachTexture(index, id) => {

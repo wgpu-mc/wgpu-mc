@@ -6,7 +6,6 @@ use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, LightLevel};
 use wgpu_mc::mc::MinecraftState;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
-
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
 
@@ -21,7 +20,7 @@ impl BlockStateProvider for SimpleBlockstateProvider {
         }
     }
 
-    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
+    fn get_light_level(&self, _x: i32, _y: i16, _z: i32) -> LightLevel {
         LightLevel::from_sky_and_block(15, 15)
     }
 

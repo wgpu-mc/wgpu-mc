@@ -1,36 +1,32 @@
 use std::collections::HashMap;
-
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::camera::Camera;
 use arc_swap::ArcSwap;
-
 use futures::executor::block_on;
 use parking_lot::RwLock;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
-use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
-use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
-
-use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
-use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
-use wgpu_mc::render::pipeline::Vertex;
-use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
-use wgpu_mc::util::BindableBuffer;
-
-use wgpu_mc::wgpu::BufferUsages;
-use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
+use wgpu_mc::{HasWindowSize, wgpu, WindowSize, WmRenderer};
+use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
+use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
+use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
+use wgpu_mc::render::graph::{CustomResource, ResourceInternal, ShaderGraph};
+use wgpu_mc::render::pipeline::Vertex;
+use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
+use wgpu_mc::util::BindableBuffer;
+use wgpu_mc::wgpu::BufferUsages;
+
+use crate::camera::Camera;
 use crate::chunk::make_chunks;
-use crate::entity::{describe_entity, ENTITY_NAME};
 
 mod camera;
 mod chunk;
@@ -157,7 +153,7 @@ impl RenderLayer for TerrainLayer {
     }
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
-        |vert, x, y, z, light| Vertex {
+        |vert, x, y, z, _light| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,
