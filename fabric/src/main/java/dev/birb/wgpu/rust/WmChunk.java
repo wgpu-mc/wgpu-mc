@@ -14,6 +14,7 @@ import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.chunk.light.ChunkLightProvider;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 
@@ -38,8 +39,8 @@ public class WmChunk {
         ChunkLightProvider<?, ?> skyLightProvider = worldChunk.getWorld().getLightingProvider().skyLightProvider;
         ChunkLightProvider<?, ?> blockLightProvider = worldChunk.getWorld().getLightingProvider().blockLightProvider;
 
-        ByteBuffer skyBytes = ByteBuffer.allocateDirect(2048 * 24);
-        ByteBuffer blockBytes = ByteBuffer.allocateDirect(2048 * 24);
+        ByteBuffer skyBytes = MemoryUtil.memAlloc(2048 * 24);
+        ByteBuffer blockBytes = MemoryUtil.memAlloc(2048 * 24);
 
         ChunkPos pos = this.worldChunk.getPos();
 
@@ -101,7 +102,7 @@ public class WmChunk {
         }
 
         Thread thread = new Thread(() -> {
-            WgpuNative.createChunk(this.x, this.z, paletteIndices, storageIndices, blockBytes, skyBytes);
+            WgpuNative.createChunk(this.x, this.z, paletteIndices, storageIndices, MemoryUtil.memAddress0(blockBytes), MemoryUtil.memAddress0(skyBytes));
             WgpuNative.bakeChunk(this.x, this.z);
         });
 

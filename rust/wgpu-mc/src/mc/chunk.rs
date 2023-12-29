@@ -320,7 +320,7 @@ pub fn bake_section_layer<
 
                 if let (true, Some(face)) = (render_south, &model.south) {
                     let light_level: LightLevel =
-                        state_provider.get_light_level(absolute_x, y, absolute_z - 1);
+                        state_provider.get_light_level(absolute_x, y, absolute_z + 1);
                     extend_vertices(face, light_level);
                 }
 

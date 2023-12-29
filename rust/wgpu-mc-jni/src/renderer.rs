@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
-use std::{slice, thread};
+use std::{ptr, slice, thread};
 use std::{sync::Arc, time::Instant};
 
 use arc_swap::ArcSwap;
@@ -651,10 +651,10 @@ pub fn setEntityInstanceBuffer(
     mut env: JNIEnv,
     _class: JClass,
     entity_name: JString,
-    mat4_float_array: JFloatArray,
-    _position: jint,
-    overlay_array: JIntArray,
-    _overlay_array_position: jint,
+    mat4_ptr: jlong,
+    mat4_len: jint,
+    overlay_ptr: jlong,
+    overlay_len: jint,
     instance_count: jint,
     texture_id: jint,
 ) -> jlong {
@@ -674,17 +674,23 @@ pub fn setEntityInstanceBuffer(
         return Instant::now().duration_since(now).as_nanos() as jlong;
     }
 
-    let mat4s_array = unsafe {
-        env.get_array_elements(&mat4_float_array, ReleaseMode::NoCopyBack)
-            .unwrap()
+    let mat4s = unsafe {
+        slice::from_raw_parts(
+            mat4_ptr as usize as *mut f32,
+            mat4_len as usize
+        )
     };
-    let transforms: Vec<f32> = mat4s_array.iter().copied().collect();
 
-    let overlay_array = unsafe {
-        env.get_array_elements(&overlay_array, ReleaseMode::NoCopyBack)
-            .unwrap()
+    let overlays = unsafe {
+        slice::from_raw_parts(
+            overlay_ptr as usize as *mut i32,
+            overlay_len as usize
+        )
     };
-    let overlays: Vec<i32> = overlay_array.iter().copied().collect();
+
+
+    let transforms: Vec<f32> = Vec::from(mat4s);
+    let overlays: Vec<i32> = Vec::from(overlays);
 
     let verts: Vec<InstanceVertex> = (0..instance_count)
         .map(|index| InstanceVertex {

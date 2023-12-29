@@ -58,6 +58,7 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
+mod alloc;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -358,8 +359,8 @@ pub fn createChunk(
     z: jint,
     palettes: JLongArray,
     storages: JLongArray,
-    block_light_nibbles: JByteBuffer,
-    sky_light_nibbles: JByteBuffer,
+    block_light_ptr: jlong,
+    sky_light_ptr: jlong,
 ) {
     let palette_elements: AutoElements<jlong> =
         unsafe { env.get_array_elements(&palettes, ReleaseMode::NoCopyBack) }.unwrap();
@@ -377,20 +378,12 @@ pub fn createChunk(
     let storage_elements =
         unsafe { slice::from_raw_parts(storage_elements.as_ptr(), storage_elements.len()) };
 
-    let block_light_nibbles_slice = {
-        let addr = env.get_direct_buffer_address(&block_light_nibbles).unwrap();
-        let len = env
-            .get_direct_buffer_capacity(&block_light_nibbles)
-            .unwrap();
-
-        unsafe { slice::from_raw_parts(addr, len) }
+    let block_light = unsafe {
+        (block_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read()
     };
 
-    let sky_light_nibbles_slice = {
-        let addr = env.get_direct_buffer_address(&sky_light_nibbles).unwrap();
-        let len = env.get_direct_buffer_capacity(&sky_light_nibbles).unwrap();
-
-        unsafe { slice::from_raw_parts(addr, len) }
+    let sky_light = unsafe {
+        (sky_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read()
     };
 
     assert_eq!(size_of::<usize>(), 8);
@@ -418,8 +411,8 @@ pub fn createChunk(
             .try_into()
             .unwrap_or_else(|_| panic!("Expected a Vec of length 24, got {}", palettes.len())),
         light_data: Some(DeserializedLightData {
-            block_light: Vec::from(block_light_nibbles_slice).try_into().unwrap(),
-            sky_light: Vec::from(sky_light_nibbles_slice).try_into().unwrap(),
+            block_light,
+            sky_light,
         }),
     };
 

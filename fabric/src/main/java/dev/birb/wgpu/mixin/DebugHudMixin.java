@@ -17,7 +17,7 @@ public class DebugHudMixin {
     public void getRightText(CallbackInfoReturnable<List<String>> cir) {
         if(WgpuMcMod.ENTRIES > 0) {
             cir.getReturnValue().add("[Electrum] texSubImage2D call count: " + Wgpu.getTimesTexSubImageCalled());
-            cir.getReturnValue().add("[Electrum] Microseconds avg uploading entities: " + (WgpuMcMod.TIME_SPENT_ENTITIES / WgpuMcMod.ENTRIES));
+            cir.getReturnValue().add("[Electrum] avg uploading entities: " + (WgpuMcMod.TIME_SPENT_ENTITIES / WgpuMcMod.ENTRIES) + "ns");
         }
     }
 

@@ -1,8 +1,6 @@
 package dev.birb.wgpu.mixin.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-
-
 import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.entity.EntityState;
 import dev.birb.wgpu.render.Wgpu;
@@ -10,18 +8,13 @@ import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuResourceProvider;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.WindowSettings;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.client.texture.TextureManager;
 import net.minecraft.client.util.Window;
 import net.minecraft.client.util.WindowProvider;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.resource.ReloadableResourceManagerImpl;
 import net.minecraft.resource.ResourceType;
-import org.spongepowered.asm.mixin.Mixin;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.ResourceType;
 import org.jetbrains.annotations.Nullable;
-import org.spongepowered.asm.mixin.Final;
+import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -84,7 +77,15 @@ public abstract class MinecraftClientRenderMixin {
             String entity = entry.getKey();
             EntityState.EntityRenderState state = entry.getValue();
 
-            long time = WgpuNative.setEntityInstanceBuffer(entity, state.buffer.array(), state.buffer.position(), state.overlays.array(), state.overlays.position(), state.count, state.textureId);
+            long time = WgpuNative.setEntityInstanceBuffer(
+                    entity,
+                    MemoryUtil.memAddress0(state.buffer),
+                    state.buffer.position(),
+                    MemoryUtil.memAddress0(state.overlays),
+                    state.overlays.position(),
+                    state.count,
+                    state.textureId
+            );
 
             WgpuMcMod.TIME_SPENT_ENTITIES += time;
             WgpuMcMod.ENTRIES++;
