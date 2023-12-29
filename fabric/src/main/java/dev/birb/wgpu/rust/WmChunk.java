@@ -1,18 +1,12 @@
 package dev.birb.wgpu.rust;
 
-import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wgpu.palette.RustPalette;
-import dev.birb.wgpu.render.Wgpu;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.world.ClientWorld;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.collection.IndexedIterable;
 import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.util.collection.PaletteStorage;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.world.chunk.ChunkNibbleArray;
@@ -20,8 +14,6 @@ import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.chunk.light.ChunkLightProvider;
-import net.minecraft.world.chunk.light.SkyLightStorage;
-import org.lwjgl.BufferUtils;
 
 import java.nio.ByteBuffer;
 
@@ -37,13 +29,6 @@ public class WmChunk {
         this.worldChunk = worldChunk;
     }
 
-    private static int getLightLevelDirect(ChunkNibbleArray array, int x, int y, int z) {
-        int index = ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);
-        int arrayIndex = index >> 1;
-        int shift = (index & 1) == 0 ? 0 : 4;
-        return (array.asByteArray()[arrayIndex] >> shift) & 15;
-    }
-
     public void uploadAndBake() throws ClassCastException {
         long[] paletteIndices = new long[24];
         long[] storageIndices = new long[24];
@@ -56,8 +41,7 @@ public class WmChunk {
         ByteBuffer skyBytes = ByteBuffer.allocateDirect(2048 * 24);
         ByteBuffer blockBytes = ByteBuffer.allocateDirect(2048 * 24);
 
-        ClientPlayerEntity player = MinecraftClient.getInstance().player;
-        ChunkPos pos = player.getChunkPos();
+        ChunkPos pos = this.worldChunk.getPos();
 
         for (int i = 0; i < 24; i++) {
             Palette<?> palette;
@@ -74,16 +58,6 @@ public class WmChunk {
             if(skyLightProvider != null && blockLightProvider != null) {
                 ChunkNibbleArray skyNibble = skyLightProvider.lightStorage.uncachedStorage.get(sectionPos);
                 ChunkNibbleArray blockNibble = blockLightProvider.lightStorage.uncachedStorage.get(sectionPos);
-
-                if(this.worldChunk.getPos().equals(pos) && ((player.getBlockY() + 64) >> 4) == i) {
-                    int lightLevel = this.worldChunk.getWorld().getLightLevel(player.getBlockPos());
-
-                    int directBlockLight = getLightLevelDirect(blockNibble, player.getBlockX(), player.getBlockY(), player.getBlockZ());
-                    int directSkyLight = getLightLevelDirect(blockNibble, player.getBlockX(), player.getBlockY(), player.getBlockZ());
-
-                    boolean uhOh = lightLevel != Math.max(directBlockLight, directSkyLight);
-                    boolean a = uhOh;
-                }
 
                 if(skyNibble != null) {
                     byte[] sectionSkyLightBytes = skyNibble.asByteArray();
@@ -125,9 +99,6 @@ public class WmChunk {
                 storageIndices[i] = index + 1;
             }
         }
-
-        byte[] skyLightDebug = new byte[24 * 2048];
-        skyBytes.get(skyLightDebug);
 
         Thread thread = new Thread(() -> {
             WgpuNative.createChunk(this.x, this.z, paletteIndices, storageIndices, blockBytes, skyBytes);
