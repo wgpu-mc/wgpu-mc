@@ -16,11 +16,11 @@ use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
 use wgpu::BufferUsages;
 
-use crate::{WgpuState, WmRenderer};
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 use crate::util::BindableBuffer;
+use crate::{WgpuState, WmRenderer};
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;

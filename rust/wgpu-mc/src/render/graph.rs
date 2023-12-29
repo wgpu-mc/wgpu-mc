@@ -789,7 +789,7 @@ impl ShaderGraph {
                         for (_pos, chunk_swap) in chunks.iter() {
                             let chunk = arena.alloc(chunk_swap.load());
                             let buffers = arena.alloc(chunk.buffers.load_full());
-                            let chunk_buffers  = (*buffers).as_ref().as_ref();
+                            let chunk_buffers = (*buffers).as_ref().as_ref();
 
                             let sections = chunk.sections.read();
 

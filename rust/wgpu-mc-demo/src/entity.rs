@@ -9,7 +9,7 @@ use wgpu_mc::mc::entity::{BundledEntityInstances, Entity, EntityInstance, PartTr
 use wgpu_mc::mc::resource::ResourcePath;
 use wgpu_mc::render::atlas::Atlas;
 use wgpu_mc::WmRenderer;
-use wgpu_mc_jni::entity::{ModelPartData, tmd_to_wm};
+use wgpu_mc_jni::entity::{tmd_to_wm, ModelPartData};
 
 const ENTITY_JSON: &str = include_str!("../dumped_entities.json");
 

@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use jni::JNIEnv;
 use jni::objects::JClass;
+use jni::JNIEnv;
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 

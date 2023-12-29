@@ -11,15 +11,15 @@ use cgmath::{Matrix4, SquareMatrix};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
-use wgpu_mc::{wgpu, WmRenderer};
 use wgpu_mc::render::graph::{
-    bind_uniforms, CustomResource, GeometryCallback, GeometryInfo, ResourceInternal,
-    set_push_constants, TextureResource,
+    bind_uniforms, set_push_constants, CustomResource, GeometryCallback, GeometryInfo,
+    ResourceInternal, TextureResource,
 };
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
 use wgpu_mc::texture::{BindableTexture, TextureHandle};
 use wgpu_mc::util::{BindableBuffer, WmArena};
-use wgpu_mc::wgpu::{Buffer, BufferUsages, IndexFormat, vertex_attr_array};
+use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
+use wgpu_mc::{wgpu, WmRenderer};
 
 pub static GL_ALLOC: Lazy<RwLock<HashMap<u32, GlTexture>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
@@ -349,7 +349,7 @@ impl GeometryCallback for ElectrumGeometry {
                         vertex_buffer: std::mem::take(&mut vertex_buffer),
                         count,
                         matrix: matrix.into(),
-                        texture: texture.take()
+                        texture: texture.take(),
                     }));
                 }
                 GLCommand::AttachTexture(index, id) => {

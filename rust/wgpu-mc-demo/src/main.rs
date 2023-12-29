@@ -15,7 +15,6 @@ use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
-use wgpu_mc::{HasWindowSize, wgpu, WindowSize, WmRenderer};
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
@@ -24,6 +23,7 @@ use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::BufferUsages;
+use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
 
 use crate::camera::Camera;
 use crate::chunk::make_chunks;
