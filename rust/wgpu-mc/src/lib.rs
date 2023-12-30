@@ -40,16 +40,18 @@ See the [render::entity] module for an example of rendering an example entity.
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::mc::entity::BundledEntityInstances;
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
 pub use naga;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, Extent3d, PresentMode};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, Extent3d, PresentMode};
+use wgpu::util::StagingBelt;
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -62,6 +64,8 @@ pub mod mc;
 pub mod render;
 pub mod texture;
 pub mod util;
+
+pub const CHUNK_STAGING_BELT_SIZE: u64 = 64_000_000;
 
 /// Provides access to most of the wgpu structs relating directly to communicating/getting
 /// information about the gpu.
@@ -81,6 +85,10 @@ pub struct WmRenderer {
     pub texture_handles: Arc<RwLock<HashMap<String, TextureHandle>>>,
     pub pipelines: Arc<ArcSwap<WmPipelines>>,
     pub mc: Arc<MinecraftState>,
+    pub chunk_update_queue: Arc<Mutex<Vec<(Arc<Buffer>, Vec<u8>)>>>,
+    pub chunk_staging_belt: Arc<Mutex<StagingBelt>>,
+    #[cfg(feature = "tracing")]
+    pub puffin_http: Arc<puffin_http::Server>
 }
 
 #[derive(Copy, Clone)]
@@ -100,7 +108,7 @@ impl WmRenderer {
     /// initialize a [WmRenderer].
     pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(
         window: &W,
-        _vsync: bool,
+        vsync: bool,
     ) -> WgpuState {
         let size = window.get_window_size();
 
@@ -145,16 +153,14 @@ impl WmRenderer {
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
-            present_mode: if surface_caps.present_modes.contains(&PresentMode::Immediate) {
+            present_mode: if vsync {
+                PresentMode::AutoVsync
+            } else if surface_caps.present_modes.contains(&PresentMode::Immediate) {
                 PresentMode::Immediate
             } else {
                 surface_caps.present_modes[0]
             },
-            // present_mode: if vsync {
-            //     wgpu::PresentMode::AutoVsync
-            // } else {
-            //     wgpu::PresentMode::AutoNoVsync
-            // },
+
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -171,6 +177,15 @@ impl WmRenderer {
     }
 
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
+        #[cfg(feature = "tracing")]
+        let puffin_http = {
+            let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
+            let puffin_server = puffin_http::Server::new(&server_addr).unwrap();
+            eprintln!("Run this to view profiling data:  puffin_viewer {server_addr}");
+            puffin::set_scopes_on(true);
+            Arc::new(puffin_server)
+        };
+
         let pipelines = WmPipelines::new(resource_provider.clone());
 
         let mc = MinecraftState::new(&wgpu_state, resource_provider);
@@ -181,6 +196,10 @@ impl WmRenderer {
             texture_handles: Arc::new(RwLock::new(HashMap::new())),
             pipelines: Arc::new(ArcSwap::new(Arc::new(pipelines))),
             mc: Arc::new(mc),
+            chunk_update_queue: Arc::new(Mutex::new(Vec::new())),
+            chunk_staging_belt: Arc::new(Mutex::new(StagingBelt::new(CHUNK_STAGING_BELT_SIZE))),
+            #[cfg(feature = "tracing")]
+            puffin_http,
         }
     }
 
@@ -330,9 +349,42 @@ impl WmRenderer {
         surface_config: &wgpu::SurfaceConfiguration,
         entity_instances: &'resources HashMap<String, BundledEntityInstances>,
     ) -> Result<(), wgpu::SurfaceError> {
+        #[cfg(feature = "tracing")]
+        puffin::GlobalProfiler::lock().new_frame();
+
         graph.render(self, output_texture_view, surface_config, entity_instances);
 
         Ok(())
+    }
+
+    pub fn submit_chunk_updates(&self) {
+        puffin::profile_function!();
+
+        let updates = {
+            let mut updates = self.chunk_update_queue.lock();
+            std::mem::take(&mut *updates)
+        };
+
+        if updates.len() == 0 {
+            return;
+        }
+
+        let mut encoder = self.wgpu_state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: None,
+        });
+
+        let mut staging_belt = self.chunk_staging_belt.lock();
+
+        updates.into_iter().for_each(|(queue, data)| {
+            let mut view = staging_belt.write_buffer(&mut encoder, &queue, 0, NonZeroU64::new(data.len() as u64).unwrap(), &self.wgpu_state.device);
+            view.copy_from_slice(&data);
+        });
+
+        staging_belt.finish();
+
+        self.wgpu_state.queue.submit([encoder.finish()]);
+
+        staging_belt.recall();
     }
 
     pub fn get_backend_description(&self) -> String {

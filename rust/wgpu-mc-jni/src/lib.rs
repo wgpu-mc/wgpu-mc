@@ -103,7 +103,7 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 static THREAD_POOL: Lazy<ThreadPool> =
     Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
 
-static CHUNKS: Lazy<RwLock<HashMap<ChunkPos, ChunkHolder>>> =
+static CHUNKS: Lazy<RwLock<HashMap<ChunkPos, Arc<ChunkHolder>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
@@ -185,7 +185,22 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
     }
 
     fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
-        let chunk = self.center;
+        let chunk_x = (x >> 4) - self.pos[0];
+        let chunk_z = (z >> 4) - self.pos[1];
+
+        let chunk_option = match [chunk_x, chunk_z] {
+            [0, 0] => Some(self.center),
+            [0, -1] => self.north,
+            [0, 1] => self.south,
+            [1, 0] => self.east,
+            [-1, 0] => self.west,
+            _pos => return LightLevel::from_sky_and_block(0, 0),
+        };
+
+        let chunk = match chunk_option {
+            None => return LightLevel::from_sky_and_block(0, 0),
+            Some(chunk) => chunk,
+        };
 
         if y as usize >= CHUNK_HEIGHT {
             return LightLevel::from_sky_and_block(15, 0);
@@ -406,58 +421,55 @@ pub fn createChunk(
 
     let mut write = CHUNKS.write();
 
-    write.insert([x, z], holder);
+    write.insert([x, z], Arc::new(holder));
 }
 
 pub fn bake_chunk(x: i32, z: i32) {
-    // THREAD_POOL.spawn(move || {
-        println!("bake chunk {x},{z}");
+    puffin::profile_scope!("jni bake chunk", format!("{},{}", x, z));
 
-        let wm = RENDERER.get().unwrap();
+    let wm = RENDERER.get().unwrap();
 
-        {
-            {
-                let loaded_chunks = wm.mc.chunks.loaded_chunks.read();
-                if !loaded_chunks.contains_key(&[x, z]) {
-                    drop(loaded_chunks);
-                    let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
-                    loaded_chunks.insert([x, z], ArcSwap::new(Arc::new(Chunk::new([x, z]))));
-                }
-            }
+    let bm = wm.mc.block_manager.read();
 
-            let bm = wm.mc.block_manager.read();
-            let loaded_chunks = wm.mc.chunks.loaded_chunks.read();
+    {
+        let loaded_chunks = wm.mc.chunks.loaded_chunks.read();
 
-            let chunk = loaded_chunks.get(&[x, z]).unwrap().load();
-
-            let chunks = CHUNKS.read();
-
-            let center = chunks.get(&[x, z]).unwrap();
-
-            let north = chunks.get(&[x, z - 1]);
-            let south = chunks.get(&[x, z + 1]);
-            let west = chunks.get(&[x - 1, z]);
-            let east = chunks.get(&[x + 1, z]);
-
-            let bsp = MinecraftBlockstateProvider {
-                center,
-                west,
-                north,
-                south,
-                east,
-                pos: [x, z],
-                air: *AIR,
-            };
-
-            let _instant = Instant::now();
-
-            chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
-
-            println!("done, baked chunk {x},{z}");
-
-            // println!("Baked and uploaded chunk in {}ms", Instant::now().duration_since(instant).as_millis());
+        if !loaded_chunks.contains_key(&[x, z]) {
+            drop(loaded_chunks);
+            let mut loaded_chunks = wm.mc.chunks.loaded_chunks.write();
+            loaded_chunks.insert([x, z], ArcSwap::new(Arc::new(Chunk::new([x, z]))));
         }
-    // });
+    }
+
+    let (chunk, center, neighbors) = {
+        let loaded_chunks = wm.mc.chunks.loaded_chunks.read();
+
+        let chunk = loaded_chunks.get(&[x, z]).unwrap().load_full();
+        let chunks = CHUNKS.read();
+
+        let center = chunks.get(&[x, z]).unwrap().clone();
+
+        let neighbors = [
+            chunks.get(&[x, z - 1]), //North
+            chunks.get(&[x, z + 1]), //South
+            chunks.get(&[x - 1, z]), //West
+            chunks.get(&[x + 1, z]), //East
+        ].map(|arc_option| arc_option.map(|arc| arc.clone()));
+
+        (chunk, center, neighbors)
+    };
+
+    let bsp = MinecraftBlockstateProvider {
+        center: &center,
+        north: neighbors[0].as_ref().map(|arc| &**arc),
+        south: neighbors[1].as_ref().map(|arc| &**arc),
+        west: neighbors[2].as_ref().map(|arc| &**arc),
+        east: neighbors[3].as_ref().map(|arc| &**arc),
+        pos: [x, z],
+        air: *AIR,
+    };
+
+    chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

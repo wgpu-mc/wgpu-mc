@@ -3,6 +3,7 @@ use std::io::Cursor;
 use std::mem::size_of;
 use std::{ptr, slice, thread};
 use std::{sync::Arc, time::Instant};
+use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use byteorder::LittleEndian;
@@ -154,7 +155,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     let wgpu_state = block_on(WmRenderer::init_wgpu(
         wrapper,
-        super::SETTINGS.read().as_ref().unwrap().vsync.value,
+        true
+        // super::SETTINGS.read().as_ref().unwrap().vsync.value,
     ));
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
@@ -182,8 +184,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
     let mut current_modifiers = ModifiersState::empty();
 
     log::trace!("Starting event loop");
-
-    let wm_clone = wm.clone();
 
     let shader_pack: ShaderPackConfig =
         serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
@@ -294,6 +294,19 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
     );
 
     shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
+
+    let wm_clone = wm.clone();
+    let wm_clone_1 = wm.clone();
+
+    thread::spawn(move || {
+        let wm = wm_clone_1;
+
+        loop {
+            wm.submit_chunk_updates();
+
+            thread::sleep(Duration::from_millis(1));
+        }
+    });
 
     thread::spawn(move || {
         let wm = wm_clone;

@@ -12,7 +12,11 @@ use jni_fn::jni_fn;
     https://github.com/CaffeineMC/sodium-fabric/blob/1.20/graph-rework-rust-wip-morton/native/core/src/mem.rs
  */
 
-// #[global_allocator]
+#[cfg(not(feature = "no_alloc"))]
+#[global_allocator]
+static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
+
+#[cfg(feature = "no_alloc")]
 static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
 
 #[repr(C)]

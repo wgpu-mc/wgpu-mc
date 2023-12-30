@@ -71,10 +71,6 @@ unsafe impl HasRawDisplayHandle for WinitWindowWrapper {
 }
 
 fn main() {
-    // env_logger::init();
-
-    println!("1");
-
     let event_loop = EventLoop::new().unwrap();
     let title = "wgpu-mc test";
     let window = winit::window::WindowBuilder::new()
@@ -132,17 +128,9 @@ fn main() {
 
     let now = Instant::now();
 
-    println!("2");
-
     wm.mc.bake_blocks(&wm, blocks.iter().map(|(a, b)| (a, b)));
 
     let end = Instant::now();
-
-    println!(
-        "Baked {} blocks in {}ms",
-        wm.mc.block_manager.read().blocks.len(),
-        end.duration_since(now).as_millis()
-    );
 
     let window = wrapper.window;
 
@@ -190,8 +178,6 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
         .load_full()
         .chunk_layers
         .store(Arc::new(vec![Box::new(TerrainLayer)]));
-
-    println!("yah");
 
     let chunk = make_chunks(&wm);
 

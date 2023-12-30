@@ -46,7 +46,7 @@ impl Block {
                 .keys
                 .read()
                 .get_index(key as usize)
-                .expect(&format!("{self:?} {key}"))
+                .expect(&format!("{self:#?}\n{key}"))
                 .1
                 .clone(),
             //TODO, random variant selection through weight and seed
@@ -211,6 +211,8 @@ impl MinecraftState {
         wm: &WmRenderer,
         block_states: impl IntoIterator<Item = (impl AsRef<str>, &'a ResourcePath)>,
     ) {
+        puffin::profile_function!();
+
         let mut block_manager = self.block_manager.write();
         let block_atlas = self
             .texture_manager

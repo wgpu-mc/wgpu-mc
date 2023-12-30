@@ -666,6 +666,8 @@ impl ShaderGraph {
         surface_config: &SurfaceConfiguration,
         entity_instances: &HashMap<String, BundledEntityInstances>,
     ) {
+        puffin::profile_scope!("render");
+
         let arena = WmArena::new(1024);
 
         let mut encoder = wm
@@ -705,6 +707,8 @@ impl ShaderGraph {
         let frustum = Frustum::from_modelview_projection((projection_matrix * view_matrix).into());
 
         for (name, config) in (&self.pack.pipelines.pipelines).into_iter() {
+            puffin::profile_scope!("render pipeline", name);
+
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None, // TODO maybe use the pipeline name or something? for easier debugging if needed
                 occlusion_query_set: None,
@@ -947,7 +951,10 @@ impl ShaderGraph {
             };
         }
 
-        wm.wgpu_state.queue.submit([encoder.finish()]);
+        {
+            puffin::profile_scope!("submit encoder to queue");
+            wm.wgpu_state.queue.submit([encoder.finish()]);
+        }
     }
 }
 
@@ -963,7 +970,7 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
             "wm_ssbo_chunk_vertices" => {
                 render_pass.set_bind_group(
                     *index as u32,
-                    &chunk_buffers.unwrap().vertex_buffer.bind_group,
+                    &chunk_buffers.unwrap().vertex_bindable.bind_group,
                     &[],
                 );
                 continue;
@@ -971,7 +978,7 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
             "wm_ssbo_chunk_indices" => {
                 render_pass.set_bind_group(
                     *index as u32,
-                    &chunk_buffers.unwrap().index_buffer.bind_group,
+                    &chunk_buffers.unwrap().index_bindable.bind_group,
                     &[],
                 );
                 continue;

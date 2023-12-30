@@ -9,12 +9,13 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::mem::size_of;
 use std::ops::Range;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
-use wgpu::BufferUsages;
+use wgpu::{BufferDescriptor, BufferUsages};
 
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
@@ -87,8 +88,8 @@ pub trait RenderLayer: Send + Sync {
 
 #[derive(Debug)]
 pub struct ChunkBuffers {
-    pub vertex_buffer: BindableBuffer,
-    pub index_buffer: BindableBuffer,
+    pub vertex_bindable: BindableBuffer,
+    pub index_bindable: BindableBuffer,
 }
 
 ///The struct representing a Chunk, with various render layers, split into sections
@@ -116,6 +117,9 @@ impl Chunk {
         block_manager: &BlockManager,
         provider: &T,
     ) {
+        #[cfg(feature = "tracing")]
+        puffin::profile_scope!("mesh chunk", format!("{:?}", self.pos));
+
         let mut vertices = 0;
         let mut vertex_data = Vec::new();
         let mut index_data = Vec::new();
@@ -156,25 +160,89 @@ impl Chunk {
             })
             .collect();
 
+        let buffers = self.buffers.load();
+
         if !vertex_data.is_empty() {
-            let vertex_buffer =
-                BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE, "ssbo");
-            let index_buffer = BindableBuffer::new(
-                wm,
-                bytemuck::cast_slice(&index_data),
-                BufferUsages::STORAGE,
-                "ssbo",
+            let (vertex_buffer, index_buffer) = match &**buffers {
+                None => {
+                    let vertex_bindable =
+                        BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
+
+                    let index_bindable = BindableBuffer::new(
+                        wm,
+                        bytemuck::cast_slice(&index_data),
+                        BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                        "ssbo",
+                    );
+
+                    let vertex_buffer = vertex_bindable.buffer.clone();
+                    let index_buffer = index_bindable.buffer.clone();
+
+                    self.buffers.store(Arc::new(
+                        Some(ChunkBuffers {
+                            vertex_bindable,
+                            index_bindable,
+                        })
+                    ));
+
+                    (vertex_buffer, index_buffer)
+                }
+                Some(chunk_buffers) => {
+
+                    if (chunk_buffers.vertex_bindable.size as usize) < vertex_data.len() || (chunk_buffers.index_bindable.size as usize) < index_data.len() * size_of::<u32>() {
+                        //the formulas below align the given value to the nearest multiple of the constant + 1
+                        let mut aligned_vertex_buffer = vec![0u8; vertex_data.len() + 16383 & !16383];
+                        let mut aligned_index_buffer = vec![0u32; index_data.len() + 1023 & !1023];
+
+                        (&mut aligned_vertex_buffer[..vertex_data.len()]).copy_from_slice(&vertex_data);
+                        (&mut aligned_index_buffer[..index_data.len()]).copy_from_slice(&index_data);
+
+                        let vertex_bindable =
+                            BindableBuffer::new(wm, &aligned_vertex_buffer, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
+
+                        let index_bindable = BindableBuffer::new(
+                            wm,
+                            bytemuck::cast_slice(&aligned_index_buffer),
+                            BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                            "ssbo",
+                        );
+
+                        let vertex_buffer = vertex_bindable.buffer.clone();
+                        let index_buffer = index_bindable.buffer.clone();
+
+                        self.buffers.store(Arc::new(Some(
+                            ChunkBuffers {
+                                vertex_bindable,
+                                index_bindable,
+                            }
+                        )));
+
+                        (vertex_buffer, index_buffer)
+                    } else {
+                        (chunk_buffers.vertex_bindable.buffer.clone(), chunk_buffers.index_bindable.buffer.clone())
+                    }
+                }
+            };
+
+            let mut queue = wm.chunk_update_queue.lock();
+
+            queue.push(
+                (vertex_buffer, vertex_data)
             );
 
-            self.buffers.store(Arc::new(Some(ChunkBuffers {
-                vertex_buffer,
-                index_buffer,
-            })));
-            *self.sections.write() = baked_layers;
-        } else {
-            self.buffers.store(Arc::new(None));
+            queue.push(
+                (
+                    index_buffer,
+                    Vec::from(bytemuck::cast_slice(&index_data))
+                )
+            );
         }
+
+        drop(buffers);
+
+        *self.sections.write() = baked_layers;
     }
+
 }
 
 /// Returns true if the block at the given coordinates is either not a full cube or has transparency
@@ -223,6 +291,9 @@ pub fn bake_section_layer<
     state_provider: &Provider,
     section_index: usize,
 ) -> (Vec<T>, Vec<u32>) {
+    #[cfg(feature = "tracing")]
+    puffin::profile_scope!("mesh section layer", format!("{}", section_index));
+
     //Generates the mesh for this chunk, culling faces whenever possible
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
