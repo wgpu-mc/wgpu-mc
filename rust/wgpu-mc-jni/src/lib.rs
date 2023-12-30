@@ -742,7 +742,9 @@ pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
         window.set_cursor_grab(match locked {
             JNI_TRUE => {
                 window.set_cursor_visible(false);
-                CursorGrabMode::Locked
+                window.set_cursor_grab(CursorGrabMode::Confined)
+                    .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked))
+                    .unwrap();
             }
             JNI_FALSE => {
                 window.set_cursor_visible(true);
