@@ -742,7 +742,7 @@ pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
         window.set_cursor_grab(match locked {
             JNI_TRUE => {
                 window.set_cursor_visible(false);
-                if cfg!(target_os = "macos") {CursorGrabMode::Locked} else {CursorGrabMode::Confined}
+                CursorGrabMode::Locked
             }
             JNI_FALSE => {
                 window.set_cursor_visible(true);

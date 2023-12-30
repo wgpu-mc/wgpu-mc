@@ -92,7 +92,6 @@ public class Wgpu {
     public static void mouseMove(double x, double y) {
         MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
         if(client.mouse.isCursorLocked()) {
-            LOGGER.info("mousemove called, x: " + x + " y: " + y + " lastx: " + lastX + " lastY: " + lastY);
             lastX += x;
             lastY += y;
             client.execute(() -> client.mouse.onCursorPos(0, lastX, lastY));
