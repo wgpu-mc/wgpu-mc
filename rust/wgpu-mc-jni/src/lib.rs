@@ -51,6 +51,7 @@ use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
+mod alloc;
 pub mod entity;
 mod gl;
 mod lighting;
@@ -58,7 +59,6 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
-mod alloc;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -742,7 +742,7 @@ pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
         window.set_cursor_grab(match locked {
             JNI_TRUE => {
                 window.set_cursor_visible(false);
-                CursorGrabMode::Confined
+                if cfg!(target_os = "macos") {CursorGrabMode::Locked} else {CursorGrabMode::Confined}
             }
             JNI_FALSE => {
                 window.set_cursor_visible(true);
