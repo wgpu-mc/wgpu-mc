@@ -151,13 +151,13 @@ public class WgpuNative {
 
     public static native void setCursorMode(int mode);
 
-    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, int[] blockstateOffsets);
+    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, long blockstateOffsets, int blockstateOffsetsLen);
 
     public static native void registerBlock(String name);
 
     public static native void clearPalette(long l);
 
-    public static native void createChunk(int x, int z, long[] pointers, long[] storagePointers, long blockLightPtr, long skyLightPtr);
+    public static native void createChunk(int x, int z, long palettePtrs, long storagePtrs, long blockLightPtr, long skyLightPtr);
 
     public static native void destroyPaletteStorage(long paletteStorage);
 

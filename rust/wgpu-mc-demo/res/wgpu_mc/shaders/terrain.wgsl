@@ -26,7 +26,7 @@ struct PushConstants {
     fb_height: f32
 }
 
-var<push_constant> push_constants: PushConstants;
+//var<push_constant> push_constants: PushConstants;
 
 @group(0) @binding(0) var<uniform> camera_uniform: CameraUniform;
 
@@ -82,7 +82,8 @@ fn vert(
 
     var pos = vec3<f32>(x, y, z);
 
-    var world_pos = pos + vec3<f32>(f32(push_constants.chunk_x) * 16.0, f32(push_constants.chunk_y) * 16.0, f32(push_constants.chunk_z) * 16.0);
+//    var world_pos = pos + vec3<f32>(f32(push_constants.chunk_x) * 16.0, f32(push_constants.chunk_y) * 16.0, f32(push_constants.chunk_z) * 16.0);
+    var world_pos = pos;
 
     vr.pos = camera_uniform.view_proj * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);

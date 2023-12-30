@@ -71,7 +71,9 @@ unsafe impl HasRawDisplayHandle for WinitWindowWrapper {
 }
 
 fn main() {
-    env_logger::init();
+    // env_logger::init();
+
+    println!("1");
 
     let event_loop = EventLoop::new().unwrap();
     let title = "wgpu-mc test";
@@ -130,6 +132,8 @@ fn main() {
 
     let now = Instant::now();
 
+    println!("2");
+
     wm.mc.bake_blocks(&wm, blocks.iter().map(|(a, b)| (a, b)));
 
     let end = Instant::now();
@@ -152,8 +156,8 @@ impl RenderLayer for TerrainLayer {
         |_| true
     }
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex {
-        |vert, x, y, z, _light| Vertex {
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> Vertex {
+        |vert, x, y, z, _light, dark| Vertex {
             position: [
                 vert.position[0] + x,
                 vert.position[1] + y,
@@ -164,6 +168,7 @@ impl RenderLayer for TerrainLayer {
             color: u32::MAX,
             uv_offset: vert.animation_uv_offset,
             lightmap_coords: 0,
+            dark,
         }
     }
 
@@ -185,6 +190,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
         .load_full()
         .chunk_layers
         .store(Arc::new(vec![Box::new(TerrainLayer)]));
+
+    println!("yah");
 
     let chunk = make_chunks(&wm);
 

@@ -70,12 +70,12 @@ pub struct BlockMeshVertex {
 #[derive(Debug)]
 pub struct BlockModelFaces {
     pub vertices: [BlockMeshVertex; 24],
-    pub north: Option<[u32; 6]>,
-    pub east: Option<[u32; 6]>,
-    pub south: Option<[u32; 6]>,
-    pub west: Option<[u32; 6]>,
-    pub up: Option<[u32; 6]>,
-    pub down: Option<[u32; 6]>,
+    pub north: Option<u32>,
+    pub east: Option<u32>,
+    pub south: Option<u32>,
+    pub west: Option<u32>,
+    pub up: Option<u32>,
+    pub down: Option<u32>,
     pub cube: bool,
 }
 
@@ -384,15 +384,15 @@ impl ModelMesh {
                         #[rustfmt::skip]
                         let faces = BlockModelFaces {
                             vertices: [
-                                BlockMeshVertex { position: e, tex_coords: [south_face.0.1.0, south_face.0.1.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
-                                BlockMeshVertex { position: f, tex_coords: [south_face.0.0.0, south_face.0.1.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
-                                BlockMeshVertex { position: g, tex_coords: [south_face.0.0.0, south_face.0.0.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
                                 BlockMeshVertex { position: h, tex_coords: [south_face.0.1.0, south_face.0.0.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
+                                BlockMeshVertex { position: g, tex_coords: [south_face.0.0.0, south_face.0.0.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
+                                BlockMeshVertex { position: f, tex_coords: [south_face.0.0.0, south_face.0.1.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
+                                BlockMeshVertex { position: e, tex_coords: [south_face.0.1.0, south_face.0.1.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
 
-                                BlockMeshVertex { position: b, tex_coords: [west_face.0.0.0, west_face.0.1.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
-                                BlockMeshVertex { position: c, tex_coords: [west_face.0.0.0, west_face.0.0.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
-                                BlockMeshVertex { position: g, tex_coords: [west_face.0.1.0, west_face.0.0.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
                                 BlockMeshVertex { position: f, tex_coords: [west_face.0.1.0, west_face.0.1.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
+                                BlockMeshVertex { position: g, tex_coords: [west_face.0.1.0, west_face.0.0.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
+                                BlockMeshVertex { position: c, tex_coords: [west_face.0.0.0, west_face.0.0.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
+                                BlockMeshVertex { position: b, tex_coords: [west_face.0.0.0, west_face.0.1.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
 
                                 BlockMeshVertex { position: a, tex_coords: [north_face.0.0.0, north_face.0.1.1], normal: [0.0, 0.0, -1.0], animation_uv_offset: north_face.1 },
                                 BlockMeshVertex { position: b, tex_coords: [north_face.0.1.0, north_face.0.1.1], normal: [0.0, 0.0, -1.0], animation_uv_offset: north_face.1 },
@@ -409,29 +409,17 @@ impl ModelMesh {
                                 BlockMeshVertex { position: g, tex_coords: [up_face.0.1.0, up_face.0.0.1], normal: [0.0, 1.0, 0.0], animation_uv_offset: up_face.1 },
                                 BlockMeshVertex { position: h, tex_coords: [up_face.0.0.0, up_face.0.0.1], normal: [0.0, 1.0, 0.0], animation_uv_offset: up_face.1 },
 
-                                BlockMeshVertex { position: b, tex_coords: [down_face.0.0.0, down_face.0.0.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
                                 BlockMeshVertex { position: e, tex_coords: [down_face.0.1.0, down_face.0.1.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
-                                BlockMeshVertex { position: a, tex_coords: [down_face.0.1.0, down_face.0.0.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
                                 BlockMeshVertex { position: f, tex_coords: [down_face.0.0.0, down_face.0.1.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
+                                BlockMeshVertex { position: b, tex_coords: [down_face.0.0.0, down_face.0.0.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
+                                BlockMeshVertex { position: a, tex_coords: [down_face.0.1.0, down_face.0.0.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
                             ],
-                            north: north.map(|_| {[
-                                9,11,8,10,11,9
-                            ]}),
-                            east: east.map(|_| {[
-                                13,15,12,14,15,13
-                            ]}),
-                            south: south.map(|_| {[
-                                0,3,1,1,3,2
-                            ]}),
-                            west: west.map(|_| {[
-                                4,7,5,5,7,6
-                            ]}),
-                            up: up.map(|_up| {[
-                                16,17,18,16,18,19
-                            ]}),
-                            down: down.map(|_down| {[
-                                22,21,20,20,21,23
-                            ]}),
+                            south: south.map(|_| 0),
+                            west: west.map(|_| 4),
+                            north: north.map(|_| 8),
+                            east: east.map(|_| 12),
+                            up: up.map(|_| 16),
+                            down: down.map(|_| 20),
                             cube: current_element_is_full_cube,
                         };
 

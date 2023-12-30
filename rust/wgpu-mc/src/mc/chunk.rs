@@ -80,7 +80,7 @@ pub trait BlockStateProvider: Send + Sync {
 pub trait RenderLayer: Send + Sync {
     fn filter(&self) -> fn(BlockstateKey) -> bool;
 
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> Vertex;
+    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> Vertex;
 
     fn name(&self) -> &str;
 }
@@ -214,7 +214,7 @@ pub fn bake_section_layer<
     T,
     Provider: BlockStateProvider,
     Filter: Fn(BlockstateKey) -> bool,
-    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, LightLevel) -> T,
+    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> T,
 >(
     block_manager: &BlockManager,
     chunk: &Chunk,
@@ -272,7 +272,7 @@ pub fn bake_section_layer<
 
         // TODO: randomly select a mesh if there are multiple models in a variant
 
-        const INDICES: [u32; 6] = [0, 1, 2, 3, 4, 5];
+        const INDICES: [u32; 6] = [1, 3, 0, 2, 3, 1];
 
         for model in &model_mesh.mesh {
             if model.cube {
@@ -287,17 +287,20 @@ pub fn bake_section_layer<
                 let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
                 let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
 
-                let mut extend_vertices = |face: &[u32; 6], light_level: LightLevel| {
+                let mut extend_vertices = |index: u32, light_level: LightLevel| {
                     let vec_index = vertices.len();
-                    vertices.extend(face.map(|index| {
-                        mapper(
-                            &model.vertices[index as usize],
-                            xf32,
-                            yf32,
-                            zf32,
-                            light_level,
+                    vertices.extend(
+                        (index..index + 4).map(|vert_index|
+                            mapper(
+                                &model.vertices[vert_index as usize],
+                                xf32,
+                                yf32,
+                                zf32,
+                                light_level,
+                                false
+                            )
                         )
-                    }));
+                    );
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 };
 
@@ -309,37 +312,37 @@ pub fn bake_section_layer<
                 if let (true, Some(face)) = (render_north, &model.north) {
                     let light_level: LightLevel =
                         state_provider.get_light_level(absolute_x, y, absolute_z - 1);
-                    extend_vertices(face, light_level);
+                    extend_vertices(*face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_east, &model.east) {
                     let light_level: LightLevel =
                         state_provider.get_light_level(absolute_x + 1, y, absolute_z);
-                    extend_vertices(face, light_level);
+                    extend_vertices(*face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_south, &model.south) {
                     let light_level: LightLevel =
                         state_provider.get_light_level(absolute_x, y, absolute_z + 1);
-                    extend_vertices(face, light_level);
+                    extend_vertices(*face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_west, &model.west) {
                     let light_level: LightLevel =
                         state_provider.get_light_level(absolute_x - 1, y, absolute_z);
-                    extend_vertices(face, light_level);
+                    extend_vertices(*face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_up, &model.up) {
                     let light_level: LightLevel =
                         state_provider.get_light_level(absolute_x, y + 1, absolute_z);
-                    extend_vertices(face, light_level);
+                    extend_vertices(*face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_down, &model.down) {
                     let light_level: LightLevel =
                         state_provider.get_light_level(absolute_x, y - 1, absolute_z);
-                    extend_vertices(face, light_level);
+                    extend_vertices(*face, light_level);
                 }
             } else {
                 let light_level: LightLevel =
@@ -355,17 +358,18 @@ pub fn bake_section_layer<
                 ]
                 .iter()
                 .filter_map(|face| *face)
-                .for_each(|face| {
+                .for_each(|index| {
                     let vec_index = vertices.len();
-                    vertices.extend(face.map(|index| {
+                    vertices.extend((index..index + 4).map(|vert_index|
                         mapper(
-                            &model.vertices[index as usize],
+                            &model.vertices[vert_index as usize],
                             xf32,
                             yf32,
                             zf32,
                             light_level,
+                            false
                         )
-                    }));
+                    ));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 });
             }

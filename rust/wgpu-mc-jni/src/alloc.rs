@@ -5,7 +5,14 @@ use jni::objects::JClass;
 use jni::sys::jlong;
 use jni_fn::jni_fn;
 
-#[global_allocator]
+/*
+    Special thanks to burger and JellySquid
+
+    This file was adapted from
+    https://github.com/CaffeineMC/sodium-fabric/blob/1.20/graph-rework-rust-wip-morton/native/core/src/mem.rs
+ */
+
+// #[global_allocator]
 static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
 
 #[repr(C)]
