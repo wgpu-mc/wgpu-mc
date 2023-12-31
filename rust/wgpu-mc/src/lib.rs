@@ -49,7 +49,10 @@ pub use naga;
 use parking_lot::RwLock;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferDescriptor, Extent3d, PresentMode};
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, Extent3d, PresentMode,
+    SurfaceConfiguration,
+};
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -249,23 +252,17 @@ impl WmRenderer {
         handle
     }
 
-    pub fn resize(&self, new_size: WindowSize) {
+    pub fn update_surface_size(
+        &self,
+        mut surface_config: SurfaceConfiguration,
+        new_size: WindowSize,
+    ) -> Option<SurfaceConfiguration> {
         if new_size.width == 0 || new_size.height == 0 {
-            return;
+            return None;
         }
-
-        let surface_state = self.wgpu_state.surface.write(); //Guarantee the Surface is not in use
-
-        let mut surface_config = surface_state.1.clone();
 
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
-
-        surface_state
-            .0
-            .as_ref()
-            .unwrap()
-            .configure(&self.wgpu_state.device, &surface_config);
 
         let handles = { self.texture_handles.read().clone() };
 
@@ -274,6 +271,8 @@ impl WmRenderer {
 
             self.create_texture_handle(name.clone(), texture.tsv.format, &surface_config);
         });
+
+        Some(surface_config)
     }
 
     pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
