@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
-use wgpu::{BufferDescriptor, BufferUsages};
+use wgpu::{BufferAddress, BufferDescriptor, BufferUsages};
 
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
@@ -166,11 +166,11 @@ impl Chunk {
             let (vertex_buffer, index_buffer) = match &**buffers {
                 None => {
                     let vertex_bindable =
-                        BindableBuffer::new(wm, &vertex_data, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
+                        BindableBuffer::new_deferred(wm, vertex_data.len() as BufferAddress, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
 
-                    let index_bindable = BindableBuffer::new(
+                    let index_bindable = BindableBuffer::new_deferred(
                         wm,
-                        bytemuck::cast_slice(&index_data),
+                        index_data.len() as BufferAddress,
                         BufferUsages::STORAGE | BufferUsages::COPY_DST,
                         "ssbo",
                     );
@@ -198,11 +198,11 @@ impl Chunk {
                         (&mut aligned_index_buffer[..index_data.len()]).copy_from_slice(&index_data);
 
                         let vertex_bindable =
-                            BindableBuffer::new(wm, &aligned_vertex_buffer, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
+                            BindableBuffer::new_deferred(wm, aligned_vertex_buffer.len() as BufferAddress, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
 
-                        let index_bindable = BindableBuffer::new(
+                        let index_bindable = BindableBuffer::new_deferred(
                             wm,
-                            bytemuck::cast_slice(&aligned_index_buffer),
+                            aligned_index_buffer.len() as BufferAddress,
                             BufferUsages::STORAGE | BufferUsages::COPY_DST,
                             "ssbo",
                         );
