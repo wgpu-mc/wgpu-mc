@@ -15,8 +15,8 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{
-    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray,
-    JObject, JString, JValue, ReleaseMode,
+    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JObject, JString, JValue,
+    ReleaseMode,
 };
 use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::{JNIEnv, JavaVM};

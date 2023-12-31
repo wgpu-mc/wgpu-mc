@@ -1,20 +1,20 @@
-use std::{slice, thread};
-use std::{sync::Arc, time::Instant};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
 use std::time::Duration;
+use std::{slice, thread};
+use std::{sync::Arc, time::Instant};
 
 use arc_swap::ArcSwap;
 use byteorder::LittleEndian;
-use cgmath::{Deg, Matrix4, perspective, SquareMatrix};
+use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use futures::executor::block_on;
-use jni::{
-    JNIEnv,
-    objects::{JString, JValue},
-};
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint, jlong};
+use jni::{
+    objects::{JString, JValue},
+    JNIEnv,
+};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
@@ -24,7 +24,6 @@ use winit::event_loop::EventLoopBuilder;
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::platform::scancode::PhysicalKeyExtScancode;
 
-use wgpu_mc::{wgpu, WindowSize};
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
@@ -33,16 +32,17 @@ use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::BindableTexture;
 use wgpu_mc::util::BindableBuffer;
-use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::WmRenderer;
+use wgpu_mc::{wgpu, WindowSize};
 
-use crate::{
-    CHANNELS, MC_STATE, MinecraftResourceManagerAdapter, RENDERER, RenderMessage,
-    THREAD_POOL, WINDOW, WinitWindowWrapper,
-};
-use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC, GlTexture};
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
 use crate::lighting::LIGHTMAP_GLID;
+use crate::{
+    MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, MC_STATE,
+    RENDERER, THREAD_POOL, WINDOW,
+};
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
