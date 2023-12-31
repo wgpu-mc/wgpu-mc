@@ -1,16 +1,16 @@
-use std::alloc::{GlobalAlloc, Layout};
-use std::ptr;
-use jni::JNIEnv;
 use jni::objects::JClass;
 use jni::sys::jlong;
+use jni::JNIEnv;
 use jni_fn::jni_fn;
+use std::alloc::{GlobalAlloc, Layout};
+use std::ptr;
 
 /*
-    Special thanks to burger and JellySquid
+   Special thanks to burger and JellySquid
 
-    This file was adapted from
-    https://github.com/CaffeineMC/sodium-fabric/blob/1.20/graph-rework-rust-wip-morton/native/core/src/mem.rs
- */
+   This file was adapted from
+   https://github.com/CaffeineMC/sodium-fabric/blob/1.20/graph-rework-rust-wip-morton/native/core/src/mem.rs
+*/
 
 #[cfg(not(feature = "no_alloc"))]
 #[global_allocator]
@@ -101,34 +101,34 @@ pub unsafe fn setAllocator(_env: JNIEnv, _class: JClass, ptr: jlong) {
 // The minimum alignment guaranteed by the architecture. This value is used to
 // add fast paths for low alignment values.
 #[cfg(any(
-target_arch = "x86",
-target_arch = "arm",
-target_arch = "m68k",
-target_arch = "mips",
-target_arch = "powerpc",
-target_arch = "powerpc64",
-target_arch = "sparc",
-target_arch = "asmjs",
-target_arch = "wasm32",
-target_arch = "hexagon",
-all(target_arch = "riscv32", not(target_os = "espidf")),
-all(target_arch = "xtensa", not(target_os = "espidf")),
+    target_arch = "x86",
+    target_arch = "arm",
+    target_arch = "m68k",
+    target_arch = "mips",
+    target_arch = "powerpc",
+    target_arch = "powerpc64",
+    target_arch = "sparc",
+    target_arch = "asmjs",
+    target_arch = "wasm32",
+    target_arch = "hexagon",
+    all(target_arch = "riscv32", not(target_os = "espidf")),
+    all(target_arch = "xtensa", not(target_os = "espidf")),
 ))]
 const MIN_ALIGN: usize = 8;
 #[cfg(any(
-target_arch = "x86_64",
-target_arch = "aarch64",
-target_arch = "loongarch64",
-target_arch = "mips64",
-target_arch = "s390x",
-target_arch = "sparc64",
-target_arch = "riscv64",
-target_arch = "wasm64",
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips64",
+    target_arch = "s390x",
+    target_arch = "sparc64",
+    target_arch = "riscv64",
+    target_arch = "wasm64",
 ))]
 const MIN_ALIGN: usize = 16;
 // The allocator on the esp-idf platform guarantees 4 byte alignment.
 #[cfg(any(
-all(target_arch = "riscv32", target_os = "espidf"),
-all(target_arch = "xtensa", target_os = "espidf"),
+    all(target_arch = "riscv32", target_os = "espidf"),
+    all(target_arch = "xtensa", target_os = "espidf"),
 ))]
 const MIN_ALIGN: usize = 4;

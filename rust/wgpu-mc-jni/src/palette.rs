@@ -4,9 +4,9 @@ use std::io::Cursor;
 use std::num::NonZeroUsize;
 use std::slice;
 
-use jni::objects::{GlobalRef, JByteArray, JClass, JLongArray, JObject, JValue, ReleaseMode};
-use jni::sys::{jint, jlong, jobject};
 use jni::JNIEnv;
+use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JValue, ReleaseMode};
+use jni::sys::{jint, jlong, jobject};
 use jni_fn::jni_fn;
 use mc_varint::VarIntRead;
 use once_cell::sync::Lazy;

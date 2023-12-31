@@ -1,20 +1,20 @@
+use std::{slice, thread};
+use std::{sync::Arc, time::Instant};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::mem::size_of;
-use std::{ptr, slice, thread};
-use std::{sync::Arc, time::Instant};
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use byteorder::LittleEndian;
-use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
+use cgmath::{Deg, Matrix4, perspective, SquareMatrix};
 use futures::executor::block_on;
-use jni::objects::{AutoElements, JClass, JFloatArray, JIntArray, ReleaseMode};
-use jni::sys::{jfloat, jint, jlong};
 use jni::{
-    objects::{JString, JValue},
     JNIEnv,
+    objects::{JString, JValue},
 };
+use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
+use jni::sys::{jfloat, jint, jlong};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
@@ -24,6 +24,7 @@ use winit::event_loop::EventLoopBuilder;
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::platform::scancode::PhysicalKeyExtScancode;
 
+use wgpu_mc::{wgpu, WindowSize};
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
@@ -32,17 +33,16 @@ use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::BindableTexture;
 use wgpu_mc::util::BindableBuffer;
-use wgpu_mc::wgpu;
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::WmRenderer;
 
-use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
-use crate::lighting::LIGHTMAP_GLID;
 use crate::{
-    MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, MC_STATE,
-    RENDERER, THREAD_POOL, WINDOW,
+    CHANNELS, MC_STATE, MinecraftResourceManagerAdapter, RENDERER, RenderMessage,
+    THREAD_POOL, WINDOW, WinitWindowWrapper,
 };
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GL_ALLOC, GlTexture};
+use crate::lighting::LIGHTMAP_GLID;
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
@@ -66,20 +66,18 @@ impl RenderLayer for TerrainLayer {
     }
 
     fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> Vertex {
-        |vert, x, y, z, light, dark| {
-            Vertex {
-                position: [
-                    vert.position[0] + x,
-                    vert.position[1] + y,
-                    vert.position[2] + z,
-                ],
-                lightmap_coords: light.byte,
-                normal: vert.normal,
-                color: 0xffffffff,
-                uv_offset: vert.animation_uv_offset,
-                uv: vert.tex_coords,
-                dark,
-            }
+        |vert, x, y, z, light, dark| Vertex {
+            position: [
+                vert.position[0] + x,
+                vert.position[1] + y,
+                vert.position[2] + z,
+            ],
+            lightmap_coords: light.byte,
+            normal: vert.normal,
+            color: 0xffffffff,
+            uv_offset: vert.animation_uv_offset,
+            uv: vert.tex_coords,
+            dark,
         }
     }
 
@@ -154,9 +152,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
     let wrapper = &WinitWindowWrapper { window: &window };
 
     let wgpu_state = block_on(WmRenderer::init_wgpu(
-        wrapper,
-        true
-        // super::SETTINGS.read().as_ref().unwrap().vsync.value,
+        wrapper, true, // super::SETTINGS.read().as_ref().unwrap().vsync.value,
     ));
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
@@ -335,7 +331,21 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             }
 
             let surface = surface_state.0.as_ref().unwrap();
-            let texture = surface.get_current_texture().unwrap();
+            let texture = surface.get_current_texture().unwrap_or_else(|_| {
+                //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+                let size = wm.wgpu_state.size.as_ref().unwrap().load();
+                let new_config = wm
+                    .update_surface_size(
+                        surface_state.1.clone(),
+                        WindowSize {
+                            width: size.width,
+                            height: size.height,
+                        },
+                    )
+                    .unwrap();
+                surface.configure(&wm.wgpu_state.device, &new_config);
+                surface.get_current_texture().unwrap()
+            });
 
             let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
@@ -374,10 +384,13 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                     match event {
                         WindowEvent::CloseRequested => target.exit(),
                         WindowEvent::Resized(physical_size) => {
-                            wm.resize(wgpu_mc::WindowSize {
+                            // Update the wgpu_state size for the render loop.
+                            let state_size = wm.wgpu_state.size.as_ref().unwrap();
+                            state_size.swap(Arc::new(WindowSize {
                                 width: physical_size.width,
                                 height: physical_size.height,
-                            });
+                            }));
+
                             CHANNELS
                                 .0
                                 .send(RenderMessage::Resized(
@@ -684,20 +697,10 @@ pub fn setEntityInstanceBuffer(
         return Instant::now().duration_since(now).as_nanos() as jlong;
     }
 
-    let mat4s = unsafe {
-        slice::from_raw_parts(
-            mat4_ptr as usize as *mut f32,
-            mat4_len as usize
-        )
-    };
+    let mat4s = unsafe { slice::from_raw_parts(mat4_ptr as usize as *mut f32, mat4_len as usize) };
 
-    let overlays = unsafe {
-        slice::from_raw_parts(
-            overlay_ptr as usize as *mut i32,
-            overlay_len as usize
-        )
-    };
-
+    let overlays =
+        unsafe { slice::from_raw_parts(overlay_ptr as usize as *mut i32, overlay_len as usize) };
 
     let transforms: Vec<f32> = Vec::from(mat4s);
     let overlays: Vec<i32> = Vec::from(overlays);

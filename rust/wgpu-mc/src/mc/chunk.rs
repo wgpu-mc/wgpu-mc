@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use parking_lot::{Mutex, RwLock};
-use wgpu::{BufferAddress, BufferDescriptor, BufferUsages};
+use wgpu::{BufferAddress, BufferUsages};
 
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
@@ -164,13 +164,18 @@ impl Chunk {
 
         //the formulas below align the given value to the nearest multiple of the constant + 1
         let aligned_vertex_data_len = (vertex_data.len() + 16383 & !16383) as BufferAddress;
-        let aligned_index_data_len = ((index_data.len() * size_of::<u32>()) + 1023 & !1023) as BufferAddress;
+        let aligned_index_data_len =
+            ((index_data.len() * size_of::<u32>()) + 1023 & !1023) as BufferAddress;
 
         if !vertex_data.is_empty() {
             let (vertex_buffer, index_buffer) = match &**buffers {
                 None => {
-                    let vertex_bindable =
-                        BindableBuffer::new_deferred(wm, aligned_vertex_data_len, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
+                    let vertex_bindable = BindableBuffer::new_deferred(
+                        wm,
+                        aligned_vertex_data_len,
+                        BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                        "ssbo",
+                    );
 
                     let index_bindable = BindableBuffer::new_deferred(
                         wm,
@@ -182,26 +187,32 @@ impl Chunk {
                     let vertex_buffer = vertex_bindable.buffer.clone();
                     let index_buffer = index_bindable.buffer.clone();
 
-                    self.buffers.store(Arc::new(
-                        Some(ChunkBuffers {
-                            vertex_bindable,
-                            index_bindable,
-                        })
-                    ));
+                    self.buffers.store(Arc::new(Some(ChunkBuffers {
+                        vertex_bindable,
+                        index_bindable,
+                    })));
 
                     (vertex_buffer, index_buffer)
                 }
                 Some(chunk_buffers) => {
-
-                    if (chunk_buffers.vertex_bindable.size as usize) < vertex_data.len() || (chunk_buffers.index_bindable.size as usize) < (index_data.len() * size_of::<u32>()) {
+                    if (chunk_buffers.vertex_bindable.size as usize) < vertex_data.len()
+                        || (chunk_buffers.index_bindable.size as usize)
+                            < (index_data.len() * size_of::<u32>())
+                    {
                         let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
                         let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
 
-                        (&mut aligned_vertex_buffer[..vertex_data.len()]).copy_from_slice(&vertex_data);
-                        (&mut aligned_index_buffer[..index_data.len()]).copy_from_slice(&index_data);
+                        (&mut aligned_vertex_buffer[..vertex_data.len()])
+                            .copy_from_slice(&vertex_data);
+                        (&mut aligned_index_buffer[..index_data.len()])
+                            .copy_from_slice(&index_data);
 
-                        let vertex_bindable =
-                            BindableBuffer::new_deferred(wm, aligned_vertex_buffer.len() as BufferAddress, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
+                        let vertex_bindable = BindableBuffer::new_deferred(
+                            wm,
+                            aligned_vertex_buffer.len() as BufferAddress,
+                            BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                            "ssbo",
+                        );
 
                         let index_bindable = BindableBuffer::new_deferred(
                             wm,
@@ -213,39 +224,32 @@ impl Chunk {
                         let vertex_buffer = vertex_bindable.buffer.clone();
                         let index_buffer = index_bindable.buffer.clone();
 
-                        self.buffers.store(Arc::new(Some(
-                            ChunkBuffers {
-                                vertex_bindable,
-                                index_bindable,
-                            }
-                        )));
+                        self.buffers.store(Arc::new(Some(ChunkBuffers {
+                            vertex_bindable,
+                            index_bindable,
+                        })));
 
                         (vertex_buffer, index_buffer)
                     } else {
-                        (chunk_buffers.vertex_bindable.buffer.clone(), chunk_buffers.index_bindable.buffer.clone())
+                        (
+                            chunk_buffers.vertex_bindable.buffer.clone(),
+                            chunk_buffers.index_bindable.buffer.clone(),
+                        )
                     }
                 }
             };
 
             let mut queue = wm.chunk_update_queue.lock();
 
-            queue.push(
-                (vertex_buffer, vertex_data)
-            );
+            queue.push((vertex_buffer, vertex_data));
 
-            queue.push(
-                (
-                    index_buffer,
-                    Vec::from(bytemuck::cast_slice(&index_data))
-                )
-            );
+            queue.push((index_buffer, Vec::from(bytemuck::cast_slice(&index_data))));
         }
 
         drop(buffers);
 
         *self.sections.write() = baked_layers;
     }
-
 }
 
 /// Returns true if the block at the given coordinates is either not a full cube or has transparency
@@ -363,18 +367,16 @@ pub fn bake_section_layer<
 
                 let mut extend_vertices = |index: u32, light_level: LightLevel| {
                     let vec_index = vertices.len();
-                    vertices.extend(
-                        (index..index + 4).map(|vert_index|
-                            mapper(
-                                &model.vertices[vert_index as usize],
-                                xf32,
-                                yf32,
-                                zf32,
-                                light_level,
-                                false
-                            )
+                    vertices.extend((index..index + 4).map(|vert_index| {
+                        mapper(
+                            &model.vertices[vert_index as usize],
+                            xf32,
+                            yf32,
+                            zf32,
+                            light_level,
+                            false,
                         )
-                    );
+                    }));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 };
 
@@ -434,16 +436,16 @@ pub fn bake_section_layer<
                 .filter_map(|face| *face)
                 .for_each(|index| {
                     let vec_index = vertices.len();
-                    vertices.extend((index..index + 4).map(|vert_index|
+                    vertices.extend((index..index + 4).map(|vert_index| {
                         mapper(
                             &model.vertices[vert_index as usize],
                             xf32,
                             yf32,
                             zf32,
                             light_level,
-                            false
+                            false,
                         )
-                    ));
+                    }));
                     indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 });
             }

@@ -50,8 +50,11 @@ pub use naga;
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, Extent3d, PresentMode};
 use wgpu::util::StagingBelt;
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, Extent3d, PresentMode,
+    SurfaceConfiguration,
+};
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -88,7 +91,7 @@ pub struct WmRenderer {
     pub chunk_update_queue: Arc<Mutex<Vec<(Arc<Buffer>, Vec<u8>)>>>,
     pub chunk_staging_belt: Arc<Mutex<StagingBelt>>,
     #[cfg(feature = "tracing")]
-    pub puffin_http: Arc<puffin_http::Server>
+    pub puffin_http: Arc<puffin_http::Server>,
 }
 
 #[derive(Copy, Clone)]
@@ -268,23 +271,17 @@ impl WmRenderer {
         handle
     }
 
-    pub fn resize(&self, new_size: WindowSize) {
+    pub fn update_surface_size(
+        &self,
+        mut surface_config: SurfaceConfiguration,
+        new_size: WindowSize,
+    ) -> Option<SurfaceConfiguration> {
         if new_size.width == 0 || new_size.height == 0 {
-            return;
+            return None;
         }
-
-        let surface_state = self.wgpu_state.surface.write(); //Guarantee the Surface is not in use
-
-        let mut surface_config = surface_state.1.clone();
 
         surface_config.width = new_size.width;
         surface_config.height = new_size.height;
-
-        surface_state
-            .0
-            .as_ref()
-            .unwrap()
-            .configure(&self.wgpu_state.device, &surface_config);
 
         let handles = { self.texture_handles.read().clone() };
 
@@ -293,6 +290,8 @@ impl WmRenderer {
 
             self.create_texture_handle(name.clone(), texture.tsv.format, &surface_config);
         });
+
+        Some(surface_config)
     }
 
     pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
@@ -369,14 +368,21 @@ impl WmRenderer {
             return;
         }
 
-        let mut encoder = self.wgpu_state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: None,
-        });
+        let mut encoder = self
+            .wgpu_state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         let mut staging_belt = self.chunk_staging_belt.lock();
 
         updates.into_iter().for_each(|(queue, data)| {
-            let mut view = staging_belt.write_buffer(&mut encoder, &queue, 0, NonZeroU64::new(data.len() as u64).unwrap(), &self.wgpu_state.device);
+            let mut view = staging_belt.write_buffer(
+                &mut encoder,
+                &queue,
+                0,
+                NonZeroU64::new(data.len() as u64).unwrap(),
+                &self.wgpu_state.device,
+            );
             view.copy_from_slice(&data);
         });
 

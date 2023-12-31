@@ -1,5 +1,3 @@
-pub mod debug_lines;
-
 use crate::render::shader::WmShader;
 use wgpu::{BindGroupLayout, ComputePipeline, PipelineLayout, SamplerBindingType};
 
@@ -26,7 +24,7 @@ pub struct Vertex {
     pub color: u32,
     pub uv_offset: u32,
     pub lightmap_coords: u8,
-    pub dark: bool
+    pub dark: bool,
 }
 
 impl Vertex {

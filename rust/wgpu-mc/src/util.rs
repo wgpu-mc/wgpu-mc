@@ -4,10 +4,8 @@ use std::cell::RefCell;
 use std::cmp::min;
 use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
-use std::num::NonZeroU64;
 use std::ptr::drop_in_place;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferAddress, BufferDescriptor};
 
@@ -19,7 +17,7 @@ const ALIGN: usize = 8;
 pub struct BindableBuffer {
     pub buffer: Arc<wgpu::Buffer>,
     pub bind_group: wgpu::BindGroup,
-    pub size: BufferAddress
+    pub size: BufferAddress,
 }
 
 impl BindableBuffer {
@@ -28,14 +26,15 @@ impl BindableBuffer {
         let layouts = pipelines.bind_group_layouts.read();
         let layout = layouts.get(layout_name).unwrap();
 
-        let buffer = Arc::new(wm
-            .wgpu_state
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: data,
-                usage,
-            }));
+        let buffer = Arc::new(
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: data,
+                    usage,
+                }),
+        );
 
         let bind_group = wm
             .wgpu_state
@@ -49,26 +48,32 @@ impl BindableBuffer {
                 }],
             });
 
-        Self { buffer, bind_group, size: data.len() as BufferAddress }
+        Self {
+            buffer,
+            bind_group,
+            size: data.len() as BufferAddress,
+        }
     }
 
     ///Creates a BindableBuffer without uploading any data
-    pub fn new_deferred(wm: &WmRenderer, size: BufferAddress, usage: wgpu::BufferUsages, layout_name: &str) -> Self {
+    pub fn new_deferred(
+        wm: &WmRenderer,
+        size: BufferAddress,
+        usage: wgpu::BufferUsages,
+        layout_name: &str,
+    ) -> Self {
         assert_eq!(size & 3, 0);
 
         let pipelines = wm.pipelines.load();
         let layouts = pipelines.bind_group_layouts.read();
         let layout = layouts.get(layout_name).unwrap();
 
-        let buffer = Arc::new(wm
-            .wgpu_state
-            .device
-            .create_buffer(&BufferDescriptor {
-                label: None,
-                size,
-                usage,
-                mapped_at_creation: false,
-            }));
+        let buffer = Arc::new(wm.wgpu_state.device.create_buffer(&BufferDescriptor {
+            label: None,
+            size,
+            usage,
+            mapped_at_creation: false,
+        }));
 
         let bind_group = wm
             .wgpu_state
@@ -82,7 +87,11 @@ impl BindableBuffer {
                 }],
             });
 
-        Self { buffer, bind_group, size }
+        Self {
+            buffer,
+            bind_group,
+            size,
+        }
     }
 }
 

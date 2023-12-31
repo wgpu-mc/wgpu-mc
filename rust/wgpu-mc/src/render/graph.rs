@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::Instant;
 
 use arc_swap::ArcSwap;
 use cgmath::{Matrix3, Matrix4, SquareMatrix};

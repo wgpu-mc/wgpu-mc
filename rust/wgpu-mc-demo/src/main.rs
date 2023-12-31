@@ -126,11 +126,7 @@ fn main() {
     }
     .collect::<Vec<_>>();
 
-    let now = Instant::now();
-
     wm.mc.bake_blocks(&wm, blocks.iter().map(|(a, b)| (a, b)));
-
-    let end = Instant::now();
 
     let window = wrapper.window;
 
@@ -337,10 +333,11 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                             _ => {}
                         },
                         WindowEvent::Resized(physical_size) => {
-                            wm.resize(WindowSize {
+                            let state_size = wm.wgpu_state.size.as_ref().unwrap();
+                            state_size.swap(Arc::new(WindowSize {
                                 width: physical_size.width,
                                 height: physical_size.height,
-                            });
+                            }));
                         }
                         WindowEvent::RedrawRequested => {
                             let frame_time =
@@ -409,7 +406,21 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
                             let surface_state = wm.wgpu_state.surface.read();
                             let surface = surface_state.0.as_ref().unwrap();
-                            let texture = surface.get_current_texture().unwrap();
+                            let texture = surface.get_current_texture().unwrap_or_else(|_| {
+                                //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+                                let size = wm.wgpu_state.size.as_ref().unwrap().load();
+                                let new_config = wm
+                                    .update_surface_size(
+                                        surface_state.1.clone(),
+                                        WindowSize {
+                                            width: size.width,
+                                            height: size.height,
+                                        },
+                                    )
+                                    .unwrap();
+                                surface.configure(&wm.wgpu_state.device, &new_config);
+                                surface.get_current_texture().unwrap()
+                            });
                             let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                                 label: None,
                                 format: Some(wgpu::TextureFormat::Bgra8Unorm),

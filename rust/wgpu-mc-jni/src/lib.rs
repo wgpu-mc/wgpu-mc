@@ -15,7 +15,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use jni::objects::{
-    AutoElements, GlobalRef, JByteArray, JByteBuffer, JClass, JFloatArray, JIntArray, JLongArray,
+    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray,
     JObject, JString, JValue, ReleaseMode,
 };
 use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
@@ -51,6 +51,7 @@ use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
+mod alloc;
 pub mod entity;
 mod gl;
 mod lighting;
@@ -58,7 +59,6 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
-mod alloc;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -368,7 +368,7 @@ pub fn registerBlockState(
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn createChunk(
-    mut env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
     x: jint,
     z: jint,
@@ -377,21 +377,15 @@ pub fn createChunk(
     block_light_ptr: jlong,
     sky_light_ptr: jlong,
 ) {
-    let palettes = unsafe {
-        &*(palettes_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK])
-    };
+    let palettes = unsafe { &*(palettes_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK]) };
 
-    let storages = unsafe {
-        &*(storages_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK])
-    };
+    let storages = unsafe { &*(storages_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK]) };
 
-    let block_light = unsafe {
-        (block_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read()
-    };
+    let block_light =
+        unsafe { (block_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read() };
 
-    let sky_light = unsafe {
-        (sky_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read()
-    };
+    let sky_light =
+        unsafe { (sky_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read() };
 
     assert_eq!(size_of::<usize>(), 8);
 
@@ -454,7 +448,8 @@ pub fn bake_chunk(x: i32, z: i32) {
             chunks.get(&[x, z + 1]), //South
             chunks.get(&[x - 1, z]), //West
             chunks.get(&[x + 1, z]), //East
-        ].map(|arc_option| arc_option.map(|arc| arc.clone()));
+        ]
+        .map(|arc_option| arc_option.map(|arc| arc.clone()));
 
         (chunk, center, neighbors)
     };
@@ -751,17 +746,16 @@ pub fn centerCursor(_env: JNIEnv, _class: JClass, _locked: jboolean) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
     if let Some(window) = WINDOW.get() {
-        window.set_cursor_grab(match locked {
-            JNI_TRUE => {
-                window.set_cursor_visible(false);
-                CursorGrabMode::Confined
-            }
-            JNI_FALSE => {
-                window.set_cursor_visible(true);
-                CursorGrabMode::None
-            }
-            _ => unreachable!(),
-        });
+        if locked == JNI_TRUE {
+            window.set_cursor_visible(false);
+            window
+                .set_cursor_grab(CursorGrabMode::Confined)
+                .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked))
+                .unwrap();
+        } else {
+            window.set_cursor_visible(true);
+            window.set_cursor_grab(CursorGrabMode::None).unwrap();
+        }
     }
 }
 
@@ -1119,7 +1113,7 @@ pub fn setProjectionMatrix(mut env: JNIEnv, _class: JClass, float_array: JFloatA
 
     let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(bytemuck::cast_slice(&converted));
 
-    let matrix = Matrix4::from(slice_4x4) * Matrix4::from_nonuniform_scale(1.0, 1.0, 0.0);
+    let matrix = Matrix4::from(slice_4x4);
 
     GL_COMMANDS.write().0.push(GLCommand::SetMatrix(matrix));
 }
