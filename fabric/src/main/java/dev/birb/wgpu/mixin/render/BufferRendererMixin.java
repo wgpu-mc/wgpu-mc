@@ -44,10 +44,10 @@ public class BufferRendererMixin {
         Matrix4f mat = RenderSystem.getProjectionMatrix();
         Matrix4f mat1 = RenderSystem.getModelViewMatrix();
 
-        mat.mul(mat1);
+        Matrix4f mat2 = (new Matrix4f()).zero().add(mat).mul(mat1);
 
         float[] out = new float[16];
-        mat.get(out);
+        mat2.get(out);
         WgpuNative.setProjectionMatrix(out);
 
         int count = parameters.vertexCount();
