@@ -80,12 +80,22 @@ public class Wgpu {
     @SuppressWarnings("unused") // called from rust
     public static void cursorMove(double x, double y) {
         MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
-
-        client.execute(() -> client.mouse.onCursorPos(0, x, y));
+        if(!client.mouse.isCursorLocked()) {
+            lastX = x;
+            lastY = y;
+            client.execute(() -> client.mouse.onCursorPos(0, x, y));
+        }
     }
-
+    private static double lastX;
+    private static double lastY;
     @SuppressWarnings("unused") // called from rust
     public static void mouseMove(double x, double y) {
+        MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        if(client.mouse.isCursorLocked()) {
+            lastX += x;
+            lastY += y;
+            client.execute(() -> client.mouse.onCursorPos(0, lastX, lastY));
+        }
     }
 
     @SuppressWarnings("unused") // called from rust

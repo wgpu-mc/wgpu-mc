@@ -51,6 +51,7 @@ use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
+mod alloc;
 pub mod entity;
 mod gl;
 mod lighting;
@@ -58,7 +59,6 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
-mod alloc;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -739,17 +739,15 @@ pub fn centerCursor(_env: JNIEnv, _class: JClass, _locked: jboolean) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
     if let Some(window) = WINDOW.get() {
-        window.set_cursor_grab(match locked {
-            JNI_TRUE => {
-                window.set_cursor_visible(false);
-                CursorGrabMode::Confined
-            }
-            JNI_FALSE => {
-                window.set_cursor_visible(true);
-                CursorGrabMode::None
-            }
-            _ => unreachable!(),
-        });
+        if locked == JNI_TRUE {
+            window.set_cursor_visible(false);
+            window.set_cursor_grab(CursorGrabMode::Confined)
+                .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked))
+                .unwrap();
+        } else {
+            window.set_cursor_visible(true);
+            window.set_cursor_grab(CursorGrabMode::None).unwrap();
+        }
     }
 }
 
