@@ -381,9 +381,7 @@ impl WmRenderer {
         });
 
         staging_belt.finish();
-
         self.wgpu_state.queue.submit([encoder.finish()]);
-
         staging_belt.recall();
     }
 

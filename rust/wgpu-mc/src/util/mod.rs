@@ -54,6 +54,8 @@ impl BindableBuffer {
 
     ///Creates a BindableBuffer without uploading any data
     pub fn new_deferred(wm: &WmRenderer, size: BufferAddress, usage: wgpu::BufferUsages, layout_name: &str) -> Self {
+        assert_eq!(size & 3, 0);
+
         let pipelines = wm.pipelines.load();
         let layouts = pipelines.bind_group_layouts.read();
         let layout = layouts.get(layout_name).unwrap();

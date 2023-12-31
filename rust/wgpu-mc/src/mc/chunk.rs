@@ -162,15 +162,19 @@ impl Chunk {
 
         let buffers = self.buffers.load();
 
+        //the formulas below align the given value to the nearest multiple of the constant + 1
+        let aligned_vertex_data_len = (vertex_data.len() + 16383 & !16383) as BufferAddress;
+        let aligned_index_data_len = ((index_data.len() * size_of::<u32>()) + 1023 & !1023) as BufferAddress;
+
         if !vertex_data.is_empty() {
             let (vertex_buffer, index_buffer) = match &**buffers {
                 None => {
                     let vertex_bindable =
-                        BindableBuffer::new_deferred(wm, vertex_data.len() as BufferAddress, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
+                        BindableBuffer::new_deferred(wm, aligned_vertex_data_len, BufferUsages::STORAGE | BufferUsages::COPY_DST, "ssbo");
 
                     let index_bindable = BindableBuffer::new_deferred(
                         wm,
-                        index_data.len() as BufferAddress,
+                        aligned_index_data_len,
                         BufferUsages::STORAGE | BufferUsages::COPY_DST,
                         "ssbo",
                     );
@@ -189,10 +193,9 @@ impl Chunk {
                 }
                 Some(chunk_buffers) => {
 
-                    if (chunk_buffers.vertex_bindable.size as usize) < vertex_data.len() || (chunk_buffers.index_bindable.size as usize) < index_data.len() * size_of::<u32>() {
-                        //the formulas below align the given value to the nearest multiple of the constant + 1
-                        let mut aligned_vertex_buffer = vec![0u8; vertex_data.len() + 16383 & !16383];
-                        let mut aligned_index_buffer = vec![0u32; index_data.len() + 1023 & !1023];
+                    if (chunk_buffers.vertex_bindable.size as usize) < vertex_data.len() || (chunk_buffers.index_bindable.size as usize) < (index_data.len() * size_of::<u32>()) {
+                        let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
+                        let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
 
                         (&mut aligned_vertex_buffer[..vertex_data.len()]).copy_from_slice(&vertex_data);
                         (&mut aligned_index_buffer[..index_data.len()]).copy_from_slice(&index_data);
