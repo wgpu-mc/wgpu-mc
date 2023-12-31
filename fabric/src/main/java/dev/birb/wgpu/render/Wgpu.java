@@ -46,9 +46,9 @@ public class Wgpu {
     private static Unsafe unsafe;
 
     @Getter
-    private static int windowWidth = 1280;
+    private static int windowWidth;
     @Getter
-    private static int windowHeight = 720;
+    private static int windowHeight;
 
     static {
         try {
