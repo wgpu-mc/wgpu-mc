@@ -4,10 +4,9 @@ import net.minecraft.client.render.entity.model.EntityModelLayer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EntityType;
 import org.joml.Matrix4f;
-import org.lwjgl.BufferUtils;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.BufferOverflowException;
-import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
@@ -71,29 +70,21 @@ public class EntityState {
         MatrixStack stack = new MatrixStack();
         stack.loadIdentity();
 
-//        ByteBuffer byteBuf = ByteBuffer.allocateDirect(64);
-//        FloatBuffer floatBufTemp = byteBuf.asFloatBuffer();
-//        FloatBuffer floatBufTemp = FloatBuffer.allocate(16);
-
-        float[] floatBuf = new float[16];
-
-//        orderedMatrices[0] = stack.peek().getPositionMatrix();
-
         for (Matrix4f orderedMatrix : orderedMatrices) {
             Matrix4f mat = orderedMatrix;
             if (mat == null) {
                 mat = stack.peek().getPositionMatrix();
             }
 
-            mat.get(floatBuf);
-
             try {
-                state.buffer.put(floatBuf);
+                mat.get(state.buffer);
+                state.buffer.position(state.buffer.position() + 16);
             } catch(BufferOverflowException e) {
                 FloatBuffer oldBuffer = state.buffer;
-                state.buffer = FloatBuffer.allocate(state.buffer.capacity() + 10000);
+                state.buffer = MemoryUtil.memAllocFloat(state.buffer.capacity() + 1000);
                 state.buffer.put(oldBuffer);
-                state.buffer.put(floatBuf);
+                mat.get(state.buffer);
+                state.buffer.position(state.buffer.position() + 16);
             }
         }
 
@@ -105,8 +96,8 @@ public class EntityState {
 
     public static class EntityRenderState {
 
-        public FloatBuffer buffer = FloatBuffer.allocate(100000);
-        public final IntBuffer overlays = IntBuffer.allocate(100000);
+        public FloatBuffer buffer = MemoryUtil.memAllocFloat(100000);
+        public final IntBuffer overlays = MemoryUtil.memAllocInt(100000);
         public int count = 0;
         public int textureId;
 

@@ -6,8 +6,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
@@ -21,6 +19,7 @@ public class WgpuNative {
     public static void loadWm() {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
+            CoreLib.init();
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
@@ -152,13 +151,13 @@ public class WgpuNative {
 
     public static native void setCursorMode(int mode);
 
-    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, int[] blockstateOffsets);
+    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, long blockstateOffsets, int blockstateOffsetsLen);
 
     public static native void registerBlock(String name);
 
     public static native void clearPalette(long l);
 
-    public static native void createChunk(int x, int z, long[] pointers, long[] storagePointers, ByteBuffer blockLight, ByteBuffer skyLight);
+    public static native void createChunk(int x, int z, long palettePtrs, long storagePtrs, long blockLightPtr, long skyLightPtr);
 
     public static native void destroyPaletteStorage(long paletteStorage);
 
@@ -178,7 +177,7 @@ public class WgpuNative {
 
     public static native void registerEntities(String toString);
 
-    public static native long setEntityInstanceBuffer(String entity, float[] array, int position, int[] overlayArray, int overlayArrayPosition, int instanceCount, int textureId);
+    public static native long setEntityInstanceBuffer(String entity, long mat4Ptr, int position, long overlayPtr, int overlayArrayPosition, int instanceCount, int textureId);
 
     public static native void clearEntities();
 
@@ -193,5 +192,7 @@ public class WgpuNative {
     public static native void setLightmapID(int id);
 
     public static native void debugLight(int x, int y, int z);
+
+    public static native void setAllocator(long ptr);
 
 }

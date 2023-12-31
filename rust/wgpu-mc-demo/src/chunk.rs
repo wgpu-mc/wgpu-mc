@@ -51,7 +51,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let (_, augment) = block
         .get_model_by_key(
             [
-                ("facing", &StateValue::String("east".into())),
+                ("facing", &StateValue::String("north".into())),
                 ("lit", &StateValue::Bool(true)),
             ],
             &*wm.mc.resource_provider,

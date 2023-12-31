@@ -58,6 +58,7 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
+mod alloc;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -356,48 +357,28 @@ pub fn createChunk(
     _class: JClass,
     x: jint,
     z: jint,
-    palettes: JLongArray,
-    storages: JLongArray,
-    block_light_nibbles: JByteBuffer,
-    sky_light_nibbles: JByteBuffer,
+    palettes_ptr: jlong,
+    storages_ptr: jlong,
+    block_light_ptr: jlong,
+    sky_light_ptr: jlong,
 ) {
-    let palette_elements: AutoElements<jlong> =
-        unsafe { env.get_array_elements(&palettes, ReleaseMode::NoCopyBack) }.unwrap();
-
-    let storage_elements: AutoElements<jlong> =
-        unsafe { env.get_array_elements(&storages, ReleaseMode::NoCopyBack) }.unwrap();
-
-    let palette_elements =
-        unsafe { slice::from_raw_parts(palette_elements.as_ptr(), palette_elements.len()) };
-
-    let palettes: &[usize; 24] = bytemuck::cast_slice::<_, usize>(palette_elements)
-        .try_into()
-        .unwrap();
-
-    let storage_elements =
-        unsafe { slice::from_raw_parts(storage_elements.as_ptr(), storage_elements.len()) };
-
-    let block_light_nibbles_slice = {
-        let addr = env.get_direct_buffer_address(&block_light_nibbles).unwrap();
-        let len = env
-            .get_direct_buffer_capacity(&block_light_nibbles)
-            .unwrap();
-
-        unsafe { slice::from_raw_parts(addr, len) }
+    let palettes = unsafe {
+        &*(palettes_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK])
     };
 
-    let sky_light_nibbles_slice = {
-        let addr = env.get_direct_buffer_address(&sky_light_nibbles).unwrap();
-        let len = env.get_direct_buffer_capacity(&sky_light_nibbles).unwrap();
+    let storages = unsafe {
+        &*(storages_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK])
+    };
 
-        unsafe { slice::from_raw_parts(addr, len) }
+    let block_light = unsafe {
+        (block_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read()
+    };
+
+    let sky_light = unsafe {
+        (sky_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read()
     };
 
     assert_eq!(size_of::<usize>(), 8);
-
-    let storages: &[usize; 24] = bytemuck::cast_slice::<_, usize>(storage_elements)
-        .try_into()
-        .unwrap();
 
     let holder = ChunkHolder {
         sections: palettes
@@ -418,8 +399,8 @@ pub fn createChunk(
             .try_into()
             .unwrap_or_else(|_| panic!("Expected a Vec of length 24, got {}", palettes.len())),
         light_data: Some(DeserializedLightData {
-            block_light: Vec::from(block_light_nibbles_slice).try_into().unwrap(),
-            sky_light: Vec::from(sky_light_nibbles_slice).try_into().unwrap(),
+            block_light,
+            sky_light,
         }),
     };
 
@@ -429,7 +410,9 @@ pub fn createChunk(
 }
 
 pub fn bake_chunk(x: i32, z: i32) {
-    THREAD_POOL.spawn(move || {
+    // THREAD_POOL.spawn(move || {
+        println!("bake chunk {x},{z}");
+
         let wm = RENDERER.get().unwrap();
 
         {
@@ -470,9 +453,11 @@ pub fn bake_chunk(x: i32, z: i32) {
 
             chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
 
+            println!("done, baked chunk {x},{z}");
+
             // println!("Baked and uploaded chunk in {}ms", Instant::now().duration_since(instant).as_millis());
         }
-    });
+    // });
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

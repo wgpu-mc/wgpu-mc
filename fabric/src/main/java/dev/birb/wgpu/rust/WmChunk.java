@@ -14,6 +14,8 @@ import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.chunk.light.ChunkLightProvider;
+import org.lwjgl.PointerBuffer;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 
@@ -30,16 +32,16 @@ public class WmChunk {
     }
 
     public void uploadAndBake() throws ClassCastException {
-        long[] paletteIndices = new long[24];
-        long[] storageIndices = new long[24];
+        PointerBuffer paletteIndices = PointerBuffer.allocateDirect(24);
+        PointerBuffer storageIndices = PointerBuffer.allocateDirect(24);
 
         assert this.worldChunk.getSectionArray().length == 24;
 
         ChunkLightProvider<?, ?> skyLightProvider = worldChunk.getWorld().getLightingProvider().skyLightProvider;
         ChunkLightProvider<?, ?> blockLightProvider = worldChunk.getWorld().getLightingProvider().blockLightProvider;
 
-        ByteBuffer skyBytes = ByteBuffer.allocateDirect(2048 * 24);
-        ByteBuffer blockBytes = ByteBuffer.allocateDirect(2048 * 24);
+        ByteBuffer skyBytes = MemoryUtil.memAlloc(2048 * 24);
+        ByteBuffer blockBytes = MemoryUtil.memAlloc(2048 * 24);
 
         ChunkPos pos = this.worldChunk.getPos();
 
@@ -82,7 +84,7 @@ public class WmChunk {
             palette.writePacket(packetBuf);
             rustPalette.readPacket(packetBuf);
 
-            paletteIndices[i] = rustPalette.getSlabIndex() + 1;
+            paletteIndices.put(i, rustPalette.getSlabIndex() + 1);
 
             if (paletteStorage instanceof PackedIntegerArray array) {
                 long index = WgpuNative.createPaletteStorage(
@@ -96,12 +98,12 @@ public class WmChunk {
                         paletteStorage.getSize()
                 );
 
-                storageIndices[i] = index + 1;
+                storageIndices.put(i, index + 1);
             }
         }
 
         Thread thread = new Thread(() -> {
-            WgpuNative.createChunk(this.x, this.z, paletteIndices, storageIndices, blockBytes, skyBytes);
+            WgpuNative.createChunk(this.x, this.z, paletteIndices.address0(), storageIndices.address0(), MemoryUtil.memAddress0(blockBytes), MemoryUtil.memAddress0(skyBytes));
             WgpuNative.bakeChunk(this.x, this.z);
         });
 

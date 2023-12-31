@@ -160,21 +160,19 @@ pub fn paletteReadPacket(
     palette_long: jlong,
     array: JByteArray,
     current_position: jint,
-    blockstate_offsets: JLongArray,
+    blockstate_offsets_ptr: jlong,
+    blockstate_offsets_len: jint,
 ) -> jint {
     let mut storage_access = PALETTE_STORAGE.write();
     let palette = storage_access.get_mut(palette_long as usize).unwrap();
     let array = unsafe { env.get_array_elements(&array, ReleaseMode::NoCopyBack) }.unwrap();
 
-    let blockstate_offsets_array =
-        unsafe { env.get_array_elements(&blockstate_offsets, ReleaseMode::NoCopyBack) }.unwrap();
-
     let id_list = unsafe { &*(palette.id_list.get() as *const IdList) };
 
     let blockstate_offsets = unsafe {
         slice::from_raw_parts(
-            blockstate_offsets_array.as_ptr() as *mut i32,
-            blockstate_offsets_array.len(),
+            blockstate_offsets_ptr as *mut i32,
+            blockstate_offsets_len as usize,
         )
     };
 
