@@ -181,15 +181,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
         wm.mc
             .chunks
             .loaded_chunks
-            .write()
             .insert([0, 0], ArcSwap::new(Arc::new(chunk)));
     }
 
     let mut frame_start = Instant::now();
 
     let mut forward = 0.0;
-    let mut _spin: f32 = 0.0;
-    let mut _frame: u32 = 0;
 
     let pack = serde_yaml::from_str(
         &wm.mc
@@ -432,7 +429,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                                 array_layer_count: None,
                             });
 
-                            let _ = wm.render(&graph, &view, &surface_state.1, &instances);
+                            let _ = wm.render(&graph, &view, &surface_state.1, &instances, None);
 
                             texture.present();
 

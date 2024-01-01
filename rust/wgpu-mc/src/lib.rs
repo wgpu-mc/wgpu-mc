@@ -43,24 +43,23 @@ use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use crate::mc::entity::BundledEntityInstances;
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
 pub use naga;
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::util::StagingBelt;
 use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, Extent3d, PresentMode,
-    SurfaceConfiguration,
+    BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, Extent3d, PresentMode
 };
+use wgpu::util::StagingBelt;
 
-use crate::mc::resource::ResourceProvider;
+use crate::mc::entity::BundledEntityInstances;
 use crate::mc::MinecraftState;
+use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;
 use crate::render::graph::ShaderGraph;
-use crate::render::pipeline::{WmPipelines, BLOCK_ATLAS, ENTITY_ATLAS};
+use crate::render::pipeline::{BLOCK_ATLAS, ENTITY_ATLAS, WmPipelines};
 use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
 
 pub mod mc;
@@ -273,9 +272,9 @@ impl WmRenderer {
 
     pub fn update_surface_size(
         &self,
-        mut surface_config: SurfaceConfiguration,
+        mut surface_config: wgpu::SurfaceConfiguration,
         new_size: WindowSize,
-    ) -> Option<SurfaceConfiguration> {
+    ) -> Option<wgpu::SurfaceConfiguration> {
         if new_size.width == 0 || new_size.height == 0 {
             return None;
         }
@@ -347,11 +346,12 @@ impl WmRenderer {
         output_texture_view: &wgpu::TextureView,
         surface_config: &wgpu::SurfaceConfiguration,
         entity_instances: &'resources HashMap<String, BundledEntityInstances>,
+        clear_color: Option<[f32; 3]>
     ) -> Result<(), wgpu::SurfaceError> {
         #[cfg(feature = "tracing")]
         puffin::GlobalProfiler::lock().new_frame();
 
-        graph.render(self, output_texture_view, surface_config, entity_instances);
+        graph.render(self, output_texture_view, surface_config, entity_instances, clear_color.unwrap_or([0.0, 0.0, 0.0]));
 
         Ok(())
     }

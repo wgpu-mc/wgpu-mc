@@ -14,6 +14,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
+use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
 use wgpu::{BufferAddress, BufferUsages};
 
@@ -34,7 +35,7 @@ pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 pub type ChunkPos = [i32; 2];
 
 pub struct ChunkManager {
-    pub loaded_chunks: RwLock<HashMap<ChunkPos, ArcSwap<Chunk>>>,
+    pub loaded_chunks: DashMap<ChunkPos, ArcSwap<Chunk>>,
     pub chunk_offset: Mutex<ChunkPos>,
 }
 
@@ -42,7 +43,7 @@ impl ChunkManager {
     #[must_use]
     pub fn new(_wgpu_state: &WgpuState) -> Self {
         ChunkManager {
-            loaded_chunks: RwLock::new(HashMap::new()),
+            loaded_chunks: DashMap::new(),
             chunk_offset: Mutex::new([0, 0]),
         }
     }
@@ -331,7 +332,10 @@ pub fn bake_section_layer<
         let absolute_x = (chunk.pos[0] * 16) + x;
         let absolute_z = (chunk.pos[1] * 16) + z;
 
-        let block_state: ChunkBlockState = state_provider.get_state(absolute_x, y, absolute_z);
+        let block_state: ChunkBlockState = {
+            puffin::profile_scope!("get block state");
+            state_provider.get_state(absolute_x, y, absolute_z)
+        };
 
         let state_key = match block_state {
             ChunkBlockState::Air => continue,
@@ -343,10 +347,6 @@ pub fn bake_section_layer<
         }
 
         let model_mesh = get_block(block_manager, block_state).unwrap();
-        let _block_entry = block_manager
-            .blocks
-            .get_index(state_key.block as usize)
-            .unwrap();
 
         // TODO: randomly select a mesh if there are multiple models in a variant
 

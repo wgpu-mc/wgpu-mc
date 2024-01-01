@@ -12,6 +12,7 @@ pipelines:
     depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
     blending: premultiplied_alpha_blending
+    clear: true
     push_constants:
       0: wm_pc_chunk_position
       12: wm_pc_framebuffer_size

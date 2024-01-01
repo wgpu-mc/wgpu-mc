@@ -5,7 +5,6 @@ import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.*;
-import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
@@ -17,7 +16,6 @@ import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
-import org.lwjgl.BufferUtils;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -26,7 +24,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.nio.FloatBuffer;
 import java.util.Objects;
 
 @Mixin(WorldRenderer.class)
@@ -50,6 +47,8 @@ public abstract class WorldRendererMixin {
     @Shadow @Final private EntityRenderDispatcher entityRenderDispatcher;
 
     @Shadow protected abstract void renderEntity(Entity entity, double cameraX, double cameraY, double cameraZ, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers);
+
+    @Shadow private int ticks;
 
     /**
      * @author wgpu-mc
@@ -88,6 +87,8 @@ public abstract class WorldRendererMixin {
 
     @Inject(method = "render", cancellable = true, at = @At("HEAD"))
     public void render(MatrixStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f projectionMatrix, CallbackInfo ci) {
+        BackgroundRenderer.render(camera, tickDelta, this.world, this.client.options.getClampedViewDistance(), gameRenderer.getSkyDarkness(tickDelta));
+
         Frustum currentFrustum;
         if (this.capturedFrustum != null) {
             currentFrustum = this.capturedFrustum;
