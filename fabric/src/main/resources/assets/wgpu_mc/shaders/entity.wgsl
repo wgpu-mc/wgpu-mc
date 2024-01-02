@@ -21,6 +21,9 @@ var<storage> transforms: Transforms;
 @group(3) @binding(0)
 var<storage> overlays: array<u32>;
 
+@group(4) @binding(0)
+var<uniform> view: mat4x4<f32>;
+
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
@@ -54,7 +57,7 @@ fn vert(
         f32(overlay >> 24u) / 255.0,
     );
 
-    vr.pos = uniform_data.view_proj * ((part_transform * vec4<f32>(pos_in, 1.0)) + vec4<f32>(0.0, 128.0, 0.0, 0.0));
+    vr.pos = uniform_data.view_proj * view * ((part_transform * vec4<f32>(pos_in, 1.0)) + vec4<f32>(0.0, 128.0, 0.0, 0.0));
 
     vr.tex_coords = tex_coords + entity_texture_offset;
     vr.normal = mat3x3<f32>(part_transform[0].xyz, part_transform[1].xyz, part_transform[2].xyz) * normal;

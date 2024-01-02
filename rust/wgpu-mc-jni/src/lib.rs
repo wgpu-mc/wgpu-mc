@@ -51,6 +51,7 @@ use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
+mod alloc;
 pub mod entity;
 mod gl;
 mod lighting;
@@ -430,7 +431,10 @@ pub fn bake_chunk(x: i32, z: i32) {
 
     {
         if !wm.mc.chunks.loaded_chunks.contains_key(&[x, z]) {
-            wm.mc.chunks.loaded_chunks.insert([x, z], ArcSwap::new(Arc::new(Chunk::new([x, z]))));
+            wm.mc
+                .chunks
+                .loaded_chunks
+                .insert([x, z], ArcSwap::new(Arc::new(Chunk::new([x, z]))));
         }
     }
 
