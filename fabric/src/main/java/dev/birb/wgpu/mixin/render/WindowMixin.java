@@ -90,7 +90,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getWidth() {
-        return Wgpu.isInitialized() ? Wgpu.getWindowWidth() : 1280;
+        return Wgpu.getWindowWidth();
     }
 
     /**
@@ -99,7 +99,7 @@ public class WindowMixin {
      */
     @Overwrite
     public int getHeight() {
-        return Wgpu.isInitialized() ? Wgpu.getWindowHeight() : 720;
+        return Wgpu.getWindowHeight();
     }
 
     /**
