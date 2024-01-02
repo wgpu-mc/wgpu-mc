@@ -4,9 +4,35 @@ resources:
   mvp_mat4:
     type: mat4
     mult: [wm_mat4_projection]
-  rename:
-    type: texture_2d
+  mvv_mat4:
+    type: mat4
+    mult: [wm_mat4_view]
+  mvm_mat4:
+    type: mat4
+    mult: [wm_mat4_model]
+  terrain_mat4:
+    type: mat4
+    mult: [wm_mat4_terrain_transformation]
 pipelines:
+  sky:
+    geometry: wm_geo_quad
+    output: [wm_framebuffer_texture]
+    push_constants:
+      0: wm_pc_sky_data
+    uniforms:
+      0: mvp_mat4
+  sun_moon_cycle:
+    geometry: wm_geo_sun_moon
+    output: [wm_framebuffer_texture]
+    blending: color_add_alpha_blending
+    push_constants:
+      0: wm_pc_sky_data
+    uniforms:
+      0: mvp_mat4
+      1: mvv_mat4
+      2: mvm_mat4
+      3: wm_texture_sky_sun
+      4: wm_texture_sky_moon
   terrain:
     geometry: wm_geo_terrain
     depth: wm_framebuffer_depth
@@ -17,11 +43,12 @@ pipelines:
       0: wm_pc_chunk_position
       12: wm_pc_framebuffer_size
     uniforms:
-      0: mvp_mat4
+      0: terrain_mat4
       1: wm_texture_atlas_blocks
       2: wm_ssbo_chunk_vertices
       3: wm_ssbo_chunk_indices
       4: wm_tex_electrum_lightmap
+      5: mvp_mat4
   entity:
     geometry: wm_geo_entities
     depth: wm_framebuffer_depth

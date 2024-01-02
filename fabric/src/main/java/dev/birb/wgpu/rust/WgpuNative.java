@@ -195,4 +195,6 @@ public class WgpuNative {
 
     public static native void setAllocator(long ptr);
 
+    public static native void bindSkyData(float colorR, float colorG, float colorB, float skyPosition, float skyBrightness, int moonPhase);
+
 }

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
+use guillotiere::euclid::default;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
@@ -13,6 +14,7 @@ use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
+use crate::texture::BindableTexture;
 use crate::{WgpuState, WmRenderer};
 
 use self::block::ModelMesh;
@@ -151,9 +153,34 @@ pub struct BlockInstance {
     pub block: MultipartOrMesh,
 }
 
+#[derive(Default)]
+pub struct SkyData {
+    pub color_r: f32,
+    pub color_g: f32,
+    pub color_b: f32,
+    pub angle: f32,
+    pub brightness: f32,
+    pub moon_phase: i32,
+    pub textures: HashMap<String, Arc<BindableTexture>>,
+}
+
+impl Clone for SkyData {
+    fn clone(&self) -> Self {
+        Self {
+            color_r: self.color_r,
+            color_g: self.color_g,
+            color_b: self.color_b,
+            angle: self.angle,
+            brightness: self.brightness,
+            moon_phase: self.moon_phase,
+            textures: self.textures.clone(),
+        }
+    }
+}
+
 /// Minecraft-specific state and data structures go in here
 pub struct MinecraftState {
-    pub sun_position: ArcSwap<f32>,
+    pub sky_data: ArcSwap<SkyData>,
 
     pub block_manager: RwLock<BlockManager>,
 
@@ -172,7 +199,7 @@ impl MinecraftState {
     #[must_use]
     pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
-            sun_position: ArcSwap::new(Arc::new(0.0)),
+            sky_data: ArcSwap::new(Arc::new(SkyData::default())),
             chunks: ChunkManager::new(wgpu_state),
             entity_models: RwLock::new(HashMap::new()),
 

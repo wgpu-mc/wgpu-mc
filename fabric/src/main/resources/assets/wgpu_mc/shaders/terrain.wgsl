@@ -1,5 +1,5 @@
 struct CameraUniform {
-    view_proj: mat4x4<f32>
+    view: mat4x4<f32>
 };
 
 struct UV {
@@ -38,6 +38,8 @@ var<push_constant> push_constants: PushConstants;
 
 @group(4) @binding(0) var lightmap_texture: texture_2d<f32>;
 @group(4) @binding(1) var lightmap_sampler: sampler;
+
+@group(5) @binding(0) var<uniform> proj: mat4x4<f32>;
 
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
@@ -87,7 +89,7 @@ fn vert(
 
     var world_pos = pos + vec3<f32>(f32(push_constants.chunk_x) * 16.0, f32(push_constants.chunk_y) * 16.0, f32(push_constants.chunk_z) * 16.0);
 
-    vr.pos = camera_uniform.view_proj * vec4(world_pos, 1.0);
+    vr.pos = proj * camera_uniform.view * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
     vr.tex_coords2 = vec2(0.0, 0.0);
     vr.world_pos = world_pos;

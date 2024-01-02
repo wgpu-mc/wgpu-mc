@@ -5,7 +5,8 @@ use std::time::Duration;
 use std::{slice, thread};
 use std::{sync::Arc, time::Instant};
 
-use arc_swap::ArcSwap;
+use arc_swap::access::Access;
+use arc_swap::{ArcSwap, ArcSwapAny};
 use byteorder::LittleEndian;
 use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use futures::executor::block_on;
@@ -18,6 +19,8 @@ use jni::{
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
+use wgpu_mc::mc::resource::ResourcePath;
+use wgpu_mc::mc::SkyData;
 use winit::dpi::PhysicalSize;
 use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoopBuilder;
@@ -28,9 +31,9 @@ use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
 use wgpu_mc::render::graph::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
-use wgpu_mc::render::pipeline::Vertex;
+use wgpu_mc::render::pipeline::{Vertex, WmPipelines};
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
-use wgpu_mc::texture::BindableTexture;
+use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
@@ -39,12 +42,17 @@ use wgpu_mc::{wgpu, WindowSize};
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
 use crate::lighting::LIGHTMAP_GLID;
-use crate::{MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, MC_STATE, RENDERER, THREAD_POOL, WINDOW, CLEAR_COLOR};
+use crate::{
+    MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
+    CHANNELS, MC_STATE, RENDERER, THREAD_POOL, WINDOW,
+};
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
         projection: [[0.0; 4]; 4],
         view: [[0.0; 4]; 4],
+        model: [[0.0; 4]; 4],
+        terrain_transformation: [[0.0; 4]; 4],
     })
 });
 
@@ -53,6 +61,8 @@ static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 pub struct Matrices {
     pub projection: [[f32; 4]; 4],
     pub view: [[f32; 4]; 4],
+    pub model: [[f32; 4]; 4],
+    pub terrain_transformation: [[f32; 4]; 4],
 }
 
 pub struct TerrainLayer;
@@ -89,7 +99,7 @@ pub fn setChunkOffset(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setMatrix(mut env: JNIEnv, _class: JClass, _id: jint, float_array: JFloatArray) {
+pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatArray) {
     let elements: AutoElements<jfloat> =
         unsafe { env.get_array_elements(&float_array, ReleaseMode::NoCopyBack) }.unwrap();
 
@@ -104,7 +114,16 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, _id: jint, float_array: JFloat
     }
 
     let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(bytemuck::cast_slice(&converted));
-    MATRICES.lock().projection = slice_4x4;
+
+    if id == 0 {
+        MATRICES.lock().projection = slice_4x4;
+    } else if id == 1 {
+        MATRICES.lock().model = slice_4x4;
+    } else if id == 2 {
+        MATRICES.lock().view = slice_4x4;
+    } else if id == 3 {
+        MATRICES.lock().terrain_transformation = slice_4x4;
+    }
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -158,8 +177,11 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     let wm = WmRenderer::new(wgpu_state, resource_provider);
 
-    wm.pipelines
-        .load()
+    // Overcomplicated because of method conflicts. Just what the compiler recommended.
+    let pipelines =
+        <Arc<ArcSwapAny<Arc<WmPipelines>>> as Access<Arc<WmPipelines>>>::load(&wm.pipelines);
+
+    pipelines
         .chunk_layers
         .store(Arc::new(vec![Box::new(TerrainLayer)]));
 
@@ -226,6 +248,75 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             )),
         },
     );
+
+    let bindable_buffer = BindableBuffer::new(
+        &wm,
+        bytemuck::cast_slice(&mat),
+        BufferUsages::UNIFORM,
+        "matrix",
+    );
+
+    resources.insert(
+        "wm_mat4_model".into(),
+        CustomResource {
+            update: None,
+            data: Arc::new(ResourceInternal::Mat4(
+                Mat4ValueOrMult::Value { value: mat },
+                Arc::new(RwLock::new(matrix)),
+                Arc::new(bindable_buffer),
+            )),
+        },
+    );
+
+    let bindable_buffer = BindableBuffer::new(
+        &wm,
+        bytemuck::cast_slice(&mat),
+        BufferUsages::UNIFORM,
+        "matrix",
+    );
+
+    resources.insert(
+        "wm_mat4_terrain_transformation".into(),
+        CustomResource {
+            update: None,
+            data: Arc::new(ResourceInternal::Mat4(
+                Mat4ValueOrMult::Value { value: mat },
+                Arc::new(RwLock::new(matrix)),
+                Arc::new(bindable_buffer),
+            )),
+        },
+    );
+
+    {
+        // Sun
+        let sky_texture_sun = "minecraft:textures/environment/sun.png";
+        let sky_texture_sun_label = "wm_texture_sky_sun";
+        let sun_texture = BindableTexture::from_resource_path(
+            &wm,
+            pipelines.as_ref(),
+            sky_texture_sun,
+            sky_texture_sun_label,
+        );
+
+        // Moon
+        let sky_texture_moon = "minecraft:textures/environment/moon_phases.png";
+        let sky_texture_moon_label = "wm_texture_sky_moon";
+        let moon_texture = BindableTexture::from_resource_path(
+            &wm,
+            pipelines.as_ref(),
+            sky_texture_moon,
+            sky_texture_moon_label,
+        );
+
+        let mut texture_map: HashMap<String, Arc<BindableTexture>> = HashMap::new();
+
+        texture_map.insert(sky_texture_sun_label.into(), Arc::new(sun_texture));
+        texture_map.insert(sky_texture_moon_label.into(), Arc::new(moon_texture));
+
+        let mut sky_data = (**wm.mc.sky_data.load()).clone();
+        sky_data.textures = texture_map;
+        wm.mc.sky_data.swap(Arc::new(sky_data));
+    }
 
     {
         let tex_id = LIGHTMAP_GLID.lock().unwrap();
@@ -305,7 +396,9 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         let wm = wm_clone;
 
         loop {
-            let _mc_state = MC_STATE.load();
+            let _mc_state = <Lazy<ArcSwapAny<Arc<MinecraftRenderState>>> as Access<
+                MinecraftRenderState,
+            >>::load(&MC_STATE);
 
             let surface_state = wm.wgpu_state.surface.write();
 
@@ -318,12 +411,31 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
                 if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_proj.data {
                     let matrix4: Matrix4<f32> = matrices.projection.into();
-                    *lock.write() = perspective(
-                        Deg(100.0),
-                        (surface_state.1.width as f32) / (surface_state.1.height as f32),
-                        0.01,
-                        1000.0,
-                    ) * matrix4;
+                    *lock.write() = matrix4;
+                }
+
+                let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_model").unwrap();
+
+                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+                    let matrix4: Matrix4<f32> = matrices.model.into();
+                    *lock.write() = matrix4;
+                }
+
+                let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_view").unwrap();
+
+                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+                    let matrix4: Matrix4<f32> = matrices.view.into();
+                    *lock.write() = matrix4;
+                }
+
+                let res_mat_mod = shader_graph
+                    .resources
+                    .get_mut("wm_mat4_terrain_transformation")
+                    .unwrap();
+
+                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+                    let matrix4: Matrix4<f32> = matrices.terrain_transformation.into();
+                    *lock.write() = matrix4;
                 }
             }
 
@@ -791,4 +903,26 @@ pub fn setEntityInstanceBuffer(
     });
 
     Instant::now().duration_since(now).as_nanos() as jlong
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bindSkyData(
+    _env: JNIEnv,
+    _class: JClass,
+    r: jfloat,
+    g: jfloat,
+    b: jfloat,
+    angle: jfloat,
+    brightness: jfloat,
+    moon_phase: jint,
+) {
+    let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
+    sky_data.color_r = r;
+    sky_data.color_g = g;
+    sky_data.color_b = b;
+    sky_data.angle = angle;
+    sky_data.brightness = brightness;
+    sky_data.moon_phase = moon_phase;
+
+    RENDERER.get().unwrap().mc.sky_data.swap(Arc::new(sky_data));
 }
