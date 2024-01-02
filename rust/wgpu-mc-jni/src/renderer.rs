@@ -44,7 +44,7 @@ use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
 use crate::lighting::LIGHTMAP_GLID;
 use crate::{
     MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
-    CHANNELS, MC_STATE, RENDERER, THREAD_POOL, WINDOW,
+    CHANNELS, CLEAR_COLOR, MC_STATE, RENDERER, THREAD_POOL, WINDOW,
 };
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
@@ -471,10 +471,17 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             let entity_instances = ENTITY_INSTANCES.lock();
 
-            let clear_color = **CLEAR_COLOR.load();
+            let clear_color =
+                *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
 
-            wm.render(&shader_graph, &view, &surface_state.1, &entity_instances, Some(clear_color))
-                .unwrap();
+            wm.render(
+                &shader_graph,
+                &view,
+                &surface_state.1,
+                &entity_instances,
+                Some(clear_color),
+            )
+            .unwrap();
 
             texture.present();
         }
