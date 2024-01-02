@@ -85,7 +85,7 @@ impl RenderLayer for TerrainLayer {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setChunkOffset(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    *RENDERER.get().unwrap().mc.chunks.chunk_offset.lock() = [x, z];
+    *RENDERER.get().unwrap().mc.chunk_store.chunk_offset.lock() = [x, z];
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

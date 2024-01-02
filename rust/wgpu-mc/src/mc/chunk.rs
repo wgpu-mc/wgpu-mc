@@ -12,6 +12,7 @@ use std::fmt::Debug;
 use std::mem::size_of;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
@@ -32,21 +33,41 @@ pub const CHUNK_SECTION_HEIGHT: usize = 16;
 pub const SECTIONS_PER_CHUNK: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
+pub const MAX_CHUNKS: usize = 1000;
+
 pub type ChunkPos = [i32; 2];
 
-pub struct ChunkManager {
-    pub loaded_chunks: DashMap<ChunkPos, ArcSwap<Chunk>>,
+pub struct ChunkStore {
+    pub chunks: [ArcSwap<Option<Chunk>>; MAX_CHUNKS],
+    pub indices: RwLock<HashMap<ChunkPos, usize>>,
+    pub chunk_count: AtomicUsize,
     pub chunk_offset: Mutex<ChunkPos>,
 }
 
-impl ChunkManager {
+impl ChunkStore {
     #[must_use]
     pub fn new(_wgpu_state: &WgpuState) -> Self {
-        ChunkManager {
-            loaded_chunks: DashMap::new(),
+        ChunkStore {
+            chunks: [(); MAX_CHUNKS].map(|_| ArcSwap::new(Arc::new(None))),
+            indices: RwLock::new(HashMap::new()),
+            chunk_count: AtomicUsize::new(0),
             chunk_offset: Mutex::new([0, 0]),
         }
     }
+
+    pub fn add_chunk(&self, pos: ChunkPos, chunk: Chunk) -> usize {
+        let len = self.chunk_count.fetch_add(1, Ordering::Release);
+
+        {
+            let mut indices = self.indices.write();
+            indices.insert(pos, len);
+        }
+
+        self.chunks[len].store(Arc::new(Some(chunk)));
+
+        len
+    }
+
 }
 
 #[derive(Clone, Copy, Debug)]

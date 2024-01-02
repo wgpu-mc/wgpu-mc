@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, thread};
 
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, AsRaw};
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -429,14 +429,7 @@ pub fn bake_chunk(x: i32, z: i32) {
 
     let bm = wm.mc.block_manager.read();
 
-    {
-        if !wm.mc.chunks.loaded_chunks.contains_key(&[x, z]) {
-            wm.mc.chunks.loaded_chunks.insert([x, z], ArcSwap::new(Arc::new(Chunk::new([x, z]))));
-        }
-    }
-
-    let (chunk, center, neighbors) = {
-        let chunk = wm.mc.chunks.loaded_chunks.get(&[x, z]).unwrap().load_full();
+    let (center, neighbors) = {
         let chunks = CHUNKS.read();
 
         let center = chunks.get(&[x, z]).unwrap().clone();
@@ -449,7 +442,7 @@ pub fn bake_chunk(x: i32, z: i32) {
         ]
         .map(|arc_option| arc_option.map(|arc| arc.clone()));
 
-        (chunk, center, neighbors)
+        (center, neighbors)
     };
 
     let bsp = MinecraftBlockstateProvider {
@@ -462,7 +455,22 @@ pub fn bake_chunk(x: i32, z: i32) {
         air: *AIR,
     };
 
-    chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+    let index = {
+        let indices = wm.mc.chunk_store.indices.read();
+        indices.get(&[x, z]).cloned()
+    };
+
+    match index {
+        None => {
+            let chunk = Chunk::new([x, z]);
+            chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+            wm.mc.chunk_store.add_chunk([x, z], chunk);
+        }
+        Some(index) => {
+            let chunk = wm.mc.chunk_store.chunks[index].load();
+            (**chunk).as_ref().unwrap().bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+        }
+    }
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -470,7 +478,9 @@ pub fn clearChunks(_env: JNIEnv, _class: JClass) {
     THREAD_POOL.spawn(|| {
         let wm = RENDERER.get().unwrap();
 
-        wm.mc.chunks.loaded_chunks.clear();
+        wm.mc.chunk_store.chunks.iter().for_each(|swap| {
+            swap.store(Arc::new(None));
+        });
     });
 }
 

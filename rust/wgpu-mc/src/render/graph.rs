@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use arc_swap::ArcSwap;
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
@@ -682,7 +683,7 @@ impl ShaderGraph {
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
 
-        let chunk_offset = *wm.mc.chunks.chunk_offset.lock();
+        let chunk_offset = *wm.mc.chunk_store.chunk_offset.lock();
 
         let projection_matrix = self
             .resources
@@ -779,9 +780,18 @@ impl ShaderGraph {
                 "wm_geo_terrain" => {
                     let layers = wm.pipelines.load().chunk_layers.load();
 
-                    for layer in &**layers {
-                        for chunk_swap in wm.mc.chunks.loaded_chunks.iter() {
-                            let chunk = arena.alloc(chunk_swap.load());
+                    let chunk_count = wm.mc.chunk_store.chunk_count.load(Ordering::Acquire);
+
+                    for chunk_swap in wm.mc.chunk_store.chunks.iter().take(chunk_count) {
+                        let load = chunk_swap.load();
+                        let chunk = if let Some(chunk_swap) = &***arena.alloc(load) {
+                            chunk_swap
+                        } else {
+                            continue;
+                        };
+
+
+                        for layer in &**layers {
                             let buffers = arena.alloc(chunk.buffers.load_full());
                             let chunk_buffers = (*buffers).as_ref().as_ref();
 
@@ -790,6 +800,14 @@ impl ShaderGraph {
                             if chunk_buffers.is_none() {
                                 continue;
                             }
+
+                            bind_uniforms(
+                                config,
+                                &resource_borrow,
+                                &arena,
+                                &mut render_pass,
+                                chunk_buffers,
+                            );
 
                             for section_index in 0..SECTIONS_PER_CHUNK {
                                 let min = Vec3::new(
@@ -815,13 +833,10 @@ impl ShaderGraph {
                                     Some(section) => &section[section_index],
                                 };
 
-                                bind_uniforms(
-                                    config,
-                                    &resource_borrow,
-                                    &arena,
-                                    &mut render_pass,
-                                    chunk_buffers,
-                                );
+                                if baked_layer.len() == 0 {
+                                    continue;
+                                }
+
                                 set_push_constants(
                                     config,
                                     &mut render_pass,
