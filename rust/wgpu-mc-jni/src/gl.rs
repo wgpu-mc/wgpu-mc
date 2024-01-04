@@ -409,6 +409,7 @@ impl GeometryCallback for ElectrumGeometry {
                         None,
                     );
                     set_push_constants(
+                        &info.wm.mc,
                         info.config,
                         info.render_pass,
                         None,
@@ -451,6 +452,7 @@ impl GeometryCallback for ElectrumGeometry {
                         None,
                     );
                     set_push_constants(
+                        &info.wm.mc,
                         info.config,
                         info.render_pass,
                         None,

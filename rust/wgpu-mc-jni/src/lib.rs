@@ -28,6 +28,7 @@ use raw_window_handle::{
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
+use wgpu_mc::wgpu::util::DeviceExt;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
 use winit::window::{CursorGrabMode, Window};
@@ -1158,11 +1159,12 @@ pub fn setVertexBuffer(env: JNIEnv, _class: JClass, byte_array: JByteArray) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setIndexBuffer(mut env: JNIEnv, _class: JClass, int_array: JIntArray) {
-    let elements: AutoElements<jint> =
-        unsafe { env.get_array_elements(&int_array, ReleaseMode::NoCopyBack) }.unwrap();
+pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: JIntArray) {
+    let mut indices = vec![0; env.get_array_length(&int_array).unwrap() as usize];
+    env.get_int_array_region(&int_array, 0, &mut indices[..])
+        .unwrap();
 
-    let slice = unsafe { slice::from_raw_parts(elements.as_ptr() as *mut u32, elements.len()) };
+    let slice = unsafe { slice::from_raw_parts(indices.as_ptr() as *mut u32, indices.len()) };
 
     GL_COMMANDS
         .write()
@@ -1250,4 +1252,72 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
             log::warn!("Set cursor mode had an invalid mode.")
         }
     }
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bindStarData(
+    env: JNIEnv,
+    _class: JClass,
+    length: jint,
+    int_array: JIntArray,
+    byte_array: JByteArray,
+) {
+    let mut indices = vec![0; env.get_array_length(&int_array).unwrap() as usize];
+    env.get_int_array_region(&int_array, 0, &mut indices[..])
+        .unwrap();
+
+    let mut bytes = vec![0; env.get_array_length(&byte_array).unwrap() as usize];
+    env.get_byte_array_region(&byte_array, 0, &mut bytes[..])
+        .unwrap();
+
+    let byte_slice = bytemuck::cast_slice(&bytes);
+    let mut cursor = Cursor::new(byte_slice);
+    let mut converted = Vec::with_capacity(bytes.len() / 4);
+
+    assert_eq!(bytes.len() % 4, 0);
+
+    for _ in 0..bytes.len() / 4 {
+        converted.push(cursor.read_f32::<LittleEndian>().unwrap());
+    }
+
+    //spawn a thread bc renderer wouldn't be initialized quite yet
+    THREAD_POOL.spawn(move || loop {
+        if RENDERER.get().is_none() {
+            continue;
+        }
+
+        *RENDERER.get().unwrap().mc.stars_length.write() = length as u32;
+
+        let mut index_buffer = RENDERER.get().unwrap().mc.stars_index_buffer.write();
+
+        *index_buffer = Some(
+            RENDERER
+                .get()
+                .unwrap()
+                .wgpu_state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                }),
+        );
+
+        let mut vertex_buffer = RENDERER.get().unwrap().mc.stars_vertex_buffer.write();
+
+        *vertex_buffer = Some(
+            RENDERER
+                .get()
+                .unwrap()
+                .wgpu_state
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&converted),
+                    usage: wgpu::BufferUsages::VERTEX,
+                }),
+        );
+
+        break;
+    });
 }

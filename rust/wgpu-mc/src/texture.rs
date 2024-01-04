@@ -4,7 +4,11 @@ use std::sync::Arc;
 use image::GenericImageView;
 use wgpu::Extent3d;
 
-use crate::{render::pipeline::WmPipelines, WgpuState};
+use crate::{
+    mc::{resource::ResourcePath, MinecraftState},
+    render::pipeline::WmPipelines,
+    WgpuState, WmRenderer,
+};
 
 pub type TextureId = u32;
 pub type UV = ((u16, u16), (u16, u16));
@@ -157,6 +161,21 @@ impl BindableTexture {
             tsv: texture,
             bind_group,
         }
+    }
+
+    pub fn from_resource_path(
+        wm: &WmRenderer,
+        pipelines: &WmPipelines,
+        path: &str,
+        label: &str,
+    ) -> BindableTexture {
+        let sun_texture_rp = ResourcePath(path.into());
+        let sun_texture_bytes = wm.mc.resource_provider.get_bytes(&sun_texture_rp).unwrap();
+        let sun_texture_tsv =
+            TextureSamplerView::from_image_file_bytes(&wm.wgpu_state, &sun_texture_bytes, label)
+                .unwrap();
+
+        BindableTexture::from_tsv(&wm.wgpu_state, pipelines, sun_texture_tsv, false)
     }
 }
 

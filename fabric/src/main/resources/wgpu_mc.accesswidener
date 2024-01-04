@@ -34,6 +34,7 @@ accessible method net/minecraft/client/font/TextRenderer drawLayer (Ljava/lang/S
 accessible method net/minecraft/client/font/TextRenderer drawLayer (Lnet/minecraft/text/OrderedText;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/render/VertexConsumerProvider;Lnet/minecraft/client/font/TextRenderer$TextLayerType;II)F
 accessible method net/minecraft/client/render/BufferRenderer bind (Lnet/minecraft/client/render/VertexFormat;)Lnet/minecraft/client/gl/VertexBuffer;
 accessible method net/minecraft/client/render/WorldRenderer updateChunks (Lnet/minecraft/client/render/Camera;)V
+accessible method net/minecraft/client/render/GameRenderer bobView (Lnet/minecraft/client/util/math/MatrixStack;F)V
 
 accessible method net/minecraft/world/chunk/PalettedContainer$DataProvider <init> (Lnet/minecraft/world/chunk/Palette$Factory;I)V
 accessible method net/minecraft/world/chunk/PalettedContainer$PaletteProvider <init> (I)V
