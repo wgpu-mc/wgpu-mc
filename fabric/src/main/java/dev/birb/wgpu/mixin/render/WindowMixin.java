@@ -154,7 +154,14 @@ public class WindowMixin {
      */
     @Overwrite
     public int calculateScaleFactor(int guiScale, boolean forceUnicodeFont) {
-        return Math.max(guiScale, 1);
+        int i;
+        for(i = 1; i != guiScale && i < getWidth() && i < getHeight() && getWidth() / (i + 1) >= 320 && getHeight() / (i + 1) >= 240; ++i) {}
+
+        if (forceUnicodeFont && i % 2 != 0) {
+            ++i;
+        }
+
+        return i;
     }
 
     /**
