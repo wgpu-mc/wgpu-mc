@@ -9,7 +9,7 @@ use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
 
-use crate::mc::chunk::ChunkManager;
+use crate::mc::chunk::ChunkStore;
 use crate::mc::entity::Entity;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
@@ -185,7 +185,7 @@ pub struct MinecraftState {
 
     pub block_manager: RwLock<BlockManager>,
 
-    pub chunks: ChunkManager,
+    pub chunk_store: ChunkStore,
     pub entity_models: RwLock<HashMap<String, Arc<Entity>>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
@@ -206,7 +206,7 @@ impl MinecraftState {
             stars_length: RwLock::new(0),
             render_effects: ArcSwap::new(Arc::new(RenderEffectsData::default())),
 
-            chunks: ChunkManager::new(wgpu_state),
+            chunk_store: ChunkStore::new(wgpu_state),
             entity_models: RwLock::new(HashMap::new()),
 
             texture_manager: TextureManager::new(),

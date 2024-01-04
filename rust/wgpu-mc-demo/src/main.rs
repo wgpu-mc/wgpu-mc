@@ -177,12 +177,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
     let chunk = make_chunks(&wm);
 
-    {
-        wm.mc
-            .chunks
-            .loaded_chunks
-            .insert([0, 0], ArcSwap::new(Arc::new(chunk)));
-    }
+    // {
+    //     wm.mc
+    //         .chunk_store
+    //         .chunks
+    //         .insert([0, 0], ArcSwap::new(Arc::new(chunk)));
+    // }
 
     let mut frame_start = Instant::now();
 
