@@ -8,16 +8,18 @@ use std::fmt::Debug;
 use std::ops::Mul;
 use std::sync::Arc;
 
-use arc_swap::ArcSwap;
+use arc_swap::access::Access;
+use arc_swap::{ArcSwap, ArcSwapAny};
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
+use dashmap::mapref::multiple::RefMulti;
 use parking_lot::RwLock;
 use serde::de::IntoDeserializer;
 use treeculler::{BVol, Frustum, Vec3, AABB};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BlendComponent, BlendFactor, BlendOperation, BufferUsages, Color, ColorTargetState,
-    CommandEncoderDescriptor, DepthStencilState, Face, FragmentState, FrontFace, LoadOp,
-    Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology,
+    CommandEncoderDescriptor, DepthStencilState, Face, FragmentState, FrontFace, IndexFormat,
+    LoadOp, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology,
     PushConstantRange, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment,
     RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStages, StoreOp,
     SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState,
@@ -26,9 +28,9 @@ use wgpu::{
 use crate::mc::chunk::{Chunk, ChunkBuffers, ChunkPos, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK};
 use crate::mc::entity::{BundledEntityInstances, InstanceVertex};
 use crate::mc::resource::ResourcePath;
-use crate::mc::SkyData;
+use crate::mc::{MinecraftState, SkyData};
 use crate::render::entity::EntityVertex;
-use crate::render::pipeline::{QuadVertex, BLOCK_ATLAS};
+use crate::render::pipeline::{QuadVertex, WmPipelines, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
 use crate::render::shaderpack::{
     LonghandResourceConfig, Mat3ValueOrMult, Mat4ValueOrMult, PipelineConfig, ShaderPackConfig,
@@ -38,7 +40,8 @@ use crate::texture::{BindableTexture, TextureHandle};
 use crate::util::{BindableBuffer, WmArena};
 use crate::WmRenderer;
 
-use super::sky::SunMoonVertex;
+use super::atlas::Atlas;
+use super::sky::{SkyVertex, SunMoonVertex};
 
 pub struct GeometryInfo<'pass, 'resource: 'pass, 'renderer> {
     pub wm: &'renderer WmRenderer,
@@ -166,6 +169,9 @@ pub struct ShaderGraph {
     pub resources: HashMap<String, CustomResource>,
     pub geometry: HashMap<String, Box<dyn GeometryCallback>>,
     sun: Option<wgpu::Buffer>,
+    light_sky: Option<(wgpu::Buffer, wgpu::Buffer)>,
+    dark_sky: Option<(wgpu::Buffer, wgpu::Buffer)>,
+    fog_sphere: Option<(wgpu::Buffer, wgpu::Buffer)>,
     quad: Option<wgpu::Buffer>,
     query_results: Option<wgpu::Buffer>,
 }
@@ -182,6 +188,9 @@ impl ShaderGraph {
             resources,
             geometry,
             sun: None,
+            light_sky: None,
+            dark_sky: None,
+            fog_sphere: None,
             quad: None,
             query_results: None,
         }
@@ -237,14 +246,68 @@ impl ShaderGraph {
                 }),
         );
 
-        let block_atlas = wm
-            .mc
-            .texture_manager
-            .atlases
-            .load()
+        let (light_sky_vertices, light_sky_indices) = SkyVertex::load_vertex_light_sky();
+        self.light_sky = Some((
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&light_sky_vertices),
+                    usage: BufferUsages::VERTEX,
+                }),
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&light_sky_indices),
+                    usage: BufferUsages::INDEX,
+                }),
+        ));
+
+        let (dark_sky_vertices, dark_sky_indices) = SkyVertex::load_vertex_light_sky();
+        self.dark_sky = Some((
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&dark_sky_vertices),
+                    usage: BufferUsages::VERTEX,
+                }),
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&dark_sky_indices),
+                    usage: BufferUsages::INDEX,
+                }),
+        ));
+
+        let (fog_sphere_vertices, fog_sphere_indices) = SkyVertex::load_fog_sphere();
+        self.fog_sphere = Some((
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&fog_sphere_vertices),
+                    usage: BufferUsages::VERTEX,
+                }),
+            wm.wgpu_state
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&fog_sphere_indices),
+                    usage: BufferUsages::INDEX,
+                }),
+        ));
+
+        //rip readability, thanks rust :(
+        let block_atlas = <Arc<ArcSwapAny<Arc<Atlas>>> as Access<Atlas>>::load(
+            <ArcSwapAny<Arc<HashMap<String, Arc<ArcSwapAny<Arc<Atlas>>>>>> as Access<
+                HashMap<String, Arc<ArcSwapAny<Arc<Atlas>>>>,
+            >>::load(&wm.mc.texture_manager.atlases)
             .get(BLOCK_ATLAS)
-            .unwrap()
-            .load();
+            .unwrap(),
+        );
 
         resources.insert(
             "wm_texture_atlas_blocks".into(),
@@ -263,7 +326,8 @@ impl ShaderGraph {
             Self::insert_resources(&wm, &mut resources, definition, resource_id);
         }
 
-        let pipelines = wm.pipelines.load();
+        let pipelines =
+            <Arc<ArcSwapAny<Arc<WmPipelines>>> as Access<WmPipelines>>::load(&wm.pipelines);
         let layouts = pipelines.bind_group_layouts.read();
 
         self.pack
@@ -335,9 +399,9 @@ impl ShaderGraph {
                                             stages: ShaderStages::VERTEX,
                                             range: *offset as u32..*offset as u32 + 4,
                                         },
-                                        "wm_pc_sky_data" => PushConstantRange {
+                                        "wm_pc_environment_data" => PushConstantRange {
                                             stages: ShaderStages::VERTEX_FRAGMENT,
-                                            range: *offset as u32..*offset as u32 + 20,
+                                            range: *offset as u32..*offset as u32 + 68,
                                         },
                                         _ => unimplemented!("Unknown push constant resource value"),
                                     })
@@ -351,6 +415,9 @@ impl ShaderGraph {
                         }
                         "wm_geo_quad" => Some(vec![QuadVertex::desc()]),
                         "wm_geo_sun_moon" => Some(vec![SunMoonVertex::desc()]),
+                        "wm_geo_sky_scatter" => Some(vec![SkyVertex::desc()]),
+                        "wm_geo_sky_stars" => Some(vec![SkyVertex::desc()]),
+                        "wm_geo_sky_fog" => Some(vec![SkyVertex::desc()]),
                         _ => {
                             if let Some(additional_geometry) = &mut additional_geometry {
                                 Some(additional_geometry.remove(&definition.geometry).unwrap())
@@ -701,7 +768,7 @@ impl ShaderGraph {
         output_texture: &'graph wgpu::TextureView,
         surface_config: &SurfaceConfiguration,
         entity_instances: &HashMap<String, BundledEntityInstances>,
-        clear_color: [f32; 3]
+        clear_color: [f32; 3],
     ) {
         puffin::profile_scope!("render");
 
@@ -735,6 +802,12 @@ impl ShaderGraph {
                     usage: BufferUsages::VERTEX,
                 }),
         );
+
+        let stars_vertex_buffer = wm.mc.stars_vertex_buffer.read();
+        let stars_vertex = stars_vertex_buffer.as_ref().unwrap().slice(..);
+
+        let stars_index_buffer = wm.mc.stars_index_buffer.read();
+        let stars_index = stars_index_buffer.as_ref().unwrap().slice(..);
 
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
@@ -779,13 +852,11 @@ impl ShaderGraph {
                                 "wm_framebuffer_texture" => output_texture,
                                 name => {
                                     &arena
-                                        .alloc(
-                                            texture_handles
-                                                .get(name)
-                                                .unwrap()
-                                                .bindable_texture
-                                                .load(),
-                                        )
+                                        .alloc(<Arc<ArcSwapAny<Arc<BindableTexture>>> as Access<
+                                            BindableTexture,
+                                        >>::load(
+                                            &texture_handles.get(name).unwrap().bindable_texture,
+                                        ))
                                         .tsv
                                         .view
                                 }
@@ -813,13 +884,11 @@ impl ShaderGraph {
 
                     RenderPassDepthStencilAttachment {
                         view: &arena
-                            .alloc(
-                                texture_handles
-                                    .get(depth_texture)
-                                    .unwrap()
-                                    .bindable_texture
-                                    .load(),
-                            )
+                            .alloc(<Arc<ArcSwapAny<Arc<BindableTexture>>> as Access<
+                                BindableTexture,
+                            >>::load(
+                                &texture_handles.get(depth_texture).unwrap().bindable_texture,
+                            ))
                             .tsv
                             .view,
                         depth_ops: Some(Operations {
@@ -839,11 +908,21 @@ impl ShaderGraph {
             let sky_data = &wm.mc.sky_data;
             match &config.geometry[..] {
                 "wm_geo_terrain" => {
-                    let layers = wm.pipelines.load().chunk_layers.load();
+                    let layers =
+                        <Arc<ArcSwapAny<Arc<WmPipelines>>> as Access<Arc<WmPipelines>>>::load(
+                            &wm.pipelines,
+                        )
+                        .chunk_layers
+                        .load();
 
                     for layer in &**layers {
                         for chunk_swap in wm.mc.chunks.loaded_chunks.iter() {
-                            let chunk = arena.alloc(chunk_swap.load());
+                            let chunk =
+                                arena.alloc(
+                                    <RefMulti<'_, [i32; 2], ArcSwapAny<Arc<Chunk>>> as Access<
+                                        Chunk,
+                                    >>::load(&chunk_swap),
+                                );
                             let buffers = arena.alloc(chunk.buffers.load_full());
                             let chunk_buffers = (*buffers).as_ref().as_ref();
 
@@ -885,6 +964,7 @@ impl ShaderGraph {
                                     chunk_buffers,
                                 );
                                 set_push_constants(
+                                    &wm.mc,
                                     config,
                                     &mut render_pass,
                                     Some(chunk),
@@ -892,7 +972,6 @@ impl ShaderGraph {
                                     chunk_offset,
                                     Some(section_index),
                                     None,
-                                    Some(&sky_data),
                                 );
 
                                 render_pass.draw(baked_layer.clone(), 0..1);
@@ -903,6 +982,7 @@ impl ShaderGraph {
                 "wm_geo_transparent" | "wm_geo_fluid" | "wm_geo_skybox" | "wm_geo_quad" => {
                     bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, None);
                     set_push_constants(
+                        &wm.mc,
                         config,
                         &mut render_pass,
                         None,
@@ -910,12 +990,86 @@ impl ShaderGraph {
                         chunk_offset,
                         None,
                         None,
-                        Some(&sky_data),
                     );
 
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
                     render_pass.set_vertex_buffer(0, self.quad.as_ref().unwrap().slice(..));
                     render_pass.draw(0..6, 0..1);
+                }
+                "wm_geo_sky_scatter" => {
+                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, None);
+                    set_push_constants(
+                        &wm.mc,
+                        config,
+                        &mut render_pass,
+                        None,
+                        surface_config,
+                        chunk_offset,
+                        None,
+                        None,
+                    );
+
+                    render_pass.set_pipeline(self.pipelines.get(name).unwrap());
+
+                    //draw light sky
+                    render_pass.set_vertex_buffer(0, self.light_sky.as_ref().unwrap().0.slice(..));
+                    render_pass.set_index_buffer(
+                        self.light_sky.as_ref().unwrap().1.slice(..),
+                        IndexFormat::Uint32,
+                    );
+                    render_pass.draw_indexed(0..24, 0, 0..1);
+                    //^^ 3 vertices per triangle fan, 8 fans total.. 3 * 8 = 24 ^^
+
+                    //draw dark sky
+                    // render_pass.set_vertex_buffer(0, self.dark_sky.as_ref().unwrap().0.slice(..));
+                    //render_pass.set_index_buffer(
+                    //    self.dark_sky.as_ref().unwrap().1.slice(..),
+                    //    IndexFormat::Uint32,
+                    //);
+                    //render_pass.draw_indexed(0..24, 0, 0..1);
+                }
+                "wm_geo_sky_stars" => {
+                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, None);
+                    set_push_constants(
+                        &wm.mc,
+                        config,
+                        &mut render_pass,
+                        None,
+                        surface_config,
+                        chunk_offset,
+                        None,
+                        None,
+                    );
+
+                    render_pass.set_pipeline(self.pipelines.get(name).unwrap());
+
+                    //draw stars
+                    render_pass.set_vertex_buffer(0, stars_vertex);
+                    render_pass.set_index_buffer(stars_index, IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..*wm.mc.stars_length.read(), 0, 0..1);
+                }
+                "wm_geo_sky_fog" => {
+                    bind_uniforms(config, &resource_borrow, &arena, &mut render_pass, None);
+                    set_push_constants(
+                        &wm.mc,
+                        config,
+                        &mut render_pass,
+                        None,
+                        surface_config,
+                        chunk_offset,
+                        None,
+                        None,
+                    );
+
+                    render_pass.set_pipeline(self.pipelines.get(name).unwrap());
+
+                    //draw stars
+                    render_pass.set_vertex_buffer(0, self.fog_sphere.as_ref().unwrap().0.slice(..));
+                    render_pass.set_index_buffer(
+                        self.fog_sphere.as_ref().unwrap().1.slice(..),
+                        IndexFormat::Uint32,
+                    );
+                    render_pass.draw_indexed(0..51, 0, 0..1);
                 }
                 "wm_geo_sun_moon" => {
                     let augmented_resources = resource_borrow
@@ -967,6 +1121,7 @@ impl ShaderGraph {
                         None,
                     );
                     set_push_constants(
+                        &wm.mc,
                         config,
                         &mut render_pass,
                         None,
@@ -974,7 +1129,6 @@ impl ShaderGraph {
                         chunk_offset,
                         None,
                         None,
-                        Some(&sky_data),
                     );
 
                     render_pass.set_pipeline(self.pipelines.get(name).unwrap());
@@ -1036,6 +1190,7 @@ impl ShaderGraph {
                             None,
                         );
                         set_push_constants(
+                            &wm.mc,
                             config,
                             &mut render_pass,
                             None,
@@ -1043,7 +1198,6 @@ impl ShaderGraph {
                             chunk_offset,
                             None,
                             Some(entity.parts.len() as u32),
-                            Some(&sky_data),
                         );
 
                         render_pass
@@ -1110,9 +1264,19 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
         let bind_group = match &*resources.get(resource_name).unwrap().data {
             ResourceInternal::Texture(handle, _) => match handle {
                 TextureResource::Handle(handle) => {
-                    &arena.alloc(handle.bindable_texture.load()).bind_group
+                    &arena
+                        .alloc(<Arc<ArcSwapAny<Arc<BindableTexture>>> as Access<
+                            BindableTexture,
+                        >>::load(&handle.bindable_texture))
+                        .bind_group
                 }
-                TextureResource::Bindable(bindable) => &arena.alloc(bindable.load()).bind_group,
+                TextureResource::Bindable(bindable) => {
+                    &arena
+                        .alloc(<Arc<ArcSwapAny<Arc<BindableTexture>>> as Access<
+                            BindableTexture,
+                        >>::load(bindable))
+                        .bind_group
+                }
             },
             ResourceInternal::Blob(bindable) => &bindable.bind_group,
             ResourceInternal::Mat3(_, _, bindable) | ResourceInternal::Mat4(_, _, bindable) => {
@@ -1130,6 +1294,7 @@ pub fn bind_uniforms<'resource: 'pass, 'pass>(
 }
 
 pub fn set_push_constants(
+    mc_state: &MinecraftState,
     pipeline: &PipelineConfig,
     render_pass: &mut RenderPass,
     chunk: Option<&Chunk>,
@@ -1137,9 +1302,14 @@ pub fn set_push_constants(
     chunk_offset: ChunkPos,
     section_y: Option<usize>,
     parts_per_entity: Option<u32>,
-    sky_data: Option<&ArcSwap<SkyData>>,
 ) {
-    let sky = sky_data.unwrap().load();
+    let sky = mc_state.sky_data.load();
+    let render_effects = mc_state.render_effects.load();
+
+    //janky way of "still loading boi!"
+    if render_effects.fog_color.is_empty() {
+        return;
+    }
     pipeline
         .push_constants
         .iter()
@@ -1168,15 +1338,28 @@ pub fn set_push_constants(
                 *offset as u32,
                 bytemuck::cast_slice(&[parts_per_entity.unwrap()]),
             ),
-            "wm_pc_sky_data" => render_pass.set_push_constants(
+            // Note: vecs are broke, so we have to pass data individual for now
+            "wm_pc_environment_data" => render_pass.set_push_constants(
                 ShaderStages::VERTEX_FRAGMENT,
                 *offset as u32,
                 bytemuck::cast_slice(&[
+                    sky.angle,
+                    sky.brightness,
+                    sky.star_shimmer,
+                    render_effects.fog_start,
+                    render_effects.fog_end,
+                    render_effects.fog_shape,
+                    render_effects.fog_color[0],
+                    render_effects.fog_color[1],
+                    render_effects.fog_color[2],
+                    render_effects.fog_color[3],
                     sky.color_r,
                     sky.color_g,
                     sky.color_b,
-                    sky.angle,
-                    sky.brightness,
+                    render_effects.dimension_fog_color[0],
+                    render_effects.dimension_fog_color[1],
+                    render_effects.dimension_fog_color[2],
+                    render_effects.dimension_fog_color[3],
                 ]),
             ),
             _ => unimplemented!("Unknown push constant resource value"),

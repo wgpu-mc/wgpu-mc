@@ -20,7 +20,7 @@ use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
 use wgpu_mc::mc::resource::ResourcePath;
-use wgpu_mc::mc::SkyData;
+use wgpu_mc::mc::{RenderEffectsData, SkyData};
 use winit::dpi::PhysicalSize;
 use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoopBuilder;
@@ -115,14 +115,20 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatA
 
     let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(bytemuck::cast_slice(&converted));
 
-    if id == 0 {
-        MATRICES.lock().projection = slice_4x4;
-    } else if id == 1 {
-        MATRICES.lock().model = slice_4x4;
-    } else if id == 2 {
-        MATRICES.lock().view = slice_4x4;
-    } else if id == 3 {
-        MATRICES.lock().terrain_transformation = slice_4x4;
+    match id {
+        0 => {
+            MATRICES.lock().projection = slice_4x4;
+        }
+        1 => {
+            MATRICES.lock().model = slice_4x4;
+        }
+        2 => {
+            MATRICES.lock().view = slice_4x4;
+        }
+        3 => {
+            MATRICES.lock().terrain_transformation = slice_4x4;
+        }
+        _ => {}
     }
 }
 
@@ -921,6 +927,7 @@ pub fn bindSkyData(
     b: jfloat,
     angle: jfloat,
     brightness: jfloat,
+    star_shimmer: jfloat,
     moon_phase: jint,
 ) {
     let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
@@ -929,7 +936,54 @@ pub fn bindSkyData(
     sky_data.color_b = b;
     sky_data.angle = angle;
     sky_data.brightness = brightness;
+    sky_data.star_shimmer = star_shimmer;
     sky_data.moon_phase = moon_phase;
 
     RENDERER.get().unwrap().mc.sky_data.swap(Arc::new(sky_data));
+}
+
+//public static native void bindRenderEffectsData(float fogStart, float fogEnd, int fogShape, float[] fogColor, float[] colorModulator);
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bindRenderEffectsData(
+    env: JNIEnv,
+    _class: JClass,
+    fog_start: jfloat,
+    fog_end: jfloat,
+    fog_shape: jint,
+    fog_color: JFloatArray,
+    color_modulator: JFloatArray,
+    dimension_fog_color: JFloatArray,
+) {
+    let mut render_effects_data = RenderEffectsData {
+        fog_start,
+        fog_end,
+        fog_shape: fog_shape as f32,
+        ..Default::default()
+    };
+
+    let mut fog_color_vec = vec![0f32; env.get_array_length(&fog_color).unwrap() as usize];
+    env.get_float_array_region(&fog_color, 0, &mut fog_color_vec[..])
+        .unwrap();
+
+    let mut color_modulator_vec =
+        vec![0f32; env.get_array_length(&color_modulator).unwrap() as usize];
+    env.get_float_array_region(&color_modulator, 0, &mut color_modulator_vec[..])
+        .unwrap();
+
+    let mut dimension_fog_color_vec =
+        vec![0f32; env.get_array_length(&dimension_fog_color).unwrap() as usize];
+    env.get_float_array_region(&dimension_fog_color, 0, &mut dimension_fog_color_vec[..])
+        .unwrap();
+
+    render_effects_data.fog_color = fog_color_vec;
+    render_effects_data.color_modulator = color_modulator_vec;
+    render_effects_data.dimension_fog_color = dimension_fog_color_vec;
+
+    RENDERER
+        .get()
+        .unwrap()
+        .mc
+        .render_effects
+        .swap(Arc::new(render_effects_data));
 }

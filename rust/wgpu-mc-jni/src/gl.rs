@@ -287,8 +287,6 @@ impl GeometryCallback for ElectrumGeometry {
 
         let mut calls = vec![];
 
-        let sky_data = &info.wm.mc.sky_data;
-
         let mut vertex_buffer = vec![];
         let mut index_buffer = vec![];
         let mut matrix = Matrix4::<f32>::identity();
@@ -411,6 +409,7 @@ impl GeometryCallback for ElectrumGeometry {
                         None,
                     );
                     set_push_constants(
+                        &info.wm.mc,
                         info.config,
                         info.render_pass,
                         None,
@@ -418,7 +417,6 @@ impl GeometryCallback for ElectrumGeometry {
                         info.chunk_offset,
                         None,
                         None,
-                        Some(&sky_data),
                     );
 
                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
@@ -454,6 +452,7 @@ impl GeometryCallback for ElectrumGeometry {
                         None,
                     );
                     set_push_constants(
+                        &info.wm.mc,
                         info.config,
                         info.render_pass,
                         None,
@@ -461,7 +460,6 @@ impl GeometryCallback for ElectrumGeometry {
                         info.chunk_offset,
                         None,
                         None,
-                        Some(&sky_data),
                     );
 
                     let vertices = match draw.pipeline_state {

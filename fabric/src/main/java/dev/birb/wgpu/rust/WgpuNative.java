@@ -195,6 +195,10 @@ public class WgpuNative {
 
     public static native void setAllocator(long ptr);
 
-    public static native void bindSkyData(float colorR, float colorG, float colorB, float skyPosition, float skyBrightness, int moonPhase);
+    public static native void bindSkyData(float colorR, float colorG, float colorB, float skyPosition, float skyBrightness, float starShimmer, int moonPhase);
+
+    public static native void bindStarData(int length, int[] indices, byte[] vertices);
+
+    public static native void bindRenderEffectsData(float fogStart, float fogEnd, int fogShape, float[] fogColor, float[] colorModulator, float[] dimensionFogColor);
 
 }

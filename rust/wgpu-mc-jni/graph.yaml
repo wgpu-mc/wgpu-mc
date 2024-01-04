@@ -14,13 +14,41 @@ resources:
     type: mat4
     mult: [wm_mat4_terrain_transformation]
 pipelines:
+  sky_scatter:
+    geometry: wm_geo_sky_scatter
+    output: [wm_framebuffer_texture]
+    clear: true
+    push_constants:
+      0: wm_pc_environment_data
+    uniforms:
+      0: mvp_mat4
+      1: mvv_mat4
+      2: mvm_mat4
+  sky_fog:
+    geometry: wm_geo_sky_fog
+    output: [wm_framebuffer_texture]
+    push_constants:
+      0: wm_pc_environment_data
+    uniforms:
+      0: mvp_mat4
+      1: mvv_mat4
+      2: mvm_mat4
+  stars:
+    geometry: wm_geo_sky_stars
+    output: [wm_framebuffer_texture]
+    blending: color_add_alpha_blending
+    push_constants:
+      0: wm_pc_environment_data
+    uniforms:
+      0: mvp_mat4
+      1: mvv_mat4
+      2: mvm_mat4
   sun_moon_cycle:
     geometry: wm_geo_sun_moon
     output: [wm_framebuffer_texture]
-    clear: true
     blending: color_add_alpha_blending
     push_constants:
-      0: wm_pc_sky_data
+      0: wm_pc_environment_data
     uniforms:
       0: mvp_mat4
       1: mvv_mat4

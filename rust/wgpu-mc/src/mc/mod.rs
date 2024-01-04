@@ -1,7 +1,7 @@
 //! Rust implementations of minecraft concepts that are important to us.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
 use guillotiere::euclid::default;
@@ -153,34 +153,35 @@ pub struct BlockInstance {
     pub block: MultipartOrMesh,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SkyData {
     pub color_r: f32,
     pub color_g: f32,
     pub color_b: f32,
     pub angle: f32,
     pub brightness: f32,
+    pub star_shimmer: f32,
     pub moon_phase: i32,
     pub textures: HashMap<String, Arc<BindableTexture>>,
 }
 
-impl Clone for SkyData {
-    fn clone(&self) -> Self {
-        Self {
-            color_r: self.color_r,
-            color_g: self.color_g,
-            color_b: self.color_b,
-            angle: self.angle,
-            brightness: self.brightness,
-            moon_phase: self.moon_phase,
-            textures: self.textures.clone(),
-        }
-    }
+#[derive(Default, Clone)]
+pub struct RenderEffectsData {
+    pub fog_start: f32,
+    pub fog_end: f32,
+    pub fog_shape: f32,
+    pub fog_color: Vec<f32>,
+    pub color_modulator: Vec<f32>,
+    pub dimension_fog_color: Vec<f32>,
 }
 
 /// Minecraft-specific state and data structures go in here
 pub struct MinecraftState {
     pub sky_data: ArcSwap<SkyData>,
+    pub stars_index_buffer: RwLock<Option<wgpu::Buffer>>,
+    pub stars_vertex_buffer: RwLock<Option<wgpu::Buffer>>,
+    pub stars_length: RwLock<u32>,
+    pub render_effects: ArcSwap<RenderEffectsData>,
 
     pub block_manager: RwLock<BlockManager>,
 
@@ -200,6 +201,11 @@ impl MinecraftState {
     pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
             sky_data: ArcSwap::new(Arc::new(SkyData::default())),
+            stars_index_buffer: RwLock::new(None),
+            stars_vertex_buffer: RwLock::new(None),
+            stars_length: RwLock::new(0),
+            render_effects: ArcSwap::new(Arc::new(RenderEffectsData::default())),
+
             chunks: ChunkManager::new(wgpu_state),
             entity_models: RwLock::new(HashMap::new()),
 

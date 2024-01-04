@@ -1,7 +1,6 @@
 struct VO {
     @builtin(position) pos: vec4<f32>,
-    @location(0) tex_coords: vec2<f32>,
-    @location(1) og_pos: vec3<f32>,
+    @location(0) og_pos: vec3<f32>,
 }
 
 const PI = 3.14159265;
@@ -14,12 +13,6 @@ var<uniform> view: mat4x4<f32>;
 
 @group(2) @binding(0)
 var<uniform> model: mat4x4<f32>;
-
-@group(3) @binding(0) var sun_texture: texture_2d<f32>;
-@group(3) @binding(1) var sun_sampler: sampler;
-
-@group(4) @binding(0) var moon_texture: texture_2d<f32>;
-@group(4) @binding(1) var moon_sampler: sampler;
 
 struct PushConstants {
     angle: f32,
@@ -55,14 +48,14 @@ fn rotateX(degrees: f32) -> mat4x4<f32> {
     );
 }
 
-fn rotateY(degrees: f32) -> mat4x4<f32> {
+fn rotateZ(degrees: f32) -> mat4x4<f32> {
     var theta = radians(degrees);
     var c = cos(theta);
     var s = sin(theta);
     return mat4x4<f32>(
-        vec4(c, 0.0, -s, 0.0),
-        vec4(0.0, 1.0, 0.0, 0.0),
-        vec4(s, 0.0, c, 0.0),
+        vec4(c, -s, 0.0, 0.0),
+        vec4(s, c, 0.0, 0.0),
+        vec4(0.0, 0.0, 1.0, 0.0),
         vec4(0.0, 0.0, 0.0, 1.0),  
     );
 }
@@ -71,36 +64,35 @@ fn radians(degrees: f32) -> f32 {
     return degrees * (PI/180.0);
 }
 
-fn identity() -> mat4x4<f32> {
-    return mat4x4<f32>(
-        vec4(1.0, 0.0, 0.0, 0.0),
-        vec4(0.0, 1.0, 0.0, 0.0),
-        vec4(0.0, 0.0, 1.0, 0.0),
-        vec4(0.0, 0.0, 0.0, 1.0), 
-    );
-}
-
 @vertex
 fn vert(
     @location(0) pos: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>
 ) -> VO {
     var vo: VO;
     vo.og_pos = pos;
 
-    var transformation_matrix = model * rotateY(-90.0) * rotateX(data.angle * 360.0);
-    var dir = transformation_matrix * vec4<f32>(pos, 1.0);
+    var pos_z_modify = 1.0;
+    if pos.z != 0.0 {
+        pos_z_modify = data.dimension_fog_color_a;
+    }
 
-    vo.pos = projection * view * vec4<f32>(dir.xyz, 1.0);
-    vo.tex_coords = tex_coords;
+    var f1 = 0.0;
+
+    if sin(data.angle) < 0.0 {
+        f1 = 180.0;
+    }
+
+    var transformation_matrix = model * rotateX(90.0) * rotateZ(f1) * rotateZ(90.0);
+
+    vo.pos = projection * view * transformation_matrix * vec4<f32>(pos.xy, pos.z * pos_z_modify, 1.0);
     return vo;
 }
 
 @fragment
 fn frag(in: VO) -> @location(0) vec4<f32> {
-    if(in.og_pos.y > 0.0) {
-        return textureSample(sun_texture, sun_sampler, in.tex_coords);
-    } else {
-        return textureSample(moon_texture, moon_sampler, in.tex_coords);
+    if in.og_pos.z == 0.0 {
+        return vec4<f32>(data.dimension_fog_color_r, data.dimension_fog_color_g, data.dimension_fog_color_b, data.dimension_fog_color_a);
     }
+
+    return vec4<f32>(data.dimension_fog_color_r, data.dimension_fog_color_g, data.dimension_fog_color_b, 0.0);
 }
