@@ -36,7 +36,6 @@ pub struct JavaPalette {
     pub indices: HashMap<BlockstateKey, usize>,
     pub id_list: NonZeroUsize,
 }
-
 impl JavaPalette {
     pub fn new(id_list: NonZeroUsize) -> Self {
         Self {
@@ -169,11 +168,11 @@ pub fn paletteReadPacket(
 
     let id_list = unsafe { &*(palette.id_list.get() as *const IdList) };
 
-    let blockstate_offsets = unsafe {
+    let blockstate_offsets:Box<[i32]> = unsafe { 
         slice::from_raw_parts(
             blockstate_offsets_ptr as *mut i32,
             blockstate_offsets_len as usize,
-        )
+        ).into()
     };
 
     let vec = unsafe {

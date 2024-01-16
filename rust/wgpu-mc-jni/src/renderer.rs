@@ -10,6 +10,7 @@ use arc_swap::{ArcSwap, ArcSwapAny};
 use byteorder::LittleEndian;
 use cgmath::{perspective, Deg, Matrix4, SquareMatrix};
 use futures::executor::block_on;
+use glam::ivec2;
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint, jlong};
 use jni::{
@@ -95,7 +96,7 @@ impl RenderLayer for TerrainLayer {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setChunkOffset(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    *RENDERER.get().unwrap().mc.chunk_store.chunk_offset.lock() = [x, z];
+    *RENDERER.get().unwrap().mc.chunk_offset.lock().unwrap() = ivec2(x, z);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -479,7 +480,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             let clear_color =
                 *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
-
             wm.render(
                 &shader_graph,
                 &view,

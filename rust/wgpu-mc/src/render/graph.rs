@@ -12,7 +12,9 @@ use std::sync::atomic::Ordering;
 use arc_swap::access::Access;
 use arc_swap::{ArcSwap, ArcSwapAny};
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
+use dashmap::Map;
 use dashmap::mapref::multiple::RefMulti;
+use glam::{ivec3, vec3, IVec3, IVec2};
 use parking_lot::RwLock;
 use serde::de::IntoDeserializer;
 use treeculler::{BVol, Frustum, Vec3, AABB};
@@ -26,7 +28,7 @@ use wgpu::{
     SurfaceConfiguration, TextureFormat, VertexBufferLayout, VertexState,
 };
 
-use crate::mc::chunk::{Chunk, ChunkBuffers, ChunkPos, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK};
+use crate::mc::chunk::{Section, ChunkBuffers, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK};
 use crate::mc::entity::{BundledEntityInstances, InstanceVertex};
 use crate::mc::resource::ResourcePath;
 use crate::mc::{MinecraftState, SkyData};
@@ -52,7 +54,7 @@ pub struct GeometryInfo<'pass, 'resource: 'pass, 'renderer> {
     pub resources: &'resource HashMap<String, CustomResource>,
     pub arena: &'resource WmArena<'resource>,
     pub surface_config: &'renderer SurfaceConfiguration,
-    pub chunk_offset: ChunkPos,
+    pub chunk_offset: IVec2,
 }
 
 pub trait GeometryCallback: Send + Sync {
@@ -813,7 +815,7 @@ impl ShaderGraph {
         //The first render pass that uses the framebuffer's depth buffer should clear it
         let mut should_clear_depth = true;
 
-        let chunk_offset = *wm.mc.chunk_store.chunk_offset.lock();
+        let chunk_offset = wm.mc.chunk_offset.lock().unwrap();
 
         let projection_matrix = self
             .resources
@@ -916,22 +918,12 @@ impl ShaderGraph {
                         .chunk_layers
                         .load();
 
-                    let chunk_count = wm.mc.chunk_store.chunk_count.load(Ordering::Acquire);
-
-                    for chunk_swap in wm.mc.chunk_store.chunks.iter().take(chunk_count) {
-                        let load = chunk_swap.load();
-                        let chunk = if let Some(chunk_swap) = &***arena.alloc(load) {
-                            chunk_swap
-                        } else {
-                            continue;
-                        };
-
+                    for it in &wm.mc.chunk_store {
+                        let (pos,section) = it.pair();
 
                         for layer in &**layers {
-                            let buffers = arena.alloc(chunk.buffers.load_full());
+                            let buffers = arena.alloc(section.buffers.load_full());
                             let chunk_buffers = (*buffers).as_ref().as_ref();
-
-                            let sections = chunk.sections.read();
 
                             if chunk_buffers.is_none() {
                                 continue;
@@ -945,47 +937,37 @@ impl ShaderGraph {
                                 chunk_buffers,
                             );
 
-                            for section_index in 0..SECTIONS_PER_CHUNK {
-                                let min = Vec3::new(
-                                    ((chunk.pos[0] + chunk_offset[0]) * 16) as f32,
-                                    (section_index * CHUNK_SECTION_HEIGHT) as f32,
-                                    ((chunk.pos[1] + chunk_offset[1]) * 16) as f32,
-                                );
-                                let max = min
-                                    + Vec3::new(
-                                        16.0,
-                                        ((section_index + 1) * CHUNK_SECTION_HEIGHT) as f32,
-                                        16.0,
-                                    );
+                            let min = vec3(
+                                (pos.x+chunk_offset.x) as f32,
+                                pos.y as f32,
+                                (pos.z+chunk_offset.y) as f32);
 
-                                let aabb = AABB::<f32>::new(min, max);
+                            let max = min + vec3(16.0,16.0,16.0);
 
-                                if aabb.test_against_frustum(&frustum, 0) == u8::MAX {
-                                    continue;
-                                }
+                            let aabb = AABB::<f32>::new(min.to_array(), max.to_array());
 
-                                let baked_layer = match sections.get(layer.name()) {
-                                    None => continue,
-                                    Some(section) => &section[section_index],
-                                };
-
-                                if baked_layer.len() == 0 {
-                                    continue;
-                                }
-
-                                set_push_constants(
-                                    &wm.mc,
-                                    config,
-                                    &mut render_pass,
-                                    Some(chunk),
-                                    surface_config,
-                                    chunk_offset,
-                                    Some(section_index),
-                                    None,
-                                );
-
-                                render_pass.draw(baked_layer.clone(), 0..1);
+                            if aabb.test_against_frustum(&frustum, 0) == u8::MAX {
+                                break;
                             }
+
+                            let baked_layer = section.layers.get(layer.name()).unwrap();
+
+                            if baked_layer.len()==0{
+                                continue;
+                            }
+
+                            set_push_constants(
+                                &wm.mc,
+                                config,
+                                &mut render_pass,
+                                Some(&section),
+                                surface_config,
+                                *chunk_offset,
+                                Some(*pos),
+                                None
+                            );
+
+                            render_pass.draw(baked_layer.clone(), 0..1);
                         }
                     }
                 }
@@ -997,7 +979,7 @@ impl ShaderGraph {
                         &mut render_pass,
                         None,
                         surface_config,
-                        chunk_offset,
+                        *chunk_offset,
                         None,
                         None,
                     );
@@ -1014,7 +996,7 @@ impl ShaderGraph {
                         &mut render_pass,
                         None,
                         surface_config,
-                        chunk_offset,
+                        *chunk_offset,
                         None,
                         None,
                     );
@@ -1046,7 +1028,7 @@ impl ShaderGraph {
                         &mut render_pass,
                         None,
                         surface_config,
-                        chunk_offset,
+                        *chunk_offset,
                         None,
                         None,
                     );
@@ -1066,7 +1048,7 @@ impl ShaderGraph {
                         &mut render_pass,
                         None,
                         surface_config,
-                        chunk_offset,
+                        *chunk_offset,
                         None,
                         None,
                     );
@@ -1136,7 +1118,7 @@ impl ShaderGraph {
                         &mut render_pass,
                         None,
                         surface_config,
-                        chunk_offset,
+                        *chunk_offset,
                         None,
                         None,
                     );
@@ -1205,7 +1187,7 @@ impl ShaderGraph {
                             &mut render_pass,
                             None,
                             surface_config,
-                            chunk_offset,
+                            *chunk_offset,
                             None,
                             Some(entity.parts.len() as u32),
                         );
@@ -1227,7 +1209,7 @@ impl ShaderGraph {
                             resources: &self.resources,
                             arena: &arena,
                             surface_config,
-                            chunk_offset,
+                            chunk_offset:*chunk_offset
                         });
                     } else {
                         unimplemented!("Unknown geometry {}", &config.geometry);
@@ -1307,10 +1289,10 @@ pub fn set_push_constants(
     mc_state: &MinecraftState,
     pipeline: &PipelineConfig,
     render_pass: &mut RenderPass,
-    chunk: Option<&Chunk>,
+    section: Option<&Section>,
     surface_config: &SurfaceConfiguration,
-    chunk_offset: ChunkPos,
-    section_y: Option<usize>,
+    chunk_offset: IVec2,
+    section_pos: Option<IVec3>,
     parts_per_entity: Option<u32>,
 ) {
     let sky = mc_state.sky_data.load();
@@ -1338,9 +1320,9 @@ pub fn set_push_constants(
                 ShaderStages::VERTEX,
                 *offset as u32,
                 bytemuck::cast_slice(&[
-                    chunk.unwrap().pos[0] + chunk_offset[0],
-                    section_y.unwrap() as i32,
-                    chunk.unwrap().pos[1] + chunk_offset[1],
+                    section_pos.unwrap().x + chunk_offset.x,
+                    section_pos.unwrap().y,
+                    section_pos.unwrap().z + chunk_offset.y,
                 ]),
             ),
             "wm_pc_parts_per_entity" => render_pass.set_push_constants(

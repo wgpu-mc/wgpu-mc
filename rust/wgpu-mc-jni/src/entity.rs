@@ -2,6 +2,7 @@ use jni::objects::{JClass, JObject, JString, JValue};
 use jni::sys::jint;
 use jni::JNIEnv;
 use jni_fn::jni_fn;
+use std::io::{stdout, Write};
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
@@ -178,6 +179,8 @@ pub struct Wrapper1 {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
+    println!("registerentities");
+    stdout().flush().unwrap();
     let wm = RENDERER.get().unwrap();
 
     let entities_json_javastr = env.get_string(&string).unwrap();
@@ -230,4 +233,7 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
     });
 
     *wm.mc.entity_models.write() = entities;
+
+    println!("end registerentities");
+    stdout().flush().unwrap();
 }

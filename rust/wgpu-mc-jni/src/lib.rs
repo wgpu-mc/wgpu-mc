@@ -1,9 +1,10 @@
 pub extern crate wgpu_mc;
 
 use core::slice;
+use std::alloc::Layout;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::Cursor;
+use std::io::{Cursor, stdout, Write};
 use std::mem::size_of;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,9 +15,10 @@ use arc_swap::{ArcSwap, AsRaw};
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
+use glam::{IVec3, ivec3};
 use jni::objects::{
     AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JObject, JString, JValue,
-    ReleaseMode,
+    ReleaseMode, JLongArray,
 };
 use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::{JNIEnv, JavaVM};
@@ -35,7 +37,7 @@ use winit::window::{CursorGrabMode, Window};
 
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{
-    BlockStateProvider, Chunk, ChunkPos, LightLevel, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT,
+    BlockStateProvider, Section, LightLevel, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT,
     SECTIONS_PER_CHUNK,
 };
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
@@ -106,9 +108,6 @@ static CLEAR_COLOR: Lazy<ArcSwap<[f32; 3]>> = Lazy::new(|| ArcSwap::new(Arc::new
 static THREAD_POOL: Lazy<ThreadPool> =
     Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
 
-static CHUNKS: Lazy<RwLock<HashMap<ChunkPos, Arc<ChunkHolder>>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     block: RENDERER
         .get()
@@ -128,58 +127,34 @@ static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::n
 pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 #[derive(Debug)]
-struct ChunkHolder {
-    pub sections: [Option<(JavaPalette, PackedIntegerArray)>; 24],
+struct SectionHolder {
+    pub block_data: Option<(JavaPalette, PackedIntegerArray)>,
     pub light_data: Option<DeserializedLightData>,
 }
 
 #[derive(Debug)]
-struct MinecraftBlockstateProvider<'a> {
-    pub center: &'a ChunkHolder,
-    pub west: Option<&'a ChunkHolder>,
-    pub north: Option<&'a ChunkHolder>,
-    pub south: Option<&'a ChunkHolder>,
-    pub east: Option<&'a ChunkHolder>,
-
-    pub pos: ChunkPos,
-
+pub struct MinecraftBlockstateProvider {
+    pub sections: [Option<SectionHolder>;27],
+    pub pos: IVec3,
     pub air: BlockstateKey,
 }
-
-impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
-    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
+impl BlockStateProvider for MinecraftBlockstateProvider {
+    fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
         puffin::profile_scope!("get state");
-
-        //Minecraft technically has negative y values now, but chunk data is indexed [0,384} instead of [-64,256}
-        if y >= CHUNK_HEIGHT as i16 || y < 0 {
-            return ChunkBlockState::Air;
-        }
-
-        let chunk_x = (x >> 4) - self.pos[0];
-        let chunk_z = (z >> 4) - self.pos[1];
-
-        let chunk_option = match [chunk_x, chunk_z] {
-            [0, 0] => Some(self.center),
-            [0, -1] => self.north,
-            [0, 1] => self.south,
-            [1, 0] => self.east,
-            [-1, 0] => self.west,
-            _pos => return ChunkBlockState::Air,
-        };
-
-        let chunk = match chunk_option {
+        let section_pos = ivec3((x>>4)+1,(y>>4)+1,(z>>4)+1);
+        let section_option = &self.sections[(section_pos.x+section_pos.y*3+section_pos.z*9) as usize];
+        
+        let section = match section_option {
             None => return ChunkBlockState::Air,
             Some(chunk) => chunk,
         };
 
-        let storage_index = (y / 16) as usize;
-
-        let (palette, storage) = match &chunk.sections[storage_index] {
+        let (palette, storage) = match &section.block_data {
             Some(section) => section,
             None => return ChunkBlockState::Air,
         };
 
-        let palette_key = storage.get(x, y as i32, z);
+        let palette_key = storage.get(x&15, y&15, z&15);
         let (_, block) = palette.get(palette_key as usize).unwrap();
 
         if *block == self.air {
@@ -189,18 +164,9 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         }
     }
 
-    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel {
-        let chunk_x = (x >> 4) - self.pos[0];
-        let chunk_z = (z >> 4) - self.pos[1];
-
-        let chunk_option = match [chunk_x, chunk_z] {
-            [0, 0] => Some(self.center),
-            [0, -1] => self.north,
-            [0, 1] => self.south,
-            [1, 0] => self.east,
-            [-1, 0] => self.west,
-            _pos => return LightLevel::from_sky_and_block(0, 0),
-        };
+    fn get_light_level(&self, x: i32, y: i32, z: i32) -> LightLevel {
+        let section_pos = ivec3((x>>4)+1,(y>>4)+1,(z>>4)+1);
+        let chunk_option = &self.sections[(section_pos.x+section_pos.y*3+section_pos.z*9) as usize];
 
         let chunk = match chunk_option {
             None => return LightLevel::from_sky_and_block(0, 0),
@@ -219,7 +185,7 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
         };
 
         let local_x = x & 0b1111;
-        let local_y = y as i32 & 0b1111;
+        let local_y = y & 0b1111;
         let local_z = z & 0b1111;
 
         let packed_coords = ((local_y << 8) | (local_z << 4) | (local_x)) as usize;
@@ -238,11 +204,14 @@ impl<'a> BlockStateProvider for MinecraftBlockstateProvider<'a> {
     }
 
     fn is_section_empty(&self, index: usize) -> bool {
-        if index >= SECTIONS_PER_CHUNK {
+        if index >= 27 {
             return true;
         }
 
-        self.center.sections[index].is_none()
+        self.sections[index].is_none()
+    }
+    fn get_pos(&self) -> IVec3 {
+        return self.pos;
     }
 }
 
@@ -371,123 +340,72 @@ pub fn registerBlockState(
         .push((block_name, state_key, global_ref));
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn createChunk(
-    _env: JNIEnv,
-    _class: JClass,
-    x: jint,
-    z: jint,
-    palettes_ptr: jlong,
-    storages_ptr: jlong,
-    block_light_ptr: jlong,
-    sky_light_ptr: jlong,
-) {
-    let palettes = unsafe { &*(palettes_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK]) };
-
-    let storages = unsafe { &*(storages_ptr as usize as *mut [usize; SECTIONS_PER_CHUNK]) };
-
-    let block_light =
-        unsafe { (block_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read() };
-
-    let sky_light =
-        unsafe { (sky_light_ptr as usize as *mut [u8; 2048 * SECTIONS_PER_CHUNK]).read() };
-
-    assert_eq!(size_of::<usize>(), 8);
-
-    let holder = ChunkHolder {
-        sections: palettes
-            .iter()
-            .zip(storages.iter())
-            .map(|(&palette, &storage)| {
-                if palette == 0 || storage == 0 {
-                    return None;
-                }
-
-                //The indices are incremented by one in Java so that 0 means null/None
-                Some((
-                    PALETTE_STORAGE.read().get(palette - 1).unwrap().clone(),
-                    PIA_STORAGE.read().get(storage - 1).unwrap().clone(),
-                ))
-            })
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap_or_else(|_| panic!("Expected a Vec of length 24, got {}", palettes.len())),
-        light_data: Some(DeserializedLightData {
-            block_light,
-            sky_light,
-        }),
-    };
-
-    let mut write = CHUNKS.write();
-
-    write.insert([x, z], Arc::new(holder));
-}
-
-pub fn bake_chunk(x: i32, z: i32) {
-    puffin::profile_scope!("jni bake chunk", format!("{},{}", x, z));
+pub fn bake_chunk(bsp:MinecraftBlockstateProvider) {
+    puffin::profile_scope!("jni bake chunk");
 
     let wm = RENDERER.get().unwrap();
 
     let bm = wm.mc.block_manager.read();
 
-    let (center, neighbors) = {
-        let chunks = CHUNKS.read();
+    let mut section_option = wm.mc.chunk_store.get_mut(&bsp.pos);
 
-        let center = chunks.get(&[x, z]).unwrap().clone();
-
-        let neighbors = [
-            chunks.get(&[x, z - 1]), //North
-            chunks.get(&[x, z + 1]), //South
-            chunks.get(&[x - 1, z]), //West
-            chunks.get(&[x + 1, z]), //East
-        ]
-        .map(|arc_option| arc_option.map(|arc| arc.clone()));
-
-        (center, neighbors)
-    };
-
-    let bsp = MinecraftBlockstateProvider {
-        center: &center,
-        north: neighbors[0].as_ref().map(|arc| &**arc),
-        south: neighbors[1].as_ref().map(|arc| &**arc),
-        west: neighbors[2].as_ref().map(|arc| &**arc),
-        east: neighbors[3].as_ref().map(|arc| &**arc),
-        pos: [x, z],
-        air: *AIR,
-    };
-
-    let index = {
-        let indices = wm.mc.chunk_store.indices.read();
-        indices.get(&[x, z]).cloned()
-    };
-
-    match index {
+    match section_option {
         None => {
-            let chunk = Chunk::new([x, z]);
-            chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
-            wm.mc.chunk_store.add_chunk([x, z], chunk);
+            let mut section = Section::new();
+            section.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+            wm.mc.chunk_store.insert(bsp.pos, section);
         }
-        Some(index) => {
-            let chunk = wm.mc.chunk_store.chunks[index].load();
-            (**chunk).as_ref().unwrap().bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+        Some(ref mut section) => {
+            let section = section.value_mut();
+            section.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
         }
     }
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearChunks(_env: JNIEnv, _class: JClass) {
-    THREAD_POOL.spawn(|| {
-        let wm = RENDERER.get().unwrap();
-
-        wm.mc.chunk_store.chunks.iter().for_each(|swap| {
-            swap.store(Arc::new(None));
-        });
-    });
+    let wm = RENDERER.get().unwrap();
+    wm.mc.chunk_store.clear();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    bake_chunk(x, z);
+pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, y: jint, z: jint, paletteIndices:jlong, storageIndices:jlong, blockIndices:jlong, skyIndicesdices:jlong) {
+    println!("bake {},{},{}",x,y,z);
+    let palettes = unsafe{Box::from_raw(paletteIndices as usize as *mut [usize;27])};
+    let storages = unsafe{Box::from_raw(storageIndices as usize as *mut [usize;27])};
+    let block_light = unsafe{Box::from_raw(blockIndices as usize as *mut [usize;27])};
+    let sky_light = unsafe{Box::from_raw(skyIndicesdices as usize as *mut [usize;27])};
+    const NONE:Option<SectionHolder> = None;
+    let mut bsp = MinecraftBlockstateProvider{
+        pos:ivec3(x,y,z),
+        sections:[NONE;27],
+        air:*AIR
+    };
+    for i in 0..27{
+        if storages[i]==0{
+            continue
+        }
+        let palette_storage = PALETTE_STORAGE.read();
+        let pia_storage = PIA_STORAGE.read();
+        let palette = palette_storage.get(palettes[i]);
+        let storage = pia_storage.get(storages[i]);
+        let block_data = if !palette.is_none() && !storage.is_none(){
+            Some((palette.unwrap().clone(),storage.unwrap().clone()))
+        }
+        else{
+            None
+        };
+        bsp.sections[i]=Some(SectionHolder{
+            block_data,
+            light_data:Some(DeserializedLightData{
+                sky_light:unsafe{Box::from_raw(sky_light[i] as *mut [u8;2048])},
+                block_light:unsafe{Box::from_raw(block_light[i] as *mut [u8;2048])},
+                })
+        })
+    }
+    bake_chunk(bsp);
+    println!("end bake");
+    stdout().flush().unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

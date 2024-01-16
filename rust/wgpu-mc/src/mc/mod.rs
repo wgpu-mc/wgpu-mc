@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
+use glam::IVec2;
 use guillotiere::euclid::default;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
@@ -186,6 +187,7 @@ pub struct MinecraftState {
     pub block_manager: RwLock<BlockManager>,
 
     pub chunk_store: ChunkStore,
+    pub chunk_offset:Mutex<IVec2>,
     pub entity_models: RwLock<HashMap<String, Arc<Entity>>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
@@ -206,7 +208,8 @@ impl MinecraftState {
             stars_length: RwLock::new(0),
             render_effects: ArcSwap::new(Arc::new(RenderEffectsData::default())),
 
-            chunk_store: ChunkStore::new(wgpu_state),
+            chunk_store: ChunkStore::new(),
+            chunk_offset: Mutex::new(IVec2::new(0,0)),
             entity_models: RwLock::new(HashMap::new()),
 
             texture_manager: TextureManager::new(),

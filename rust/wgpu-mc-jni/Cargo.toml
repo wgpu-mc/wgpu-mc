@@ -5,8 +5,8 @@ authors = ["Birb <birb.seeb@gmail.com>"]
 edition = "2021"
 
 [features]
-default = []
-no_alloc = []
+default = ["libc_alloc"]
+libc_alloc = []
 
 [dependencies]
 crate-root = "0.1.3"
@@ -23,6 +23,7 @@ parking_lot = "0.12.1"
 arc-swap = "1.4.0"
 bumpalo = "3.8.0"
 cgmath = "0.18.0"
+glam = "0.25"
 bytemuck = { version = "1.13", features = ["derive"] }
 dashmap = "5.4.0"
 once_cell = "1.9.0"
