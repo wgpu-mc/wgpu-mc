@@ -14,7 +14,7 @@ use wgpu::Extent3d;
 
 use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::render::pipeline::WmPipelines;
-use crate::texture::{BindableTexture, TextureSamplerView, UV};
+use crate::texture::{BindableTexture, TextureAndView, UV};
 use crate::{WgpuState, WmRenderer};
 
 /// The width and height of an [atlas](Atlas];
@@ -64,14 +64,12 @@ pub struct Atlas {
     /// The mapping of image [ResourcePath]s to UV coordinates
     pub uv_map: RwLock<HashMap<ResourcePath, UV>>,
     /// The representation of the [Atlas]'s image buffer on the GPU, which can be bound to a draw call
-    pub bindable_texture: Arc<ArcSwap<BindableTexture>>,
+    pub texture: Arc<TextureAndView>,
     /// Not every [Atlas] is used for block textures, but the ones that are store the information for each animated texture here
     pub animated_textures: RwLock<Vec<schemas::texture::TextureAnimation>>,
     ///
     pub animated_texture_offsets: RwLock<HashMap<ResourcePath, u32>>,
-    pub resizes: bool,
-    size: RwLock<u32>,
-    gpu_size: RwLock<u32>,
+    size: u32
 }
 
 impl Debug for Atlas {
@@ -82,23 +80,17 @@ impl Debug for Atlas {
 
 impl Atlas {
     pub fn new(wgpu_state: &WgpuState, pipelines: &WmPipelines, resizes: bool) -> Self {
-        let bindable_texture = BindableTexture::from_tsv(
+        let tv = TextureAndView::from_rgb_bytes(
             wgpu_state,
-            pipelines,
-            TextureSamplerView::from_rgb_bytes(
-                wgpu_state,
-                &vec![0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
-                Extent3d {
-                    width: ATLAS_DIMENSIONS,
-                    height: ATLAS_DIMENSIONS,
-                    depth_or_array_layers: 1,
-                },
-                None,
-                wgpu::TextureFormat::Rgba8Unorm,
-            )
-            .unwrap(),
-            false,
-        );
+            &vec![0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
+            Extent3d {
+                width: ATLAS_DIMENSIONS,
+                height: ATLAS_DIMENSIONS,
+                depth_or_array_layers: 1,
+            },
+            None,
+            wgpu::TextureFormat::Rgba8Unorm,
+        ).unwrap();
 
         Self {
             allocator: RwLock::new(AtlasAllocator::new(Size2D::new(
@@ -107,12 +99,10 @@ impl Atlas {
             ))),
             image: RwLock::new(ImageBuffer::new(ATLAS_DIMENSIONS, ATLAS_DIMENSIONS)),
             uv_map: Default::default(),
-            bindable_texture: Arc::new(ArcSwap::new(Arc::new(bindable_texture))),
+            texture: Arc::new(tv),
             animated_textures: RwLock::new(Vec::new()),
             animated_texture_offsets: Default::default(),
-            size: RwLock::new(ATLAS_DIMENSIONS),
-            gpu_size: RwLock::new(ATLAS_DIMENSIONS),
-            resizes,
+            size: ATLAS_DIMENSIONS
         }
     }
 
@@ -157,42 +147,7 @@ impl Atlas {
     ) {
         let image = image::load_from_memory(image_bytes).unwrap();
 
-        let allocation = match (
-            allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)),
-            self.resizes,
-        ) {
-            (Some(alloc), _) => alloc,
-            (None, true) => {
-                let mut size = self.size.write();
-                let old_size = *size;
-                let new_size = old_size + 1024;
-                *size = new_size;
-
-                drop(size);
-
-                allocator.grow(Size2D::new(new_size as i32, new_size as i32));
-
-                let mut new_image = ImageBuffer::new(new_size, new_size);
-                overlay(
-                    &mut new_image,
-                    &*image_buffer.view(0, 0, old_size, old_size),
-                    0,
-                    0,
-                );
-                *image_buffer = new_image;
-
-                return self.allocate_one(
-                    image_buffer,
-                    map,
-                    allocator,
-                    animated_textures,
-                    path,
-                    image_bytes,
-                    resource_provider,
-                );
-            }
-            (None, false) => panic!("Atlas allocation failed: no more space"),
-        };
+        let allocation = allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)).unwrap();
 
         overlay(
             image_buffer,
@@ -232,47 +187,17 @@ impl Atlas {
     /// become obsolete if you .load() the BindableTexture before calling upload(), so you should get the BindableTexture after calling this function and not before-hand.
     /// Returns true if the atlas was resized.
     pub fn upload(&self, wm: &WmRenderer) -> bool {
-        if self.resizes && *self.size.read() != *self.gpu_size.read() {
-            let size = *self.size.read();
-
-            let bindable_texture = BindableTexture::from_tsv(
-                &wm.wgpu_state,
-                &wm.pipelines.load(),
-                TextureSamplerView::from_rgb_bytes(
-                    &wm.wgpu_state,
-                    self.image.read().as_raw(),
-                    Extent3d {
-                        width: size,
-                        height: size,
-                        depth_or_array_layers: 1,
-                    },
-                    None,
-                    wgpu::TextureFormat::Rgba8Unorm,
-                )
-                .unwrap(),
-                false,
-            );
-
-            self.bindable_texture.store(Arc::new(bindable_texture));
-
-            *self.gpu_size.write() = size;
-
-            return true;
-        }
-
-        let size = *self.size.read();
-
         wm.wgpu_state.queue.write_texture(
-            self.bindable_texture.load().tsv.texture.as_image_copy(),
+            self.texture.texture.as_image_copy(),
             self.image.read().as_raw(),
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * size),
-                rows_per_image: Some(size),
+                bytes_per_row: Some(4 * self.size),
+                rows_per_image: Some(self.size),
             },
             Extent3d {
-                width: size,
-                height: size,
+                width: self.size,
+                height: self.size,
                 depth_or_array_layers: 1,
             },
         );
@@ -281,40 +206,38 @@ impl Atlas {
     }
 
     pub fn clear(&self) {
-        let size = *self.size.read();
-
         self.allocator.write().clear();
         self.animated_texture_offsets.write().clear();
         self.animated_textures.write().clear();
-        *self.image.write() = ImageBuffer::new(size, size);
+        *self.image.write() = ImageBuffer::new(self.size, self.size);
     }
 }
 
 /// Stores uploaded textures which will be automatically updated whenever necessary
 #[derive(Debug)]
 pub struct TextureManager {
-    /// Using RwLock<HashMap>> instead of DashMap because when doing a resource pack reload,
-    /// we need potentially a lot of textures to be updated and it's better to be able to
-    /// have some other thread work on building a new HashMap, and then just blocking any other
-    /// readers for a bit to update the whole map
-    pub textures: RwLock<HashMap<ResourcePath, Arc<BindableTexture>>>,
+    pub default_sampler: Arc<wgpu::Sampler>,
 
     pub atlases: ArcSwap<HashMap<String, Arc<ArcSwap<Atlas>>>>,
 }
 
 impl TextureManager {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(wgpu_state: &WgpuState) -> Self {
+        let sampler = wgpu_state.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         Self {
-            textures: RwLock::new(HashMap::new()),
+            default_sampler: Arc::new(sampler),
             atlases: ArcSwap::new(Arc::new(HashMap::new())),
         }
-    }
-}
-
-impl Default for TextureManager {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

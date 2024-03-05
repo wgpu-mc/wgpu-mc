@@ -1,15 +1,6 @@
 version: "0.0.1"
 support: wgsl
 resources:
-  mvp_mat4:
-    type: mat4
-    mult: [wm_mat4_projection]
-  mvv_mat4:
-    type: mat4
-    mult: [wm_mat4_view]
-  mvm_mat4:
-    type: mat4
-    mult: [wm_mat4_model]
   terrain_mat4:
     type: mat4
     mult: [wm_mat4_terrain_transformation]
@@ -30,9 +21,9 @@ pipelines:
     push_constants:
       0: wm_pc_environment_data
     uniforms:
-      0: mvp_mat4
-      1: mvv_mat4
-      2: mvm_mat4
+      0: wm_mat4_projection
+      1: wm_mat4_view
+      2: wm_mat4_model
   stars:
     geometry: wm_geo_sky_stars
     output: [wm_framebuffer_texture]
@@ -40,9 +31,9 @@ pipelines:
     push_constants:
       0: wm_pc_environment_data
     uniforms:
-      0: mvp_mat4
-      1: mvv_mat4
-      2: mvm_mat4
+      0: wm_mat4_projection
+      1: wm_mat4_view
+      2: wm_mat4_model
   sun_moon_cycle:
     geometry: wm_geo_sun_moon
     output: [wm_framebuffer_texture]
@@ -50,9 +41,9 @@ pipelines:
     push_constants:
       0: wm_pc_environment_data
     uniforms:
-      0: mvp_mat4
-      1: mvv_mat4
-      2: mvm_mat4
+      0: wm_mat4_projection
+      1: wm_mat4_view
+      2: wm_mat4_model
       3: wm_texture_sky_sun
       4: wm_texture_sky_moon
   terrain:

@@ -58,9 +58,8 @@ use crate::mc::entity::BundledEntityInstances;
 use crate::mc::MinecraftState;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;
-use crate::render::graph::ShaderGraph;
 use crate::render::pipeline::{BLOCK_ATLAS, ENTITY_ATLAS, WmPipelines};
-use crate::texture::{BindableTexture, TextureHandle, TextureSamplerView};
+use crate::texture::{BindableTexture, TextureHandle, TextureAndView};
 
 pub mod mc;
 pub mod render;
@@ -238,7 +237,7 @@ impl WmRenderer {
         format: wgpu::TextureFormat,
         config: &wgpu::SurfaceConfiguration,
     ) -> TextureHandle {
-        let tsv = TextureSamplerView::from_rgb_bytes(
+        let tv = Arc::new(TextureAndView::from_rgb_bytes(
             &self.wgpu_state,
             &[],
             Extent3d {
@@ -249,13 +248,14 @@ impl WmRenderer {
             None,
             format,
         )
-        .unwrap();
+        .unwrap());
 
         let handle = TextureHandle {
-            bindable_texture: Arc::new(ArcSwap::new(Arc::new(BindableTexture::from_tsv(
+            bindable_texture: Arc::new(ArcSwap::new(Arc::new(BindableTexture::from_tv(
                 &self.wgpu_state,
                 &self.pipelines.load(),
-                tsv,
+                tv,
+                &self.mc.texture_manager.default_sampler,
                 matches!(format, wgpu::TextureFormat::Depth32Float),
             )))),
         };
@@ -287,7 +287,7 @@ impl WmRenderer {
         handles.iter().for_each(|(name, handle)| {
             let texture = handle.bindable_texture.load();
 
-            self.create_texture_handle(name.clone(), texture.tsv.format, &surface_config);
+            self.create_texture_handle(name.clone(), texture.tv.format, &surface_config);
         });
 
         Some(surface_config)
@@ -338,22 +338,6 @@ impl WmRenderer {
             0,
             bytemuck::cast_slice(d),
         );
-    }
-
-    pub fn render<'graph: 'resources, 'resources>(
-        &self,
-        graph: &ShaderGraph,
-        output_texture_view: &wgpu::TextureView,
-        surface_config: &wgpu::SurfaceConfiguration,
-        entity_instances: &'resources HashMap<String, BundledEntityInstances>,
-        clear_color: Option<[f32; 3]>
-    ) -> Result<(), wgpu::SurfaceError> {
-        #[cfg(feature = "tracing")]
-        puffin::GlobalProfiler::lock().new_frame();
-
-        graph.render(self, output_texture_view, surface_config, entity_instances, clear_color.unwrap_or([0.0, 0.0, 0.0]));
-
-        Ok(())
     }
 
     pub fn submit_chunk_updates(&self) {

@@ -11,7 +11,7 @@ use cgmath::{Matrix4, SquareMatrix};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
-use wgpu_mc::render::graph::{
+use wgpu_mc::render::graph_old::{
     bind_uniforms, set_push_constants, CustomResource, GeometryCallback, GeometryInfo,
     ResourceInternal, TextureResource,
 };

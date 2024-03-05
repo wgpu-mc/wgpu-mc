@@ -6,6 +6,7 @@ edition = "2021"
 
 [features]
 default = []
+vbo-fallback = []
 tracing = ["dep:puffin_http"]
 
 [dependencies]

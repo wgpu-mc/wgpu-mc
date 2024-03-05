@@ -20,7 +20,7 @@ use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
 use wgpu_mc::mc::resource::ResourcePath;
-use wgpu_mc::mc::{RenderEffectsData, SkyData};
+use wgpu_mc::mc::{RenderEffectsData, SkyState};
 use winit::dpi::PhysicalSize;
 use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoopBuilder;
@@ -30,10 +30,10 @@ use winit::platform::scancode::PhysicalKeyExtScancode;
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
-use wgpu_mc::render::graph::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
+use wgpu_mc::render::graph_old::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
 use wgpu_mc::render::pipeline::{Vertex, WmPipelines};
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
-use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
+use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
@@ -51,7 +51,6 @@ pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
         projection: [[0.0; 4]; 4],
         view: [[0.0; 4]; 4],
-        model: [[0.0; 4]; 4],
         terrain_transformation: [[0.0; 4]; 4],
     })
 });
@@ -61,7 +60,6 @@ static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 pub struct Matrices {
     pub projection: [[f32; 4]; 4],
     pub view: [[f32; 4]; 4],
-    pub model: [[f32; 4]; 4],
     pub terrain_transformation: [[f32; 4]; 4],
 }
 
@@ -335,7 +333,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             CustomResource {
                 update: None,
                 data: Arc::new(ResourceInternal::Texture(
-                    wgpu_mc::render::graph::TextureResource::Bindable(asaa.into()),
+                    wgpu_mc::render::graph_old::TextureResource::Bindable(asaa.into()),
                     false,
                 )),
             },
@@ -421,11 +419,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                 }
 
                 let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_model").unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                    let matrix4: Matrix4<f32> = matrices.model.into();
-                    *lock.write() = matrix4;
-                }
 
                 let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_view").unwrap();
 

@@ -144,6 +144,13 @@ fn blend_default() -> String {
 }
 
 #[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum BindGroupDef {
+    Entries(LinkedHashMap<u64, String>),
+    Resource(String)
+}
+
+#[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PipelineConfig {
     pub geometry: String,
 
@@ -156,7 +163,7 @@ pub struct PipelineConfig {
     pub clear: bool,
 
     #[serde(default)]
-    pub uniforms: LinkedHashMap<u64, String>,
+    pub bind_groups: LinkedHashMap<u64, BindGroupDef>,
 
     #[serde(default)]
     pub push_constants: LinkedHashMap<u64, String>,

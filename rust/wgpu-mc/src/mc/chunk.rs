@@ -110,8 +110,10 @@ pub trait RenderLayer: Send + Sync {
 
 #[derive(Debug)]
 pub struct ChunkBuffers {
-    pub vertex_bindable: BindableBuffer,
-    pub index_bindable: BindableBuffer,
+    pub vertex_buffer: Arc<wgpu::Buffer>,
+    pub index_buffer: Arc<wgpu::Buffer>,
+    pub vertex_size: u32,
+    pub index_size: u32,
 }
 
 ///The struct representing a Chunk, with various render layers, split into sections
@@ -192,33 +194,50 @@ impl Chunk {
         if !vertex_data.is_empty() {
             let (vertex_buffer, index_buffer) = match &**buffers {
                 None => {
-                    let vertex_bindable = BindableBuffer::new_deferred(
-                        wm,
-                        aligned_vertex_data_len,
-                        BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                        "ssbo",
+                    let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
+                    let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
+
+                    (&mut aligned_vertex_buffer[..vertex_data.len()])
+                        .copy_from_slice(&vertex_data);
+                    (&mut aligned_index_buffer[..index_data.len()])
+                        .copy_from_slice(&index_data);
+
+                    let vertex_buffer = Arc::new(
+                        wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                            label: None,
+                            size: aligned_vertex_data_len,
+                            #[cfg(not(feature = "vbo-fallback"))]
+                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                            #[cfg(feature = "vbo-fallback")]
+                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                            mapped_at_creation: false,
+                        })
                     );
 
-                    let index_bindable = BindableBuffer::new_deferred(
-                        wm,
-                        aligned_index_data_len,
-                        BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                        "ssbo",
+                    let index_buffer = Arc::new(
+                        wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                            label: None,
+                            size: aligned_index_data_len,
+                            #[cfg(not(feature = "vbo-fallback"))]
+                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                            #[cfg(feature = "vbo-fallback")]
+                            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                            mapped_at_creation: false,
+                        })
                     );
-
-                    let vertex_buffer = vertex_bindable.buffer.clone();
-                    let index_buffer = index_bindable.buffer.clone();
 
                     self.buffers.store(Arc::new(Some(ChunkBuffers {
-                        vertex_bindable,
-                        index_bindable,
+                        vertex_buffer: vertex_buffer.clone(),
+                        index_buffer: index_buffer.clone(),
+                        vertex_size: aligned_vertex_data_len as u32,
+                        index_size: aligned_index_data_len as u32,
                     })));
 
                     (vertex_buffer, index_buffer)
                 }
-                Some(chunk_buffers) => {
-                    if (chunk_buffers.vertex_bindable.size as usize) < vertex_data.len()
-                        || (chunk_buffers.index_bindable.size as usize)
+                Some(ChunkBuffers { vertex_buffer, index_buffer, vertex_size, index_size }) => {
+                    if (*vertex_size as usize) < vertex_data.len()
+                        || (*index_size as usize)
                             < (index_data.len() * size_of::<u32>())
                     {
                         let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
@@ -229,33 +248,42 @@ impl Chunk {
                         (&mut aligned_index_buffer[..index_data.len()])
                             .copy_from_slice(&index_data);
 
-                        let vertex_bindable = BindableBuffer::new_deferred(
-                            wm,
-                            aligned_vertex_buffer.len() as BufferAddress,
-                            BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                            "ssbo",
+                        let vertex_buffer = Arc::new(
+                            wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                                label: None,
+                                size: aligned_vertex_data_len,
+                                #[cfg(not(feature = "vbo-fallback"))]
+                                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                                #[cfg(feature = "vbo-fallback")]
+                                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                                mapped_at_creation: false,
+                            })
                         );
 
-                        let index_bindable = BindableBuffer::new_deferred(
-                            wm,
-                            aligned_index_buffer.len() as BufferAddress,
-                            BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                            "ssbo",
+                        let index_buffer = Arc::new(
+                            wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                                label: None,
+                                size: aligned_index_data_len,
+                                #[cfg(not(feature = "vbo-fallback"))]
+                                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                                #[cfg(feature = "vbo-fallback")]
+                                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                                mapped_at_creation: false,
+                            })
                         );
-
-                        let vertex_buffer = vertex_bindable.buffer.clone();
-                        let index_buffer = index_bindable.buffer.clone();
 
                         self.buffers.store(Arc::new(Some(ChunkBuffers {
-                            vertex_bindable,
-                            index_bindable,
+                            vertex_buffer: vertex_buffer.clone(),
+                            index_buffer: index_buffer.clone(),
+                            vertex_size: aligned_vertex_data_len as u32,
+                            index_size: aligned_index_data_len as u32,
                         })));
 
                         (vertex_buffer, index_buffer)
                     } else {
                         (
-                            chunk_buffers.vertex_bindable.buffer.clone(),
-                            chunk_buffers.index_bindable.buffer.clone(),
+                            vertex_buffer.clone(),
+                            index_buffer.clone(),
                         )
                     }
                 }
@@ -264,7 +292,6 @@ impl Chunk {
             let mut queue = wm.chunk_update_queue.lock();
 
             queue.push((vertex_buffer, vertex_data));
-
             queue.push((index_buffer, Vec::from(bytemuck::cast_slice(&index_data))));
         }
 

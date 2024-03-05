@@ -11,7 +11,7 @@ pub trait WmShader: Send + Sync {
 
 #[derive(Debug)]
 pub struct WgslShader {
-    pub shader: ShaderModule,
+    pub module: ShaderModule,
     pub frag_entry: String,
     pub vert_entry: String,
 }
@@ -34,7 +34,7 @@ impl WgslShader {
         });
 
         Some(Self {
-            shader: module,
+            module: module,
             frag_entry,
             vert_entry,
         })
@@ -43,11 +43,11 @@ impl WgslShader {
 
 impl WmShader for WgslShader {
     fn get_frag(&self) -> (&ShaderModule, &str) {
-        (&self.shader, &self.frag_entry)
+        (&self.module, &self.frag_entry)
     }
 
     fn get_vert(&self) -> (&ShaderModule, &str) {
-        (&self.shader, &self.vert_entry)
+        (&self.module, &self.vert_entry)
     }
 }
 

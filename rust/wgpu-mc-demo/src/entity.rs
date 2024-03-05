@@ -76,7 +76,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, BundledEntityInstances)
     let mut instances = BundledEntityInstances::new(
         entity.clone(),
         1,
-        entity_atlas_guard.bindable_texture.load_full(),
+        entity_atlas_guard.texture.load_full(),
     );
     instances.upload(wm, &[one_transform]);
 

@@ -10,7 +10,7 @@ use minecraft_assets::schemas;
 use parking_lot::RwLock;
 
 use crate::mc::chunk::ChunkStore;
-use crate::mc::entity::Entity;
+use crate::mc::entity::{BundledEntityInstances, Entity};
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
@@ -154,15 +154,12 @@ pub struct BlockInstance {
 }
 
 #[derive(Default, Clone)]
-pub struct SkyData {
-    pub color_r: f32,
-    pub color_g: f32,
-    pub color_b: f32,
+pub struct SkyState {
+    pub color: [u8; 3],
     pub angle: f32,
     pub brightness: f32,
     pub star_shimmer: f32,
-    pub moon_phase: i32,
-    pub textures: HashMap<String, Arc<BindableTexture>>,
+    pub moon_phase: i32
 }
 
 #[derive(Default, Clone)]
@@ -175,21 +172,25 @@ pub struct RenderEffectsData {
     pub dimension_fog_color: Vec<f32>,
 }
 
-/// Minecraft-specific state and data structures go in here
-pub struct MinecraftState {
-    pub sky_data: ArcSwap<SkyData>,
+pub struct World {
+    pub chunk_store: ChunkStore,
+    pub entity_instances: HashMap<String, BundledEntityInstances>,
+    pub sky_state: SkyState,
+
     pub stars_index_buffer: RwLock<Option<wgpu::Buffer>>,
     pub stars_vertex_buffer: RwLock<Option<wgpu::Buffer>>,
     pub stars_length: RwLock<u32>,
     pub render_effects: ArcSwap<RenderEffectsData>,
+}
 
+/// Minecraft-specific state and data structures go in here
+pub struct MinecraftState {
     pub block_manager: RwLock<BlockManager>,
 
     pub chunk_store: ChunkStore,
     pub entity_models: RwLock<HashMap<String, Arc<Entity>>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
-
     pub texture_manager: TextureManager,
 
     pub animated_block_buffer: ArcSwap<Option<wgpu::Buffer>>,
@@ -200,16 +201,10 @@ impl MinecraftState {
     #[must_use]
     pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
-            sky_data: ArcSwap::new(Arc::new(SkyData::default())),
-            stars_index_buffer: RwLock::new(None),
-            stars_vertex_buffer: RwLock::new(None),
-            stars_length: RwLock::new(0),
-            render_effects: ArcSwap::new(Arc::new(RenderEffectsData::default())),
-
             chunk_store: ChunkStore::new(wgpu_state),
             entity_models: RwLock::new(HashMap::new()),
 
-            texture_manager: TextureManager::new(),
+            texture_manager: TextureManager::new(wgpu_state),
 
             block_manager: RwLock::new(BlockManager {
                 blocks: IndexMap::new(),

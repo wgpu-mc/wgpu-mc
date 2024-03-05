@@ -41,7 +41,7 @@ use wgpu_mc::mc::chunk::{
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
-use wgpu_mc::texture::{BindableTexture, TextureSamplerView};
+use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
@@ -896,7 +896,7 @@ pub fn texImage2D(
 
         let wm = RENDERER.get().unwrap();
 
-        let tsv = TextureSamplerView::from_rgb_bytes(
+        let tsv = TextureAndView::from_rgb_bytes(
             &wm.wgpu_state,
             &data[..],
             Extent3d {
@@ -914,7 +914,7 @@ pub fn texImage2D(
         .unwrap();
 
         let bindable =
-            BindableTexture::from_tsv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
+            BindableTexture::from_tv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
 
         {
             GL_ALLOC.write().insert(
@@ -1021,7 +1021,7 @@ pub fn subImage2D(
                 .bindable_texture
                 .as_ref()
                 .unwrap()
-                .tsv
+                .tv
                 .texture
                 .as_image_copy(),
             &gl_texture.pixels,
