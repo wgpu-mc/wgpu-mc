@@ -408,6 +408,5 @@ pub fn bake_section_layer<
             }
         }
     }
-
     (vertices, indices)
 }

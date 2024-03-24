@@ -1,11 +1,8 @@
 pub extern crate wgpu_mc;
 
 use core::slice;
-use std::alloc::Layout;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Cursor, stdout, Write};
-use std::mem::size_of;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -17,10 +14,9 @@ use cgmath::Matrix4;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use glam::{IVec3, ivec3};
 use jni::objects::{
-    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JObject, JString, JValue,
-    ReleaseMode, JLongArray,
+    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject, JObjectArray, JPrimitiveArray, JString, JValue, ReleaseMode
 };
-use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
+use jni::sys::{jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jobject, jobjectArray, jsize, jstring, JNI_FALSE, JNI_TRUE};
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
@@ -192,13 +188,10 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
 
         let shift = (packed_coords & 1) << 2;
 
-        let section = y as usize / CHUNK_SECTION_HEIGHT;
-
         let array_index = packed_coords >> 1;
-        let absolute_index = (section * 2048) + array_index;
 
-        let sky_light = (light_data.sky_light[absolute_index] >> shift) & 0b1111;
-        let block_light = (light_data.block_light[absolute_index] >> shift) & 0b1111;
+        let sky_light = (light_data.sky_light[array_index] >> shift) & 0b1111;
+        let block_light = (light_data.block_light[array_index] >> shift) & 0b1111;
 
         LightLevel::from_sky_and_block(sky_light, block_light)
     }
@@ -369,12 +362,11 @@ pub fn clearChunks(_env: JNIEnv, _class: JClass) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, y: jint, z: jint, paletteIndices:jlong, storageIndices:jlong, blockIndices:jlong, skyIndicesdices:jlong) {
-    println!("bake {},{},{}",x,y,z);
-    let palettes = unsafe{Box::from_raw(paletteIndices as usize as *mut [usize;27])};
-    let storages = unsafe{Box::from_raw(storageIndices as usize as *mut [usize;27])};
-    let block_light = unsafe{Box::from_raw(blockIndices as usize as *mut [usize;27])};
-    let sky_light = unsafe{Box::from_raw(skyIndicesdices as usize as *mut [usize;27])};
+pub fn bakeChunk(mut _env:JNIEnv, _class: JClass, x: jint, y: jint, z: jint, paletteIndices:JLongArray, storageIndices:JLongArray, blockBytes:JObjectArray, skyBytes:JObjectArray) {
+    let palette_elements = unsafe{_env.get_array_elements(&paletteIndices, ReleaseMode::NoCopyBack)}.unwrap();
+    let palettes= unsafe{slice::from_raw_parts(palette_elements.as_ptr(), palette_elements.len())};
+    let storage_elements = unsafe{_env.get_array_elements(&storageIndices, ReleaseMode::NoCopyBack)}.unwrap();
+    let storages = unsafe{slice::from_raw_parts(storage_elements.as_ptr(),storage_elements.len())};
     const NONE:Option<SectionHolder> = None;
     let mut bsp = MinecraftBlockstateProvider{
         pos:ivec3(x,y,z),
@@ -382,30 +374,32 @@ pub fn bakeChunk(_env: JNIEnv, _class: JClass, x: jint, y: jint, z: jint, palett
         air:*AIR
     };
     for i in 0..27{
-        if storages[i]==0{
+        if storages[i]==-1{
             continue
         }
         let palette_storage = PALETTE_STORAGE.read();
         let pia_storage = PIA_STORAGE.read();
-        let palette = palette_storage.get(palettes[i]);
-        let storage = pia_storage.get(storages[i]);
+        let palette = palette_storage.get(palettes[i] as usize);
+        let storage = pia_storage.get(storages[i] as usize);
         let block_data = if !palette.is_none() && !storage.is_none(){
             Some((palette.unwrap().clone(),storage.unwrap().clone()))
         }
         else{
             None
         };
+        let sky_array = unsafe{JPrimitiveArray::from_raw( _env.get_object_array_element(&skyBytes, i as jsize).unwrap().into_raw())};
+        let sky_bytes = unsafe{_env.get_array_elements(&sky_array,ReleaseMode::NoCopyBack)}.unwrap();
+        let block_array = unsafe{JPrimitiveArray::from_raw( _env.get_object_array_element(&blockBytes, i as jsize).unwrap().into_raw())};
+        let block_bytes = unsafe{_env.get_array_elements(&block_array,ReleaseMode::NoCopyBack)}.unwrap();
         bsp.sections[i]=Some(SectionHolder{
             block_data,
             light_data:Some(DeserializedLightData{
-                sky_light:unsafe{Box::from_raw(sky_light[i] as *mut [u8;2048])},
-                block_light:unsafe{Box::from_raw(block_light[i] as *mut [u8;2048])},
+                sky_light:Box::new(unsafe{slice::from_raw_parts(sky_bytes.as_ptr(), sky_bytes.len())}.try_into().unwrap()),
+                block_light:Box::new(unsafe{slice::from_raw_parts(block_bytes.as_ptr(), block_bytes.len())}.try_into().unwrap()),
                 })
         })
     }
     bake_chunk(bsp);
-    println!("end bake");
-    stdout().flush().unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

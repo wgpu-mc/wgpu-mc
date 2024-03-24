@@ -55,47 +55,41 @@ public class BuiltChunkMixin {
      */
     @Inject(method = "createRebuildTask", cancellable = true, at = @At("RETURN"), locals = LocalCapture.CAPTURE_FAILHARD)
     public void createRebuildTask(ChunkRendererRegionBuilder builder, CallbackInfoReturnable<ChunkBuilder.BuiltChunk.Task> cir) {
-        PointerBuffer paletteIndices = PointerBuffer.allocateDirect(27);
-        PointerBuffer storageIndices = PointerBuffer.allocateDirect(27);
+        long[] paletteIndices = new long[27];
+        long[] storageIndices = new long[27];
         ClientWorld world = MinecraftClient.getInstance().world;
 
         ChunkLightProvider<?, ?> skyLightProvider = world.getLightingProvider().skyLightProvider;
         ChunkLightProvider<?, ?> blockLightProvider = world.getLightingProvider().blockLightProvider;
 
 
-        PointerBuffer skyIndices = PointerBuffer.allocateDirect(27);
-        PointerBuffer blockIndices = PointerBuffer.allocateDirect(27);
+        byte[][] skyIndices = new byte[27][2048];
+        byte[][] blockIndices = new byte[27][2048];
         Vec3i sectionCoord = new Vec3i(origin.getX()>>4,origin.getY()>>4,origin.getZ()>>4);
 
         for(int x=0;x<3;x++){
             for(int z=0;z<3;z++){
-                WorldChunk chunk = (WorldChunk)world.getChunk(x, z,ChunkStatus.FULL,false);
+                WorldChunk chunk = (WorldChunk)world.getChunk(sectionCoord.getX()+x-1, sectionCoord.getZ()+z-1,ChunkStatus.FULL,false);
                 for(int y=0;y<3;y++){
                     int id = x+3*y+9*z;
                     Palette<?> palette;
                     PalettedContainer<?> container;
                     try {
-                        container = chunk.getSection(y).getBlockStateContainer();
+                        container = chunk.getSection(sectionCoord.getY()+y-1).getBlockStateContainer();
                         palette = container.data.palette;
                     } catch (ArrayIndexOutOfBoundsException e) {
                         continue;
                     }
 
                     long sectionPos = ChunkSectionPos.from(sectionCoord.getX()+x-1,sectionCoord.getY()+y-1,sectionCoord.getZ()+z-1).asLong();
-
                     if(skyLightProvider != null && blockLightProvider != null) {
                         ChunkNibbleArray skyNibble = skyLightProvider.lightStorage.uncachedStorage.get(sectionPos);
                         ChunkNibbleArray blockNibble = blockLightProvider.lightStorage.uncachedStorage.get(sectionPos);
-                        ByteBuffer skyBytes = MemoryUtil.memAlloc(2048);
                         if(skyNibble != null) {
-                            skyBytes.put(0, skyNibble.asByteArray());
-                            skyIndices.put(id, MemoryUtil.memAddress0(skyBytes));
+                            skyIndices[id]=skyNibble.asByteArray();
                         }
-                        ByteBuffer blockBytes = MemoryUtil.memAlloc(2048);
-
                         if(blockNibble != null) {
-                            blockBytes.put(0, blockNibble.asByteArray());
-                            blockIndices.put(id, MemoryUtil.memAddress0(blockBytes));
+                            blockIndices[id]=blockNibble.asByteArray();
                         }
                     }
 
@@ -111,7 +105,7 @@ public class BuiltChunkMixin {
                     palette.writePacket(packetBuf);
                     rustPalette.readPacket(packetBuf);
 
-                    paletteIndices.put(id, rustPalette.getSlabIndex() + 1);
+                    paletteIndices[id] = rustPalette.getSlabIndex();
 
                     if (paletteStorage instanceof PackedIntegerArray array) {
                         long index = WgpuNative.createPaletteStorage(
@@ -125,12 +119,15 @@ public class BuiltChunkMixin {
                                 paletteStorage.getSize()
                         );
 
-                        storageIndices.put(id, index + 1);
+                        storageIndices[id] = index;
+                    }
+                    else{
+                        storageIndices[id] = -1;
                     }
                 }
             }
         }
-        WgpuNative.bakeChunk(sectionCoord.getX(),sectionCoord.getY(),sectionCoord.getZ(),paletteIndices.address0(), storageIndices.address0(), blockIndices.address0(), skyIndices.address0());
+        WgpuNative.bakeChunk(sectionCoord.getX(),sectionCoord.getY(),sectionCoord.getZ(),paletteIndices, storageIndices, blockIndices, skyIndices);
         cir.setReturnValue(null);
     }
 
