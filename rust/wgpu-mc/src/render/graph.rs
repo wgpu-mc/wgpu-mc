@@ -14,10 +14,10 @@ use arc_swap::{ArcSwap, ArcSwapAny};
 use cgmath::{Matrix3, Matrix4, SquareMatrix};
 use dashmap::Map;
 use dashmap::mapref::multiple::RefMulti;
-use glam::{ivec3, vec3, IVec3, IVec2};
+use glam::{ivec3, vec3, IVec3, IVec2,Vec3};
 use parking_lot::RwLock;
 use serde::de::IntoDeserializer;
-use treeculler::{BVol, Frustum, Vec3, AABB};
+use treeculler::{BVol, Frustum,AABB};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BlendComponent, BlendFactor, BlendOperation, BufferUsages, Color, ColorTargetState,
@@ -816,7 +816,7 @@ impl ShaderGraph {
         let mut should_clear_depth = true;
 
         let chunk_offset = wm.mc.chunk_offset.lock().unwrap();
-
+        
         let projection_matrix = self
             .resources
             .get("wm_mat4_projection")
@@ -937,10 +937,11 @@ impl ShaderGraph {
                                 chunk_buffers,
                             );
 
-                            let min = vec3(
-                                (pos.x+chunk_offset.x) as f32,
-                                pos.y as f32,
-                                (pos.z+chunk_offset.y) as f32);
+                            let min:Vec3= vec3(
+                                (pos.x*16+chunk_offset.x) as f32,
+                                (pos.y*16) as f32,
+                                (pos.z*16+chunk_offset.y) as f32,
+                            );
 
                             let max = min + vec3(16.0,16.0,16.0);
 

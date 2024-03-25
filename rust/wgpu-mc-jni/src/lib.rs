@@ -397,7 +397,7 @@ pub fn bakeChunk(mut _env:JNIEnv, _class: JClass, x: jint, y: jint, z: jint, pal
                 sky_light:Box::new(unsafe{slice::from_raw_parts(sky_bytes.as_ptr(), sky_bytes.len())}.try_into().unwrap()),
                 block_light:Box::new(unsafe{slice::from_raw_parts(block_bytes.as_ptr(), block_bytes.len())}.try_into().unwrap()),
                 })
-        })
+        });
     }
     bake_chunk(bsp);
 }

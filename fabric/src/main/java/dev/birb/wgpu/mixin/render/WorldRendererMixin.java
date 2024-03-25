@@ -3,10 +3,12 @@ package dev.birb.wgpu.mixin.render;
 import dev.birb.wgpu.entity.DummyVertexConsumer;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.*;
 import net.minecraft.client.render.BackgroundRenderer.FogType;
+import net.minecraft.client.render.chunk.ChunkBuilder;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
@@ -58,6 +60,9 @@ public abstract class WorldRendererMixin {
     @Shadow private @Nullable ClientWorld world;
 
     @Shadow @Final private EntityRenderDispatcher entityRenderDispatcher;
+
+
+    @Shadow @Final ObjectArrayList<ChunkBuilder.BuiltChunk> field_45616 = new ObjectArrayList(10000);
 
     @Shadow protected abstract void renderEntity(Entity entity, double cameraX, double cameraY, double cameraZ, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers);
 

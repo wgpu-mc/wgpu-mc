@@ -51,6 +51,14 @@ public class BuiltChunkMixin {
 
     /**
      * @author wgpu-mc
+     * @reason we do this in Rust
+     */
+    @Overwrite
+    public void scheduleRebuild(ChunkBuilder chunkRenderer, ChunkRendererRegionBuilder builder) {
+        ((ChunkBuilder.BuiltChunk) (Object) this).createRebuildTask(builder);
+    }
+    /**
+     * @author wgpu-mc
      * @reason Rust builds the chunks
      */
     @Inject(method = "createRebuildTask", cancellable = true, at = @At("RETURN"), locals = LocalCapture.CAPTURE_FAILHARD)
@@ -70,12 +78,13 @@ public class BuiltChunkMixin {
         for(int x=0;x<3;x++){
             for(int z=0;z<3;z++){
                 WorldChunk chunk = (WorldChunk)world.getChunk(sectionCoord.getX()+x-1, sectionCoord.getZ()+z-1,ChunkStatus.FULL,false);
+                if(chunk==null)return;
                 for(int y=0;y<3;y++){
                     int id = x+3*y+9*z;
                     Palette<?> palette;
                     PalettedContainer<?> container;
                     try {
-                        container = chunk.getSection(sectionCoord.getY()+y-1).getBlockStateContainer();
+                        container = chunk.getSection(world.sectionCoordToIndex(sectionCoord.getY()+y-1)).getBlockStateContainer();
                         palette = container.data.palette;
                     } catch (ArrayIndexOutOfBoundsException e) {
                         continue;
@@ -127,17 +136,8 @@ public class BuiltChunkMixin {
                 }
             }
         }
-        WgpuNative.bakeChunk(sectionCoord.getX(),sectionCoord.getY(),sectionCoord.getZ(),paletteIndices, storageIndices, blockIndices, skyIndices);
+        WgpuNative.bakeChunk(sectionCoord.getX(),world.sectionCoordToIndex(sectionCoord.getY()),sectionCoord.getZ(),paletteIndices, storageIndices, blockIndices, skyIndices);
         cir.setReturnValue(null);
-    }
-
-    /**
-     * @author wgpu-mc
-     * @reason Rust builds the chunks
-     */
-    @Overwrite
-    public void scheduleRebuild(ChunkBuilder chunkRenderer, ChunkRendererRegionBuilder builder) {
-        ((ChunkBuilder.BuiltChunk) (Object) this).createRebuildTask(builder);
     }
 
     /**

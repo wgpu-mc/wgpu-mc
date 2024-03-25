@@ -95,11 +95,6 @@ impl RenderLayer for TerrainLayer {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setChunkOffset(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    *RENDERER.get().unwrap().mc.chunk_offset.lock().unwrap() = ivec2(x, z);
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatArray) {
     let elements: AutoElements<jfloat> =
         unsafe { env.get_array_elements(&float_array, ReleaseMode::NoCopyBack) }.unwrap();
