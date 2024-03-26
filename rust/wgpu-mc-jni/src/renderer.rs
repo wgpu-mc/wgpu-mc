@@ -381,21 +381,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
 
-    let wm_clone = wm.clone();
-    let wm_clone_1 = wm.clone();
-
-    thread::spawn(move || {
-        let wm = wm_clone_1;
-
-        loop {
-            wm.submit_chunk_updates();
-
-            thread::sleep(Duration::from_millis(1));
-        }
-    });
-    let wm = wm_clone;
-
-
     event_loop
         .run(move |event, target| {
             if SHOULD_STOP.get().is_some() {
@@ -404,11 +389,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             match event {
                 Event::AboutToWait => {
-                    let _mc_state = <Lazy<ArcSwapAny<Arc<MinecraftRenderState>>> as Access<
-                        MinecraftRenderState,
-                    >>::load(&MC_STATE);
 
-                    let surface_state = wm.wgpu_state.surface.write();
+                    wm.submit_chunk_updates();
 
                     {
                         let matrices = MATRICES.lock();
@@ -446,6 +428,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                             *lock.write() = matrix4;
                         }
                     }
+
+                    let surface_state = wm.wgpu_state.surface.write();
 
                     let surface = surface_state.0.as_ref().unwrap();
                     let texture = surface.get_current_texture().unwrap_or_else(|_| {
