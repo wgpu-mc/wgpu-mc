@@ -3,16 +3,16 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Chunk, LightLevel};
+use wgpu_mc::mc::chunk::{BlockStateProvider, Section, LightLevel};
 use wgpu_mc::mc::MinecraftState;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
-
+use glam::IVec3;
 struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
-    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState {
+    fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
         if (0..1).contains(&x) && (0..1).contains(&z) && y == 0 {
             ChunkBlockState::State(self.1)
         } else {
@@ -20,12 +20,16 @@ impl BlockStateProvider for SimpleBlockstateProvider {
         }
     }
 
-    fn get_light_level(&self, _x: i32, _y: i16, _z: i32) -> LightLevel {
+    fn get_light_level(&self, _x: i32, _y: i32, _z: i32) -> LightLevel {
         LightLevel::from_sky_and_block(15, 15)
     }
 
     fn is_section_empty(&self, _index: usize) -> bool {
         false
+    }
+
+    fn get_pos(&self) -> IVec3 {
+        todo!()
     }
 }
 
@@ -35,7 +39,7 @@ impl Debug for SimpleBlockstateProvider {
     }
 }
 
-pub fn make_chunks(wm: &WmRenderer) -> Chunk {
+pub fn make_chunks(wm: &WmRenderer) -> Section {
     let bm = wm.mc.block_manager.read();
     let atlas = wm
         .mc
@@ -68,7 +72,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
         },
     );
 
-    let chunk = Chunk::new([0, 0]);
+    let mut chunk = Section::new();
     let time = Instant::now();
 
     let pipelines = wm.pipelines.load();

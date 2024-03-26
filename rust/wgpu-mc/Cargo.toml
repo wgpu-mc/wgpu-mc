@@ -13,6 +13,7 @@ tracing = ["dep:puffin_http"]
 wgpu = { version = "0.18", features = ["glsl"] }
 image = "0.24"
 cgmath = "0.18"
+glam = "0.25"
 naga = "0.14.2"
 bytemuck = { version = "1.13", features = ["derive"] }
 anyhow = "1.0"
