@@ -285,10 +285,8 @@ pub fn getSettings(env: JNIEnv, _class: JClass) -> jstring {
 pub fn sendSettings(mut env: JNIEnv, _class: JClass, settings: JString) -> bool {
     let json: String = env.get_string(&settings).unwrap().into();
     if let Ok(settings) = serde_json::from_str(json.as_str()) {
-        THREAD_POOL.spawn(|| {
-            let mut guard = SETTINGS.write();
-            *guard = Some(settings);
-        });
+        let mut guard = SETTINGS.write();
+        *guard = Some(settings);
         true
     } else {
         false
@@ -301,10 +299,8 @@ pub fn sendRunDirectory(mut env: JNIEnv, _class: JClass, dir: JString) {
     let path = PathBuf::from(dir);
     RUN_DIRECTORY.set(path).unwrap();
 
-    THREAD_POOL.spawn(|| {
-        let mut write = SETTINGS.write();
-        *write = Some(Settings::load_or_default());
-    });
+    let mut write = SETTINGS.write();
+    *write = Some(Settings::load_or_default());
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -335,7 +331,6 @@ pub fn registerBlockState(
 
 pub fn bake_chunk(bsp:MinecraftBlockstateProvider) {
     puffin::profile_scope!("jni bake chunk");
-
     let wm = RENDERER.get().unwrap();
 
     let bm = wm.mc.block_manager.read();
@@ -399,7 +394,7 @@ pub fn bakeChunk(mut _env:JNIEnv, _class: JClass, x: jint, y: jint, z: jint, pal
                 })
         });
     }
-    bake_chunk(bsp);
+    THREAD_POOL.spawn(move ||{bake_chunk(bsp);})
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

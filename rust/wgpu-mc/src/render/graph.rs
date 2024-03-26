@@ -1133,7 +1133,7 @@ impl ShaderGraph {
                 }
                 "wm_geo_entities" => {
                     for (_, bundle) in entity_instances.iter() {
-                        let uploaded = bundle.uploaded.as_ref().unwrap();
+                        let uploaded = &bundle.uploaded;
                         let entity = &*bundle.entity;
 
                         let instance_vbo = arena.alloc(uploaded.instance_vbo.clone());

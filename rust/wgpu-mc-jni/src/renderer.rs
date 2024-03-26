@@ -393,100 +393,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             thread::sleep(Duration::from_millis(1));
         }
     });
+    let wm = wm_clone;
 
-    thread::spawn(move || {
-        let wm = wm_clone;
-
-        loop {
-            let _mc_state = <Lazy<ArcSwapAny<Arc<MinecraftRenderState>>> as Access<
-                MinecraftRenderState,
-            >>::load(&MC_STATE);
-
-            let surface_state = wm.wgpu_state.surface.write();
-
-            {
-                let matrices = MATRICES.lock();
-                let res_mat_proj = shader_graph
-                    .resources
-                    .get_mut("wm_mat4_projection")
-                    .unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_proj.data {
-                    let matrix4: Matrix4<f32> = matrices.projection.into();
-                    *lock.write() = matrix4;
-                }
-
-                let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_model").unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                    let matrix4: Matrix4<f32> = matrices.model.into();
-                    *lock.write() = matrix4;
-                }
-
-                let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_view").unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                    let matrix4: Matrix4<f32> = matrices.view.into();
-                    *lock.write() = matrix4;
-                }
-
-                let res_mat_mod = shader_graph
-                    .resources
-                    .get_mut("wm_mat4_terrain_transformation")
-                    .unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                    let matrix4: Matrix4<f32> = matrices.terrain_transformation.into();
-                    *lock.write() = matrix4;
-                }
-            }
-
-            let surface = surface_state.0.as_ref().unwrap();
-            let texture = surface.get_current_texture().unwrap_or_else(|_| {
-                //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-                let size = wm.wgpu_state.size.as_ref().unwrap().load();
-                let new_config = wm
-                    .update_surface_size(
-                        surface_state.1.clone(),
-                        WindowSize {
-                            width: size.width,
-                            height: size.height,
-                        },
-                    )
-                    .unwrap();
-                surface.configure(&wm.wgpu_state.device, &new_config);
-                surface.get_current_texture().unwrap()
-            });
-
-            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
-                label: None,
-                format: Some(TextureFormat::Bgra8Unorm),
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                aspect: Default::default(),
-                base_mip_level: 0,
-                mip_level_count: None,
-                base_array_layer: 0,
-                array_layer_count: None,
-            });
-
-            let _instant = Instant::now();
-
-            let entity_instances = ENTITY_INSTANCES.lock();
-
-            let clear_color =
-                *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
-            wm.render(
-                &shader_graph,
-                &view,
-                &surface_state.1,
-                &entity_instances,
-                Some(clear_color),
-            )
-            .unwrap();
-
-            texture.present();
-        }
-    });
 
     event_loop
         .run(move |event, target| {
@@ -495,7 +403,95 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
             }
 
             match event {
-                Event::AboutToWait => window.request_redraw(),
+                Event::AboutToWait => {
+                    let _mc_state = <Lazy<ArcSwapAny<Arc<MinecraftRenderState>>> as Access<
+                        MinecraftRenderState,
+                    >>::load(&MC_STATE);
+
+                    let surface_state = wm.wgpu_state.surface.write();
+
+                    {
+                        let matrices = MATRICES.lock();
+                        let res_mat_proj = shader_graph
+                            .resources
+                            .get_mut("wm_mat4_projection")
+                            .unwrap();
+
+                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_proj.data {
+                            let matrix4: Matrix4<f32> = matrices.projection.into();
+                            *lock.write() = matrix4;
+                        }
+
+                        let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_model").unwrap();
+
+                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+                            let matrix4: Matrix4<f32> = matrices.model.into();
+                            *lock.write() = matrix4;
+                        }
+
+                        let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_view").unwrap();
+
+                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+                            let matrix4: Matrix4<f32> = matrices.view.into();
+                            *lock.write() = matrix4;
+                        }
+
+                        let res_mat_mod = shader_graph
+                            .resources
+                            .get_mut("wm_mat4_terrain_transformation")
+                            .unwrap();
+
+                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+                            let matrix4: Matrix4<f32> = matrices.terrain_transformation.into();
+                            *lock.write() = matrix4;
+                        }
+                    }
+
+                    let surface = surface_state.0.as_ref().unwrap();
+                    let texture = surface.get_current_texture().unwrap_or_else(|_| {
+                        //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+                        let size = wm.wgpu_state.size.as_ref().unwrap().load();
+                        let new_config = wm
+                            .update_surface_size(
+                                surface_state.1.clone(),
+                                WindowSize {
+                                    width: size.width,
+                                    height: size.height,
+                                },
+                            )
+                            .unwrap();
+                        surface.configure(&wm.wgpu_state.device, &new_config);
+                        surface.get_current_texture().unwrap()
+                    });
+
+                    let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+                        label: None,
+                        format: Some(TextureFormat::Bgra8Unorm),
+                        dimension: Some(wgpu::TextureViewDimension::D2),
+                        aspect: Default::default(),
+                        base_mip_level: 0,
+                        mip_level_count: None,
+                        base_array_layer: 0,
+                        array_layer_count: None,
+                    });
+
+
+                    let clear_color =
+                        *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
+                    {
+                        let entity_instances = ENTITY_INSTANCES.lock();
+                        wm.render(
+                            &shader_graph,
+                            &view,
+                            &surface_state.1,
+                            &entity_instances,
+                            Some(clear_color),
+                        )
+                        .unwrap();
+                    }
+                    texture.present();
+                    window.request_redraw()
+                },
                 Event::WindowEvent {
                     ref event,
                     window_id,
@@ -750,18 +746,8 @@ pub enum MCTextureId {
     Lightmap,
 }
 
-#[derive(Clone)]
-pub struct EntityBuffers {
-    verts: Vec<InstanceVertex>,
-    transforms: Vec<f32>,
-    overlays: Vec<i32>,
-    instance_count: u32,
-}
 
 pub static ENTITY_INSTANCES: Lazy<Mutex<HashMap<String, BundledEntityInstances>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
-
-pub static ENTITY_BUFFERS: Lazy<Mutex<HashMap<String, EntityBuffers>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub static MC_TEXTURES: Lazy<Mutex<HashMap<MCTextureId, Arc<BindableTexture>>>> =
@@ -769,7 +755,7 @@ pub static MC_TEXTURES: Lazy<Mutex<HashMap<MCTextureId, Arc<BindableTexture>>>> 
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearEntities(_env: JNIEnv, _class: JClass) {
-    THREAD_POOL.spawn(|| ENTITY_INSTANCES.lock().clear());
+    ENTITY_INSTANCES.lock().clear();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -801,18 +787,16 @@ pub fn setEntityInstanceBuffer(
     texture_id: jint,
 ) -> jlong {
     assert!(instance_count >= 0);
+    let now = Instant::now();
     let instance_count = instance_count as u32;
 
     let wm = RENDERER.get().unwrap();
-    let now = Instant::now();
 
     //TODO this is slow, let's use an integer id somewhere
     let entity_name: String = env.get_string(&entity_name).unwrap().into();
 
     if instance_count == 0 {
-        THREAD_POOL.spawn(move || {
             ENTITY_INSTANCES.lock().remove(&entity_name);
-        });
         return Instant::now().duration_since(now).as_nanos() as jlong;
     }
 
@@ -823,7 +807,6 @@ pub fn setEntityInstanceBuffer(
 
     let transforms: Vec<f32> = Vec::from(mat4s);
     let overlays: Vec<i32> = Vec::from(overlays);
-
     let verts: Vec<InstanceVertex> = (0..instance_count)
         .map(|index| InstanceVertex {
             entity_index: index,
@@ -831,59 +814,26 @@ pub fn setEntityInstanceBuffer(
         })
         .collect();
 
-    let entity_buffers = EntityBuffers {
-        verts,
-        transforms,
-        overlays,
-        instance_count,
-    };
-
-    {
-        let mut entity_buffers_map = ENTITY_BUFFERS.lock();
-
-        entity_buffers_map.insert(entity_name.clone(), entity_buffers);
+    dbg!(Instant::now().duration_since(now).as_nanos());
+    let mut instances = ENTITY_INSTANCES.lock();
+    dbg!(Instant::now().duration_since(now).as_nanos());
+    let bundled_entity_instances = if let Some(bundled_entity_instances) = instances.get_mut(&entity_name){
+        bundled_entity_instances.count = instance_count;
+        bundled_entity_instances
     }
-
-    THREAD_POOL.spawn(move || {
-        let entity_buffers = {
-            let entity_buffers_map = ENTITY_BUFFERS.lock();
-            entity_buffers_map.get(&entity_name).unwrap().clone()
-        };
-
-        let instance_buffer = Arc::new(wm.wgpu_state.device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&entity_buffers.verts),
-                usage: BufferUsages::VERTEX,
-            },
-        ));
-
-        let transform_ssbo = Arc::new(BindableBuffer::new(
-            wm,
-            bytemuck::cast_slice(&entity_buffers.transforms),
-            BufferUsages::STORAGE,
-            "ssbo",
-        ));
-
-        let overlay_ssbo = Arc::new(BindableBuffer::new(
-            wm,
-            bytemuck::cast_slice(&entity_buffers.overlays),
-            BufferUsages::STORAGE,
-            "ssbo",
-        ));
-
+    else{
         let texture = {
             let gl_alloc = GL_ALLOC.read();
-
+    
             match gl_alloc.get(&(texture_id as u32)) {
-                None => return,
+                None => return 0,
                 Some(GlTexture {
                     bindable_texture: None,
                     ..
-                }) => return,
+                }) => return 0,
                 _ => {}
             }
-
+    
             gl_alloc
                 .get(&(texture_id as u32))
                 .unwrap()
@@ -892,24 +842,15 @@ pub fn setEntityInstanceBuffer(
                 .unwrap()
                 .clone()
         };
-
         let models = wm.mc.entity_models.read();
         let entity = models.get(&entity_name).unwrap();
-
-        let mut bundled_entity_instances =
-            BundledEntityInstances::new(entity.clone(), entity_buffers.instance_count, texture);
-
-        bundled_entity_instances.uploaded = Some(UploadedEntityInstances {
-            transform_ssbo,
-            instance_vbo: instance_buffer,
-            overlay_ssbo,
-            count: instance_count,
-        });
-
-        let mut instances = ENTITY_INSTANCES.lock();
-        instances.insert(entity_name, bundled_entity_instances);
-    });
-
+        instances.insert(entity_name.clone(), BundledEntityInstances::new(wm,entity.clone(), instance_count, texture));
+        instances.get(&entity_name).unwrap()
+    };
+    
+    wm.wgpu_state.queue.write_buffer(bundled_entity_instances.uploaded.instance_vbo.as_ref(), 0, bytemuck::cast_slice(&verts));
+    wm.wgpu_state.queue.write_buffer(&bundled_entity_instances.uploaded.transform_ssbo.buffer, 0, bytemuck::cast_slice(&transforms));
+    wm.wgpu_state.queue.write_buffer(&bundled_entity_instances.uploaded.overlay_ssbo.buffer, 0, bytemuck::cast_slice(&overlays));
     Instant::now().duration_since(now).as_nanos() as jlong
 }
 
