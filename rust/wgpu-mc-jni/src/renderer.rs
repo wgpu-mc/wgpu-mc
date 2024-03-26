@@ -814,9 +814,7 @@ pub fn setEntityInstanceBuffer(
         })
         .collect();
 
-    dbg!(Instant::now().duration_since(now).as_nanos());
     let mut instances = ENTITY_INSTANCES.lock();
-    dbg!(Instant::now().duration_since(now).as_nanos());
     let bundled_entity_instances = if let Some(bundled_entity_instances) = instances.get_mut(&entity_name){
         bundled_entity_instances.count = instance_count;
         bundled_entity_instances
