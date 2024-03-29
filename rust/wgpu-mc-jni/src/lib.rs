@@ -136,7 +136,6 @@ pub struct MinecraftBlockstateProvider {
 }
 impl BlockStateProvider for MinecraftBlockstateProvider {
     fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
-        puffin::profile_scope!("get state");
         let section_pos = ivec3((x>>4)+1,(y>>4)+1,(z>>4)+1);
         let section_option = &self.sections[(section_pos.x+section_pos.y*3+section_pos.z*9) as usize];
         

@@ -107,8 +107,6 @@ impl Section {
         block_manager: &BlockManager,
         provider: &T,
     ) {
-        puffin::profile_scope!("mesh chunk");
-
         let mut vertices = 0;
         let mut vertex_data = Vec::new();
         let mut index_data = Vec::new();
@@ -272,7 +270,6 @@ pub fn bake_section_layer<
     filter: Filter,
     state_provider: &Provider
 ) -> (Vec<T>, Vec<u32>) {
-    puffin::profile_scope!("mesh section");
 
     //Generates the mesh for this chunk, culling faces whenever possible
     let mut vertices = Vec::new();
@@ -314,7 +311,6 @@ pub fn bake_section_layer<
                 let baked_should_render_face = |x_: i32, y_: i32, z_: i32| {
                     block_allows_neighbor_render(block_manager, state_provider, x_, y_, z_)
                 };
-
                 let render_east = baked_should_render_face(x + 1, y, z);
                 let render_west = baked_should_render_face(x - 1, y, z);
                 let render_up = baked_should_render_face(x, y + 1, z);
@@ -323,6 +319,7 @@ pub fn bake_section_layer<
                 let render_north = baked_should_render_face(x, y, z - 1);
 
                 let mut extend_vertices = |index: u32, light_level: LightLevel| {
+
                     let vec_index = vertices.len();
                     vertices.extend((index..index + 4).map(|vert_index| {
                         mapper(

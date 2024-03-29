@@ -1,0 +1,17 @@
+Configuration on demand is an incubating feature.
+Type-safe project accessors is an incubating feature.
+
+> Configure project :wgpu-mc-fabric
+Fabric Loom: 1.4.6
+
+> Task :wgpu-mc-fabric:generateEffectiveLombokConfig UP-TO-DATE
+> Task :wgpu-mc-fabric:compileJava UP-TO-DATE
+> Task :wgpu-mc-fabric:generateDLIConfig
+> Task :wgpu-mc-fabric:generateLog4jConfig
+> Task :wgpu-mc-fabric:generateRemapClasspath UP-TO-DATE
+> Task :wgpu-mc-fabric:configureLaunch
+> Task :wgpu-mc-fabric:downloadAssets UP-TO-DATE
+> Task :wgpu-mc-fabric:configureClientLaunch
+
+> Task :wgpu-mc-rust:build FAILED
+Building for default target...

@@ -30,6 +30,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -37,6 +38,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Objects;
 
 @Mixin(WorldRenderer.class)
@@ -52,6 +54,9 @@ public abstract class WorldRendererMixin {
     @Shadow private Frustum frustum;
 
     @Shadow private @Nullable Frustum capturedFrustum;
+
+    @Shadow private @Nullable BuiltChunkStorage chunks;
+
 
     @Shadow private boolean shouldCaptureFrustum;
 
@@ -122,6 +127,19 @@ public abstract class WorldRendererMixin {
      */
     @Overwrite
     public void reload(ResourceManager manager) {
+    }
+
+    @Inject(method = "setupTerrain", cancellable = true, at = @At(value = "INVOKE", shift = At.Shift.AFTER,
+    target = "Lnet/minecraft/client/render/BuiltChunkStorage;updateCameraPosition(DD)V"))
+    public void setAllVisible(CallbackInfo ci){
+        this.field_45616.clear();
+        this.field_45616.addAll(new ObjectArrayList(this.chunks.chunks));
+    }
+
+    @Redirect(method = "setupTerrain",
+    at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/ChunkRenderingDataPreparer;method_52834(ZLnet/minecraft/client/render/Camera;Lnet/minecraft/client/render/Frustum;Ljava/util/List;)V"))
+    public void disableMcCulling(ChunkRenderingDataPreparer c,boolean bl, Camera camera, Frustum frustum, List<ChunkBuilder.BuiltChunk> list){
+        
     }
 
     @Inject(method = "render", cancellable = true, at = @At("HEAD"))

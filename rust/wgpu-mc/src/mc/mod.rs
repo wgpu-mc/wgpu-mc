@@ -49,7 +49,7 @@ impl Block {
                 .keys
                 .read()
                 .get_index(key as usize)
-                .expect(&format!("{self:#?}\n{key}"))
+                .unwrap()
                 .1
                 .clone(),
             //TODO, random variant selection through weight and seed
