@@ -82,10 +82,10 @@ public class BuiltChunkMixin {
                 for(int y=0;y<3;y++){
                     int id = x+3*y+9*z;
                     Palette<?> palette;
-                    PalettedContainer<?> container;
+                    PalettedContainer<?> section;
                     try {
-                        container = chunk.getSection(world.sectionCoordToIndex(sectionCoord.getY()+y-1)).getBlockStateContainer();
-                        palette = container.data.palette;
+                        section = chunk.getSection(world.sectionCoordToIndex(sectionCoord.getY()+y-1)).getBlockStateContainer();
+                        palette = section.data.palette;
                     } catch (ArrayIndexOutOfBoundsException e) {
                         continue;
                     }
@@ -102,15 +102,18 @@ public class BuiltChunkMixin {
                         }
                     }
 
-                    PaletteStorage paletteStorage = container.data.storage;
+                    PaletteStorage paletteStorage = section.data.storage;
 
                     RustPalette rustPalette = new RustPalette(
-                            container.idList,
-                            WgpuNative.uploadIdList((IndexedIterable<Object>) container.idList)
+                            section.idList,
+                            WgpuNative.uploadIdList((IndexedIterable<Object>) section.idList)
                     );
 
                     ByteBuf buf = Unpooled.buffer(palette.getPacketSize());
                     PacketByteBuf packetBuf = new PacketByteBuf(buf);
+                    if(palette.getSize() == 1){
+                        packetBuf.writeInt(1);
+                    }
                     palette.writePacket(packetBuf);
                     rustPalette.readPacket(packetBuf);
 
