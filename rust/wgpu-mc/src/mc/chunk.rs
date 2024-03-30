@@ -223,7 +223,6 @@ impl Section {
 
             queue.push((index_buffer, Vec::from(bytemuck::cast_slice(&index_data))));
         }
-        drop(buffers);
     }
 }
 

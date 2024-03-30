@@ -371,12 +371,10 @@ pub fn bakeChunk(mut _env:JNIEnv, _class: JClass, x: jint, y: jint, z: jint, pal
         if storages[i]==-1{
             continue
         }
-        let palette_storage = PALETTE_STORAGE.read();
-        let pia_storage = PIA_STORAGE.read();
-        let palette = palette_storage.get(palettes[i] as usize);
-        let storage = pia_storage.get(storages[i] as usize);
-        let block_data = if !palette.is_none() && !storage.is_none(){
-            Some((palette.unwrap().clone(),storage.unwrap().clone()))
+        let mut palette_storage = PALETTE_STORAGE.write();
+        let mut pia_storage = PIA_STORAGE.write();
+        let block_data = if palette_storage.contains(palettes[i] as usize) && pia_storage.contains(storages[i] as usize){
+            Some((palette_storage.remove(palettes[i] as usize),pia_storage.remove(storages[i] as usize)))
         }
         else{
             None
