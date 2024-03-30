@@ -46,7 +46,7 @@ use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::lighting::DeserializedLightData;
-use crate::palette::{IdList, JavaPalette, PALETTE_STORAGE};
+use crate::palette::{ JavaPalette, PALETTE_STORAGE};
 use crate::pia::{PackedIntegerArray, PIA_STORAGE};
 use crate::settings::Settings;
 
@@ -150,7 +150,7 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         };
 
         let palette_key = storage.get(x&15, y&15, z&15);
-        let (_, block) = palette.get(palette_key as usize).unwrap();
+        let block = palette.get(palette_key as usize).unwrap();
 
         if *block == self.air {
             ChunkBlockState::Air
@@ -356,10 +356,10 @@ pub fn clearChunks(_env: JNIEnv, _class: JClass) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bakeChunk(mut _env:JNIEnv, _class: JClass, x: jint, y: jint, z: jint, paletteIndices:JLongArray, storageIndices:JLongArray, blockBytes:JObjectArray, skyBytes:JObjectArray) {
-    let palette_elements = unsafe{_env.get_array_elements(&paletteIndices, ReleaseMode::NoCopyBack)}.unwrap();
+pub fn bakeChunk(mut env:JNIEnv, _class: JClass, x: jint, y: jint, z: jint, paletteIndices:JLongArray, storageIndices:JLongArray, blockBytes:JObjectArray, skyBytes:JObjectArray) {
+    let palette_elements = unsafe{env.get_array_elements(&paletteIndices, ReleaseMode::NoCopyBack)}.unwrap();
     let palettes= unsafe{slice::from_raw_parts(palette_elements.as_ptr(), palette_elements.len())};
-    let storage_elements = unsafe{_env.get_array_elements(&storageIndices, ReleaseMode::NoCopyBack)}.unwrap();
+    let storage_elements = unsafe{env.get_array_elements(&storageIndices, ReleaseMode::NoCopyBack)}.unwrap();
     let storages = unsafe{slice::from_raw_parts(storage_elements.as_ptr(),storage_elements.len())};
     const NONE:Option<SectionHolder> = None;
     let mut bsp = MinecraftBlockstateProvider{
@@ -367,22 +367,22 @@ pub fn bakeChunk(mut _env:JNIEnv, _class: JClass, x: jint, y: jint, z: jint, pal
         sections:[NONE;27],
         air:*AIR
     };
+    let mut counter = 0u32;
     for i in 0..27{
-        if storages[i]==-1{
-            continue
-        }
         let mut palette_storage = PALETTE_STORAGE.write();
         let mut pia_storage = PIA_STORAGE.write();
+
         let block_data = if palette_storage.contains(palettes[i] as usize) && pia_storage.contains(storages[i] as usize){
+            counter+=1;
             Some((palette_storage.remove(palettes[i] as usize),pia_storage.remove(storages[i] as usize)))
         }
         else{
             None
         };
-        let sky_array = unsafe{JPrimitiveArray::from_raw( _env.get_object_array_element(&skyBytes, i as jsize).unwrap().into_raw())};
-        let sky_bytes = unsafe{_env.get_array_elements(&sky_array,ReleaseMode::NoCopyBack)}.unwrap();
-        let block_array = unsafe{JPrimitiveArray::from_raw( _env.get_object_array_element(&blockBytes, i as jsize).unwrap().into_raw())};
-        let block_bytes = unsafe{_env.get_array_elements(&block_array,ReleaseMode::NoCopyBack)}.unwrap();
+        let sky_array = unsafe{JPrimitiveArray::from_raw( env.get_object_array_element(&skyBytes, i as jsize).unwrap().into_raw())};
+        let sky_bytes = unsafe{env.get_array_elements(&sky_array,ReleaseMode::NoCopyBack)}.unwrap();
+        let block_array = unsafe{JPrimitiveArray::from_raw( env.get_object_array_element(&blockBytes, i as jsize).unwrap().into_raw())};
+        let block_bytes = unsafe{env.get_array_elements(&block_array,ReleaseMode::NoCopyBack)}.unwrap();
         bsp.sections[i]=Some(SectionHolder{
             block_data,
             light_data:Some(DeserializedLightData{
@@ -1074,35 +1074,6 @@ pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: JIntArray) {
         .write()
         .0
         .push(GLCommand::SetIndexBuffer(Vec::from(slice)));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn createIdList(_env: JNIEnv, _class: JClass) -> jlong {
-    let mut palette = Box::new(IdList::new());
-
-    let ptr = ((&mut *palette as *mut IdList) as usize) as jlong;
-    mem::forget(palette);
-
-    ptr
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn addIdListEntry(
-    env: JNIEnv,
-    _class: JClass,
-    idlist_long: jlong,
-    index: jint,
-    object: JObject,
-) {
-    let idlist = (idlist_long as usize) as *mut IdList;
-
-    unsafe {
-        idlist
-            .as_mut()
-            .unwrap()
-            .map
-            .insert(index, env.new_global_ref(object).unwrap())
-    };
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

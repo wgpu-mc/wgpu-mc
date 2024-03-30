@@ -13,27 +13,28 @@ import java.util.Objects;
 public class RustPalette {
 
     @Getter
-    private final long slabIndex;
+    private long slabIndex;
     private final IndexedIterable<?> idList;
 
-    public RustPalette(IndexedIterable<?> idList, long rustIdList) {
+    public RustPalette(IndexedIterable<?> idList) {
         this.idList = idList;
-        this.slabIndex = WgpuNative.createPalette(rustIdList);
+
     }
 
     public void readPacket(PacketByteBuf buf) {
+        this.slabIndex = WgpuNative.createPalette();
         int index = buf.readerIndex();
         int size = buf.readVarInt();
         
-        IntBuffer blockstateOffsets = MemoryUtil.memAllocInt(size);
+        long[] blockstateOffsets = new long[size];
 
         for(int i=0;i<size;++i) {
             Object object = this.idList.get(buf.readVarInt());
             RustBlockStateAccessor accessor = (RustBlockStateAccessor) object;
-            blockstateOffsets.put(i, Objects.requireNonNull(accessor).wgpu_mc$getRustBlockStateIndex());
+            blockstateOffsets[i] = Objects.requireNonNull(accessor).wgpu_mc$getRustBlockStateIndex();
         }
 
-        WgpuNative.paletteReadPacket(this.slabIndex, buf.array(), index, MemoryUtil.memAddress0(blockstateOffsets), size);
+        WgpuNative.paletteReadPacket(this.slabIndex, buf.array(), index, blockstateOffsets);
     }
 
 }

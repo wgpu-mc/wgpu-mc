@@ -24,6 +24,7 @@ import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.chunk.light.ChunkLightProvider;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryUtil;
@@ -65,6 +66,8 @@ public class BuiltChunkMixin {
     public void createRebuildTask(ChunkRendererRegionBuilder builder, CallbackInfoReturnable<ChunkBuilder.BuiltChunk.Task> cir) {
         long[] paletteIndices = new long[27];
         long[] storageIndices = new long[27];
+        Arrays.fill(paletteIndices,-1);
+        Arrays.fill(storageIndices,-1);
         ClientWorld world = MinecraftClient.getInstance().world;
 
         ChunkLightProvider<?, ?> skyLightProvider = world.getLightingProvider().skyLightProvider;
@@ -74,11 +77,10 @@ public class BuiltChunkMixin {
         byte[][] skyIndices = new byte[27][2048];
         byte[][] blockIndices = new byte[27][2048];
         Vec3i sectionCoord = new Vec3i(origin.getX()>>4,origin.getY()>>4,origin.getZ()>>4);
-
         for(int x=0;x<3;x++){
             for(int z=0;z<3;z++){
                 WorldChunk chunk = (WorldChunk)world.getChunk(sectionCoord.getX()+x-1, sectionCoord.getZ()+z-1,ChunkStatus.FULL,false);
-                if(chunk==null)return;
+                if(chunk==null)continue;
                 for(int y=0;y<3;y++){
                     int id = x+3*y+9*z;
                     Palette<?> palette;
@@ -104,22 +106,22 @@ public class BuiltChunkMixin {
 
                     PaletteStorage paletteStorage = section.data.storage;
 
-                    RustPalette rustPalette = new RustPalette(
-                            section.idList,
-                            WgpuNative.uploadIdList((IndexedIterable<Object>) section.idList)
-                    );
-
-                    ByteBuf buf = Unpooled.buffer(palette.getPacketSize());
-                    PacketByteBuf packetBuf = new PacketByteBuf(buf);
-                    if(palette.getSize() == 1){
-                        packetBuf.writeInt(1);
-                    }
-                    palette.writePacket(packetBuf);
-                    rustPalette.readPacket(packetBuf);
-
-                    paletteIndices[id] = rustPalette.getSlabIndex();
 
                     if (paletteStorage instanceof PackedIntegerArray array) {
+                        //palette
+                        RustPalette rustPalette = new RustPalette(section.idList);
+
+                        ByteBuf buf = Unpooled.buffer(palette.getPacketSize());
+                        PacketByteBuf packetBuf = new PacketByteBuf(buf);
+                        if(palette.getSize() == 1){
+                            packetBuf.writeInt(1);
+                        }
+                        palette.writePacket(packetBuf);
+                        rustPalette.readPacket(packetBuf);
+
+                        paletteIndices[id] = rustPalette.getSlabIndex();
+
+                        //PackedIntegerArray
                         long index = WgpuNative.createPaletteStorage(
                                 paletteStorage.getData(),
                                 array.elementsPerLong,
@@ -132,9 +134,6 @@ public class BuiltChunkMixin {
                         );
 
                         storageIndices[id] = index;
-                    }
-                    else{
-                        storageIndices[id] = -1;
                     }
                 }
             }
