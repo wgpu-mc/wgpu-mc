@@ -1,54 +1,25 @@
 version: "0.0.1"
 support: wgsl
 resources:
-  mvp_mat4:
-    type: mat4
-    mult: [wm_mat4_projection, wm_mat4_view]
-  shadow_depth:
-    type: texture_depth
-  shadow_col:
-    type: texture_2d
-  shadow_ortho_mat4:
-    type: mat4
-    value: [[1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]]
-  rot:
-    type: mat4
-    mult: [wm_mat4_rotation]
-  wm_mat4_terrain_transformation:
-    type: mat4
-    value: [ [ 1.0, 0.0, 0.0, 0.0 ], [ 0.0, 1.0, 0.0, 0.0 ], [ 0.0, 0.0, 1.0, 0.0 ], [ 0.0, 0.0, 0.0, 1.0 ] ]
-  wm_mat4_model:
-    type: mat4
-    value: [ [ 1.0, 0.0, 0.0, 0.0 ], [ 0.0, 1.0, 0.0, 0.0 ], [ 0.0, 0.0, 1.0, 0.0 ], [ 0.0, 0.0, 0.0, 1.0 ] ]
 pipelines:
-  quad:
-    geometry: wm_geo_quad
-#    depth: wm_framebuffer_depth
-    output: [wm_framebuffer_texture]
-    push_constants:
-      0: wm_pc_framebuffer_size
-    uniforms:
-      0: rot
-#  entity:
-#    geometry: wm_geo_entities
-#    depth: wm_framebuffer_depth
+#  quad:
+#    geometry: wm_geo_quad
+##    depth: wm_framebuffer_depth
 #    output: [wm_framebuffer_texture]
 #    push_constants:
-#      0: wm_pc_parts_per_entity
+#      0: wm_pc_framebuffer_size
 #    uniforms:
-#      0: mvp_mat4
-#      1: wm_ssbo_entity_part_transforms
-#      2: wm_texture_entities
-  terrain:
-    geometry: wm_geo_terrain
-    depth: wm_framebuffer_depth
-    output: [ wm_framebuffer_texture ]
+#      0: rot
+  terrain_vbo:
+    geometry: "@geo_terrain"
+    depth: "@texture_depth"
+    output: [ "@framebuffer_texture" ]
     blending: premultiplied_alpha_blending
-#    push_constants:
-#      0: wm_pc_chunk_position
-#      12: wm_pc_framebuffer_size
-    uniforms:
-      0: mvp_mat4
-      1: wm_texture_atlas_blocks
-      2: wm_ssbo_chunk_vertices
-      3: wm_ssbo_chunk_indices
+    bind_groups:
+      0:
+        0: "@mat4_model"
+        1: "@mat4_view"
+        2: "@mat4_perspective"
+        3: "@tex_block_atlas"
+        4: "@sampler"
+#      1: "@bg_chunk_ssbos"

@@ -13,7 +13,6 @@ use parking_lot::RwLock;
 use wgpu::Extent3d;
 
 use crate::mc::resource::{ResourcePath, ResourceProvider};
-use crate::render::pipeline::WmPipelines;
 use crate::texture::{BindableTexture, TextureAndView, UV};
 use crate::{WgpuState, WmRenderer};
 
@@ -79,7 +78,7 @@ impl Debug for Atlas {
 }
 
 impl Atlas {
-    pub fn new(wgpu_state: &WgpuState, pipelines: &WmPipelines, resizes: bool) -> Self {
+    pub fn new(wgpu_state: &WgpuState, resizes: bool) -> Self {
         let tv = TextureAndView::from_rgb_bytes(
             wgpu_state,
             &vec![0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],

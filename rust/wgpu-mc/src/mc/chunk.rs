@@ -16,8 +16,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
+use encase::UniformBuffer;
 use parking_lot::{Mutex, RwLock};
-use wgpu::{BufferAddress, BufferUsages};
+use wgpu::{BindGroup, BufferAddress, BufferUsages};
 
 use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
@@ -45,8 +46,7 @@ pub struct ChunkStore {
 }
 
 impl ChunkStore {
-    #[must_use]
-    pub fn new(_wgpu_state: &WgpuState) -> Self {
+    pub fn new() -> Self {
         ChunkStore {
             chunks: [(); MAX_CHUNKS].map(|_| ArcSwap::new(Arc::new(None))),
             indices: RwLock::new(HashMap::new()),
@@ -112,6 +112,8 @@ pub trait RenderLayer: Send + Sync {
 pub struct ChunkBuffers {
     pub vertex_buffer: Arc<wgpu::Buffer>,
     pub index_buffer: Arc<wgpu::Buffer>,
+    #[cfg(not(feature = "vbo-fallback"))]
+    pub bind_group: BindGroup,
     pub vertex_size: u32,
     pub index_size: u32,
 }
@@ -121,14 +123,14 @@ pub struct ChunkBuffers {
 pub struct Chunk {
     pub pos: ChunkPos,
     pub buffers: ArcSwap<Option<ChunkBuffers>>,
-    pub sections: RwLock<HashMap<String, [Range<u32>; SECTIONS_PER_CHUNK]>>,
+    pub sections: RwLock<Vec<[Range<u32>; SECTIONS_PER_CHUNK]>>,
 }
 
 impl Chunk {
     pub fn new(pos: ChunkPos) -> Self {
         Self {
             pos,
-            sections: RwLock::new(HashMap::new()),
+            sections: RwLock::new(vec![]),
             buffers: ArcSwap::new(Arc::new(None)),
         }
     }
@@ -166,21 +168,18 @@ impl Chunk {
                     })
                     .collect::<Vec<_>>();
 
-                let ranges: [Range<u32>; SECTIONS_PER_CHUNK] =
-                    array_init::from_iter(sections.iter().map(|(vert, index)| {
-                        let offset = vertices as u32;
-                        vertices += vert.len();
+                array_init::from_iter(sections.iter().map(|(vert, index)| {
+                    let offset = vertices as u32;
+                    vertices += vert.len();
 
-                        let index_offset = index_data.len();
+                    let index_offset = index_data.len();
 
-                        vertex_data.extend(vert.iter().flat_map(Vertex::compressed));
-                        index_data.extend(index.iter().map(|i| *i + offset));
+                    vertex_data.extend(vert.iter().flat_map(Vertex::compressed));
+                    index_data.extend(index.iter().map(|i| *i + offset));
 
-                        index_offset as u32..index_offset as u32 + index.len() as u32
-                    }))
-                    .unwrap();
-
-                (layer.name().to_string(), ranges)
+                    index_offset as u32..index_offset as u32 + index.len() as u32
+                }))
+                .unwrap()
             })
             .collect();
 
@@ -226,16 +225,40 @@ impl Chunk {
                         })
                     );
 
+                    #[cfg(not(feature = "vbo-fallback"))]
+                        let bind_group = {
+                        let layout = &wm.bind_group_layouts["chunk_ssbos"];
+
+                        wm.wgpu_state.device.create_bind_group(
+                            &wgpu::BindGroupDescriptor {
+                                label: None,
+                                layout,
+                                entries: &[
+                                    wgpu::BindGroupEntry {
+                                        binding: 0,
+                                        resource: vertex_buffer.as_entire_binding(),
+                                    },
+                                    wgpu::BindGroupEntry {
+                                        binding: 1,
+                                        resource: index_buffer.as_entire_binding(),
+                                    }
+                                ],
+                            }
+                        )
+                    };
+
                     self.buffers.store(Arc::new(Some(ChunkBuffers {
                         vertex_buffer: vertex_buffer.clone(),
                         index_buffer: index_buffer.clone(),
+                        #[cfg(not(feature = "vbo-fallback"))]
+                        bind_group,
                         vertex_size: aligned_vertex_data_len as u32,
                         index_size: aligned_index_data_len as u32,
                     })));
 
                     (vertex_buffer, index_buffer)
                 }
-                Some(ChunkBuffers { vertex_buffer, index_buffer, vertex_size, index_size }) => {
+                Some(ChunkBuffers { vertex_buffer, index_buffer, vertex_size, index_size, .. }) => {
                     if (*vertex_size as usize) < vertex_data.len()
                         || (*index_size as usize)
                             < (index_data.len() * size_of::<u32>())
@@ -272,9 +295,33 @@ impl Chunk {
                             })
                         );
 
+                        #[cfg(not(feature = "vbo-fallback"))]
+                        let bind_group = {
+                            let layout = &wm.bind_group_layouts["chunk_ssbos"];
+
+                            wm.wgpu_state.device.create_bind_group(
+                                &wgpu::BindGroupDescriptor {
+                                    label: None,
+                                    layout,
+                                    entries: &[
+                                        wgpu::BindGroupEntry {
+                                            binding: 0,
+                                            resource: vertex_buffer.as_entire_binding(),
+                                        },
+                                        wgpu::BindGroupEntry {
+                                            binding: 1,
+                                            resource: index_buffer.as_entire_binding(),
+                                        }
+                                    ],
+                                }
+                            )
+                        };
+
                         self.buffers.store(Arc::new(Some(ChunkBuffers {
                             vertex_buffer: vertex_buffer.clone(),
                             index_buffer: index_buffer.clone(),
+                            #[cfg(not(feature = "vbo-fallback"))]
+                            bind_group,
                             vertex_size: aligned_vertex_data_len as u32,
                             index_size: aligned_index_data_len as u32,
                         })));

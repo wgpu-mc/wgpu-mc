@@ -1,13 +1,10 @@
-use arc_swap::ArcSwap;
 use std::sync::Arc;
 
 use image::GenericImageView;
 use wgpu::Extent3d;
 
 use crate::{
-    mc::{resource::ResourcePath, MinecraftState},
-    render::pipeline::WmPipelines,
-    WgpuState, WmRenderer,
+    WgpuState, WmRenderer
 };
 
 pub type TextureId = u32;
@@ -103,12 +100,6 @@ impl TextureAndView {
     }
 }
 
-///Texture that will be automatically resized by wgpu-mc to fit the framebuffer
-#[derive(Debug, Clone)]
-pub struct TextureHandle {
-    pub bindable_texture: Arc<ArcSwap<BindableTexture>>,
-}
-
 ///Represents a texture that has been uploaded to GPU and has an associated `BindGroup`
 #[derive(Debug)]
 pub struct BindableTexture {
@@ -119,19 +110,17 @@ pub struct BindableTexture {
 impl BindableTexture {
     #[must_use]
     pub fn from_tv(
-        wgpu_state: &WgpuState,
-        pipelines: &WmPipelines,
+        wm: &WmRenderer,
         tv: Arc<TextureAndView>,
         sampler: &wgpu::Sampler,
         depth: bool,
     ) -> Self {
-        let bind_group = wgpu_state
+        let bind_group = wm
+            .wgpu_state
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: pipelines
-                    .bind_group_layouts
-                    .read()
+                layout: wm.bind_group_layouts
                     .get(if depth { "texture_depth" } else { "texture" })
                     .unwrap(),
                 entries: &[

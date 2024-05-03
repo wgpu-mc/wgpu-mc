@@ -49,17 +49,13 @@ pub use naga;
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, Extent3d, PresentMode
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferDescriptor, PresentMode};
 use wgpu::util::StagingBelt;
 
-use crate::mc::entity::BundledEntityInstances;
 use crate::mc::MinecraftState;
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;
-use crate::render::pipeline::{BLOCK_ATLAS, ENTITY_ATLAS, WmPipelines};
-use crate::texture::{BindableTexture, TextureHandle, TextureAndView};
+use crate::render::pipeline::{BLOCK_ATLAS, create_bind_group_layouts, ENTITY_ATLAS};
 
 pub mod mc;
 pub mod render;
@@ -78,13 +74,14 @@ pub struct WgpuState {
     pub size: Option<ArcSwap<WindowSize>>,
 }
 
-/// The main wgpu-mc renderer struct. This mostly just contains wgpu state.
-/// Resources pertaining to Minecraft go in `MinecraftState`
+/// The main wgpu-mc renderer struct
+/// Resources pertaining to Minecraft go in `MinecraftState`.
+///
+/// `RenderGraph` is used in tandem with `World` to render scenes.
 #[derive(Clone)]
 pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
-    pub texture_handles: Arc<RwLock<HashMap<String, TextureHandle>>>,
-    pub pipelines: Arc<ArcSwap<WmPipelines>>,
+    pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: Arc<MinecraftState>,
     pub chunk_update_queue: Arc<Mutex<Vec<(Arc<Buffer>, Vec<u8>)>>>,
     pub chunk_staging_belt: Arc<Mutex<StagingBelt>>,
@@ -187,15 +184,11 @@ impl WmRenderer {
             Arc::new(puffin_server)
         };
 
-        let pipelines = WmPipelines::new(resource_provider.clone());
-
         let mc = MinecraftState::new(&wgpu_state, resource_provider);
 
         Self {
+            bind_group_layouts: Arc::new(create_bind_group_layouts(&wgpu_state.device)),
             wgpu_state: Arc::new(wgpu_state),
-
-            texture_handles: Arc::new(RwLock::new(HashMap::new())),
-            pipelines: Arc::new(ArcSwap::new(Arc::new(pipelines))),
             mc: Arc::new(mc),
             chunk_update_queue: Arc::new(Mutex::new(Vec::new())),
             chunk_staging_belt: Arc::new(Mutex::new(StagingBelt::new(CHUNK_STAGING_BELT_SIZE))),
@@ -205,9 +198,6 @@ impl WmRenderer {
     }
 
     pub fn init(&self) {
-        let pipelines = self.pipelines.load();
-        pipelines.init(self);
-
         let atlases = [BLOCK_ATLAS, ENTITY_ATLAS]
             .iter()
             .map(|&name| {
@@ -215,7 +205,6 @@ impl WmRenderer {
                     name.into(),
                     Arc::new(ArcSwap::new(Arc::new(Atlas::new(
                         &self.wgpu_state,
-                        &pipelines,
                         false,
                     )))),
                 )
@@ -223,74 +212,6 @@ impl WmRenderer {
             .collect();
 
         self.mc.texture_manager.atlases.store(Arc::new(atlases));
-
-        self.create_texture_handle(
-            "wm_framebuffer_depth".into(),
-            wgpu::TextureFormat::Depth32Float,
-            &self.wgpu_state.surface.read().1,
-        );
-    }
-
-    pub fn create_texture_handle(
-        &self,
-        name: String,
-        format: wgpu::TextureFormat,
-        config: &wgpu::SurfaceConfiguration,
-    ) -> TextureHandle {
-        let tv = Arc::new(TextureAndView::from_rgb_bytes(
-            &self.wgpu_state,
-            &[],
-            Extent3d {
-                width: config.width,
-                height: config.height,
-                depth_or_array_layers: 1,
-            },
-            None,
-            format,
-        )
-        .unwrap());
-
-        let handle = TextureHandle {
-            bindable_texture: Arc::new(ArcSwap::new(Arc::new(BindableTexture::from_tv(
-                &self.wgpu_state,
-                &self.pipelines.load(),
-                tv,
-                &self.mc.texture_manager.default_sampler,
-                matches!(format, wgpu::TextureFormat::Depth32Float),
-            )))),
-        };
-
-        let mut handles = self.texture_handles.write();
-        handles
-            .entry(name)
-            .or_insert(handle.clone())
-            .bindable_texture
-            .store(handle.bindable_texture.load_full());
-
-        handle
-    }
-
-    pub fn update_surface_size(
-        &self,
-        mut surface_config: wgpu::SurfaceConfiguration,
-        new_size: WindowSize,
-    ) -> Option<wgpu::SurfaceConfiguration> {
-        if new_size.width == 0 || new_size.height == 0 {
-            return None;
-        }
-
-        surface_config.width = new_size.width;
-        surface_config.height = new_size.height;
-
-        let handles = { self.texture_handles.read().clone() };
-
-        handles.iter().for_each(|(name, handle)| {
-            let texture = handle.bindable_texture.load();
-
-            self.create_texture_handle(name.clone(), texture.tv.format, &surface_config);
-        });
-
-        Some(surface_config)
     }
 
     pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
@@ -311,10 +232,7 @@ impl WmRenderer {
                     .create_bind_group(&BindGroupDescriptor {
                         label: None,
                         layout: self
-                            .pipelines
-                            .load()
                             .bind_group_layouts
-                            .read()
                             .get("ssbo")
                             .unwrap(),
                         entries: &[BindGroupEntry {

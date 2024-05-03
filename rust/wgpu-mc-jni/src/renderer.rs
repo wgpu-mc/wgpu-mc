@@ -30,8 +30,7 @@ use winit::platform::scancode::PhysicalKeyExtScancode;
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
-use wgpu_mc::render::graph_old::{CustomResource, GeometryCallback, ResourceInternal, ShaderGraph};
-use wgpu_mc::render::pipeline::{Vertex, WmPipelines};
+use wgpu_mc::render::pipeline::{Vertex};
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::BindableBuffer;
@@ -40,7 +39,7 @@ use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
 use wgpu_mc::WmRenderer;
 use wgpu_mc::{wgpu, WindowSize};
 
-use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
+use crate::gl::{ElectrumVertex, GlTexture, GL_ALLOC};
 use crate::lighting::LIGHTMAP_GLID;
 use crate::{
     MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
@@ -118,7 +117,8 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatA
             MATRICES.lock().projection = slice_4x4;
         }
         1 => {
-            MATRICES.lock().model = slice_4x4;
+            todo!()
+            // MATRICES.lock().model = slice_4x4;
         }
         2 => {
             MATRICES.lock().view = slice_4x4;
@@ -135,464 +135,466 @@ pub fn scheduleStop(_env: JNIEnv, _class: JClass) {
     let _ = SHOULD_STOP.set(());
 }
 
-pub fn start_rendering(mut env: JNIEnv, title: JString) {
-    let title: String = env.get_string(&title).unwrap().into();
-
-    // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
-    // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build
-    let mut event_loop = EventLoopBuilder::new();
-
-    #[cfg(target_os = "linux")]
-    {
-        // double hacky fix B)
-        if std::env::var("WAYLAND_DISPLAY").is_ok() {
-            use winit::platform::wayland::EventLoopBuilderExtWayland;
-            event_loop.with_any_thread(true);
-        } else {
-            use winit::platform::x11::EventLoopBuilderExtX11;
-            event_loop.with_any_thread(true);
-        }
-    }
-
-    let event_loop = event_loop.build().unwrap();
-
-    let window = Arc::new(
-        winit::window::WindowBuilder::new()
-            .with_title(title)
-            .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
-                width: 1280,
-                height: 720,
-            }))
-            .build(&event_loop)
-            .unwrap(),
-    );
-
-    WINDOW.set(window.clone()).unwrap();
-
-    let wrapper = &WinitWindowWrapper { window: &window };
-
-    let wgpu_state = block_on(WmRenderer::init_wgpu(
-        wrapper, true, // super::SETTINGS.read().as_ref().unwrap().vsync.value,
-    ));
-
-    let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
-        jvm: env.get_java_vm().unwrap(),
-    });
-
-    let wm = WmRenderer::new(wgpu_state, resource_provider);
-
-    // Overcomplicated because of method conflicts. Just what the compiler recommended.
-    let pipelines =
-        <Arc<ArcSwapAny<Arc<WmPipelines>>> as Access<Arc<WmPipelines>>>::load(&wm.pipelines);
-
-    pipelines
-        .chunk_layers
-        .store(Arc::new(vec![Box::new(TerrainLayer)]));
-
-    let _ = RENDERER.set(wm.clone());
-
-    wm.init();
-
-    env.set_static_field(
-        "dev/birb/wgpu/render/Wgpu",
-        ("dev/birb/wgpu/render/Wgpu", "initialized", "Z"),
-        JValue::Bool(true.into()),
-    )
-    .unwrap();
-
-    let mut current_modifiers = ModifiersState::empty();
-
-    log::trace!("Starting event loop");
-
-    let shader_pack: ShaderPackConfig =
-        serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
-
-    let mut render_geometry = HashMap::new();
-
-    render_geometry.insert(
-        "wm_geo_electrum_gui".into(),
-        Box::new(ElectrumGeometry {
-            blank: wm.create_texture_handle(
-                "electrum_blank_texture".into(),
-                TextureFormat::Bgra8Unorm,
-                &wm.wgpu_state.surface.read().1,
-            ),
-            pool: Arc::new(
-                wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: &vec![0u8; 10_000_000],
-                        usage: BufferUsages::VERTEX | BufferUsages::INDEX | BufferUsages::COPY_DST,
-                    }),
-            ),
-            last_bytes: RwLock::new(None),
-        }) as Box<dyn GeometryCallback>,
-    );
-
-    let mut resources = HashMap::new();
-
-    let matrix = Matrix4::identity();
-    let mat: Mat4 = matrix.into();
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
-    );
-
-    resources.insert(
-        "wm_mat4_projection".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
-    );
-
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
-    );
-
-    resources.insert(
-        "wm_mat4_model".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
-    );
-
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
-    );
-
-    resources.insert(
-        "wm_mat4_terrain_transformation".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
-    );
-
-    {
-        // Sun
-        let sky_texture_sun = "minecraft:textures/environment/sun.png";
-        let sky_texture_sun_label = "wm_texture_sky_sun";
-        let sun_texture = BindableTexture::from_resource_path(
-            &wm,
-            pipelines.as_ref(),
-            sky_texture_sun,
-            sky_texture_sun_label,
-        );
-
-        // Moon
-        let sky_texture_moon = "minecraft:textures/environment/moon_phases.png";
-        let sky_texture_moon_label = "wm_texture_sky_moon";
-        let moon_texture = BindableTexture::from_resource_path(
-            &wm,
-            pipelines.as_ref(),
-            sky_texture_moon,
-            sky_texture_moon_label,
-        );
-
-        let mut texture_map: HashMap<String, Arc<BindableTexture>> = HashMap::new();
-
-        texture_map.insert(sky_texture_sun_label.into(), Arc::new(sun_texture));
-        texture_map.insert(sky_texture_moon_label.into(), Arc::new(moon_texture));
-
-        let mut sky_data = (**wm.mc.sky_data.load()).clone();
-        sky_data.textures = texture_map;
-        wm.mc.sky_data.swap(Arc::new(sky_data));
-    }
-
-    {
-        let tex_id = LIGHTMAP_GLID.lock().unwrap();
-        let textures_read = GL_ALLOC.read();
-        let lightmap = textures_read.get(&*tex_id).unwrap();
-        let bindable = lightmap.bindable_texture.as_ref().unwrap();
-        let asaa = ArcSwap::new(bindable.clone());
-        resources.insert(
-            "wm_tex_electrum_lightmap".into(),
-            CustomResource {
-                update: None,
-                data: Arc::new(ResourceInternal::Texture(
-                    wgpu_mc::render::graph_old::TextureResource::Bindable(asaa.into()),
-                    false,
-                )),
-            },
-        );
-        println!("Added resources");
-    }
-
-    let matrix = Matrix4::identity();
-    let mat: Mat4 = matrix.into();
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
-    );
-
-    resources.insert(
-        "wm_mat4_view".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
-    );
-
-    let mut shader_graph = ShaderGraph::new(shader_pack, resources, render_geometry);
-
-    let mut types = HashMap::new();
-
-    types.insert("wm_electrum_mat4".into(), "matrix".into());
-    types.insert("wm_electrum_gl_texture".into(), "texture".into());
-    types.insert("wm_tex_electrum_lightmap".into(), "texture".into());
-
-    let mut geometry_layouts = HashMap::new();
-
-    geometry_layouts.insert(
-        "wm_geo_electrum_gui".into(),
-        vec![wgpu::VertexBufferLayout {
-            array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &ElectrumVertex::VAO,
-        }],
-    );
-
-    shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
-
-    let wm_clone = wm.clone();
-    let wm_clone_1 = wm.clone();
-
-    thread::spawn(move || {
-        let wm = wm_clone_1;
-
-        loop {
-            wm.submit_chunk_updates();
-
-            thread::sleep(Duration::from_millis(1));
-        }
-    });
-
-    thread::spawn(move || {
-        let wm = wm_clone;
-
-        loop {
-            let _mc_state = <Lazy<ArcSwapAny<Arc<MinecraftRenderState>>> as Access<
-                MinecraftRenderState,
-            >>::load(&MC_STATE);
-
-            let surface_state = wm.wgpu_state.surface.write();
-
-            {
-                let matrices = MATRICES.lock();
-                let res_mat_proj = shader_graph
-                    .resources
-                    .get_mut("wm_mat4_projection")
-                    .unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_proj.data {
-                    let matrix4: Matrix4<f32> = matrices.projection.into();
-                    *lock.write() = matrix4;
-                }
-
-                let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_model").unwrap();
-
-                let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_view").unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                    let matrix4: Matrix4<f32> = matrices.view.into();
-                    *lock.write() = matrix4;
-                }
-
-                let res_mat_mod = shader_graph
-                    .resources
-                    .get_mut("wm_mat4_terrain_transformation")
-                    .unwrap();
-
-                if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                    let matrix4: Matrix4<f32> = matrices.terrain_transformation.into();
-                    *lock.write() = matrix4;
-                }
-            }
-
-            let surface = surface_state.0.as_ref().unwrap();
-            let texture = surface.get_current_texture().unwrap_or_else(|_| {
-                //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-                let size = wm.wgpu_state.size.as_ref().unwrap().load();
-                let new_config = wm
-                    .update_surface_size(
-                        surface_state.1.clone(),
-                        WindowSize {
-                            width: size.width,
-                            height: size.height,
-                        },
-                    )
-                    .unwrap();
-                surface.configure(&wm.wgpu_state.device, &new_config);
-                surface.get_current_texture().unwrap()
-            });
-
-            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
-                label: None,
-                format: Some(TextureFormat::Bgra8Unorm),
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                aspect: Default::default(),
-                base_mip_level: 0,
-                mip_level_count: None,
-                base_array_layer: 0,
-                array_layer_count: None,
-            });
-
-            let _instant = Instant::now();
-
-            let entity_instances = ENTITY_INSTANCES.lock();
-
-            let clear_color =
-                *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
-
-            wm.render(
-                &shader_graph,
-                &view,
-                &surface_state.1,
-                &entity_instances,
-                Some(clear_color),
-            )
-            .unwrap();
-
-            texture.present();
-        }
-    });
-
-    event_loop
-        .run(move |event, target| {
-            if SHOULD_STOP.get().is_some() {
-                target.exit();
-            }
-
-            match event {
-                Event::AboutToWait => window.request_redraw(),
-                Event::WindowEvent {
-                    ref event,
-                    window_id,
-                } if window_id == window.id() => {
-                    match event {
-                        WindowEvent::CloseRequested => target.exit(),
-                        WindowEvent::Resized(physical_size) => {
-                            // Update the wgpu_state size for the render loop.
-                            let state_size = wm.wgpu_state.size.as_ref().unwrap();
-                            state_size.swap(Arc::new(WindowSize {
-                                width: physical_size.width,
-                                height: physical_size.height,
-                            }));
-
-                            CHANNELS
-                                .0
-                                .send(RenderMessage::Resized(
-                                    physical_size.width,
-                                    physical_size.height,
-                                ))
-                                .unwrap();
-                        }
-                        WindowEvent::MouseInput {
-                            device_id: _,
-                            state,
-                            button,
-                            ..
-                        } => {
-                            CHANNELS
-                                .0
-                                .send(RenderMessage::MouseState(*state, *button))
-                                .unwrap();
-                        }
-                        WindowEvent::CursorMoved { position, .. } => {
-                            CHANNELS
-                                .0
-                                .send(RenderMessage::CursorMove(position.x, position.y))
-                                .unwrap();
-                        }
-                        WindowEvent::KeyboardInput {
-                            event:
-                                KeyEvent {
-                                    physical_key: PhysicalKey::Code(key),
-                                    text,
-                                    state,
-                                    ..
-                                },
-                            ..
-                        } => {
-                            if let Some(scancode) = key.to_scancode() {
-                                CHANNELS
-                                    .0
-                                    .send(RenderMessage::KeyState(
-                                        keycode_to_glfw(*key),
-                                        scancode,
-                                        match state {
-                                            ElementState::Pressed => 1,  // GLFW_PRESS
-                                            ElementState::Released => 0, // GLFW_RELEASE
-                                        },
-                                        modifiers_to_glfw(current_modifiers),
-                                    ))
-                                    .unwrap();
-
-                                if let Some(text) = text {
-                                    for c in text.chars() {
-                                        CHANNELS
-                                            .0
-                                            .send(RenderMessage::CharTyped(
-                                                c,
-                                                modifiers_to_glfw(current_modifiers),
-                                            ))
-                                            .unwrap();
-                                    }
-                                }
-                            }
-                        }
-                        WindowEvent::ModifiersChanged(new_modifiers) => {
-                            current_modifiers = new_modifiers.state();
-                        }
-                        WindowEvent::Focused(focused) => {
-                            CHANNELS.0.send(RenderMessage::Focused(*focused)).unwrap();
-                        }
-                        _ => {}
-                    }
-                }
-                Event::DeviceEvent {
-                    device_id: _,
-                    event: DeviceEvent::MouseMotion { delta },
-                } => {
-                    CHANNELS
-                        .0
-                        .send(RenderMessage::MouseMove(delta.0, delta.1))
-                        .unwrap();
-                }
-                _ => {}
-            }
-        })
-        .unwrap();
-}
+// pub fn start_rendering(mut env: JNIEnv, title: JString) {
+//     let title: String = env.get_string(&title).unwrap().into();
+//
+//     // Hacky fix for starting the game on linux, needs more investigation (thanks, accusitive)
+//     // https://docs.rs/winit/latest/winit/event_loop/struct.EventLoopBuilder.html#method.build
+//     let mut event_loop = EventLoopBuilder::new();
+//
+//     #[cfg(target_os = "linux")]
+//     {
+//         // double hacky fix B)
+//         if std::env::var("WAYLAND_DISPLAY").is_ok() {
+//             use winit::platform::wayland::EventLoopBuilderExtWayland;
+//             event_loop.with_any_thread(true);
+//         } else {
+//             use winit::platform::x11::EventLoopBuilderExtX11;
+//             event_loop.with_any_thread(true);
+//         }
+//     }
+//
+//     let event_loop = event_loop.build().unwrap();
+//
+//     let window = Arc::new(
+//         winit::window::WindowBuilder::new()
+//             .with_title(title)
+//             .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
+//                 width: 1280,
+//                 height: 720,
+//             }))
+//             .build(&event_loop)
+//             .unwrap(),
+//     );
+//
+//     WINDOW.set(window.clone()).unwrap();
+//
+//     let wrapper = &WinitWindowWrapper { window: &window };
+//
+//     let wgpu_state = block_on(WmRenderer::init_wgpu(
+//         wrapper, true, // super::SETTINGS.read().as_ref().unwrap().vsync.value,
+//     ));
+//
+//     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
+//         jvm: env.get_java_vm().unwrap(),
+//     });
+//
+//     let wm = WmRenderer::new(wgpu_state, resource_provider);
+//
+//     // Overcomplicated because of method conflicts. Just what the compiler recommended.
+//     let pipelines =
+//         // <Arc<ArcSwapAny<Arc<WmPipelines>>> as Access<Arc<WmPipelines>>>::load(&wm.pipelines);
+//
+//     pipelines
+//         .chunk_layers
+//         .store(Arc::new(vec![Box::new(TerrainLayer)]));
+//
+//     let _ = RENDERER.set(wm.clone());
+//
+//     wm.init();
+//
+//     env.set_static_field(
+//         "dev/birb/wgpu/render/Wgpu",
+//         ("dev/birb/wgpu/render/Wgpu", "initialized", "Z"),
+//         JValue::Bool(true.into()),
+//     )
+//     .unwrap();
+//
+//     let mut current_modifiers = ModifiersState::empty();
+//
+//     log::trace!("Starting event loop");
+//
+//     let shader_pack: ShaderPackConfig =
+//         serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
+//
+//     let mut render_geometry = HashMap::new();
+//
+//     // render_geometry.insert(
+//     //     "wm_geo_electrum_gui".into(),
+//     //     Box::new(ElectrumGeometry {
+//     //         blank: wm.create_texture_handle(
+//     //             "electrum_blank_texture".into(),
+//     //             TextureFormat::Bgra8Unorm,
+//     //             &wm.wgpu_state.surface.read().1,
+//     //         ),
+//     //         pool: Arc::new(
+//     //             wm.wgpu_state
+//     //                 .device
+//     //                 .create_buffer_init(&BufferInitDescriptor {
+//     //                     label: None,
+//     //                     contents: &vec![0u8; 10_000_000],
+//     //                     usage: BufferUsages::VERTEX | BufferUsages::INDEX | BufferUsages::COPY_DST,
+//     //                 }),
+//     //         ),
+//     //         last_bytes: RwLock::new(None),
+//     //     }) as Box<dyn GeometryCallback>,
+//     // );
+//     //
+//     // let mut resources = HashMap::new();
+//     //
+//     // let matrix = Matrix4::identity();
+//     // let mat: Mat4 = matrix.into();
+//     // let bindable_buffer = BindableBuffer::new(
+//     //     &wm,
+//     //     bytemuck::cast_slice(&mat),
+//     //     BufferUsages::UNIFORM,
+//     //     "matrix",
+//     // );
+//     //
+//     // resources.insert(
+//     //     "wm_mat4_projection".into(),
+//     //     CustomResource {
+//     //         update: None,
+//     //         data: Arc::new(ResourceInternal::Mat4(
+//     //             Mat4ValueOrMult::Value { value: mat },
+//     //             Arc::new(RwLock::new(matrix)),
+//     //             Arc::new(bindable_buffer),
+//     //         )),
+//     //     },
+//     // );
+//     //
+//     // let bindable_buffer = BindableBuffer::new(
+//     //     &wm,
+//     //     bytemuck::cast_slice(&mat),
+//     //     BufferUsages::UNIFORM,
+//     //     "matrix",
+//     // );
+//     //
+//     // resources.insert(
+//     //     "wm_mat4_model".into(),
+//     //     CustomResource {
+//     //         update: None,
+//     //         data: Arc::new(ResourceInternal::Mat4(
+//     //             Mat4ValueOrMult::Value { value: mat },
+//     //             Arc::new(RwLock::new(matrix)),
+//     //             Arc::new(bindable_buffer),
+//     //         )),
+//     //     },
+//     // );
+//     //
+//     // let bindable_buffer = BindableBuffer::new(
+//     //     &wm,
+//     //     bytemuck::cast_slice(&mat),
+//     //     BufferUsages::UNIFORM,
+//     //     "matrix",
+//     // );
+//     //
+//     // resources.insert(
+//     //     "wm_mat4_terrain_transformation".into(),
+//     //     CustomResource {
+//     //         update: None,
+//     //         data: Arc::new(ResourceInternal::Mat4(
+//     //             Mat4ValueOrMult::Value { value: mat },
+//     //             Arc::new(RwLock::new(matrix)),
+//     //             Arc::new(bindable_buffer),
+//     //         )),
+//     //     },
+//     // );
+//     //
+//     // {
+//     //     // Sun
+//     //     let sky_texture_sun = "minecraft:textures/environment/sun.png";
+//     //     let sky_texture_sun_label = "wm_texture_sky_sun";
+//     //     let sun_texture = BindableTexture::from_resource_path(
+//     //         &wm,
+//     //         pipelines.as_ref(),
+//     //         sky_texture_sun,
+//     //         sky_texture_sun_label,
+//     //     );
+//     //
+//     //     // Moon
+//     //     let sky_texture_moon = "minecraft:textures/environment/moon_phases.png";
+//     //     let sky_texture_moon_label = "wm_texture_sky_moon";
+//     //     let moon_texture = BindableTexture::from_resource_path(
+//     //         &wm,
+//     //         pipelines.as_ref(),
+//     //         sky_texture_moon,
+//     //         sky_texture_moon_label,
+//     //     );
+//     //
+//     //     let mut texture_map: HashMap<String, Arc<BindableTexture>> = HashMap::new();
+//     //
+//     //     texture_map.insert(sky_texture_sun_label.into(), Arc::new(sun_texture));
+//     //     texture_map.insert(sky_texture_moon_label.into(), Arc::new(moon_texture));
+//     //
+//     //     let mut sky_data = (**wm.mc.sky_data.load()).clone();
+//     //     sky_data.textures = texture_map;
+//     //     wm.mc.sky_data.swap(Arc::new(sky_data));
+//     // }
+//     //
+//     // {
+//     //     let tex_id = LIGHTMAP_GLID.lock().unwrap();
+//     //     let textures_read = GL_ALLOC.read();
+//     //     let lightmap = textures_read.get(&*tex_id).unwrap();
+//     //     let bindable = lightmap.bindable_texture.as_ref().unwrap();
+//     //     let asaa = ArcSwap::new(bindable.clone());
+//     //     resources.insert(
+//     //         "wm_tex_electrum_lightmap".into(),
+//     //         CustomResource {
+//     //             update: None,
+//     //             data: Arc::new(ResourceInternal::Texture(
+//     //                 wgpu_mc::render::graph_old::TextureResource::Bindable(asaa.into()),
+//     //                 false,
+//     //             )),
+//     //         },
+//     //     );
+//     //     println!("Added resources");
+//     // }
+//
+//     let matrix = Matrix4::identity();
+//     let mat: Mat4 = matrix.into();
+//     let bindable_buffer = BindableBuffer::new(
+//         &wm,
+//         bytemuck::cast_slice(&mat),
+//         BufferUsages::UNIFORM,
+//         "matrix",
+//     );
+//
+//     resources.insert(
+//         "wm_mat4_view".into(),
+//         CustomResource {
+//             update: None,
+//             data: Arc::new(ResourceInternal::Mat4(
+//                 Mat4ValueOrMult::Value { value: mat },
+//                 Arc::new(RwLock::new(matrix)),
+//                 Arc::new(bindable_buffer),
+//             )),
+//         },
+//     );
+//
+//     let mut shader_graph = ShaderGraph::new(shader_pack, resources, render_geometry);
+//
+//     let mut types = HashMap::new();
+//
+//     types.insert("wm_electrum_mat4".into(), "matrix".into());
+//     types.insert("wm_electrum_gl_texture".into(), "texture".into());
+//     types.insert("wm_tex_electrum_lightmap".into(), "texture".into());
+//
+//     let mut geometry_layouts = HashMap::new();
+//
+//     geometry_layouts.insert(
+//         "wm_geo_electrum_gui".into(),
+//         vec![wgpu::VertexBufferLayout {
+//             array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
+//             step_mode: wgpu::VertexStepMode::Vertex,
+//             attributes: &ElectrumVertex::VAO,
+//         }],
+//     );
+//
+//     shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
+//
+//     let wm_clone = wm.clone();
+//     let wm_clone_1 = wm.clone();
+//
+//     thread::spawn(move || {
+//         let wm = wm_clone_1;
+//
+//         loop {
+//             wm.submit_chunk_updates();
+//
+//             thread::sleep(Duration::from_millis(1));
+//         }
+//     });
+//
+//     thread::spawn(move || {
+//         let wm = wm_clone;
+//
+//         loop {
+//             let _mc_state = <Lazy<ArcSwapAny<Arc<MinecraftRenderState>>> as Access<
+//                 MinecraftRenderState,
+//             >>::load(&MC_STATE);
+//
+//             let surface_state = wm.wgpu_state.surface.write();
+//
+//             {
+//                 let matrices = MATRICES.lock();
+//                 let res_mat_proj = shader_graph
+//                     .resources
+//                     .get_mut("wm_mat4_projection")
+//                     .unwrap();
+//
+//                 if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_proj.data {
+//                     let matrix4: Matrix4<f32> = matrices.projection.into();
+//                     *lock.write() = matrix4;
+//                 }
+//
+//                 let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_model").unwrap();
+//
+//                 let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_view").unwrap();
+//
+//                 if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+//                     let matrix4: Matrix4<f32> = matrices.view.into();
+//                     *lock.write() = matrix4;
+//                 }
+//
+//                 let res_mat_mod = shader_graph
+//                     .resources
+//                     .get_mut("wm_mat4_terrain_transformation")
+//                     .unwrap();
+//
+//                 if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
+//                     let matrix4: Matrix4<f32> = matrices.terrain_transformation.into();
+//                     *lock.write() = matrix4;
+//                 }
+//             }
+//
+//             let surface = surface_state.0.as_ref().unwrap();
+//             let texture = surface.get_current_texture().unwrap_or_else(|_| {
+//                 //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+//                 let size = wm.wgpu_state.size.as_ref().unwrap().load();
+//                 let new_config = wm
+//                     .update_surface_size(
+//                         surface_state.1.clone(),
+//                         WindowSize {
+//                             width: size.width,
+//                             height: size.height,
+//                         },
+//                     )
+//                     .unwrap();
+//                 surface.configure(&wm.wgpu_state.device, &new_config);
+//                 surface.get_current_texture().unwrap()
+//             });
+//
+//             let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+//                 label: None,
+//                 format: Some(TextureFormat::Bgra8Unorm),
+//                 dimension: Some(wgpu::TextureViewDimension::D2),
+//                 aspect: Default::default(),
+//                 base_mip_level: 0,
+//                 mip_level_count: None,
+//                 base_array_layer: 0,
+//                 array_layer_count: None,
+//             });
+//
+//             let _instant = Instant::now();
+//
+//             let entity_instances = ENTITY_INSTANCES.lock();
+//
+//             let clear_color =
+//                 *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
+//
+//             wm.render(
+//                 &shader_graph,
+//                 &view,
+//                 &surface_state.1,
+//                 &entity_instances,
+//                 Some(clear_color),
+//             )
+//             .unwrap();
+//
+//             texture.present();
+//         }
+//     });
+//
+//     event_loop
+//         .run(move |event, target| {
+//             if SHOULD_STOP.get().is_some() {
+//                 target.exit();
+//             }
+//
+//             match event {
+//                 Event::AboutToWait => window.request_redraw(),
+//                 Event::WindowEvent {
+//                     ref event,
+//                     window_id,
+//                 } if window_id == window.id() => {
+//                     match event {
+//                         WindowEvent::CloseRequested => target.exit(),
+//                         WindowEvent::Resized(physical_size) => {
+//                             // Update the wgpu_state size for the render loop.
+//                             let state_size = wm.wgpu_state.size.as_ref().unwrap();
+//                             state_size.swap(Arc::new(WindowSize {
+//                                 width: physical_size.width,
+//                                 height: physical_size.height,
+//                             }));
+//
+//                             CHANNELS
+//                                 .0
+//                                 .send(RenderMessage::Resized(
+//                                     physical_size.width,
+//                                     physical_size.height,
+//                                 ))
+//                                 .unwrap();
+//                         }
+//                         WindowEvent::MouseInput {
+//                             device_id: _,
+//                             state,
+//                             button,
+//                             ..
+//                         } => {
+//                             CHANNELS
+//                                 .0
+//                                 .send(RenderMessage::MouseState(*state, *button))
+//                                 .unwrap();
+//                         }
+//                         WindowEvent::CursorMoved { position, .. } => {
+//                             CHANNELS
+//                                 .0
+//                                 .send(RenderMessage::CursorMove(position.x, position.y))
+//                                 .unwrap();
+//                         }
+//                         WindowEvent::KeyboardInput {
+//                             event:
+//                                 KeyEvent {
+//                                     physical_key: PhysicalKey::Code(key),
+//                                     text,
+//                                     state,
+//                                     ..
+//                                 },
+//                             ..
+//                         } => {
+//                             if let Some(scancode) = key.to_scancode() {
+//                                 CHANNELS
+//                                     .0
+//                                     .send(RenderMessage::KeyState(
+//                                         keycode_to_glfw(*key),
+//                                         scancode,
+//                                         match state {
+//                                             ElementState::Pressed => 1,  // GLFW_PRESS
+//                                             ElementState::Released => 0, // GLFW_RELEASE
+//                                         },
+//                                         modifiers_to_glfw(current_modifiers),
+//                                     ))
+//                                     .unwrap();
+//
+//                                 if let Some(text) = text {
+//                                     for c in text.chars() {
+//                                         CHANNELS
+//                                             .0
+//                                             .send(RenderMessage::CharTyped(
+//                                                 c,
+//                                                 modifiers_to_glfw(current_modifiers),
+//                                             ))
+//                                             .unwrap();
+//                                     }
+//                                 }
+//                             }
+//                         }
+//                         WindowEvent::ModifiersChanged(new_modifiers) => {
+//                             current_modifiers = new_modifiers.state();
+//                         }
+//                         WindowEvent::Focused(focused) => {
+//                             CHANNELS.0.send(RenderMessage::Focused(*focused)).unwrap();
+//                         }
+//                         _ => {}
+//                     }
+//                 }
+//                 Event::DeviceEvent {
+//                     device_id: _,
+//                     event: DeviceEvent::MouseMotion { delta },
+//                 } => {
+//                     CHANNELS
+//                         .0
+//                         .send(RenderMessage::MouseMove(delta.0, delta.1))
+//                         .unwrap();
+//                 }
+//                 _ => {}
+//             }
+//         })
+//         .unwrap();
+// }
+
+pub fn start_rendering(mut env: JNIEnv, title: JString) {}
 
 fn keycode_to_glfw(code: KeyCode) -> u32 {
     match code {
@@ -911,29 +913,29 @@ pub fn setEntityInstanceBuffer(
     Instant::now().duration_since(now).as_nanos() as jlong
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bindSkyData(
-    _env: JNIEnv,
-    _class: JClass,
-    r: jfloat,
-    g: jfloat,
-    b: jfloat,
-    angle: jfloat,
-    brightness: jfloat,
-    star_shimmer: jfloat,
-    moon_phase: jint,
-) {
-    let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
-    sky_data.color_r = r;
-    sky_data.color_g = g;
-    sky_data.color_b = b;
-    sky_data.angle = angle;
-    sky_data.brightness = brightness;
-    sky_data.star_shimmer = star_shimmer;
-    sky_data.moon_phase = moon_phase;
-
-    RENDERER.get().unwrap().mc.sky_data.swap(Arc::new(sky_data));
-}
+// #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+// pub fn bindSkyData(
+//     _env: JNIEnv,
+//     _class: JClass,
+//     r: jfloat,
+//     g: jfloat,
+//     b: jfloat,
+//     angle: jfloat,
+//     brightness: jfloat,
+//     star_shimmer: jfloat,
+//     moon_phase: jint,
+// ) {
+//     let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
+//     sky_data.color_r = r;
+//     sky_data.color_g = g;
+//     sky_data.color_b = b;
+//     sky_data.angle = angle;
+//     sky_data.brightness = brightness;
+//     sky_data.star_shimmer = star_shimmer;
+//     sky_data.moon_phase = moon_phase;
+//
+//     RENDERER.get().unwrap().mc.sky_data.swap(Arc::new(sky_data));
+// }
 
 //public static native void bindRenderEffectsData(float fogStart, float fogEnd, int fogShape, float[] fogColor, float[] colorModulator);
 
@@ -969,14 +971,14 @@ pub fn bindRenderEffectsData(
     env.get_float_array_region(&dimension_fog_color, 0, &mut dimension_fog_color_vec[..])
         .unwrap();
 
-    render_effects_data.fog_color = fog_color_vec;
-    render_effects_data.color_modulator = color_modulator_vec;
-    render_effects_data.dimension_fog_color = dimension_fog_color_vec;
-
-    RENDERER
-        .get()
-        .unwrap()
-        .mc
-        .render_effects
-        .swap(Arc::new(render_effects_data));
+    // render_effects_data.fog_color = fog_color_vec;
+    // render_effects_data.color_modulator = color_modulator_vec;
+    // render_effects_data.dimension_fog_color = dimension_fog_color_vec;
+    //
+    // RENDERER
+    //     .get()
+    //     .unwrap()
+    //     .mc
+    //     .render_effects
+    //     .swap(Arc::new(render_effects_data));
 }

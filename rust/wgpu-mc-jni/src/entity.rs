@@ -101,13 +101,13 @@ pub fn tmd_to_wm(name: String, part: &ModelPartData, ap: [u16; 2]) -> Option<Ent
             .iter()
             .map(|cuboid_data| {
                 let pos = [
-                    *cuboid_data.texture_uv.get("x").unwrap() as u16,
-                    *cuboid_data.texture_uv.get("y").unwrap() as u16,
+                    *cuboid_data.texture_uv.get("x")? as u16,
+                    *cuboid_data.texture_uv.get("y")? as u16,
                 ];
                 let dimensions = [
-                    *cuboid_data.dimensions.get("x").unwrap() as u16,
-                    *cuboid_data.dimensions.get("y").unwrap() as u16,
-                    *cuboid_data.dimensions.get("z").unwrap() as u16,
+                    *cuboid_data.dimensions.get("x")? as u16,
+                    *cuboid_data.dimensions.get("y")? as u16,
+                    *cuboid_data.dimensions.get("z")? as u16,
                 ];
 
                 Some(Cuboid {

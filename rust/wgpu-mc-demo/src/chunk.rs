@@ -8,6 +8,7 @@ use wgpu_mc::mc::MinecraftState;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
+use crate::TerrainLayer;
 
 struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
@@ -71,10 +72,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Chunk {
     let chunk = Chunk::new([0, 0]);
     let time = Instant::now();
 
-    let pipelines = wm.pipelines.load();
-    let layers = pipelines.chunk_layers.load();
-
-    chunk.bake_chunk(wm, &layers, &bm, &provider);
+    chunk.bake_chunk(wm, &[Box::new(TerrainLayer)], &bm, &provider);
 
     println!(
         "Built 1 chunk in {} microseconds",

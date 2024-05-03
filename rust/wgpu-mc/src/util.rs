@@ -22,9 +22,7 @@ pub struct BindableBuffer {
 
 impl BindableBuffer {
     pub fn new(wm: &WmRenderer, data: &[u8], usage: wgpu::BufferUsages, layout_name: &str) -> Self {
-        let pipelines = wm.pipelines.load();
-        let layouts = pipelines.bind_group_layouts.read();
-        let layout = layouts.get(layout_name).unwrap();
+        let layout = wm.bind_group_layouts.get(layout_name).unwrap();
 
         let buffer = Arc::new(
             wm.wgpu_state
@@ -62,11 +60,9 @@ impl BindableBuffer {
         usage: wgpu::BufferUsages,
         layout_name: &str,
     ) -> Self {
-        assert_eq!(size & 3, 0);
+        assert_eq!(size & 0b11, 0);
 
-        let pipelines = wm.pipelines.load();
-        let layouts = pipelines.bind_group_layouts.read();
-        let layout = layouts.get(layout_name).unwrap();
+        let layout = wm.bind_group_layouts.get(layout_name).unwrap();
 
         let buffer = Arc::new(wm.wgpu_state.device.create_buffer(&BufferDescriptor {
             label: None,

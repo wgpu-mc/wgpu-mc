@@ -31,9 +31,6 @@ struct PushConstants {
 @group(0) @binding(3) var terrain_texture: texture_2d<f32>;
 @group(0) @binding(4) var terrain_sampler: sampler;
 
-@group(1) @binding(0) var<storage> vertex_data: array<u32>;
-@group(1) @binding(1) var<storage> index_data: array<u32>;
-
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
@@ -46,18 +43,15 @@ struct VertexResult {
 
 @vertex
 fn vert(
+    @location(0) v1: u32,
+    @location(1) v2: u32,
+    @location(2) v3: u32,
+    @location(3) v4: u32,
     @builtin(vertex_index) vertex_index: u32
 ) -> VertexResult {
     // var uv = uv_offsets.uvs[uv_offset];
 
     var vr: VertexResult;
-
-    var index: u32 = index_data[vertex_index];
-
-    var v1 = vertex_data[index * 4u];
-    var v2 = vertex_data[(index * 4u) + 1u];
-    var v3 = vertex_data[(index * 4u) + 2u];
-    var v4 = vertex_data[(index * 4u) + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
@@ -100,5 +94,5 @@ fn frag(
 
     let col = mix(col1, col2, in.blend);
 
-    return col1;
+    return col;
 }

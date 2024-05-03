@@ -1,6 +1,7 @@
 //! Rust implementations of minecraft concepts that are important to us.
 
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
@@ -48,7 +49,7 @@ impl Block {
                 .keys
                 .read()
                 .get_index(key as usize)
-                .expect(&format!("{self:#?}\n{key}"))
+                .unwrap()
                 .1
                 .clone(),
             //TODO, random variant selection through weight and seed
@@ -167,20 +168,48 @@ pub struct RenderEffectsData {
     pub fog_start: f32,
     pub fog_end: f32,
     pub fog_shape: f32,
-    pub fog_color: Vec<f32>,
-    pub color_modulator: Vec<f32>,
-    pub dimension_fog_color: Vec<f32>,
+    pub fog_color: [f32; 4],
+    pub color_modulator: [f32; 4],
+    pub dimension_fog_color: [f32; 4],
 }
 
-pub struct World {
+pub struct Scene {
     pub chunk_store: ChunkStore,
     pub entity_instances: HashMap<String, BundledEntityInstances>,
     pub sky_state: SkyState,
 
-    pub stars_index_buffer: RwLock<Option<wgpu::Buffer>>,
-    pub stars_vertex_buffer: RwLock<Option<wgpu::Buffer>>,
-    pub stars_length: RwLock<u32>,
-    pub render_effects: ArcSwap<RenderEffectsData>,
+    pub stars_index_buffer: Option<wgpu::Buffer>,
+    pub stars_vertex_buffer: Option<wgpu::Buffer>,
+    pub stars_length: u32,
+    pub render_effects: RenderEffectsData,
+    
+    pub depth_texture: wgpu::Texture
+}
+
+impl Scene {
+
+    pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
+        Self {
+            chunk_store: ChunkStore::new(),
+            entity_instances: Default::default(),
+            sky_state: Default::default(),
+            stars_index_buffer: None,
+            stars_vertex_buffer: None,
+            stars_length: 0,
+            render_effects: Default::default(),
+            depth_texture: wm.wgpu_state.device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: framebuffer_size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            }),
+        }
+    }
+
 }
 
 /// Minecraft-specific state and data structures go in here
@@ -201,7 +230,7 @@ impl MinecraftState {
     #[must_use]
     pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
-            chunk_store: ChunkStore::new(wgpu_state),
+            chunk_store: ChunkStore::new(),
             entity_models: RwLock::new(HashMap::new()),
 
             texture_manager: TextureManager::new(wgpu_state),

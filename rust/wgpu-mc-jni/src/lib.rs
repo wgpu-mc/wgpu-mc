@@ -464,14 +464,16 @@ pub fn bake_chunk(x: i32, z: i32) {
     match index {
         None => {
             let chunk = Chunk::new([x, z]);
-            chunk.bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+            chunk.bake_chunk(wm, &[], &bm, &bsp);
             wm.mc.chunk_store.add_chunk([x, z], chunk);
         }
         Some(index) => {
             let chunk = wm.mc.chunk_store.chunks[index].load();
-            (**chunk).as_ref().unwrap().bake_chunk(wm, &wm.pipelines.load_full().chunk_layers.load(), &bm, &bsp);
+            (**chunk).as_ref().unwrap().bake_chunk(wm, &[], &bm, &bsp);
         }
     }
+
+    todo!();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -913,20 +915,20 @@ pub fn texImage2D(
         )
         .unwrap();
 
-        let bindable =
-            BindableTexture::from_tv(&wm.wgpu_state, &wm.pipelines.load_full(), tsv, false);
-
-        {
-            GL_ALLOC.write().insert(
-                texture_id as u32,
-                GlTexture {
-                    width: width as u16,
-                    height: height as u16,
-                    bindable_texture: Some(Arc::new(bindable)),
-                    pixels: data,
-                },
-            );
-        }
+        // let bindable =
+        //     BindableTexture::from_tv(&wm, Arc::new(tsv), false);
+        //
+        // {
+        //     GL_ALLOC.write().insert(
+        //         texture_id as u32,
+        //         GlTexture {
+        //             width: width as u16,
+        //             height: height as u16,
+        //             bindable_texture: Some(Arc::new(bindable)),
+        //             pixels: data,
+        //         },
+        //     );
+        // }
     };
 
     let tx = &TASK_CHANNELS.0;
@@ -1286,37 +1288,37 @@ pub fn bindStarData(
             continue;
         }
 
-        *RENDERER.get().unwrap().mc.stars_length.write() = length as u32;
+        // *RENDERER.get().unwrap().mc.stars_length.write() = length as u32;
 
-        let mut index_buffer = RENDERER.get().unwrap().mc.stars_index_buffer.write();
+        // let mut index_buffer = RENDERER.get().unwrap().mc.stars_index_buffer.write();
 
-        *index_buffer = Some(
-            RENDERER
-                .get()
-                .unwrap()
-                .wgpu_state
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(&indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                }),
-        );
+        // *index_buffer = Some(
+        //     RENDERER
+        //         .get()
+        //         .unwrap()
+        //         .wgpu_state
+        //         .device
+        //         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //             label: None,
+        //             contents: bytemuck::cast_slice(&indices),
+        //             usage: wgpu::BufferUsages::INDEX,
+        //         }),
+        // );
 
-        let mut vertex_buffer = RENDERER.get().unwrap().mc.stars_vertex_buffer.write();
+        // let mut vertex_buffer = RENDERER.get().unwrap().mc.stars_vertex_buffer.write();
 
-        *vertex_buffer = Some(
-            RENDERER
-                .get()
-                .unwrap()
-                .wgpu_state
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(&converted),
-                    usage: wgpu::BufferUsages::VERTEX,
-                }),
-        );
+        // *vertex_buffer = Some(
+        //     RENDERER
+        //         .get()
+        //         .unwrap()
+        //         .wgpu_state
+        //         .device
+        //         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //             label: None,
+        //             contents: bytemuck::cast_slice(&converted),
+        //             usage: wgpu::BufferUsages::VERTEX,
+        //         }),
+        // );
 
         break;
     });

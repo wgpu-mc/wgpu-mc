@@ -7,13 +7,12 @@ use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
 use parking_lot::RwLock;
 use wgpu::BufferUsages;
 
+use crate::{WgpuState, WmRenderer};
 use crate::render::atlas::Atlas;
 use crate::render::entity::EntityVertex;
-use crate::render::pipeline::WmPipelines;
 use crate::texture::{BindableTexture, UV};
 use crate::util::BindableBuffer;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use crate::{WgpuState, WmRenderer};
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -26,11 +25,11 @@ pub struct EntityManager {
 }
 
 impl EntityManager {
-    pub fn new(wgpu_state: &WgpuState, pipelines: &WmPipelines) -> Self {
+    pub fn new(wgpu_state: &WgpuState) -> Self {
         Self {
-            mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines, false)),
+            mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, false)),
             //TODO: support resizing the atlas
-            player_texture_atlas: RwLock::new(Atlas::new(wgpu_state, pipelines, false)),
+            player_texture_atlas: RwLock::new(Atlas::new(wgpu_state, false)),
             entity_types: RwLock::new(Vec::new()),
             entity_vertex_buffers: Default::default(),
         }

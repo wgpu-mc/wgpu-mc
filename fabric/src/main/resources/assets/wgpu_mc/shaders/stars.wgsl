@@ -19,17 +19,9 @@ struct PushConstants {
     fog_start: f32,
     fog_end: f32,
     fog_shape: f32,
-    fog_color_r: f32,
-    fog_color_g: f32,
-    fog_color_b: f32,
-    fog_color_a: f32,
-    color_modulator_r: f32,
-    color_modulator_g: f32,
-    color_modulator_b: f32,
-    dimension_fog_color_r: f32,
-    dimension_fog_color_g: f32,
-    dimension_fog_color_b: f32,
-    dimension_fog_color_a: f32,
+    fog_color: vec4,
+    color_modulator: vec3,
+    dimension_fog_color: vec4,
 }
 
 var<push_constant> data: PushConstants;

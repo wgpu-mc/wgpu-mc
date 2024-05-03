@@ -11,12 +11,8 @@ use cgmath::{Matrix4, SquareMatrix};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
-use wgpu_mc::render::graph_old::{
-    bind_uniforms, set_push_constants, CustomResource, GeometryCallback, GeometryInfo,
-    ResourceInternal, TextureResource,
-};
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
-use wgpu_mc::texture::{BindableTexture, TextureHandle};
+use wgpu_mc::texture::{BindableTexture};
 use wgpu_mc::util::{BindableBuffer, WmArena};
 use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
 use wgpu_mc::{wgpu, WmRenderer};
@@ -209,48 +205,6 @@ enum PipelineState {
     PositionColorUvLight,
 }
 
-fn augment_resources<'arena: 'resources, 'resources>(
-    wm: &WmRenderer,
-    resources: &'resources HashMap<String, CustomResource>,
-    arena: &'arena WmArena<'arena>,
-    texture: Arc<BindableTexture>,
-    matrix: Mat4,
-) -> &'arena HashMap<&'arena String, &'resources CustomResource> {
-    arena.alloc(
-        resources
-            .iter()
-            .chain([
-                (
-                    &*arena.alloc("wm_electrum_gl_texture".into()),
-                    &*arena.alloc(CustomResource {
-                        update: None,
-                        data: Arc::new(ResourceInternal::Texture(
-                            TextureResource::Bindable(Arc::new(ArcSwap::new(texture))),
-                            false,
-                        )),
-                    }),
-                ),
-                (
-                    &*arena.alloc("wm_electrum_mat4".into()),
-                    &*arena.alloc(CustomResource {
-                        update: None,
-                        data: Arc::new(ResourceInternal::Mat4(
-                            Mat4ValueOrMult::Value { value: matrix },
-                            Arc::new(RwLock::new(matrix.into())),
-                            Arc::new(BindableBuffer::new(
-                                wm,
-                                bytemuck::cast_slice(&matrix),
-                                BufferUsages::UNIFORM,
-                                "matrix",
-                            )),
-                        )),
-                    }),
-                ),
-            ])
-            .collect(),
-    )
-}
-
 pub struct BufferPool {
     pub data: Vec<u8>,
 }
@@ -270,247 +224,247 @@ impl BufferPool {
     }
 }
 
-#[derive(Debug)]
-pub struct ElectrumGeometry {
-    pub blank: TextureHandle,
-    pub pool: Arc<Buffer>,
-    pub last_bytes: RwLock<Option<Vec<u8>>>,
-}
+// #[derive(Debug)]
+// pub struct ElectrumGeometry {
+//     pub blank: TextureHandle,
+//     pub pool: Arc<Buffer>,
+//     pub last_bytes: RwLock<Option<Vec<u8>>>,
+// }
 
-impl GeometryCallback for ElectrumGeometry {
-    fn render(&self, info: GeometryInfo) {
-        let mut buffer_pool = BufferPool { data: Vec::new() };
-
-        let (_, commands) = {
-            GL_COMMANDS.read().clone() //Free the lock as soon as possible
-        };
-
-        let mut calls = vec![];
-
-        let mut vertex_buffer = vec![];
-        let mut index_buffer = vec![];
-        let mut matrix = Matrix4::<f32>::identity();
-        let mut texture = None;
-        let mut pipeline_state = None;
-
-        let textures_read = GL_ALLOC.read();
-
-        for command in commands {
-            match command {
-                GLCommand::SetMatrix(new_matrix) => {
-                    matrix = new_matrix;
-                }
-                GLCommand::ClearColor(color) => {
-                    #[rustfmt::skip]
-                    calls.push(DrawCall::Indexed(IndexedDraw {
-                        vertex_buffer: Vec::from(
-                            bytemuck::cast_slice(&[
-                                -1.0, 1.0, 0.0, color[0], color[1], color[2],
-                                1.0, 1.0, 0.0, color[0], color[1], color[2],
-                                1.0, -1.0, 0.0, color[0], color[1], color[2],
-                                -1.0, -1.0, 0.0, color[0], color[1], color[2]
-                            ])
-                        ),
-                        index_buffer: vec![0,1,2,0,3,2],
-                        count: 6,
-                        matrix: Matrix4::<f32>::identity().into(),
-                        texture: None,
-                        pipeline_state: PipelineState::PositionColorF32,
-                    }));
-                }
-                GLCommand::UsePipeline(pipeline) => {
-                    pipeline_state = Some(match pipeline {
-                        0 => PipelineState::PositionColorUint,
-                        1 => PipelineState::PositionUv,
-                        2 => PipelineState::PositionColorF32,
-                        3 => PipelineState::PositionColorUvLight,
-                        4 => PipelineState::PositionUvColor,
-                        _ => unimplemented!(),
-                    });
-                }
-                GLCommand::SetVertexBuffer(buffer) => {
-                    vertex_buffer = buffer;
-                }
-                GLCommand::SetIndexBuffer(buffer) => {
-                    index_buffer = buffer;
-                }
-                GLCommand::DrawIndexed(count) => {
-                    calls.push(DrawCall::Indexed(IndexedDraw {
-                        vertex_buffer: std::mem::take(&mut vertex_buffer),
-                        index_buffer: std::mem::take(&mut index_buffer),
-                        count,
-                        matrix: matrix.into(),
-                        texture: texture.take(),
-                        pipeline_state: pipeline_state.take().unwrap(),
-                    }));
-                }
-                GLCommand::Draw(count) => {
-                    calls.push(DrawCall::Verts(Draw {
-                        vertex_buffer: std::mem::take(&mut vertex_buffer),
-                        count,
-                        matrix: matrix.into(),
-                        texture: texture.take(),
-                    }));
-                }
-                GLCommand::AttachTexture(index, id) => {
-                    assert_eq!(index, 0);
-                    texture = Some(id as u32);
-                }
-            }
-        }
-
-        //TODO: make gui rendering instanced to minimize draw calls by merging similar calls
-
-        // let mut draws = HashMap::new();
-        // let mut indexed_draws = HashMap::new();
-        // let mut clears = HashMap::new();
-        //
-        // for call in calls {
-        //     match call {
-        //         DrawCall::Verts(draw) => {
-        //             match draws.get_mut(&draw.texture) {
-        //                 Some(assembled_draw) => {
-        //                     assembled_draw.
-        //                 },
-        //                 None => {
-        //                     draws.insert(draw.texture, draw);
-        //                 }
-        //             };
-        //         }
-        //         DrawCall::Indexed(_) => {}
-        //         DrawCall::Clear(_) => {}
-        //     }
-        // }
-
-        for call in calls {
-            match call {
-                DrawCall::Verts(draw) => {
-                    let mut texture = self.blank.bindable_texture.load_full();
-
-                    if let Some(texture_index) = draw.texture {
-                        if let Some(gl_texture) = textures_read.get(&texture_index) {
-                            texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
-                        }
-                    }
-
-                    let augmented_resources = augment_resources(
-                        info.wm,
-                        info.resources,
-                        info.arena,
-                        texture,
-                        draw.matrix,
-                    );
-
-                    bind_uniforms(
-                        info.config,
-                        augmented_resources,
-                        info.arena,
-                        info.render_pass,
-                        None,
-                    );
-                    set_push_constants(
-                        &info.wm.mc,
-                        info.config,
-                        info.render_pass,
-                        None,
-                        info.surface_config,
-                        info.chunk_offset,
-                        None,
-                        None,
-                    );
-
-                    let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
-
-                    info.render_pass.set_vertex_buffer(
-                        0,
-                        info.arena.alloc(self.pool.clone()).slice(buffer_slice),
-                    );
-                    info.render_pass.draw(0..draw.count, 0..1);
-                }
-                DrawCall::Indexed(draw) => {
-                    let mut texture = self.blank.bindable_texture.load_full();
-
-                    if let Some(texture_index) = draw.texture {
-                        if let Some(gl_texture) = textures_read.get(&texture_index) {
-                            texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
-                        }
-                    }
-
-                    let augmented_resources = augment_resources(
-                        info.wm,
-                        info.resources,
-                        info.arena,
-                        texture,
-                        draw.matrix,
-                    );
-
-                    bind_uniforms(
-                        info.config,
-                        augmented_resources,
-                        info.arena,
-                        info.render_pass,
-                        None,
-                    );
-                    set_push_constants(
-                        &info.wm.mc,
-                        info.config,
-                        info.render_pass,
-                        None,
-                        info.surface_config,
-                        info.chunk_offset,
-                        None,
-                        None,
-                    );
-
-                    let vertices = match draw.pipeline_state {
-                        PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
-                            bytemuck::cast_slice(&draw.vertex_buffer),
-                        ),
-                        PipelineState::PositionUv => {
-                            ElectrumVertex::map_pos_uv(bytemuck::cast_slice(&draw.vertex_buffer))
-                        }
-                        PipelineState::PositionColorF32 => ElectrumVertex::map_pos_col_float3(
-                            bytemuck::cast_slice(&draw.vertex_buffer),
-                        ),
-                        PipelineState::PositionUvColor => ElectrumVertex::map_pos_uv_color(
-                            bytemuck::cast_slice(&draw.vertex_buffer),
-                        ),
-                        PipelineState::PositionColorUvLight => {
-                            ElectrumVertex::map_pos_color_uv_light(
-                                bytemuck::try_cast_slice(&draw.vertex_buffer).unwrap(),
-                            )
-                        }
-                    };
-
-                    let vert_slice = buffer_pool.allocate(&vertices);
-
-                    let index_slice = buffer_pool.allocate(&draw.index_buffer);
-
-                    let pool_alloc = info.arena.alloc(self.pool.clone());
-
-                    info.render_pass
-                        .set_vertex_buffer(0, pool_alloc.slice(vert_slice));
-                    info.render_pass
-                        .set_index_buffer(pool_alloc.slice(index_slice), IndexFormat::Uint32);
-                    info.render_pass.draw_indexed(0..draw.count, 0, 0..1);
-                }
-            }
-        }
-
-        match &*self.last_bytes.read() {
-            None => {}
-            Some(bytes) => {
-                if bytes == &buffer_pool.data {
-                    return;
-                }
-            }
-        }
-
-        info.wm
-            .wgpu_state
-            .queue
-            .write_buffer(&self.pool, 0, &buffer_pool.data);
-
-        *self.last_bytes.write() = Some(buffer_pool.data);
-    }
-}
+// impl GeometryCallback for ElectrumGeometry {
+//     fn render(&self, info: GeometryInfo) {
+//         let mut buffer_pool = BufferPool { data: Vec::new() };
+//
+//         let (_, commands) = {
+//             GL_COMMANDS.read().clone() //Free the lock as soon as possible
+//         };
+//
+//         let mut calls = vec![];
+//
+//         let mut vertex_buffer = vec![];
+//         let mut index_buffer = vec![];
+//         let mut matrix = Matrix4::<f32>::identity();
+//         let mut texture = None;
+//         let mut pipeline_state = None;
+//
+//         let textures_read = GL_ALLOC.read();
+//
+//         for command in commands {
+//             match command {
+//                 GLCommand::SetMatrix(new_matrix) => {
+//                     matrix = new_matrix;
+//                 }
+//                 GLCommand::ClearColor(color) => {
+//                     #[rustfmt::skip]
+//                     calls.push(DrawCall::Indexed(IndexedDraw {
+//                         vertex_buffer: Vec::from(
+//                             bytemuck::cast_slice(&[
+//                                 -1.0, 1.0, 0.0, color[0], color[1], color[2],
+//                                 1.0, 1.0, 0.0, color[0], color[1], color[2],
+//                                 1.0, -1.0, 0.0, color[0], color[1], color[2],
+//                                 -1.0, -1.0, 0.0, color[0], color[1], color[2]
+//                             ])
+//                         ),
+//                         index_buffer: vec![0,1,2,0,3,2],
+//                         count: 6,
+//                         matrix: Matrix4::<f32>::identity().into(),
+//                         texture: None,
+//                         pipeline_state: PipelineState::PositionColorF32,
+//                     }));
+//                 }
+//                 GLCommand::UsePipeline(pipeline) => {
+//                     pipeline_state = Some(match pipeline {
+//                         0 => PipelineState::PositionColorUint,
+//                         1 => PipelineState::PositionUv,
+//                         2 => PipelineState::PositionColorF32,
+//                         3 => PipelineState::PositionColorUvLight,
+//                         4 => PipelineState::PositionUvColor,
+//                         _ => unimplemented!(),
+//                     });
+//                 }
+//                 GLCommand::SetVertexBuffer(buffer) => {
+//                     vertex_buffer = buffer;
+//                 }
+//                 GLCommand::SetIndexBuffer(buffer) => {
+//                     index_buffer = buffer;
+//                 }
+//                 GLCommand::DrawIndexed(count) => {
+//                     calls.push(DrawCall::Indexed(IndexedDraw {
+//                         vertex_buffer: std::mem::take(&mut vertex_buffer),
+//                         index_buffer: std::mem::take(&mut index_buffer),
+//                         count,
+//                         matrix: matrix.into(),
+//                         texture: texture.take(),
+//                         pipeline_state: pipeline_state.take().unwrap(),
+//                     }));
+//                 }
+//                 GLCommand::Draw(count) => {
+//                     calls.push(DrawCall::Verts(Draw {
+//                         vertex_buffer: std::mem::take(&mut vertex_buffer),
+//                         count,
+//                         matrix: matrix.into(),
+//                         texture: texture.take(),
+//                     }));
+//                 }
+//                 GLCommand::AttachTexture(index, id) => {
+//                     assert_eq!(index, 0);
+//                     texture = Some(id as u32);
+//                 }
+//             }
+//         }
+//
+//         //TODO: make gui rendering instanced to minimize draw calls by merging similar calls
+//
+//         // let mut draws = HashMap::new();
+//         // let mut indexed_draws = HashMap::new();
+//         // let mut clears = HashMap::new();
+//         //
+//         // for call in calls {
+//         //     match call {
+//         //         DrawCall::Verts(draw) => {
+//         //             match draws.get_mut(&draw.texture) {
+//         //                 Some(assembled_draw) => {
+//         //                     assembled_draw.
+//         //                 },
+//         //                 None => {
+//         //                     draws.insert(draw.texture, draw);
+//         //                 }
+//         //             };
+//         //         }
+//         //         DrawCall::Indexed(_) => {}
+//         //         DrawCall::Clear(_) => {}
+//         //     }
+//         // }
+//
+//         for call in calls {
+//             match call {
+//                 DrawCall::Verts(draw) => {
+//                     let mut texture = self.blank.bindable_texture.load_full();
+//
+//                     if let Some(texture_index) = draw.texture {
+//                         if let Some(gl_texture) = textures_read.get(&texture_index) {
+//                             texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
+//                         }
+//                     }
+//
+//                     let augmented_resources = augment_resources(
+//                         info.wm,
+//                         info.resources,
+//                         info.arena,
+//                         texture,
+//                         draw.matrix,
+//                     );
+//
+//                     // bind_uniforms(
+//                     //     info.config,
+//                     //     augmented_resources,
+//                     //     info.arena,
+//                     //     info.render_pass,
+//                     //     None,
+//                     // );
+//                     // set_push_constants(
+//                     //     &info.wm.mc,
+//                     //     info.config,
+//                     //     info.render_pass,
+//                     //     None,
+//                     //     info.surface_config,
+//                     //     info.chunk_offset,
+//                     //     None,
+//                     //     None,
+//                     // );
+//
+//                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
+//
+//                     info.render_pass.set_vertex_buffer(
+//                         0,
+//                         info.arena.alloc(self.pool.clone()).slice(buffer_slice),
+//                     );
+//                     info.render_pass.draw(0..draw.count, 0..1);
+//                 }
+//                 DrawCall::Indexed(draw) => {
+//                     let mut texture = self.blank.bindable_texture.load_full();
+//
+//                     if let Some(texture_index) = draw.texture {
+//                         if let Some(gl_texture) = textures_read.get(&texture_index) {
+//                             texture = gl_texture.bindable_texture.as_ref().unwrap().clone();
+//                         }
+//                     }
+//
+//                     let augmented_resources = augment_resources(
+//                         info.wm,
+//                         info.resources,
+//                         info.arena,
+//                         texture,
+//                         draw.matrix,
+//                     );
+//
+//                     bind_uniforms(
+//                         info.config,
+//                         augmented_resources,
+//                         info.arena,
+//                         info.render_pass,
+//                         None,
+//                     );
+//                     set_push_constants(
+//                         &info.wm.mc,
+//                         info.config,
+//                         info.render_pass,
+//                         None,
+//                         info.surface_config,
+//                         info.chunk_offset,
+//                         None,
+//                         None,
+//                     );
+//
+//                     let vertices = match draw.pipeline_state {
+//                         PipelineState::PositionColorUint => ElectrumVertex::map_pos_color_uint(
+//                             bytemuck::cast_slice(&draw.vertex_buffer),
+//                         ),
+//                         PipelineState::PositionUv => {
+//                             ElectrumVertex::map_pos_uv(bytemuck::cast_slice(&draw.vertex_buffer))
+//                         }
+//                         PipelineState::PositionColorF32 => ElectrumVertex::map_pos_col_float3(
+//                             bytemuck::cast_slice(&draw.vertex_buffer),
+//                         ),
+//                         PipelineState::PositionUvColor => ElectrumVertex::map_pos_uv_color(
+//                             bytemuck::cast_slice(&draw.vertex_buffer),
+//                         ),
+//                         PipelineState::PositionColorUvLight => {
+//                             ElectrumVertex::map_pos_color_uv_light(
+//                                 bytemuck::try_cast_slice(&draw.vertex_buffer).unwrap(),
+//                             )
+//                         }
+//                     };
+//
+//                     let vert_slice = buffer_pool.allocate(&vertices);
+//
+//                     let index_slice = buffer_pool.allocate(&draw.index_buffer);
+//
+//                     let pool_alloc = info.arena.alloc(self.pool.clone());
+//
+//                     info.render_pass
+//                         .set_vertex_buffer(0, pool_alloc.slice(vert_slice));
+//                     info.render_pass
+//                         .set_index_buffer(pool_alloc.slice(index_slice), IndexFormat::Uint32);
+//                     info.render_pass.draw_indexed(0..draw.count, 0, 0..1);
+//                 }
+//             }
+//         }
+//
+//         match &*self.last_bytes.read() {
+//             None => {}
+//             Some(bytes) => {
+//                 if bytes == &buffer_pool.data {
+//                     return;
+//                 }
+//             }
+//         }
+//
+//         info.wm
+//             .wgpu_state
+//             .queue
+//             .write_buffer(&self.pool, 0, &buffer_pool.data);
+//
+//         *self.last_bytes.write() = Some(buffer_pool.data);
+//     }
+// }

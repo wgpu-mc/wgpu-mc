@@ -2,11 +2,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
 
-use arc_swap::ArcSwap;
 use futures::executor::block_on;
-use parking_lot::RwLock;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
@@ -15,22 +12,22 @@ use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
+use wgpu_mc::{HasWindowSize, wgpu, WindowSize, WmRenderer};
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
-use wgpu_mc::render::graph_old::{CustomResource, ResourceInternal, ShaderGraph};
+use wgpu_mc::mc::Scene;
+use wgpu_mc::render::graph::{RenderGraph, ResourceBacking};
 use wgpu_mc::render::pipeline::Vertex;
-use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
-use wgpu_mc::util::BindableBuffer;
-use wgpu_mc::wgpu::BufferUsages;
-use wgpu_mc::{wgpu, HasWindowSize, WindowSize, WmRenderer};
+use wgpu_mc::render::shaderpack::ShaderPackConfig;
+use wgpu_mc::wgpu::{BufferBindingType, Extent3d};
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use crate::camera::Camera;
 use crate::chunk::make_chunks;
 
 mod camera;
 mod chunk;
-mod entity;
 
 struct FsResourceProvider {
     pub asset_root: PathBuf,
@@ -161,118 +158,47 @@ impl RenderLayer for TerrainLayer {
     }
 }
 
+fn create_buffer(wm: &WmRenderer, contents: &[u8]) -> wgpu::Buffer {
+    wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        contents,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    })
+}
+
 fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
-    // let (_entity, instances) = describe_entity(&wm);
-
-    // let mut instances_map = HashMap::new();
-    //
-    // instances_map.insert(ENTITY_NAME.into(), instances);
-
-    // wm.mc.entity_models.write().push(entity.clone());
-
-    wm.pipelines
-        .load_full()
-        .chunk_layers
-        .store(Arc::new(vec![Box::new(TerrainLayer)]));
-
-    let chunk = make_chunks(&wm);
-
-    // {
-    //     wm.mc
-    //         .chunk_store
-    //         .chunks
-    //         .insert([0, 0], ArcSwap::new(Arc::new(chunk)));
-    // }
-
-    let mut frame_start = Instant::now();
-
-    let mut forward = 0.0;
-
-    let pack = serde_yaml::from_str(
+    let pack = serde_yaml::from_str::<ShaderPackConfig>(
         &wm.mc
             .resource_provider
             .get_string(&ResourcePath("wgpu_mc:graph.yaml".into()))
             .unwrap(),
-    )
-    .unwrap();
-    let mut resources = HashMap::new();
-
-    let aspect = {
-        let surface = wm.wgpu_state.surface.read();
-        (surface.1.width as f32) / (surface.1.height as f32)
-    };
-
-    let mut camera = Camera::new(aspect);
-    let projection_bindable = Arc::new(BindableBuffer::new(
-        &wm,
-        &[0u8; 64],
-        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        "matrix",
-    ));
-    let view_bindable = Arc::new(BindableBuffer::new(
-        &wm,
-        &[0u8; 64],
-        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        "matrix",
-    ));
-    let rotation_bindable = Arc::new(BindableBuffer::new(
-        &wm,
-        &[0u8; 64],
-        BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        "matrix",
-    ));
-
-    let view_matrix = Arc::new(RwLock::new(camera.build_view_matrix()));
-    let projection_matrix = Arc::new(RwLock::new(camera.build_perspective_matrix()));
-    let rotation_matrix = Arc::new(RwLock::new(camera.build_rotation_matrix()));
-
-    resources.insert(
-        "wm_mat4_projection".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value {
-                    value: [[0.0; 4]; 4],
-                },
-                projection_matrix.clone(),
-                projection_bindable.clone(),
-            )),
-        },
     );
 
-    resources.insert(
-        "wm_mat4_view".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value {
-                    value: [[0.0; 4]; 4],
-                },
-                view_matrix.clone(),
-                view_bindable.clone(),
-            )),
-        },
-    );
+    let mat4_model_buffer = Arc::new(create_buffer(&wm, &[0; 64]));
+    let mat4_view_buffer = Arc::new(create_buffer(&wm, &[0; 64]));
+    let mat4_persp_buffer = Arc::new(create_buffer(&wm, &[0; 64]));
 
-    resources.insert(
-        "wm_mat4_rotation".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value {
-                    value: [[0.0; 4]; 4],
-                },
-                rotation_matrix.clone(),
-                rotation_bindable.clone(),
-            )),
-        },
-    );
+    let resource_backings = [
+        ("@mat4_model".into(), ResourceBacking::BufferBacked(mat4_model_buffer.clone(), BufferBindingType::Uniform)),
+        ("@mat4_view".into(), ResourceBacking::BufferBacked(mat4_view_buffer.clone(), BufferBindingType::Uniform)),
+        ("@mat4_perspective".into(), ResourceBacking::BufferBacked(mat4_persp_buffer.clone(), BufferBindingType::Uniform))
+    ].into_iter().collect::<HashMap<String, ResourceBacking>>();
 
-    let mut graph = ShaderGraph::new(pack, resources, HashMap::new());
+    let render_graph = RenderGraph::new(&wm, resource_backings, pack.unwrap());
 
-    graph.init(&wm, None, None);
+    let scene = Scene::new(&wm, Extent3d {
+        width: window.inner_size().width,
+        height: window.inner_size().height,
+        depth_or_array_layers: 1,
+    });
 
-    let instances = HashMap::new();
+    let chunk = make_chunks(&wm);
+    scene.chunk_store.add_chunk([0,0], chunk);
+
+
+    let mut forward = 0.0;
+
+    let mut camera = Camera::new(1.0);
 
     event_loop
         .run(move |event, target| {
@@ -337,88 +263,42 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                             }));
                         }
                         WindowEvent::RedrawRequested => {
-                            let frame_time =
-                                Instant::now().duration_since(frame_start).as_secs_f32();
 
-                            // let mut part_transforms = vec![PartTransform::identity(); entity.parts.len()];
-                            // let lid_index = *entity.parts.get("lid").unwrap();
-                            // part_transforms[lid_index] = PartTransform {
-                            //     x: 0.0,
-                            //     y: 0.0,
-                            //     z: 0.0,
-                            //     pivot_x: (1.0 / 16.0),
-                            //     pivot_y: (10.0 / 16.0),
-                            //     pivot_z: (1.0 / 16.0),
-                            //     yaw: 0.0,
-                            //     pitch: ((spin * 15.0).sin() * PI).to_degrees() * 0.25 - 45.0,
-                            //     roll: 0.0,
-                            //     scale_x: 1.0,
-                            //     scale_y: 1.0,
-                            //     scale_z: 1.0,
-                            // };
-
-                            // let gpu_instance = EntityInstances::new(
-                            //     entity.clone(),
-                            //     vec![EntityInstanceTransforms {
-                            //         position: (0.0, 0.0, 0.0),
-                            //         looking_yaw: 0.0,
-                            //         uv_offset: (0.0, 0.0),
-                            //         part_transforms,
-                            //     }],
-                            // );
-
-                            // gpu_instance.upload(&wm);
-
-                            // instances_map.insert(ENTITY_NAME.into(), gpu_instance);
-
-                            camera.position += camera.get_direction() * forward * frame_time * 40.0;
-
-                            {
-                                *projection_matrix.write() = camera.build_perspective_matrix();
-                                *view_matrix.write() = camera.build_view_matrix();
-                                *rotation_matrix.write() = camera.build_rotation_matrix();
-                            }
-
-                            let proj_mat: Mat4 = camera.build_perspective_matrix().into();
-                            let view_mat: Mat4 = camera.build_view_matrix().into();
-                            let rot_mat: Mat4 = camera.build_rotation_matrix().into();
+                            let perspective: [[f32; 4]; 4] = camera.build_perspective_matrix().into();
+                            let view: [[f32; 4]; 4] = camera.build_view_matrix().into();
 
                             wm.wgpu_state.queue.write_buffer(
-                                &projection_bindable.buffer,
+                                &mat4_persp_buffer,
                                 0,
-                                bytemuck::cast_slice(&proj_mat),
+                                bytemuck::cast_slice(&perspective)
                             );
 
                             wm.wgpu_state.queue.write_buffer(
-                                &view_bindable.buffer,
+                                &mat4_view_buffer,
                                 0,
-                                bytemuck::cast_slice(&view_mat),
+                                bytemuck::cast_slice(&view)
                             );
 
-                            wm.wgpu_state.queue.write_buffer(
-                                &rotation_bindable.buffer,
-                                0,
-                                bytemuck::cast_slice(&rot_mat),
-                            );
+                            camera.position += camera.get_direction() * forward * 0.01;
+                            dbg!(camera.get_direction() * forward * 0.01);
 
-                            let surface_state = wm.wgpu_state.surface.read();
-                            let surface = surface_state.0.as_ref().unwrap();
-                            let texture = surface.get_current_texture().unwrap_or_else(|_| {
+                            let mut surface_guard = wm.wgpu_state.surface.write();
+                            let (surface, ref mut config) = &mut *surface_guard;
+
+                            let surface = surface.as_ref().unwrap();
+
+                            let surface_texture = surface.get_current_texture().unwrap_or_else(|_| {
                                 //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
                                 let size = wm.wgpu_state.size.as_ref().unwrap().load();
-                                let new_config = wm
-                                    .update_surface_size(
-                                        surface_state.1.clone(),
-                                        WindowSize {
-                                            width: size.width,
-                                            height: size.height,
-                                        },
-                                    )
-                                    .unwrap();
-                                surface.configure(&wm.wgpu_state.device, &new_config);
+
+                                config.width = size.width;
+                                config.height = size.height;
+
+                                surface.configure(&wm.wgpu_state.device, &config);
                                 surface.get_current_texture().unwrap()
                             });
-                            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+
+                            let view = surface_texture.texture.create_view(&wgpu::TextureViewDescriptor {
                                 label: None,
                                 format: Some(wgpu::TextureFormat::Bgra8Unorm),
                                 dimension: Some(wgpu::TextureViewDimension::D2),
@@ -429,11 +309,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                                 array_layer_count: None,
                             });
 
-                            let _ = wm.render(&graph, &view, &surface_state.1, &instances, None);
 
-                            texture.present();
+                            wm.submit_chunk_updates();
+                            render_graph.render(&wm, &scene, &[], &view, [0; 3]);
 
-                            frame_start = Instant::now();
+                            surface_texture.present();
+
                         }
                         _ => {}
                     }

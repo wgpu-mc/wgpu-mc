@@ -10,7 +10,7 @@ edition = "2021"
 crate-root = "0.1.3"
 futures = "0.3"
 raw-window-handle = "0.5.2"
-wgpu-mc = { path = "../wgpu-mc", features = ["tracing"] }
+wgpu-mc = { path = "../wgpu-mc", features = ["tracing", "vbo-fallback"] }
 winit = "0.29.6"
 cgmath = "0.18.0"
 arc-swap = "1.4.0"

@@ -1,82 +1,75 @@
 version: "0.0.1"
 support: wgsl
 resources:
-  terrain_mat4:
-    type: mat4
-    mult: [wm_mat4_terrain_transformation]
 pipelines:
   sky_scatter:
-    geometry: wm_geo_sky_scatter
-    output: [wm_framebuffer_texture]
+    geometry: @geo_sky_scatter
+    output: [@framebuffer_texture]
     clear: true
     push_constants:
-      0: wm_pc_environment_data
-    uniforms:
-      0: mvp_mat4
-      1: mvv_mat4
-      2: mvm_mat4
+      0: @pc_environment_data
+    bind_groups:
+      0:
+        0: @mat4_mvp
   sky_fog:
-    geometry: wm_geo_sky_fog
-    output: [wm_framebuffer_texture]
+    geometry: @geo_sky_fog
+    output: [@framebuffer_texture]
     push_constants:
-      0: wm_pc_environment_data
-    uniforms:
-      0: wm_mat4_projection
-      1: wm_mat4_view
-      2: wm_mat4_model
+      0: @pc_environment_data
+    bind_groups:
+      0:
+        0: @mat4_projection
+        1: @mat4_view
+        2: @mat4_model
   stars:
-    geometry: wm_geo_sky_stars
-    output: [wm_framebuffer_texture]
+    geometry: @geo_sky_stars
+    output: [@framebuffer_texture]
     blending: color_add_alpha_blending
     push_constants:
-      0: wm_pc_environment_data
-    uniforms:
-      0: wm_mat4_projection
-      1: wm_mat4_view
-      2: wm_mat4_model
+      0: @pc_environment_data
+    bind_groups:
+      0: @mat4_projection
+      1: @mat4_view
+      2: @mat4_model
   sun_moon_cycle:
-    geometry: wm_geo_sun_moon
-    output: [wm_framebuffer_texture]
+    geometry: @geo_sun_moon
+    output: [@framebuffer_texture]
     blending: color_add_alpha_blending
     push_constants:
-      0: wm_pc_environment_data
-    uniforms:
-      0: wm_mat4_projection
-      1: wm_mat4_view
-      2: wm_mat4_model
-      3: wm_texture_sky_sun
-      4: wm_texture_sky_moon
+      0: @pc_environment_data
+    bind_groups:
+      0: @mat4_projection
+      1: @mat4_view
+      2: @mat4_model
+      3: @texture_sky_sun
+      4: @texture_sky_moon
   terrain:
-    geometry: wm_geo_terrain
-    depth: wm_framebuffer_depth
-    output: [wm_framebuffer_texture]
+    geometry: @geo_terrain
+    depth: @framebuffer_depth
+    output: [@framebuffer_texture]
     blending: premultiplied_alpha_blending
     push_constants:
-      0: wm_pc_chunk_position
-      12: wm_pc_framebuffer_size
-    uniforms:
-      0: terrain_mat4
-      1: wm_texture_atlas_blocks
-      2: wm_ssbo_chunk_vertices
-      3: wm_ssbo_chunk_indices
-      4: wm_tex_electrum_lightmap
-      5: mvp_mat4
+      0: @pc_chunk_position
+      12: @pc_framebuffer_size
+    bind_groups:
+      0: @tex_block_atlas
+      1: @ssbo_chunk_vertices
+      2: @ssbo_chunk_indices
+      3: @tex_electrum_lightmap
+      4: mvp_mat4
   entity:
-    geometry: wm_geo_entities
-    depth: wm_framebuffer_depth
-    output: [wm_framebuffer_texture]
+    geometry: @geo_entities
+    depth: @framebuffer_depth
+    output: [@framebuffer_texture]
     push_constants:
-      0: wm_pc_parts_per_entity
-    uniforms:
-      0: mvp_mat4
-      1: wm_ssbo_entity_part_transforms
-      2: wm_texture_entities
-      3: wm_ssbo_entity_part_overlays
-      4: terrain_mat4
+      0: @pc_parts_per_entity
+    bind_groups:
+      0: @bg_matrices
+      1: @bg_entity
   electrum_gui:
-    geometry: wm_geo_electrum_gui
-    output: [wm_framebuffer_texture]
+    geometry: @geo_electrum_gui
+    output: [@framebuffer_texture]
 #    blending: premultiplied_alpha_blending
-    uniforms:
-      0: wm_electrum_mat4
-      1: wm_electrum_gl_texture
+    bind_groups:
+      0: @electrum_mat4
+      1: @electrum_gl_texture
