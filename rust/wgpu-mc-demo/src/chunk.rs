@@ -2,13 +2,13 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Instant;
 
+use glam::IVec3;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{BlockStateProvider, Section, LightLevel};
+use wgpu_mc::mc::chunk::{BlockStateProvider, LightLevel, Section};
 use wgpu_mc::mc::MinecraftState;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
-use glam::IVec3;
 struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
@@ -27,7 +27,6 @@ impl BlockStateProvider for SimpleBlockstateProvider {
     fn is_section_empty(&self, _index: usize) -> bool {
         false
     }
-
 }
 
 impl Debug for SimpleBlockstateProvider {
@@ -69,7 +68,7 @@ pub fn make_chunks(wm: &WmRenderer) -> Section {
         },
     );
 
-    let mut chunk = Section::new([0,0,0].into());
+    let mut chunk = Section::new([0, 0, 0].into());
     let time = Instant::now();
 
     chunk.bake_chunk(wm, &bm, &provider);

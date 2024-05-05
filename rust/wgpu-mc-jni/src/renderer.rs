@@ -31,7 +31,7 @@ use winit::platform::scancode::PhysicalKeyExtScancode;
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
-use wgpu_mc::render::pipeline::{Vertex};
+use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::BindableBuffer;
@@ -351,7 +351,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             match event {
                 Event::AboutToWait => {
-
                     wm.submit_chunk_updates();
 
                     {
@@ -421,7 +420,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                         array_layer_count: None,
                     });
 
-
                     let clear_color =
                         *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
                     {
@@ -437,7 +435,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                     }
                     texture.present();
                     window.request_redraw()
-                },
+                }
                 Event::WindowEvent {
                     ref event,
                     window_id,
@@ -692,7 +690,6 @@ pub enum MCTextureId {
     Lightmap,
 }
 
-
 pub static ENTITY_INSTANCES: Lazy<Mutex<HashMap<String, BundledEntityInstances>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
@@ -742,7 +739,7 @@ pub fn setEntityInstanceBuffer(
     let entity_name: String = env.get_string(&entity_name).unwrap().into();
 
     if instance_count == 0 {
-            ENTITY_INSTANCES.lock().remove(&entity_name);
+        ENTITY_INSTANCES.lock().remove(&entity_name);
         return Instant::now().duration_since(now).as_nanos() as jlong;
     }
 
@@ -761,40 +758,55 @@ pub fn setEntityInstanceBuffer(
         .collect();
 
     let mut instances = ENTITY_INSTANCES.lock();
-    let bundled_entity_instances = if let Some(bundled_entity_instances) = instances.get_mut(&entity_name){
-        bundled_entity_instances.count = instance_count;
-        bundled_entity_instances
-    }
-    else{
-        let texture = {
-            let gl_alloc = GL_ALLOC.read();
-    
-            match gl_alloc.get(&(texture_id as u32)) {
-                None => return 0,
-                Some(GlTexture {
-                    bindable_texture: None,
-                    ..
-                }) => return 0,
-                _ => {}
-            }
-    
-            gl_alloc
-                .get(&(texture_id as u32))
-                .unwrap()
-                .bindable_texture
-                .as_ref()
-                .unwrap()
-                .clone()
+    let bundled_entity_instances =
+        if let Some(bundled_entity_instances) = instances.get_mut(&entity_name) {
+            bundled_entity_instances.count = instance_count;
+            bundled_entity_instances
+        } else {
+            let texture = {
+                let gl_alloc = GL_ALLOC.read();
+
+                match gl_alloc.get(&(texture_id as u32)) {
+                    None => return 0,
+                    Some(GlTexture {
+                        bindable_texture: None,
+                        ..
+                    }) => return 0,
+                    _ => {}
+                }
+
+                gl_alloc
+                    .get(&(texture_id as u32))
+                    .unwrap()
+                    .bindable_texture
+                    .as_ref()
+                    .unwrap()
+                    .clone()
+            };
+            let models = wm.mc.entity_models.read();
+            let entity = models.get(&entity_name).unwrap();
+            instances.insert(
+                entity_name.clone(),
+                BundledEntityInstances::new(wm, entity.clone(), instance_count, texture),
+            );
+            instances.get(&entity_name).unwrap()
         };
-        let models = wm.mc.entity_models.read();
-        let entity = models.get(&entity_name).unwrap();
-        instances.insert(entity_name.clone(), BundledEntityInstances::new(wm,entity.clone(), instance_count, texture));
-        instances.get(&entity_name).unwrap()
-    };
-    
-    wm.wgpu_state.queue.write_buffer(bundled_entity_instances.uploaded.instance_vbo.as_ref(), 0, bytemuck::cast_slice(&verts));
-    wm.wgpu_state.queue.write_buffer(&bundled_entity_instances.uploaded.transform_ssbo.buffer, 0, bytemuck::cast_slice(&transforms));
-    wm.wgpu_state.queue.write_buffer(&bundled_entity_instances.uploaded.overlay_ssbo.buffer, 0, bytemuck::cast_slice(&overlays));
+
+    wm.wgpu_state.queue.write_buffer(
+        bundled_entity_instances.uploaded.instance_vbo.as_ref(),
+        0,
+        bytemuck::cast_slice(&verts),
+    );
+    wm.wgpu_state.queue.write_buffer(
+        &bundled_entity_instances.uploaded.transform_ssbo.buffer,
+        0,
+        bytemuck::cast_slice(&transforms),
+    );
+    wm.wgpu_state.queue.write_buffer(
+        &bundled_entity_instances.uploaded.overlay_ssbo.buffer,
+        0,
+        bytemuck::cast_slice(&overlays),
+    );
     Instant::now().duration_since(now).as_nanos() as jlong
 }
 

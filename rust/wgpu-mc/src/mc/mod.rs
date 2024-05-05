@@ -162,7 +162,7 @@ pub struct SkyState {
     pub angle: f32,
     pub brightness: f32,
     pub star_shimmer: f32,
-    pub moon_phase: i32
+    pub moon_phase: i32,
 }
 
 #[derive(Default, Clone)]
@@ -176,7 +176,7 @@ pub struct RenderEffectsData {
 }
 
 pub struct Scene {
-    pub chunk_sections: DashMap<IVec3,Section>,
+    pub chunk_sections: DashMap<IVec3, Section>,
     pub entity_instances: HashMap<String, BundledEntityInstances>,
     pub sky_state: SkyState,
 
@@ -184,12 +184,11 @@ pub struct Scene {
     pub stars_vertex_buffer: Option<wgpu::Buffer>,
     pub stars_length: u32,
     pub render_effects: RenderEffectsData,
-    
-    pub depth_texture: wgpu::Texture
+
+    pub depth_texture: wgpu::Texture,
 }
 
 impl Scene {
-
     pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
         Self {
             chunk_sections: DashMap::new(),
@@ -199,19 +198,21 @@ impl Scene {
             stars_vertex_buffer: None,
             stars_length: 0,
             render_effects: Default::default(),
-            depth_texture: wm.wgpu_state.device.create_texture(&wgpu::TextureDescriptor {
-                label: None,
-                size: framebuffer_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            }),
+            depth_texture: wm
+                .wgpu_state
+                .device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size: framebuffer_size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Depth32Float,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                }),
         }
     }
-
 }
 
 /// Minecraft-specific state and data structures go in here
@@ -241,7 +242,7 @@ impl MinecraftState {
             resource_provider,
 
             animated_block_buffer: ArcSwap::new(Arc::new(None)),
-            animated_block_bind_group: ArcSwap::new(Arc::new(None))
+            animated_block_bind_group: ArcSwap::new(Arc::new(None)),
         }
     }
 

@@ -1,17 +1,20 @@
+use glam::{IVec2, IVec3};
 use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
-use glam::{IVec2, IVec3};
 use treeculler::Vec3;
 
-use wgpu::{Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp};
 use crate::mc::chunk::{ChunkBuffers, RenderLayer, Section, SECTIONS_PER_CHUNK};
+use wgpu::{
+    Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp,
+};
 
 use crate::mc::entity::InstanceVertex;
 use crate::mc::resource::ResourcePath;
 use crate::mc::{MinecraftState, Scene};
 use crate::render::entity::EntityVertex;
-use crate::render::pipeline::{BLOCK_ATLAS, QuadVertex};
+use crate::render::pipeline::{QuadVertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
 use crate::render::shaderpack::{BindGroupDef, PipelineConfig, ShaderPackConfig};
 use crate::render::sky::{SkyVertex, SunMoonVertex};
@@ -23,11 +26,10 @@ pub enum ResourceBacking {
     BufferBacked(Arc<wgpu::Buffer>, wgpu::BufferBindingType),
     BufferArray(Vec<Arc<wgpu::Buffer>>),
     Texture2D(Arc<TextureAndView>),
-    Sampler(Arc<wgpu::Sampler>)
+    Sampler(Arc<wgpu::Sampler>),
 }
 
 impl ResourceBacking {
-
     pub fn get_bind_group_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
         match self {
             ResourceBacking::BufferBacked(_, buffer_ty) => wgpu::BindGroupLayoutEntry {
@@ -45,9 +47,7 @@ impl ResourceBacking {
                 binding,
                 visibility: wgpu::ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage {
-                        read_only: true,
-                    },
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
@@ -68,116 +68,126 @@ impl ResourceBacking {
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Sampler(SamplerBindingType::NonFiltering),
                 count: None,
-            }
+            },
         }
     }
 
     pub fn get_bind_group_entries(&self, index: u32) -> Vec<wgpu::BindGroupEntry> {
         match self {
-            ResourceBacking::BufferBacked(buffer, buffer_ty) => vec![
-                wgpu::BindGroupEntry {
-                    binding: index,
-                    resource: wgpu::BindingResource::Buffer(buffer.as_entire_buffer_binding()),
-                }
-            ],
-            ResourceBacking::Texture2D(texture) => vec![
-                wgpu::BindGroupEntry {
-                    binding: index,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                }
-            ],
-            ResourceBacking::Sampler(sampler) => vec![
-                wgpu::BindGroupEntry {
-                    binding: index,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                }
-            ],
+            ResourceBacking::BufferBacked(buffer, buffer_ty) => vec![wgpu::BindGroupEntry {
+                binding: index,
+                resource: wgpu::BindingResource::Buffer(buffer.as_entire_buffer_binding()),
+            }],
+            ResourceBacking::Texture2D(texture) => vec![wgpu::BindGroupEntry {
+                binding: index,
+                resource: wgpu::BindingResource::TextureView(&texture.view),
+            }],
+            ResourceBacking::Sampler(sampler) => vec![wgpu::BindGroupEntry {
+                binding: index,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            }],
             // RenderResource::TextureHandle(handle) => vec![
             //     wgpu::BindGroupEntry {
             //         binding: index,
             //         resource: wgpu::BindingResource::TextureView(handle.),
             //     }
             // ],
-            _ => todo!()
+            _ => todo!(),
         }
     }
-
 }
 
 #[derive(Debug)]
 pub enum WmBindGroup {
     Resource(String),
-    Custom(wgpu::BindGroup)
+    Custom(wgpu::BindGroup),
 }
 
 struct BoundPipeline {
     pub pipeline: wgpu::RenderPipeline,
-    pub bind_groups: Vec<(u32, WmBindGroup)>
+    pub bind_groups: Vec<(u32, WmBindGroup)>,
 }
 
 pub struct RenderGraph {
     pub config: ShaderPackConfig,
     pub pipelines: HashMap<String, BoundPipeline>,
-    pub resources: HashMap<String, ResourceBacking>
+    pub resources: HashMap<String, ResourceBacking>,
 }
 
 impl RenderGraph {
-
     fn create_pipelines(&mut self, wm: &WmRenderer) {
         self.pipelines.clear();
 
         let arena = WmArena::new(1024);
 
         for (pipeline_name, pipeline_config) in &self.config.pipelines.pipelines {
-
-            let bind_group_layouts = pipeline_config.bind_groups.iter().map(|(slot, def)| {
-
-                match def {
+            let bind_group_layouts = pipeline_config
+                .bind_groups
+                .iter()
+                .map(|(slot, def)| match def {
                     BindGroupDef::Entries(entries) => {
-                        let layout_entries = entries.iter().map(|(index, resource_id)| {
-                            let resource = self.resources.get(resource_id).unwrap();
-                            resource.get_bind_group_layout_entry(*index as u32)
-                        }).collect::<Vec<wgpu::BindGroupLayoutEntry>>();
+                        let layout_entries = entries
+                            .iter()
+                            .map(|(index, resource_id)| {
+                                let resource = self.resources.get(resource_id).unwrap();
+                                resource.get_bind_group_layout_entry(*index as u32)
+                            })
+                            .collect::<Vec<wgpu::BindGroupLayoutEntry>>();
 
-                        &*arena.alloc(wm.wgpu_state.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                            label: None,
-                            entries: &layout_entries,
-                        }))
+                        &*arena.alloc(wm.wgpu_state.device.create_bind_group_layout(
+                            &wgpu::BindGroupLayoutDescriptor {
+                                label: None,
+                                entries: &layout_entries,
+                            },
+                        ))
                     }
                     BindGroupDef::Resource(resource) => match &resource[..] {
-                        "@bg_chunk_ssbos" => {
-                            wm.bind_group_layouts.get("chunk_ssbos").unwrap()
-                        }
-                        _ => unimplemented!()
-                    }
-                }
-            }).collect::<Vec<&wgpu::BindGroupLayout>>();
+                        "@bg_chunk_ssbos" => wm.bind_group_layouts.get("chunk_ssbos").unwrap(),
+                        _ => unimplemented!(),
+                    },
+                })
+                .collect::<Vec<&wgpu::BindGroupLayout>>();
 
-            let wm_bind_groups = pipeline_config.bind_groups.iter().enumerate().map(|(vec_index, (slot, def))| {
-                match def {
+            let wm_bind_groups = pipeline_config
+                .bind_groups
+                .iter()
+                .enumerate()
+                .map(|(vec_index, (slot, def))| match def {
                     BindGroupDef::Entries(entries) => {
-                        let entries = entries.iter().map(|(index, resource_id)| {
-                            let resource = self.resources.get(resource_id).unwrap();
-                            resource.get_bind_group_entries(*index as u32)
-                        }).flatten().collect::<Vec<wgpu::BindGroupEntry>>();
+                        let entries = entries
+                            .iter()
+                            .map(|(index, resource_id)| {
+                                let resource = self.resources.get(resource_id).unwrap();
+                                resource.get_bind_group_entries(*index as u32)
+                            })
+                            .flatten()
+                            .collect::<Vec<wgpu::BindGroupEntry>>();
 
-                        let bind_group = wm.wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: None,
-                            layout: &bind_group_layouts[vec_index],
-                            entries: &entries,
-                        });
+                        let bind_group =
+                            wm.wgpu_state
+                                .device
+                                .create_bind_group(&wgpu::BindGroupDescriptor {
+                                    label: None,
+                                    layout: &bind_group_layouts[vec_index],
+                                    entries: &entries,
+                                });
 
                         (*slot as u32, WmBindGroup::Custom(bind_group))
                     }
-                    BindGroupDef::Resource(resource) => (*slot as u32, WmBindGroup::Resource(resource.clone()))
-                }
-            }).collect::<Vec<(u32, WmBindGroup)>>();
+                    BindGroupDef::Resource(resource) => {
+                        (*slot as u32, WmBindGroup::Resource(resource.clone()))
+                    }
+                })
+                .collect::<Vec<(u32, WmBindGroup)>>();
 
-            let layout = wm.wgpu_state.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &bind_group_layouts,
-                push_constant_ranges: &[],
-            });
+            let layout =
+                wm.wgpu_state
+                    .device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: None,
+                        bind_group_layouts: &bind_group_layouts,
+                        push_constant_ranges: &[],
+                    });
 
             let shader = WgslShader::init(
                 &ResourcePath(format!("wgpu_mc:shaders/{}.wgsl", pipeline_name)),
@@ -186,7 +196,7 @@ impl RenderGraph {
                 "frag".into(),
                 "vert".into(),
             )
-                .unwrap();
+            .unwrap();
 
             let vertex_buffer = match &pipeline_config.geometry[..] {
                 #[cfg(not(feature = "vbo-fallback"))]
@@ -200,106 +210,109 @@ impl RenderGraph {
                         3 => Uint32
                     ];
 
-                    Some(vec![
-                        wgpu::VertexBufferLayout {
-                            array_stride: (mem::size_of::<u32>() * 4) as wgpu::BufferAddress,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &VAA,
-                        }
-                    ])
-                },
-                "@geo_entities" => {
-                    Some(vec![EntityVertex::desc(), InstanceVertex::desc()])
+                    Some(vec![wgpu::VertexBufferLayout {
+                        array_stride: (mem::size_of::<u32>() * 4) as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &VAA,
+                    }])
                 }
+                "@geo_entities" => Some(vec![EntityVertex::desc(), InstanceVertex::desc()]),
                 "@geo_quad" => Some(vec![QuadVertex::desc()]),
                 "@geo_sun_moon" => Some(vec![SunMoonVertex::desc()]),
-                "@geo_sky_scatter" | "@geo_sky_stars" | "@geo_sky_fog" => Some(vec![SkyVertex::desc()]),
-                _ => unimplemented!()
+                "@geo_sky_scatter" | "@geo_sky_stars" | "@geo_sky_fog" => {
+                    Some(vec![SkyVertex::desc()])
+                }
+                _ => unimplemented!(),
             };
 
             let label = format!("{}", pipeline_name);
 
-            let render_pipeline = wm.wgpu_state.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(&label),
-                layout: Some(&layout),
-                vertex: wgpu::VertexState {
-                    module: &shader.module,
-                    entry_point: "vert",
-                    compilation_options: Default::default(),
-                    buffers: match &vertex_buffer {
-                        None => &[],
-                        Some(buffer_layout) => buffer_layout
-                    },
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Cw,
-                    cull_mode: None,
-                    unclipped_depth: false,
-                    polygon_mode: Default::default(),
-                    conservative: false,
-                },
-                depth_stencil: pipeline_config.depth.as_ref().map(|_| {
-                    wgpu::DepthStencilState {
-                        format: wgpu::TextureFormat::Depth32Float,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::Less,
-                        stencil: wgpu::StencilState::default(),
-                        bias: Default::default(),
-                    }
-                }),
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader.module,
-                    entry_point: "frag",
-                    compilation_options: Default::default(),
-                    targets: &pipeline_config
-                        .output
-                        .iter()
-                        .map(|_| {
-                            Some(wgpu::ColorTargetState {
-                                format: wgpu::TextureFormat::Bgra8Unorm,
-                                blend: Some(match &pipeline_config.blending[..] {
-                                    "alpha_blending" => {
-                                        wgpu::BlendState::ALPHA_BLENDING
-                                    }
-                                    "premultiplied_alpha_blending" => {
-                                        wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING
-                                    }
-                                    "color_add_alpha_blending" => {
-                                        wgpu::BlendState {
-                                            color: wgpu::BlendComponent {
-                                                src_factor: wgpu::BlendFactor::SrcAlpha,
-                                                dst_factor: wgpu::BlendFactor::One,
-                                                operation: wgpu::BlendOperation::Add,
+            let render_pipeline =
+                wm.wgpu_state
+                    .device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some(&label),
+                        layout: Some(&layout),
+                        vertex: wgpu::VertexState {
+                            module: &shader.module,
+                            entry_point: "vert",
+                            compilation_options: Default::default(),
+                            buffers: match &vertex_buffer {
+                                None => &[],
+                                Some(buffer_layout) => buffer_layout,
+                            },
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Cw,
+                            cull_mode: None,
+                            unclipped_depth: false,
+                            polygon_mode: Default::default(),
+                            conservative: false,
+                        },
+                        depth_stencil: pipeline_config.depth.as_ref().map(|_| {
+                            wgpu::DepthStencilState {
+                                format: wgpu::TextureFormat::Depth32Float,
+                                depth_write_enabled: true,
+                                depth_compare: wgpu::CompareFunction::Less,
+                                stencil: wgpu::StencilState::default(),
+                                bias: Default::default(),
+                            }
+                        }),
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &shader.module,
+                            entry_point: "frag",
+                            compilation_options: Default::default(),
+                            targets: &pipeline_config
+                                .output
+                                .iter()
+                                .map(|_| {
+                                    Some(wgpu::ColorTargetState {
+                                        format: wgpu::TextureFormat::Bgra8Unorm,
+                                        blend: Some(match &pipeline_config.blending[..] {
+                                            "alpha_blending" => wgpu::BlendState::ALPHA_BLENDING,
+                                            "premultiplied_alpha_blending" => {
+                                                wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING
+                                            }
+                                            "color_add_alpha_blending" => wgpu::BlendState {
+                                                color: wgpu::BlendComponent {
+                                                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                                                    dst_factor: wgpu::BlendFactor::One,
+                                                    operation: wgpu::BlendOperation::Add,
+                                                },
+                                                alpha: wgpu::BlendComponent {
+                                                    src_factor: wgpu::BlendFactor::One,
+                                                    dst_factor: wgpu::BlendFactor::Zero,
+                                                    operation: wgpu::BlendOperation::Add,
+                                                },
                                             },
-                                            alpha: wgpu::BlendComponent {
-                                                src_factor: wgpu::BlendFactor::One,
-                                                dst_factor: wgpu::BlendFactor::Zero,
-                                                operation: wgpu::BlendOperation::Add,
-                                            },
-                                        }
-                                    }
-                                    _ => unimplemented!("Unknown blend state"),
-                                }),
-                                write_mask: Default::default(),
-                            })
-                        })
-                        .collect::<Vec<_>>(),
-                }),
-                multiview: None,
-            });
+                                            _ => unimplemented!("Unknown blend state"),
+                                        }),
+                                        write_mask: Default::default(),
+                                    })
+                                })
+                                .collect::<Vec<_>>(),
+                        }),
+                        multiview: None,
+                    });
 
-            self.pipelines.insert(pipeline_name.clone(), BoundPipeline {
-                pipeline: render_pipeline,
-                bind_groups: wm_bind_groups,
-            });
+            self.pipelines.insert(
+                pipeline_name.clone(),
+                BoundPipeline {
+                    pipeline: render_pipeline,
+                    bind_groups: wm_bind_groups,
+                },
+            );
         }
-
     }
 
-    pub fn new(wm: &WmRenderer, resources: HashMap<String, ResourceBacking>, config: ShaderPackConfig) -> Self {
+    pub fn new(
+        wm: &WmRenderer,
+        resources: HashMap<String, ResourceBacking>,
+        config: ShaderPackConfig,
+    ) -> Self {
         let mut graph = Self {
             config,
             pipelines: HashMap::new(),
@@ -312,12 +325,14 @@ impl RenderGraph {
         let block_atlas = atlas_swap.load();
 
         graph.resources.extend([
-            ("@tex_block_atlas".into(), ResourceBacking::Texture2D(
-                block_atlas.texture.clone()
-            )),
-            ("@sampler".into(), ResourceBacking::Sampler(
-                wm.mc.texture_manager.default_sampler.clone()
-            ))
+            (
+                "@tex_block_atlas".into(),
+                ResourceBacking::Texture2D(block_atlas.texture.clone()),
+            ),
+            (
+                "@sampler".into(),
+                ResourceBacking::Sampler(wm.mc.texture_manager.default_sampler.clone()),
+            ),
         ]);
 
         graph.create_pipelines(wm);
@@ -325,13 +340,19 @@ impl RenderGraph {
         graph
     }
 
-    pub fn render(&self, wm: &WmRenderer, scene: &Scene, render_target: &wgpu::TextureView, clear_color: [u8; 3]) {
-
+    pub fn render(
+        &self,
+        wm: &WmRenderer,
+        scene: &Scene,
+        render_target: &wgpu::TextureView,
+        clear_color: [u8; 3],
+    ) {
         let arena = WmArena::new(4096);
 
-        let mut encoder = wm.wgpu_state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: None,
-        });
+        let mut encoder = wm
+            .wgpu_state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         let mut should_clear_depth = true;
 
@@ -351,7 +372,7 @@ impl RenderGraph {
                         Some(RenderPassColorAttachment {
                             view: match &texture_name[..] {
                                 "@framebuffer_texture" => render_target,
-                                _ => unimplemented!()
+                                _ => unimplemented!(),
                             },
                             resolve_target: None,
                             ops: Operations {
@@ -374,25 +395,26 @@ impl RenderGraph {
                     let will_clear_depth = should_clear_depth;
                     should_clear_depth = false;
 
-                    let depth_view = if depth_texture == "@texture_depth" {
-                        arena.alloc(scene.depth_texture.create_view(&wgpu::TextureViewDescriptor {
-                            label: None,
-                            format: Some(wgpu::TextureFormat::Depth32Float),
-                            dimension: Some(wgpu::TextureViewDimension::D2),
-                            aspect: Default::default(),
-                            base_mip_level: 0,
-                            mip_level_count: None,
-                            base_array_layer: 0,
-                            array_layer_count: None,
-                        }))
-                    } else {
-                        match self.resources.get(depth_texture) {
-                            Some(&ResourceBacking::Texture2D(ref view)) => {
-                                &view.view
+                    let depth_view =
+                        if depth_texture == "@texture_depth" {
+                            arena.alloc(scene.depth_texture.create_view(
+                                &wgpu::TextureViewDescriptor {
+                                    label: None,
+                                    format: Some(wgpu::TextureFormat::Depth32Float),
+                                    dimension: Some(wgpu::TextureViewDimension::D2),
+                                    aspect: Default::default(),
+                                    base_mip_level: 0,
+                                    mip_level_count: None,
+                                    base_array_layer: 0,
+                                    array_layer_count: None,
+                                },
+                            ))
+                        } else {
+                            match self.resources.get(depth_texture) {
+                                Some(&ResourceBacking::Texture2D(ref view)) => &view.view,
+                                _ => unimplemented!("Unknown depth target {}", depth_texture),
                             }
-                            _ => unimplemented!("Unknown depth target {}", depth_texture),
-                        }
-                    };
+                        };
 
                     RenderPassDepthStencilAttachment {
                         view: &depth_view,
@@ -418,29 +440,31 @@ impl RenderGraph {
 
                         let buffers = match &section.buffers {
                             None => continue,
-                            Some(buffers) => buffers
+                            Some(buffers) => buffers,
                         };
 
                         render_pass.set_pipeline(&bound_pipeline.pipeline);
 
                         for (index, bind_group) in bound_pipeline.bind_groups.iter() {
                             match bind_group {
-                                WmBindGroup::Resource(name) => {
-                                    match &name[..] {
-                                        "@bg_chunk_ssbos" => {
-                                            #[cfg(not(feature = "vbo-fallback"))]
-                                            if let Some(ref buffers) = section.buffers {
-                                                render_pass.set_bind_group(*index, &buffers.bind_group, &[]);
-                                            }
+                                WmBindGroup::Resource(name) => match &name[..] {
+                                    "@bg_chunk_ssbos" => {
+                                        #[cfg(not(feature = "vbo-fallback"))]
+                                        if let Some(ref buffers) = section.buffers {
+                                            render_pass.set_bind_group(
+                                                *index,
+                                                &buffers.bind_group,
+                                                &[],
+                                            );
+                                        }
 
-                                            #[cfg(feature = "vbo-fallback")]
-                                            {
-                                                panic!("SSBOs are not supported on WebGL")
-                                            }
-                                        },
-                                        _ => unimplemented!()
+                                        #[cfg(feature = "vbo-fallback")]
+                                        {
+                                            panic!("SSBOs are not supported on WebGL")
+                                        }
                                     }
-                                }
+                                    _ => unimplemented!(),
+                                },
                                 WmBindGroup::Custom(bind_group) => {
                                     render_pass.set_bind_group(*index, bind_group, &[]);
                                 }
@@ -456,22 +480,22 @@ impl RenderGraph {
                             #[cfg(feature = "vbo-fallback")]
                             if let Some(ref buffers) = section.buffers {
                                 render_pass.set_vertex_buffer(0, buffers.vertex_buffer.slice(..));
-                                render_pass.set_index_buffer(buffers.index_buffer.slice(..), IndexFormat::Uint32);
+                                render_pass.set_index_buffer(
+                                    buffers.index_buffer.slice(..),
+                                    IndexFormat::Uint32,
+                                );
 
                                 render_pass.draw_indexed(solid.clone(), 0, 0..1);
                             }
                         }
-
                     }
-                },
+                }
                 _ => {}
             }
         }
 
         wm.wgpu_state.queue.submit([encoder.finish()]);
-
     }
-
 }
 
 pub fn set_push_constants(
@@ -542,7 +566,7 @@ pub fn set_push_constants(
                 //     render_effects.dimension_fog_color[2],
                 //     render_effects.dimension_fog_color[3],
                 // ]),
-                &[]
+                &[],
             ),
             _ => unimplemented!("Unknown push constant resource value"),
         });

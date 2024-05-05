@@ -3,10 +3,10 @@ use wgpu::{BindGroupLayout, ComputePipeline, PipelineLayout, SamplerBindingType}
 
 use crate::mc::chunk::RenderLayer;
 use arc_swap::ArcSwap;
+use encase::ShaderType;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
-use encase::ShaderType;
 
 use crate::WmRenderer;
 
@@ -117,7 +117,6 @@ impl QuadVertex {
     }
 }
 
-
 pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindGroupLayout> {
     [
         (
@@ -142,29 +141,25 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
                 label: Some("Vertex and index SSBOs"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {
-                            read_only: true,
-                        },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
+                        binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage {
-                                read_only: true,
-                            },
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
                         count: None,
-                    }
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             }),
         ),

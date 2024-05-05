@@ -68,7 +68,7 @@ pub struct Atlas {
     pub animated_textures: RwLock<Vec<schemas::texture::TextureAnimation>>,
     ///
     pub animated_texture_offsets: RwLock<HashMap<ResourcePath, u32>>,
-    size: u32
+    size: u32,
 }
 
 impl Debug for Atlas {
@@ -89,7 +89,8 @@ impl Atlas {
             },
             None,
             wgpu::TextureFormat::Rgba8Unorm,
-        ).unwrap();
+        )
+        .unwrap();
 
         Self {
             allocator: RwLock::new(AtlasAllocator::new(Size2D::new(
@@ -101,7 +102,7 @@ impl Atlas {
             texture: Arc::new(tv),
             animated_textures: RwLock::new(Vec::new()),
             animated_texture_offsets: Default::default(),
-            size: ATLAS_DIMENSIONS
+            size: ATLAS_DIMENSIONS,
         }
     }
 
@@ -146,7 +147,9 @@ impl Atlas {
     ) {
         let image = image::load_from_memory(image_bytes).unwrap();
 
-        let allocation = allocator.allocate(Size2D::new(image.width() as i32, image.height() as i32)).unwrap();
+        let allocation = allocator
+            .allocate(Size2D::new(image.width() as i32, image.height() as i32))
+            .unwrap();
 
         overlay(
             image_buffer,

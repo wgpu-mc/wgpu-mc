@@ -91,7 +91,7 @@ pub enum TypeResourceConfig {
     #[serde(rename = "texture_2d")]
     Texture2d {
         #[serde(default)]
-        src: String
+        src: String,
     },
     #[serde(rename = "texture_depth")]
     TextureDepth,
@@ -147,7 +147,7 @@ fn blend_default() -> String {
 #[serde(untagged)]
 pub enum BindGroupDef {
     Entries(LinkedHashMap<u64, String>),
-    Resource(String)
+    Resource(String),
 }
 
 #[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]

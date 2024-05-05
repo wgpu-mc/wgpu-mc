@@ -12,7 +12,7 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
-use wgpu_mc::texture::{BindableTexture};
+use wgpu_mc::texture::BindableTexture;
 use wgpu_mc::util::{BindableBuffer, WmArena};
 use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
 use wgpu_mc::{wgpu, WmRenderer};

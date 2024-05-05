@@ -53,20 +53,18 @@ impl LightLevel {
 
 /// Return a [ChunkBlockState] within the provided world coordinates.
 pub trait BlockStateProvider: Send + Sync {
-
     fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState;
 
     fn get_light_level(&self, x: i32, y: i32, z: i32) -> LightLevel;
 
     fn is_section_empty(&self, index: usize) -> bool;
-
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum RenderLayer {
     Solid,
     Cutout,
-    Transparent
+    Transparent,
 }
 
 #[derive(Debug)]
@@ -84,7 +82,7 @@ pub struct ChunkBuffers {
 pub struct Section {
     pub buffers: Option<ChunkBuffers>,
     pub layers: HashMap<RenderLayer, Range<u32>>,
-    pub pos: IVec3
+    pub pos: IVec3,
 }
 
 impl Section {
@@ -116,7 +114,10 @@ impl Section {
             vertex_data.extend(baked.vertices.iter().flat_map(Vertex::compressed));
             index_data.extend(baked.indices.iter().map(|index| *index + index_offset));
 
-            layers.insert(layer, index_offset..index_offset + (index_data.len() as u32));
+            layers.insert(
+                layer,
+                index_offset..index_offset + (index_data.len() as u32),
+            );
         }
 
         self.layers = layers;
@@ -132,13 +133,11 @@ impl Section {
                     let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
                     let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
 
-                    (&mut aligned_vertex_buffer[..vertex_data.len()])
-                        .copy_from_slice(&vertex_data);
-                    (&mut aligned_index_buffer[..index_data.len()])
-                        .copy_from_slice(&index_data);
+                    (&mut aligned_vertex_buffer[..vertex_data.len()]).copy_from_slice(&vertex_data);
+                    (&mut aligned_index_buffer[..index_data.len()]).copy_from_slice(&index_data);
 
-                    let vertex_buffer = Arc::new(
-                        wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                    let vertex_buffer =
+                        Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
                             label: None,
                             size: aligned_vertex_data_len,
                             #[cfg(not(feature = "vbo-fallback"))]
@@ -146,11 +145,10 @@ impl Section {
                             #[cfg(feature = "vbo-fallback")]
                             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                             mapped_at_creation: false,
-                        })
-                    );
+                        }));
 
-                    let index_buffer = Arc::new(
-                        wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                    let index_buffer =
+                        Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
                             label: None,
                             size: aligned_index_data_len,
                             #[cfg(not(feature = "vbo-fallback"))]
@@ -158,15 +156,15 @@ impl Section {
                             #[cfg(feature = "vbo-fallback")]
                             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                             mapped_at_creation: false,
-                        })
-                    );
+                        }));
 
                     #[cfg(not(feature = "vbo-fallback"))]
-                        let bind_group = {
+                    let bind_group = {
                         let layout = &wm.bind_group_layouts["chunk_ssbos"];
 
-                        wm.wgpu_state.device.create_bind_group(
-                            &wgpu::BindGroupDescriptor {
+                        wm.wgpu_state
+                            .device
+                            .create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout,
                                 entries: &[
@@ -177,10 +175,9 @@ impl Section {
                                     wgpu::BindGroupEntry {
                                         binding: 1,
                                         resource: index_buffer.as_entire_binding(),
-                                    }
+                                    },
                                 ],
-                            }
-                        )
+                            })
                     };
 
                     self.buffers = Some(ChunkBuffers {
@@ -194,10 +191,15 @@ impl Section {
 
                     (vertex_buffer, index_buffer)
                 }
-                Some(ChunkBuffers { vertex_buffer, index_buffer, vertex_size, index_size, .. }) => {
+                Some(ChunkBuffers {
+                    vertex_buffer,
+                    index_buffer,
+                    vertex_size,
+                    index_size,
+                    ..
+                }) => {
                     if ((*vertex_size) as usize) < vertex_data.len()
-                        || (*index_size as usize)
-                            < (index_data.len() * size_of::<u32>())
+                        || (*index_size as usize) < (index_data.len() * size_of::<u32>())
                     {
                         let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
                         let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
@@ -207,8 +209,8 @@ impl Section {
                         (&mut aligned_index_buffer[..index_data.len()])
                             .copy_from_slice(&index_data);
 
-                        let vertex_buffer = Arc::new(
-                            wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                        let vertex_buffer =
+                            Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
                                 label: None,
                                 size: aligned_vertex_data_len,
                                 #[cfg(not(feature = "vbo-fallback"))]
@@ -216,11 +218,10 @@ impl Section {
                                 #[cfg(feature = "vbo-fallback")]
                                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                                 mapped_at_creation: false,
-                            })
-                        );
+                            }));
 
-                        let index_buffer = Arc::new(
-                            wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
+                        let index_buffer =
+                            Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
                                 label: None,
                                 size: aligned_index_data_len,
                                 #[cfg(not(feature = "vbo-fallback"))]
@@ -228,15 +229,15 @@ impl Section {
                                 #[cfg(feature = "vbo-fallback")]
                                 usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                                 mapped_at_creation: false,
-                            })
-                        );
+                            }));
 
                         #[cfg(not(feature = "vbo-fallback"))]
                         let bind_group = {
                             let layout = &wm.bind_group_layouts["chunk_ssbos"];
 
-                            wm.wgpu_state.device.create_bind_group(
-                                &wgpu::BindGroupDescriptor {
+                            wm.wgpu_state
+                                .device
+                                .create_bind_group(&wgpu::BindGroupDescriptor {
                                     label: None,
                                     layout,
                                     entries: &[
@@ -247,10 +248,9 @@ impl Section {
                                         wgpu::BindGroupEntry {
                                             binding: 1,
                                             resource: index_buffer.as_entire_binding(),
-                                        }
+                                        },
                                     ],
-                                }
-                            )
+                                })
                         };
 
                         self.buffers = Some(ChunkBuffers {
@@ -264,10 +264,7 @@ impl Section {
 
                         (vertex_buffer, index_buffer)
                     } else {
-                        (
-                            vertex_buffer.clone(),
-                            index_buffer.clone(),
-                        )
+                        (vertex_buffer.clone(), index_buffer.clone())
                     }
                 }
             };
@@ -315,19 +312,14 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
 #[derive(Clone, Default)]
 struct BakedSection {
     pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>
+    pub indices: Vec<u32>,
 }
 
-
-
-pub fn bake_section<
-    Provider: BlockStateProvider
->(
+pub fn bake_section<Provider: BlockStateProvider>(
     pos: IVec3,
     block_manager: &BlockManager,
-    state_provider: &Provider
+    state_provider: &Provider,
 ) -> HashMap<RenderLayer, BakedSection> {
-
     let mut layers = HashMap::new();
     layers.insert(RenderLayer::Solid, BakedSection::default());
     layers.insert(RenderLayer::Cutout, BakedSection::default());
@@ -337,11 +329,10 @@ pub fn bake_section<
         return layers;
     }
 
-    for block_index in 0..16*16*16{
-
+    for block_index in 0..16 * 16 * 16 {
         let x = block_index & 15;
         let y = block_index >> 8;
-        let z = (block_index & 255)>>4;
+        let z = (block_index & 255) >> 4;
 
         let xf32 = x as f32;
         let yf32 = y as f32;
@@ -372,29 +363,34 @@ pub fn bake_section<
                 let render_south = baked_should_render_face(x, y, z + 1);
                 let render_north = baked_should_render_face(x, y, z - 1);
 
-                let mut extend_vertices = |layer: RenderLayer, index: u32, light_level: LightLevel| {
-                    let baked_layer = layers.get_mut(&layer).unwrap();
-                    let vec_index = baked_layer.vertices.len();
+                let mut extend_vertices =
+                    |layer: RenderLayer, index: u32, light_level: LightLevel| {
+                        let baked_layer = layers.get_mut(&layer).unwrap();
+                        let vec_index = baked_layer.vertices.len();
 
-                    baked_layer.vertices.extend((index..index + 4).map(|vert_index| {
-                        let model_vertex = model.vertices[vert_index as usize];
+                        baked_layer
+                            .vertices
+                            .extend((index..index + 4).map(|vert_index| {
+                                let model_vertex = model.vertices[vert_index as usize];
 
-                        Vertex {
-                            position: [
-                                xf32 + model_vertex.position[0],
-                                yf32 + model_vertex.position[1],
-                                zf32 + model_vertex.position[2]
-                            ],
-                            uv: model_vertex.tex_coords,
-                            normal: model_vertex.normal,
-                            color: u32::MAX,
-                            uv_offset: 0,
-                            lightmap_coords: state_provider.get_light_level(x,y,z).byte,
-                            dark: false,
-                        }
-                    }));
-                    baked_layer.indices.extend(INDICES.map(|index| index + (vec_index as u32)));
-                };
+                                Vertex {
+                                    position: [
+                                        xf32 + model_vertex.position[0],
+                                        yf32 + model_vertex.position[1],
+                                        zf32 + model_vertex.position[2],
+                                    ],
+                                    uv: model_vertex.tex_coords,
+                                    normal: model_vertex.normal,
+                                    color: u32::MAX,
+                                    uv_offset: 0,
+                                    lightmap_coords: state_provider.get_light_level(x, y, z).byte,
+                                    dark: false,
+                                }
+                            }));
+                        baked_layer
+                            .indices
+                            .extend(INDICES.map(|index| index + (vec_index as u32)));
+                    };
 
                 // dbg!(absolute_x, absolute_z, render_up, render_down, render_north, render_south, render_west, render_east);
 
@@ -402,43 +398,36 @@ pub fn bake_section<
                 //We use those offsets to get the relevant vertices, and add them into the chunk vertices.
                 //We then add the starting offset into the vertices to the face indices so that they match up.
                 if let (true, Some(face)) = (render_north, &model.north) {
-                    let light_level: LightLevel =
-                        state_provider.get_light_level(x, y, z - 1);
+                    let light_level: LightLevel = state_provider.get_light_level(x, y, z - 1);
                     extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_east, &model.east) {
-                    let light_level: LightLevel =
-                        state_provider.get_light_level(x + 1, y, z);
+                    let light_level: LightLevel = state_provider.get_light_level(x + 1, y, z);
                     extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_south, &model.south) {
-                    let light_level: LightLevel =
-                        state_provider.get_light_level(x, y, z + 1);
+                    let light_level: LightLevel = state_provider.get_light_level(x, y, z + 1);
                     extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_west, &model.west) {
-                    let light_level: LightLevel =
-                        state_provider.get_light_level(x - 1, y, z);
+                    let light_level: LightLevel = state_provider.get_light_level(x - 1, y, z);
                     extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_up, &model.up) {
-                    let light_level: LightLevel =
-                        state_provider.get_light_level(x, y + 1, z);
+                    let light_level: LightLevel = state_provider.get_light_level(x, y + 1, z);
                     extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_down, &model.down) {
-                    let light_level: LightLevel =
-                        state_provider.get_light_level(x, y - 1, z);
+                    let light_level: LightLevel = state_provider.get_light_level(x, y - 1, z);
                     extend_vertices(model_mesh.layer, *face, light_level);
                 }
             } else {
-                let light_level: LightLevel =
-                    state_provider.get_light_level(x, y, z);
+                let light_level: LightLevel = state_provider.get_light_level(x, y, z);
 
                 [
                     model.north,
@@ -454,24 +443,28 @@ pub fn bake_section<
                     let baked_layer = layers.get_mut(&model_mesh.layer).unwrap();
                     let vec_index = baked_layer.vertices.len();
 
-                    baked_layer.vertices.extend((index..index + 4).map(|vert_index| {
-                        let model_vertex = model.vertices[vert_index as usize];
+                    baked_layer
+                        .vertices
+                        .extend((index..index + 4).map(|vert_index| {
+                            let model_vertex = model.vertices[vert_index as usize];
 
-                        Vertex {
-                            position: [
-                                xf32 + model_vertex.position[0],
-                                yf32 + model_vertex.position[1],
-                                zf32 + model_vertex.position[2]
-                            ],
-                            uv: model_vertex.tex_coords,
-                            normal: model_vertex.normal,
-                            color: u32::MAX,
-                            uv_offset: 0,
-                            lightmap_coords: state_provider.get_light_level(x,y,z).byte,
-                            dark: false,
-                        }
-                    }));
-                    baked_layer.indices.extend(INDICES.map(|index| index + (vec_index as u32)));
+                            Vertex {
+                                position: [
+                                    xf32 + model_vertex.position[0],
+                                    yf32 + model_vertex.position[1],
+                                    zf32 + model_vertex.position[2],
+                                ],
+                                uv: model_vertex.tex_coords,
+                                normal: model_vertex.normal,
+                                color: u32::MAX,
+                                uv_offset: 0,
+                                lightmap_coords: state_provider.get_light_level(x, y, z).byte,
+                                dark: false,
+                            }
+                        }));
+                    baked_layer
+                        .indices
+                        .extend(INDICES.map(|index| index + (vec_index as u32)));
                 });
             }
         }

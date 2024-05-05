@@ -47,13 +47,15 @@ use arc_swap::ArcSwap;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferDescriptor, PresentMode};
 use wgpu::util::StagingBelt;
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferDescriptor, PresentMode,
+};
 
-use crate::mc::MinecraftState;
 use crate::mc::resource::ResourceProvider;
+use crate::mc::MinecraftState;
 use crate::render::atlas::Atlas;
-use crate::render::pipeline::{BLOCK_ATLAS, create_bind_group_layouts, ENTITY_ATLAS};
+use crate::render::pipeline::{create_bind_group_layouts, BLOCK_ATLAS, ENTITY_ATLAS};
 
 pub mod mc;
 pub mod render;
@@ -98,7 +100,6 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         #[cfg(feature = "tracing")]
         let puffin_http = {
@@ -128,10 +129,7 @@ impl WmRenderer {
             .map(|&name| {
                 (
                     name.into(),
-                    Arc::new(ArcSwap::new(Arc::new(Atlas::new(
-                        &self.wgpu_state,
-                        false,
-                    )))),
+                    Arc::new(ArcSwap::new(Arc::new(Atlas::new(&self.wgpu_state, false)))),
                 )
             })
             .collect();
@@ -156,10 +154,7 @@ impl WmRenderer {
                     .device
                     .create_bind_group(&BindGroupDescriptor {
                         label: None,
-                        layout: self
-                            .bind_group_layouts
-                            .get("ssbo")
-                            .unwrap(),
+                        layout: self.bind_group_layouts.get("ssbo").unwrap(),
                         entries: &[BindGroupEntry {
                             binding: 0,
                             resource: wgpu::BindingResource::Buffer(

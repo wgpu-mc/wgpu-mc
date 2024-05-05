@@ -1,3 +1,4 @@
+use crate::mc::chunk::RenderLayer;
 use bytemuck::{Pod, Zeroable};
 use cgmath::{Matrix4, SquareMatrix, Vector4};
 use itertools::Itertools;
@@ -5,7 +6,6 @@ use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
 use minecraft_assets::schemas::blockstates::ModelProperties;
 use serde_derive::{Deserialize, Serialize};
-use crate::mc::chunk::RenderLayer;
 
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;
@@ -188,7 +188,7 @@ pub enum MeshBakeError {
 pub struct ModelMesh {
     pub mesh: Vec<BlockModelFaces>,
     pub is_cube: bool,
-    pub layer: RenderLayer
+    pub layer: RenderLayer,
 }
 
 impl ModelMesh {

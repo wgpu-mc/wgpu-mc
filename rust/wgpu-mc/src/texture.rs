@@ -3,9 +3,7 @@ use std::sync::Arc;
 use image::GenericImageView;
 use wgpu::Extent3d;
 
-use crate::{
-    WgpuState, WmRenderer
-};
+use crate::{WgpuState, WmRenderer};
 
 pub type TextureId = u32;
 pub type UV = ((u16, u16), (u16, u16));
@@ -120,7 +118,8 @@ impl BindableTexture {
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: wm.bind_group_layouts
+                layout: wm
+                    .bind_group_layouts
                     .get(if depth { "texture_depth" } else { "texture" })
                     .unwrap(),
                 entries: &[
@@ -135,9 +134,6 @@ impl BindableTexture {
                 ],
             });
 
-        Self {
-            tv,
-            bind_group,
-        }
+        Self { tv, bind_group }
     }
 }

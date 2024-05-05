@@ -18,8 +18,6 @@ use wgpu_mc::mc::block::BlockstateKey;
 pub static PALETTE_STORAGE: Lazy<RwLock<Slab<JavaPalette>>> =
     Lazy::new(|| RwLock::new(Slab::with_capacity(4096)));
 
-
-
 #[derive(Clone)]
 pub struct JavaPalette {
     pub store: Vec<BlockstateKey>,
@@ -29,7 +27,7 @@ impl JavaPalette {
     pub fn new() -> Self {
         Self {
             store: Vec::with_capacity(5),
-            indices: HashMap::new()
+            indices: HashMap::new(),
         }
     }
 
@@ -114,7 +112,6 @@ pub fn paletteSize(_env: JNIEnv, _class: JClass, palette_long: jlong) -> jint {
         .size() as jint
 }
 
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn paletteReadPacket(
     mut env: JNIEnv,
@@ -122,13 +119,19 @@ pub fn paletteReadPacket(
     palette_long: jlong,
     array: JByteArray,
     current_position: jint,
-    blockstate_offsets: JLongArray
+    blockstate_offsets: JLongArray,
 ) -> jint {
     let mut storage_access = PALETTE_STORAGE.write();
     let palette = storage_access.get_mut(palette_long as usize).unwrap();
     let array = unsafe { env.get_array_elements(&array, ReleaseMode::NoCopyBack) }.unwrap();
-    let blockstate_offsets_elements = unsafe{env.get_array_elements(&blockstate_offsets, ReleaseMode::NoCopyBack)}.unwrap();
-    let blockstate_offsets = unsafe{slice::from_raw_parts(blockstate_offsets_elements.as_ptr(),blockstate_offsets_elements.len())};
+    let blockstate_offsets_elements =
+        unsafe { env.get_array_elements(&blockstate_offsets, ReleaseMode::NoCopyBack) }.unwrap();
+    let blockstate_offsets = unsafe {
+        slice::from_raw_parts(
+            blockstate_offsets_elements.as_ptr(),
+            blockstate_offsets_elements.len(),
+        )
+    };
 
     let vec = unsafe {
         slice::from_raw_parts(
@@ -143,15 +146,12 @@ pub fn paletteReadPacket(
     for blockstate_offset in blockstate_offsets.iter().take(packet_len as usize) {
         let var_int: i32 = cursor.read_var_int().unwrap().into();
 
-        palette.add(
-            BlockstateKey {
-                block: (blockstate_offset >> 16) as u16,
-                augment: (blockstate_offset & 0xffff) as u16,
-            }
-        );
+        palette.add(BlockstateKey {
+            block: (blockstate_offset >> 16) as u16,
+            augment: (blockstate_offset & 0xffff) as u16,
+        });
     }
 
     //The amount of bytes read
     cursor.position() as jint
 }
-

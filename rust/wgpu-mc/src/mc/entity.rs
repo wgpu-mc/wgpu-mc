@@ -7,12 +7,12 @@ use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
 use parking_lot::RwLock;
 use wgpu::{BufferDescriptor, BufferUsages};
 
-use crate::{WgpuState, WmRenderer};
 use crate::render::atlas::Atlas;
 use crate::render::entity::EntityVertex;
 use crate::texture::{BindableTexture, UV};
 use crate::util::BindableBuffer;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
+use crate::{WgpuState, WmRenderer};
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -496,29 +496,32 @@ pub struct BundledEntityInstances {
 }
 
 impl BundledEntityInstances {
-    pub fn new(wm:&WmRenderer,entity: Arc<Entity>, count: u32, texture: Arc<BindableTexture>) -> Self {
+    pub fn new(
+        wm: &WmRenderer,
+        entity: Arc<Entity>,
+        count: u32,
+        texture: Arc<BindableTexture>,
+    ) -> Self {
         Self {
             entity,
             texture,
-            uploaded: UploadedEntityInstances{
+            uploaded: UploadedEntityInstances {
                 transform_ssbo: Arc::new(BindableBuffer::new_deferred(
                     wm,
                     100000,
-                    BufferUsages::STORAGE|BufferUsages::COPY_DST,
+                    BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     "ssbo",
                 )),
-                instance_vbo: Arc::new(wm.wgpu_state.device.create_buffer(
-                    &BufferDescriptor {
-                        label: None,
-                        usage: BufferUsages::VERTEX|BufferUsages::COPY_DST,
-                        size: 100000,
-                        mapped_at_creation: false,
-                    },
-                )),
+                instance_vbo: Arc::new(wm.wgpu_state.device.create_buffer(&BufferDescriptor {
+                    label: None,
+                    usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                    size: 100000,
+                    mapped_at_creation: false,
+                })),
                 overlay_ssbo: Arc::new(BindableBuffer::new_deferred(
                     wm,
                     100000,
-                    BufferUsages::STORAGE|BufferUsages::COPY_DST,
+                    BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     "ssbo",
                 )),
                 count,
