@@ -45,9 +45,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
-pub use naga;
 use parking_lot::{Mutex, RwLock};
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 pub use wgpu;
 use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferDescriptor, PresentMode};
 use wgpu::util::StagingBelt;
@@ -67,7 +65,7 @@ pub const CHUNK_STAGING_BELT_SIZE: u64 = 64_000_000;
 /// Provides access to most of the wgpu structs relating directly to communicating/getting
 /// information about the gpu.
 pub struct WgpuState {
-    pub surface: RwLock<(Option<wgpu::Surface>, wgpu::SurfaceConfiguration)>,
+    pub surface: RwLock<(Option<wgpu::Surface<'static>>, wgpu::SurfaceConfiguration)>,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -100,79 +98,6 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-    /// This is a convenience method;
-    ///
-    /// This takes in a raw window handle and returns a [WgpuState], which is then used to
-    /// initialize a [WmRenderer].
-    pub async fn init_wgpu<W: HasRawWindowHandle + HasRawDisplayHandle + HasWindowSize>(
-        window: &W,
-        vsync: bool,
-    ) -> WgpuState {
-        let size = window.get_window_size();
-
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
-        });
-
-        let surface = unsafe { instance.create_surface(window) }.unwrap();
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: false,
-                compatible_surface: Some(&surface),
-            })
-            .await
-            .unwrap();
-
-        let limits = wgpu::Limits {
-            max_push_constant_size: 128,
-            max_bind_groups: 8,
-            ..Default::default()
-        };
-
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    features: wgpu::Features::default()
-                        | wgpu::Features::DEPTH_CLIP_CONTROL
-                        | wgpu::Features::PUSH_CONSTANTS,
-                    limits,
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
-
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8Unorm,
-            width: size.width,
-            height: size.height,
-            present_mode: if vsync {
-                PresentMode::AutoVsync
-            } else if surface_caps.present_modes.contains(&PresentMode::Immediate) {
-                PresentMode::Immediate
-            } else {
-                surface_caps.present_modes[0]
-            },
-
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-        };
-
-        surface.configure(&device, &surface_config);
-
-        WgpuState {
-            surface: RwLock::new((Some(surface), surface_config)),
-            adapter,
-            device,
-            queue,
-            size: Some(ArcSwap::new(Arc::new(size))),
-        }
-    }
 
     pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         #[cfg(feature = "tracing")]

@@ -4,7 +4,7 @@ use std::io::Cursor;
 use std::num::NonZeroUsize;
 use std::slice;
 
-use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JValue, ReleaseMode};
+use jni::objects::{GlobalRef, JByteArray, JClass, JLongArray, JObject, JValue, ReleaseMode};
 use jni::sys::{jint, jlong, jobject};
 use jni::JNIEnv;
 use jni_fn::jni_fn;
@@ -18,38 +18,25 @@ use wgpu_mc::mc::block::BlockstateKey;
 pub static PALETTE_STORAGE: Lazy<RwLock<Slab<JavaPalette>>> =
     Lazy::new(|| RwLock::new(Slab::with_capacity(4096)));
 
-pub struct IdList {
-    pub map: HashMap<i32, GlobalRef>,
-}
 
-impl IdList {
-    pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct JavaPalette {
-    pub store: Vec<(GlobalRef, BlockstateKey)>,
+    pub store: Vec<BlockstateKey>,
     pub indices: HashMap<BlockstateKey, usize>,
-    pub id_list: NonZeroUsize,
 }
-
 impl JavaPalette {
-    pub fn new(id_list: NonZeroUsize) -> Self {
+    pub fn new() -> Self {
         Self {
             store: Vec::with_capacity(5),
-            indices: HashMap::new(),
-            id_list,
+            indices: HashMap::new()
         }
     }
 
-    pub fn index(&mut self, element: (GlobalRef, BlockstateKey)) -> usize {
-        match self.indices.get(&element.1) {
+    pub fn index(&mut self, element: BlockstateKey) -> usize {
+        match self.indices.get(&element) {
             None => {
-                self.indices.insert(element.1, self.store.len());
+                self.indices.insert(element, self.store.len());
                 self.store.push(element);
                 self.store.len() - 1
             }
@@ -57,8 +44,8 @@ impl JavaPalette {
         }
     }
 
-    pub fn add(&mut self, element: (GlobalRef, BlockstateKey)) {
-        self.indices.insert(element.1, self.store.len());
+    pub fn add(&mut self, element: BlockstateKey) {
+        self.indices.insert(element, self.store.len());
         self.store.push(element);
     }
 
@@ -66,7 +53,7 @@ impl JavaPalette {
         self.store.len()
     }
 
-    pub fn get(&self, index: usize) -> Option<&(GlobalRef, BlockstateKey)> {
+    pub fn get(&self, index: usize) -> Option<&BlockstateKey> {
         self.store.get(index).or_else(|| self.store.first())
     }
 
@@ -80,15 +67,15 @@ impl Debug for JavaPalette {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let res = f.write_str("JavaPalette { store: [");
         self.store.iter().for_each(|store_entry| {
-            write!(f, "(GlobalRef, {:?})", store_entry.1).unwrap();
+            write!(f, "(GlobalRef, {:?})", store_entry).unwrap();
         });
         res
     }
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn createPalette(_env: JNIEnv, _class: JClass, idList: jlong) -> jlong {
-    let palette = JavaPalette::new(NonZeroUsize::new(idList as usize).unwrap());
+pub fn createPalette(_env: JNIEnv, _class: JClass) -> jlong {
+    let palette = JavaPalette::new();
     PALETTE_STORAGE.write().insert(palette) as jlong
 }
 
@@ -115,10 +102,7 @@ pub fn paletteIndex(
 ) -> jint {
     let mut storage_access = PALETTE_STORAGE.write();
     let palette = storage_access.get_mut(palette_long as usize).unwrap();
-    palette.index((
-        env.new_global_ref(object).unwrap(),
-        (blockstate_index as u32).into(),
-    )) as jint
+    palette.index((blockstate_index as u32).into()) as jint
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -130,28 +114,6 @@ pub fn paletteSize(_env: JNIEnv, _class: JClass, palette_long: jlong) -> jint {
         .size() as jint
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn copyPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) -> jlong {
-    let mut storage_access = PALETTE_STORAGE.write();
-    let palette = storage_access.get(palette_long as usize).unwrap();
-    let new_palette = palette.clone();
-    storage_access.insert(new_palette) as jlong
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn paletteGet(_env: JNIEnv, _class: JClass, palette_long: jlong, index: i32) -> jobject {
-    let storage_access = PALETTE_STORAGE.read();
-    let palette = storage_access.get(palette_long as usize).unwrap();
-
-    match palette.get(index as usize) {
-        Some((global_ref, _)) => {
-            return global_ref.as_obj().as_raw();
-        }
-        None => {
-            panic!("Palette index {index} was not occupied\nPalette:\n{palette:?}");
-        }
-    }
-}
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn paletteReadPacket(
@@ -160,21 +122,13 @@ pub fn paletteReadPacket(
     palette_long: jlong,
     array: JByteArray,
     current_position: jint,
-    blockstate_offsets_ptr: jlong,
-    blockstate_offsets_len: jint,
+    blockstate_offsets: JLongArray
 ) -> jint {
     let mut storage_access = PALETTE_STORAGE.write();
     let palette = storage_access.get_mut(palette_long as usize).unwrap();
     let array = unsafe { env.get_array_elements(&array, ReleaseMode::NoCopyBack) }.unwrap();
-
-    let id_list = unsafe { &*(palette.id_list.get() as *const IdList) };
-
-    let blockstate_offsets = unsafe {
-        slice::from_raw_parts(
-            blockstate_offsets_ptr as *mut i32,
-            blockstate_offsets_len as usize,
-        )
-    };
+    let blockstate_offsets_elements = unsafe{env.get_array_elements(&blockstate_offsets, ReleaseMode::NoCopyBack)}.unwrap();
+    let blockstate_offsets = unsafe{slice::from_raw_parts(blockstate_offsets_elements.as_ptr(),blockstate_offsets_elements.len())};
 
     let vec = unsafe {
         slice::from_raw_parts(
@@ -189,32 +143,15 @@ pub fn paletteReadPacket(
     for blockstate_offset in blockstate_offsets.iter().take(packet_len as usize) {
         let var_int: i32 = cursor.read_var_int().unwrap().into();
 
-        let object = id_list.map.get(&var_int).unwrap().clone();
-
-        palette.add((
-            object,
+        palette.add(
             BlockstateKey {
                 block: (blockstate_offset >> 16) as u16,
                 augment: (blockstate_offset & 0xffff) as u16,
-            },
-        ));
+            }
+        );
     }
 
     //The amount of bytes read
     cursor.position() as jint
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn debugPalette(mut env: JNIEnv, _class: JClass, _packed_integer_array: jlong, palette: jlong) {
-    let storage_access = PALETTE_STORAGE.read();
-    let palette = storage_access.get(palette as usize).unwrap();
-    palette.store.iter().for_each(|item| {
-        env.call_static_method(
-            "dev/birb/wgpu/render/Wgpu",
-            "debug",
-            "(Ljava/lang/Object;)V",
-            &[JValue::Object(item.0.as_obj())],
-        )
-        .unwrap();
-    });
-}

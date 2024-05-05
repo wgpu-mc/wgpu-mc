@@ -5,7 +5,7 @@ use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
 use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
 use parking_lot::RwLock;
-use wgpu::BufferUsages;
+use wgpu::{BufferDescriptor, BufferUsages};
 
 use crate::{WgpuState, WmRenderer};
 use crate::render::atlas::Atlas;
@@ -491,16 +491,38 @@ impl InstanceVertex {
 pub struct BundledEntityInstances {
     pub entity: Arc<Entity>,
     pub texture: Arc<BindableTexture>,
-    pub uploaded: Option<UploadedEntityInstances>,
+    pub uploaded: UploadedEntityInstances,
     pub count: u32,
 }
 
 impl BundledEntityInstances {
-    pub fn new(entity: Arc<Entity>, count: u32, texture: Arc<BindableTexture>) -> Self {
+    pub fn new(wm:&WmRenderer,entity: Arc<Entity>, count: u32, texture: Arc<BindableTexture>) -> Self {
         Self {
             entity,
             texture,
-            uploaded: None,
+            uploaded: UploadedEntityInstances{
+                transform_ssbo: Arc::new(BindableBuffer::new_deferred(
+                    wm,
+                    100000,
+                    BufferUsages::STORAGE|BufferUsages::COPY_DST,
+                    "ssbo",
+                )),
+                instance_vbo: Arc::new(wm.wgpu_state.device.create_buffer(
+                    &BufferDescriptor {
+                        label: None,
+                        usage: BufferUsages::VERTEX|BufferUsages::COPY_DST,
+                        size: 100000,
+                        mapped_at_creation: false,
+                    },
+                )),
+                overlay_ssbo: Arc::new(BindableBuffer::new_deferred(
+                    wm,
+                    100000,
+                    BufferUsages::STORAGE|BufferUsages::COPY_DST,
+                    "ssbo",
+                )),
+                count,
+            },
             count,
         }
     }
@@ -558,12 +580,12 @@ impl BundledEntityInstances {
             "ssbo",
         ));
 
-        self.uploaded = Some(UploadedEntityInstances {
+        self.uploaded = UploadedEntityInstances {
             transform_ssbo,
             instance_vbo,
             overlay_ssbo,
             count: self.count,
-        });
+        };
     }
 }
 

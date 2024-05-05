@@ -10,7 +10,7 @@ pipelines:
 #      0: wm_pc_framebuffer_size
 #    uniforms:
 #      0: rot
-  terrain_vbo:
+  terrain:
     geometry: "@geo_terrain"
     depth: "@texture_depth"
     output: [ "@framebuffer_texture" ]
@@ -22,4 +22,4 @@ pipelines:
         2: "@mat4_perspective"
         3: "@tex_block_atlas"
         4: "@sampler"
-#      1: "@bg_chunk_ssbos"
+      1: "@bg_chunk_ssbos"

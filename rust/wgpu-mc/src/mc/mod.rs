@@ -5,12 +5,14 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
+use dashmap::DashMap;
+use glam::{IVec2, IVec3};
 use guillotiere::euclid::default;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
 
-use crate::mc::chunk::ChunkStore;
+use crate::mc::chunk::Section;
 use crate::mc::entity::{BundledEntityInstances, Entity};
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
@@ -174,7 +176,7 @@ pub struct RenderEffectsData {
 }
 
 pub struct Scene {
-    pub chunk_store: ChunkStore,
+    pub chunk_sections: DashMap<IVec3,Section>,
     pub entity_instances: HashMap<String, BundledEntityInstances>,
     pub sky_state: SkyState,
 
@@ -190,7 +192,7 @@ impl Scene {
 
     pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
         Self {
-            chunk_store: ChunkStore::new(),
+            chunk_sections: DashMap::new(),
             entity_instances: Default::default(),
             sky_state: Default::default(),
             stars_index_buffer: None,
@@ -216,7 +218,6 @@ impl Scene {
 pub struct MinecraftState {
     pub block_manager: RwLock<BlockManager>,
 
-    pub chunk_store: ChunkStore,
     pub entity_models: RwLock<HashMap<String, Arc<Entity>>>,
 
     pub resource_provider: Arc<dyn ResourceProvider>,
@@ -230,7 +231,6 @@ impl MinecraftState {
     #[must_use]
     pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
-            chunk_store: ChunkStore::new(),
             entity_models: RwLock::new(HashMap::new()),
 
             texture_manager: TextureManager::new(wgpu_state),
@@ -238,11 +238,10 @@ impl MinecraftState {
             block_manager: RwLock::new(BlockManager {
                 blocks: IndexMap::new(),
             }),
-
             resource_provider,
 
             animated_block_buffer: ArcSwap::new(Arc::new(None)),
-            animated_block_bind_group: ArcSwap::new(Arc::new(None)),
+            animated_block_bind_group: ArcSwap::new(Arc::new(None))
         }
     }
 

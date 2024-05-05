@@ -1,18 +1,19 @@
+use winit::raw_window_handle::{HasDisplayHandle, HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use arc_swap::ArcSwap;
 
 use futures::executor::block_on;
-use raw_window_handle::{
-    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
+use parking_lot::RwLock;
 use winit::event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
-use wgpu_mc::{HasWindowSize, wgpu, WindowSize, WmRenderer};
+use wgpu_mc::{HasWindowSize, wgpu, WgpuState, WindowSize, WmRenderer};
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
@@ -20,8 +21,9 @@ use wgpu_mc::mc::Scene;
 use wgpu_mc::render::graph::{RenderGraph, ResourceBacking};
 use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::ShaderPackConfig;
-use wgpu_mc::wgpu::{BufferBindingType, Extent3d};
+use wgpu_mc::wgpu::{BufferBindingType, Extent3d, PresentMode};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
+
 
 use crate::camera::Camera;
 use crate::chunk::make_chunks;
@@ -55,27 +57,16 @@ impl HasWindowSize for WinitWindowWrapper {
     }
 }
 
-unsafe impl HasRawWindowHandle for WinitWindowWrapper {
-    fn raw_window_handle(&self) -> RawWindowHandle {
-        self.window.raw_window_handle()
-    }
-}
-
-unsafe impl HasRawDisplayHandle for WinitWindowWrapper {
-    fn raw_display_handle(&self) -> RawDisplayHandle {
-        self.window.raw_display_handle()
-    }
-}
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();
     let title = "wgpu-mc test";
-    let window = winit::window::WindowBuilder::new()
-        .with_title(title)
-        .build(&event_loop)
-        .unwrap();
-
-    let wrapper = WinitWindowWrapper { window };
+    let window = Arc::new(
+        winit::window::WindowBuilder::new()
+            .with_title(title)
+            .build(&event_loop)
+            .unwrap()
+    );
 
     let rsp = Arc::new(FsResourceProvider {
         asset_root: crate_root::root()
@@ -92,7 +83,72 @@ fn main() {
         .join("assets")
         .join("minecraft");
 
-    let wgpu_state = block_on(WmRenderer::init_wgpu(&wrapper, false));
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::PRIMARY,
+        ..Default::default()
+    });
+
+    let surface = unsafe { instance.create_surface(window.clone()) }.unwrap();
+    let adapter = block_on(instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: false,
+            compatible_surface: Some(&surface),
+        }))
+        .unwrap();
+
+    let required_limits = wgpu::Limits {
+        max_push_constant_size: 128,
+        max_bind_groups: 8,
+        ..Default::default()
+    };
+
+    let (device, queue) = block_on(adapter
+        .request_device(
+            &wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::default()
+                    | wgpu::Features::DEPTH_CLIP_CONTROL
+                    | wgpu::Features::PUSH_CONSTANTS,
+                required_limits,
+            },
+            None, // Trace path
+        ))
+        .unwrap();
+
+    const VSYNC: bool = false;
+
+    let surface_caps = surface.get_capabilities(&adapter);
+    let surface_config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: wgpu::TextureFormat::Bgra8Unorm,
+        width: window.inner_size().width,
+        height: window.inner_size().height,
+        present_mode: if VSYNC {
+            PresentMode::AutoVsync
+        } else if surface_caps.present_modes.contains(&PresentMode::Immediate) {
+            PresentMode::Immediate
+        } else {
+            surface_caps.present_modes[0]
+        },
+
+        desired_maximum_frame_latency: 2,
+        alpha_mode: surface_caps.alpha_modes[0],
+        view_formats: vec![],
+    };
+
+    surface.configure(&device, &surface_config);
+
+    let wgpu_state = WgpuState {
+        surface: RwLock::new((Some(surface), surface_config)),
+        adapter,
+        device,
+        queue,
+        size: Some(ArcSwap::new(Arc::new(WindowSize {
+            width: window.inner_size().width,
+            height: window.inner_size().height,
+        }))),
+    };
 
     let wm = WmRenderer::new(wgpu_state, rsp);
 
@@ -125,38 +181,10 @@ fn main() {
 
     wm.mc.bake_blocks(&wm, blocks.iter().map(|(a, b)| (a, b)));
 
-    let window = wrapper.window;
-
     begin_rendering(event_loop, window, wm);
 }
 
 pub struct TerrainLayer;
-
-impl RenderLayer for TerrainLayer {
-    fn filter(&self) -> fn(BlockstateKey) -> bool {
-        |_| true
-    }
-
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> Vertex {
-        |vert, x, y, z, _light, dark| Vertex {
-            position: [
-                vert.position[0] + x,
-                vert.position[1] + y,
-                vert.position[2] + z,
-            ],
-            uv: vert.tex_coords,
-            normal: [vert.normal[0], vert.normal[1], vert.normal[2]],
-            color: u32::MAX,
-            uv_offset: vert.animation_uv_offset,
-            lightmap_coords: 0,
-            dark,
-        }
-    }
-
-    fn name(&self) -> &str {
-        "all"
-    }
-}
 
 fn create_buffer(wm: &WmRenderer, contents: &[u8]) -> wgpu::Buffer {
     wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
@@ -166,7 +194,7 @@ fn create_buffer(wm: &WmRenderer, contents: &[u8]) -> wgpu::Buffer {
     })
 }
 
-fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
+fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRenderer) {
     let pack = serde_yaml::from_str::<ShaderPackConfig>(
         &wm.mc
             .resource_provider
@@ -192,13 +220,13 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
         depth_or_array_layers: 1,
     });
 
-    let chunk = make_chunks(&wm);
-    scene.chunk_store.add_chunk([0,0], chunk);
+    let section = make_chunks(&wm);
+    scene.chunk_sections.insert([0,0,0].into(), section);
 
 
     let mut forward = 0.0;
 
-    let mut camera = Camera::new(1.0);
+    let mut camera = Camera::new(window.inner_size().width as f32 / window.inner_size().height as f32);
 
     event_loop
         .run(move |event, target| {
@@ -280,7 +308,6 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
                             );
 
                             camera.position += camera.get_direction() * forward * 0.01;
-                            dbg!(camera.get_direction() * forward * 0.01);
 
                             let mut surface_guard = wm.wgpu_state.surface.write();
                             let (surface, ref mut config) = &mut *surface_guard;
@@ -311,7 +338,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Window, wm: WmRenderer) {
 
 
                             wm.submit_chunk_updates();
-                            render_graph.render(&wm, &scene, &[], &view, [0; 3]);
+                            render_graph.render(&wm, &scene, &view, [0; 3]);
 
                             surface_texture.present();
 

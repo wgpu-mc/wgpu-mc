@@ -6,25 +6,19 @@
 //!
 //! Minecraft splits chunks into 16-block tall pieces called chunk sections, for
 //! rendering purposes.
-
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::mem::size_of;
 use std::ops::Range;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
-use arc_swap::ArcSwap;
-use dashmap::DashMap;
-use encase::UniformBuffer;
-use parking_lot::{Mutex, RwLock};
-use wgpu::{BindGroup, BufferAddress, BufferUsages};
+use glam::IVec3;
+use wgpu::BufferAddress;
 
-use crate::mc::block::{BlockMeshVertex, BlockstateKey, ChunkBlockState, ModelMesh};
+use crate::mc::block::{BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
-use crate::util::BindableBuffer;
-use crate::{WgpuState, WmRenderer};
+use crate::WmRenderer;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
@@ -35,40 +29,6 @@ pub const SECTIONS_PER_CHUNK: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
 pub const MAX_CHUNKS: usize = 1000;
-
-pub type ChunkPos = [i32; 2];
-
-pub struct ChunkStore {
-    pub chunks: [ArcSwap<Option<Chunk>>; MAX_CHUNKS],
-    pub indices: RwLock<HashMap<ChunkPos, usize>>,
-    pub chunk_count: AtomicUsize,
-    pub chunk_offset: Mutex<ChunkPos>,
-}
-
-impl ChunkStore {
-    pub fn new() -> Self {
-        ChunkStore {
-            chunks: [(); MAX_CHUNKS].map(|_| ArcSwap::new(Arc::new(None))),
-            indices: RwLock::new(HashMap::new()),
-            chunk_count: AtomicUsize::new(0),
-            chunk_offset: Mutex::new([0, 0]),
-        }
-    }
-
-    pub fn add_chunk(&self, pos: ChunkPos, chunk: Chunk) -> usize {
-        let len = self.chunk_count.fetch_add(1, Ordering::Release);
-
-        {
-            let mut indices = self.indices.write();
-            indices.insert(pos, len);
-        }
-
-        self.chunks[len].store(Arc::new(Some(chunk)));
-
-        len
-    }
-
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct LightLevel {
@@ -93,19 +53,20 @@ impl LightLevel {
 
 /// Return a [ChunkBlockState] within the provided world coordinates.
 pub trait BlockStateProvider: Send + Sync {
-    fn get_state(&self, x: i32, y: i16, z: i32) -> ChunkBlockState;
 
-    fn get_light_level(&self, x: i32, y: i16, z: i32) -> LightLevel;
+    fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState;
+
+    fn get_light_level(&self, x: i32, y: i32, z: i32) -> LightLevel;
 
     fn is_section_empty(&self, index: usize) -> bool;
+
 }
 
-pub trait RenderLayer: Send + Sync {
-    fn filter(&self) -> fn(BlockstateKey) -> bool;
-
-    fn mapper(&self) -> fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> Vertex;
-
-    fn name(&self) -> &str;
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub enum RenderLayer {
+    Solid,
+    Cutout,
+    Transparent
 }
 
 #[derive(Debug)]
@@ -113,77 +74,52 @@ pub struct ChunkBuffers {
     pub vertex_buffer: Arc<wgpu::Buffer>,
     pub index_buffer: Arc<wgpu::Buffer>,
     #[cfg(not(feature = "vbo-fallback"))]
-    pub bind_group: BindGroup,
+    pub bind_group: wgpu::BindGroup,
     pub vertex_size: u32,
     pub index_size: u32,
 }
 
 ///The struct representing a Chunk, with various render layers, split into sections
 #[derive(Debug)]
-pub struct Chunk {
-    pub pos: ChunkPos,
-    pub buffers: ArcSwap<Option<ChunkBuffers>>,
-    pub sections: RwLock<Vec<[Range<u32>; SECTIONS_PER_CHUNK]>>,
+pub struct Section {
+    pub buffers: Option<ChunkBuffers>,
+    pub layers: HashMap<RenderLayer, Range<u32>>,
+    pub pos: IVec3
 }
 
-impl Chunk {
-    pub fn new(pos: ChunkPos) -> Self {
+impl Section {
+    pub fn new(pos: IVec3) -> Self {
         Self {
+            layers: HashMap::new(),
+            buffers: None,
             pos,
-            sections: RwLock::new(vec![]),
-            buffers: ArcSwap::new(Arc::new(None)),
         }
     }
 
     /// Bakes the layers, and uploads them to the GPU.
     pub fn bake_chunk<T: BlockStateProvider>(
-        &self,
+        &mut self,
         wm: &WmRenderer,
-        layers: &[Box<dyn RenderLayer>],
         block_manager: &BlockManager,
         provider: &T,
     ) {
-        #[cfg(feature = "tracing")]
-        puffin::profile_scope!("mesh chunk", format!("{:?}", self.pos));
+        let baked_layers = bake_section(self.pos, block_manager, provider);
 
-        let mut vertices = 0;
         let mut vertex_data = Vec::new();
         let mut index_data = Vec::new();
 
-        // let mut out = stdout().lock();
+        let mut layers = HashMap::new();
 
-        let baked_layers = layers
-            .iter()
-            .map(|layer| {
-                let sections = (0..SECTIONS_PER_CHUNK)
-                    .map(|index| {
-                        bake_section_layer(
-                            block_manager,
-                            self,
-                            layer.mapper(),
-                            layer.filter(),
-                            provider,
-                            index,
-                        )
-                    })
-                    .collect::<Vec<_>>();
+        for (layer, baked) in baked_layers {
+            let index_offset = index_data.len() as u32;
 
-                array_init::from_iter(sections.iter().map(|(vert, index)| {
-                    let offset = vertices as u32;
-                    vertices += vert.len();
+            vertex_data.extend(baked.vertices.iter().flat_map(Vertex::compressed));
+            index_data.extend(baked.indices.iter().map(|index| *index + index_offset));
 
-                    let index_offset = index_data.len();
+            layers.insert(layer, index_offset..index_offset + (index_data.len() as u32));
+        }
 
-                    vertex_data.extend(vert.iter().flat_map(Vertex::compressed));
-                    index_data.extend(index.iter().map(|i| *i + offset));
-
-                    index_offset as u32..index_offset as u32 + index.len() as u32
-                }))
-                .unwrap()
-            })
-            .collect();
-
-        let buffers = self.buffers.load();
+        self.layers = layers;
 
         //the formulas below align the given value to the nearest multiple of the constant + 1
         let aligned_vertex_data_len = (vertex_data.len() + 16383 & !16383) as BufferAddress;
@@ -191,7 +127,7 @@ impl Chunk {
             ((index_data.len() * size_of::<u32>()) + 1023 & !1023) as BufferAddress;
 
         if !vertex_data.is_empty() {
-            let (vertex_buffer, index_buffer) = match &**buffers {
+            let (vertex_buffer, index_buffer) = match &self.buffers {
                 None => {
                     let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
                     let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
@@ -247,19 +183,19 @@ impl Chunk {
                         )
                     };
 
-                    self.buffers.store(Arc::new(Some(ChunkBuffers {
+                    self.buffers = Some(ChunkBuffers {
                         vertex_buffer: vertex_buffer.clone(),
                         index_buffer: index_buffer.clone(),
                         #[cfg(not(feature = "vbo-fallback"))]
                         bind_group,
                         vertex_size: aligned_vertex_data_len as u32,
                         index_size: aligned_index_data_len as u32,
-                    })));
+                    });
 
                     (vertex_buffer, index_buffer)
                 }
                 Some(ChunkBuffers { vertex_buffer, index_buffer, vertex_size, index_size, .. }) => {
-                    if (*vertex_size as usize) < vertex_data.len()
+                    if ((*vertex_size) as usize) < vertex_data.len()
                         || (*index_size as usize)
                             < (index_data.len() * size_of::<u32>())
                     {
@@ -317,14 +253,14 @@ impl Chunk {
                             )
                         };
 
-                        self.buffers.store(Arc::new(Some(ChunkBuffers {
+                        self.buffers = Some(ChunkBuffers {
                             vertex_buffer: vertex_buffer.clone(),
                             index_buffer: index_buffer.clone(),
                             #[cfg(not(feature = "vbo-fallback"))]
                             bind_group,
                             vertex_size: aligned_vertex_data_len as u32,
                             index_size: aligned_index_data_len as u32,
-                        })));
+                        });
 
                         (vertex_buffer, index_buffer)
                     } else {
@@ -341,10 +277,6 @@ impl Chunk {
             queue.push((vertex_buffer, vertex_data));
             queue.push((index_buffer, Vec::from(bytemuck::cast_slice(&index_data))));
         }
-
-        drop(buffers);
-
-        *self.sections.write() = baked_layers;
     }
 }
 
@@ -354,11 +286,10 @@ fn block_allows_neighbor_render(
     block_manager: &BlockManager,
     state_provider: &impl BlockStateProvider,
     x: i32,
-    y: i16,
+    y: i32,
     z: i32,
 ) -> bool {
     let state = get_block(block_manager, state_provider.get_state(x, y, z));
-
     match state {
         Some(mesh) => !mesh.is_cube,
         None => true,
@@ -381,65 +312,47 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
     )
 }
 
-pub fn bake_section_layer<
-    T,
-    Provider: BlockStateProvider,
-    Filter: Fn(BlockstateKey) -> bool,
-    Mapper: Fn(&BlockMeshVertex, f32, f32, f32, LightLevel, bool) -> T,
+#[derive(Clone, Default)]
+struct BakedSection {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>
+}
+
+
+
+pub fn bake_section<
+    Provider: BlockStateProvider
 >(
+    pos: IVec3,
     block_manager: &BlockManager,
-    chunk: &Chunk,
-    mapper: Mapper,
-    filter: Filter,
-    state_provider: &Provider,
-    section_index: usize,
-) -> (Vec<T>, Vec<u32>) {
-    #[cfg(feature = "tracing")]
-    puffin::profile_scope!("mesh section layer", format!("{}", section_index));
+    state_provider: &Provider
+) -> HashMap<RenderLayer, BakedSection> {
 
-    //Generates the mesh for this chunk, culling faces whenever possible
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
+    let mut layers = HashMap::new();
+    layers.insert(RenderLayer::Solid, BakedSection::default());
+    layers.insert(RenderLayer::Cutout, BakedSection::default());
+    layers.insert(RenderLayer::Transparent, BakedSection::default());
 
-    let mut block_index = section_index * (16 * 16 * 16);
-
-    let end_index = (section_index + 1) * (16 * 16 * 16);
-
-    if state_provider.is_section_empty(section_index) {
-        return (vertices, indices);
+    if state_provider.is_section_empty(pos.y as usize) {
+        return layers;
     }
 
-    loop {
-        if block_index >= end_index {
-            break;
-        }
+    for block_index in 0..16*16*16{
 
-        let x = (block_index % CHUNK_WIDTH) as i32;
-        let y = (block_index / CHUNK_AREA) as i16;
-        let z = ((block_index % CHUNK_AREA) / CHUNK_WIDTH) as i32;
+        let x = block_index & 15;
+        let y = block_index >> 8;
+        let z = (block_index & 255)>>4;
 
         let xf32 = x as f32;
-        let yf32 = (y % 16) as f32;
+        let yf32 = y as f32;
         let zf32 = z as f32;
 
-        block_index += 1;
-
-        let absolute_x = (chunk.pos[0] * 16) + x;
-        let absolute_z = (chunk.pos[1] * 16) + z;
-
-        let block_state: ChunkBlockState = {
-            puffin::profile_scope!("get block state");
-            state_provider.get_state(absolute_x, y, absolute_z)
-        };
+        let block_state: ChunkBlockState = state_provider.get_state(x, y, z);
 
         let state_key = match block_state {
             ChunkBlockState::Air => continue,
             ChunkBlockState::State(key) => key,
         };
-
-        if !filter(state_key) {
-            continue;
-        }
 
         let model_mesh = get_block(block_manager, block_state).unwrap();
 
@@ -449,30 +362,38 @@ pub fn bake_section_layer<
 
         for model in &model_mesh.mesh {
             if model.cube {
-                let baked_should_render_face = |x_: i32, y_: i16, z_: i32| {
+                let baked_should_render_face = |x_: i32, y_: i32, z_: i32| {
                     block_allows_neighbor_render(block_manager, state_provider, x_, y_, z_)
                 };
+                let render_east = baked_should_render_face(x + 1, y, z);
+                let render_west = baked_should_render_face(x - 1, y, z);
+                let render_up = baked_should_render_face(x, y + 1, z);
+                let render_down = baked_should_render_face(x, y - 1, z);
+                let render_south = baked_should_render_face(x, y, z + 1);
+                let render_north = baked_should_render_face(x, y, z - 1);
 
-                let render_east = baked_should_render_face(absolute_x + 1, y, absolute_z);
-                let render_west = baked_should_render_face(absolute_x - 1, y, absolute_z);
-                let render_up = baked_should_render_face(absolute_x, y + 1, absolute_z);
-                let render_down = baked_should_render_face(absolute_x, y - 1, absolute_z);
-                let render_south = baked_should_render_face(absolute_x, y, absolute_z + 1);
-                let render_north = baked_should_render_face(absolute_x, y, absolute_z - 1);
+                let mut extend_vertices = |layer: RenderLayer, index: u32, light_level: LightLevel| {
+                    let baked_layer = layers.get_mut(&layer).unwrap();
+                    let vec_index = baked_layer.vertices.len();
 
-                let mut extend_vertices = |index: u32, light_level: LightLevel| {
-                    let vec_index = vertices.len();
-                    vertices.extend((index..index + 4).map(|vert_index| {
-                        mapper(
-                            &model.vertices[vert_index as usize],
-                            xf32,
-                            yf32,
-                            zf32,
-                            light_level,
-                            false,
-                        )
+                    baked_layer.vertices.extend((index..index + 4).map(|vert_index| {
+                        let model_vertex = model.vertices[vert_index as usize];
+
+                        Vertex {
+                            position: [
+                                xf32 + model_vertex.position[0],
+                                yf32 + model_vertex.position[1],
+                                zf32 + model_vertex.position[2]
+                            ],
+                            uv: model_vertex.tex_coords,
+                            normal: model_vertex.normal,
+                            color: u32::MAX,
+                            uv_offset: 0,
+                            lightmap_coords: state_provider.get_light_level(x,y,z).byte,
+                            dark: false,
+                        }
                     }));
-                    indices.extend(INDICES.map(|index| index + (vec_index as u32)));
+                    baked_layer.indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 };
 
                 // dbg!(absolute_x, absolute_z, render_up, render_down, render_north, render_south, render_west, render_east);
@@ -482,42 +403,42 @@ pub fn bake_section_layer<
                 //We then add the starting offset into the vertices to the face indices so that they match up.
                 if let (true, Some(face)) = (render_north, &model.north) {
                     let light_level: LightLevel =
-                        state_provider.get_light_level(absolute_x, y, absolute_z - 1);
-                    extend_vertices(*face, light_level);
+                        state_provider.get_light_level(x, y, z - 1);
+                    extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_east, &model.east) {
                     let light_level: LightLevel =
-                        state_provider.get_light_level(absolute_x + 1, y, absolute_z);
-                    extend_vertices(*face, light_level);
+                        state_provider.get_light_level(x + 1, y, z);
+                    extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_south, &model.south) {
                     let light_level: LightLevel =
-                        state_provider.get_light_level(absolute_x, y, absolute_z + 1);
-                    extend_vertices(*face, light_level);
+                        state_provider.get_light_level(x, y, z + 1);
+                    extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_west, &model.west) {
                     let light_level: LightLevel =
-                        state_provider.get_light_level(absolute_x - 1, y, absolute_z);
-                    extend_vertices(*face, light_level);
+                        state_provider.get_light_level(x - 1, y, z);
+                    extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_up, &model.up) {
                     let light_level: LightLevel =
-                        state_provider.get_light_level(absolute_x, y + 1, absolute_z);
-                    extend_vertices(*face, light_level);
+                        state_provider.get_light_level(x, y + 1, z);
+                    extend_vertices(model_mesh.layer, *face, light_level);
                 }
 
                 if let (true, Some(face)) = (render_down, &model.down) {
                     let light_level: LightLevel =
-                        state_provider.get_light_level(absolute_x, y - 1, absolute_z);
-                    extend_vertices(*face, light_level);
+                        state_provider.get_light_level(x, y - 1, z);
+                    extend_vertices(model_mesh.layer, *face, light_level);
                 }
             } else {
                 let light_level: LightLevel =
-                    state_provider.get_light_level(absolute_x, y, absolute_z);
+                    state_provider.get_light_level(x, y, z);
 
                 [
                     model.north,
@@ -530,22 +451,31 @@ pub fn bake_section_layer<
                 .iter()
                 .filter_map(|face| *face)
                 .for_each(|index| {
-                    let vec_index = vertices.len();
-                    vertices.extend((index..index + 4).map(|vert_index| {
-                        mapper(
-                            &model.vertices[vert_index as usize],
-                            xf32,
-                            yf32,
-                            zf32,
-                            light_level,
-                            false,
-                        )
+                    let baked_layer = layers.get_mut(&model_mesh.layer).unwrap();
+                    let vec_index = baked_layer.vertices.len();
+
+                    baked_layer.vertices.extend((index..index + 4).map(|vert_index| {
+                        let model_vertex = model.vertices[vert_index as usize];
+
+                        Vertex {
+                            position: [
+                                xf32 + model_vertex.position[0],
+                                yf32 + model_vertex.position[1],
+                                zf32 + model_vertex.position[2]
+                            ],
+                            uv: model_vertex.tex_coords,
+                            normal: model_vertex.normal,
+                            color: u32::MAX,
+                            uv_offset: 0,
+                            lightmap_coords: state_provider.get_light_level(x,y,z).byte,
+                            dark: false,
+                        }
                     }));
-                    indices.extend(INDICES.map(|index| index + (vec_index as u32)));
+                    baked_layer.indices.extend(INDICES.map(|index| index + (vec_index as u32)));
                 });
             }
         }
     }
 
-    (vertices, indices)
+    layers
 }

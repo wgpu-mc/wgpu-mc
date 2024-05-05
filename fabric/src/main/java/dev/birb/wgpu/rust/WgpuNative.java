@@ -112,52 +112,25 @@ public class WgpuNative {
 
     public static native String getVideoMode();
 
-    public static native long createPalette(long idList);
+    public static native long createPalette();
 
     public static native void destroyPalette(long rustPalettePointer);
 
     public static native int paletteIndex(long ptr, Object object, int index);
 
-    public static native Object paletteGet(long ptr, int id);
-
-    public static native long copyPalette(long rustPaletteIndex);
-
     public static native int paletteSize(long rustPalettePointer);
 
     public static native long createPaletteStorage(long[] copy, int elementsPerLong, int elementBits, long maxValue, int indexScale, int indexOffset, int indexShift, int size);
-
-    public static long uploadIdList(IndexedIterable<Object> idList) {
-        if (!idLists.containsKey(idList)) {
-            long rustIdList = createIdList();
-
-            idLists.put(idList, rustIdList);
-
-            for (Object entry : idList) {
-                int id = idList.getRawId(entry);
-                addIdListEntry(rustIdList, id, entry);
-            }
-
-            return rustIdList;
-        } else {
-            return idLists.get(idList);
-        }
-    }
-
-    private static native long createIdList();
-
-    private static native void addIdListEntry(long idList, int id, Object object);
 
     public static native void setCursorPosition(double x, double y);
 
     public static native void setCursorMode(int mode);
 
-    public static native int paletteReadPacket(long rustPalettePointer, byte[] array, int currentPosition, long blockstateOffsets, int blockstateOffsetsLen);
+    public static native int paletteReadPacket(long slabIndex, byte[] array, int currentPosition, long[] blockstateOffsets);
 
     public static native void registerBlock(String name);
 
     public static native void clearPalette(long l);
-
-    public static native void createChunk(int x, int z, long palettePtrs, long storagePtrs, long blockLightPtr, long skyLightPtr);
 
     public static native void destroyPaletteStorage(long paletteStorage);
 
@@ -165,7 +138,7 @@ public class WgpuNative {
 
     public static native void setCamera(double x, double y, double z, float renderYaw, float renderPitch);
 
-    public static native void bakeChunk(int x, int z);
+    public static native void bakeChunk(int x, int y, int z, long[] paletteIndices, long[] storageIndices, byte[][] blockIndices, byte[][] skyIndices);
 
     public static native void setMatrix(int type, float[] mat);
 

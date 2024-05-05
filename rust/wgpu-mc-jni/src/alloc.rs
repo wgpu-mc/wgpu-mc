@@ -12,11 +12,11 @@ use std::ptr;
    https://github.com/CaffeineMC/sodium-fabric/blob/1.20/graph-rework-rust-wip-morton/native/core/src/mem.rs
 */
 
-#[cfg(not(feature = "no_alloc"))]
+#[cfg(feature = "libc_alloc")]
 #[global_allocator]
 static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
 
-#[cfg(feature = "no_alloc")]
+#[cfg(not(feature = "libc_alloc"))]
 static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
 
 #[repr(C)]
@@ -55,7 +55,7 @@ unsafe impl GlobalAlloc for GlobalLibcAllocator {
         (self.vtable().aligned_alloc)(layout.align(), layout.size())
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
+    unsafe fn dealloc(&self, ptr: *mut u8, l: Layout) {
         (self.vtable().aligned_free)(ptr)
     }
 

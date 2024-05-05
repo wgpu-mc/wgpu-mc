@@ -85,17 +85,3 @@ pub fn createPaletteStorage(
     let mut storage = PIA_STORAGE.write();
     storage.insert(packed_arr) as jlong
 }
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn piaGet(_env: JNIEnv, _class: JClass, pia: jlong, x: jint, y: jint, z: jint) -> jint {
-    let storage = PIA_STORAGE.read();
-    let pia = storage.get(pia as usize).unwrap();
-    pia.get(x, y, z)
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn piaGetByIndex(_env: JNIEnv, _class: JClass, pia: jlong, index: jint) -> jint {
-    let storage = PIA_STORAGE.read();
-    let pia = storage.get(pia as usize).unwrap();
-    pia.get_by_index(index)
-}

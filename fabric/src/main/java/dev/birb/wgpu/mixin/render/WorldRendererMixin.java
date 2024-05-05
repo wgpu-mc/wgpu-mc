@@ -3,10 +3,12 @@ package dev.birb.wgpu.mixin.render;
 import dev.birb.wgpu.entity.DummyVertexConsumer;
 import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.*;
 import net.minecraft.client.render.BackgroundRenderer.FogType;
+import net.minecraft.client.render.chunk.ChunkBuilder;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
@@ -28,6 +30,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -35,6 +38,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Objects;
 
 @Mixin(WorldRenderer.class)
@@ -51,6 +55,9 @@ public abstract class WorldRendererMixin {
 
     @Shadow private @Nullable Frustum capturedFrustum;
 
+    @Shadow private @Nullable BuiltChunkStorage chunks;
+
+
     @Shadow private boolean shouldCaptureFrustum;
 
     @Shadow @Final private Vector3d capturedFrustumPosition;
@@ -58,6 +65,9 @@ public abstract class WorldRendererMixin {
     @Shadow private @Nullable ClientWorld world;
 
     @Shadow @Final private EntityRenderDispatcher entityRenderDispatcher;
+
+
+    @Shadow @Final ObjectArrayList<ChunkBuilder.BuiltChunk> field_45616 = new ObjectArrayList(10000);
 
     @Shadow protected abstract void renderEntity(Entity entity, double cameraX, double cameraY, double cameraZ, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers);
 
@@ -117,6 +127,19 @@ public abstract class WorldRendererMixin {
      */
     @Overwrite
     public void reload(ResourceManager manager) {
+    }
+
+    @Inject(method = "setupTerrain", cancellable = true, at = @At(value = "INVOKE", shift = At.Shift.AFTER,
+    target = "Lnet/minecraft/client/render/BuiltChunkStorage;updateCameraPosition(DD)V"))
+    public void setAllVisible(CallbackInfo ci){
+        this.field_45616.clear();
+        this.field_45616.addAll(new ObjectArrayList(this.chunks.chunks));
+    }
+
+    @Redirect(method = "setupTerrain",
+    at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/ChunkRenderingDataPreparer;method_52834(ZLnet/minecraft/client/render/Camera;Lnet/minecraft/client/render/Frustum;Ljava/util/List;)V"))
+    public void disableMcCulling(ChunkRenderingDataPreparer c,boolean bl, Camera camera, Frustum frustum, List<ChunkBuilder.BuiltChunk> list){
+        
     }
 
     @Inject(method = "render", cancellable = true, at = @At("HEAD"))

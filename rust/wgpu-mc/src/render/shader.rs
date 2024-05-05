@@ -74,7 +74,7 @@ impl GlslShader {
             label: None,
             source: wgpu::ShaderSource::Glsl {
                 shader: Cow::from(frag_src),
-                stage: naga::ShaderStage::Fragment,
+                stage: wgpu::naga::ShaderStage::Fragment,
                 defines: Default::default(),
             },
         });
@@ -83,7 +83,7 @@ impl GlslShader {
             label: None,
             source: wgpu::ShaderSource::Glsl {
                 shader: Cow::from(vert_src),
-                stage: naga::ShaderStage::Vertex,
+                stage: wgpu::naga::ShaderStage::Vertex,
                 defines: Default::default(),
             },
         });

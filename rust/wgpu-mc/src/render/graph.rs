@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
+use glam::{IVec2, IVec3};
 use treeculler::Vec3;
 
 use wgpu::{Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp};
-use crate::mc::chunk::{Chunk, ChunkBuffers, ChunkPos, RenderLayer, SECTIONS_PER_CHUNK};
+use crate::mc::chunk::{ChunkBuffers, RenderLayer, Section, SECTIONS_PER_CHUNK};
 
 use crate::mc::entity::InstanceVertex;
 use crate::mc::resource::ResourcePath;
@@ -224,6 +225,7 @@ impl RenderGraph {
                 vertex: wgpu::VertexState {
                     module: &shader.module,
                     entry_point: "vert",
+                    compilation_options: Default::default(),
                     buffers: match &vertex_buffer {
                         None => &[],
                         Some(buffer_layout) => buffer_layout
@@ -251,6 +253,7 @@ impl RenderGraph {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader.module,
                     entry_point: "frag",
+                    compilation_options: Default::default(),
                     targets: &pipeline_config
                         .output
                         .iter()
@@ -322,7 +325,7 @@ impl RenderGraph {
         graph
     }
 
-    pub fn render(&self, wm: &WmRenderer, scene: &Scene, layers: &[&dyn RenderLayer], render_target: &wgpu::TextureView, clear_color: [u8; 3]) {
+    pub fn render(&self, wm: &WmRenderer, scene: &Scene, render_target: &wgpu::TextureView, clear_color: [u8; 3]) {
 
         let arena = WmArena::new(4096);
 
@@ -333,7 +336,6 @@ impl RenderGraph {
         let mut should_clear_depth = true;
 
         for (pipeline_name, bound_pipeline) in &self.pipelines {
-
             let pipeline_config = self.config.pipelines.pipelines.get(pipeline_name).unwrap();
 
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -409,87 +411,61 @@ impl RenderGraph {
 
             match &pipeline_config.geometry[..] {
                 "@geo_terrain" => {
+                    for section in scene.chunk_sections.iter() {
+                        let section = arena.alloc(section);
 
-                    for chunk_arcswap in scene.chunk_store.chunks.iter() {
-                        let chunk_guard = chunk_arcswap.load();
+                        let pos = section.key();
 
-                        let chunk = match &**chunk_guard {
+                        let buffers = match &section.buffers {
                             None => continue,
-                            Some(chunk) => chunk
+                            Some(buffers) => buffers
                         };
 
-                        let sections = chunk.sections.read();
+                        render_pass.set_pipeline(&bound_pipeline.pipeline);
 
-                        for section_index in 0..SECTIONS_PER_CHUNK {
+                        for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                            match bind_group {
+                                WmBindGroup::Resource(name) => {
+                                    match &name[..] {
+                                        "@bg_chunk_ssbos" => {
+                                            #[cfg(not(feature = "vbo-fallback"))]
+                                            if let Some(ref buffers) = section.buffers {
+                                                render_pass.set_bind_group(*index, &buffers.bind_group, &[]);
+                                            }
 
-                            render_pass.set_pipeline(&bound_pipeline.pipeline);
-
-                            for (index, bind_group) in bound_pipeline.bind_groups.iter() {
-                                match bind_group {
-                                    WmBindGroup::Resource(name) => {
-                                        match &name[..] {
-                                            "@bg_chunk_ssbos" => {
-
-                                                #[cfg(not(feature = "vbo-fallback"))]
-                                                {
-                                                    let buffers = arena.alloc(chunk.buffers.load());
-
-                                                    let buffers = match &***buffers {
-                                                        None => continue,
-                                                        Some(buffers) => buffers
-                                                    };
-
-                                                    render_pass.set_bind_group(*index, &buffers.bind_group, &[]);
-                                                }
-
-                                                #[cfg(feature = "vbo-fallback")]
-                                                {
-                                                    panic!("SSBOs are not supported on WebGL")
-                                                }
-
-                                            },
-                                            _ => unimplemented!()
-                                        };
-                                    }
-                                    WmBindGroup::Custom(bind_group) => {
-                                        render_pass.set_bind_group(*index, bind_group, &[]);
+                                            #[cfg(feature = "vbo-fallback")]
+                                            {
+                                                panic!("SSBOs are not supported on WebGL")
+                                            }
+                                        },
+                                        _ => unimplemented!()
                                     }
                                 }
+                                WmBindGroup::Custom(bind_group) => {
+                                    render_pass.set_bind_group(*index, bind_group, &[]);
+                                }
                             }
+                        }
 
+                        if let Some(solid) = section.layers.get(&RenderLayer::Solid) {
                             #[cfg(not(feature = "vbo-fallback"))]
                             {
-                                let range = sections[0][section_index].clone();
-                                println!("draw");
-                                render_pass.draw(range, 0..1);
+                                render_pass.draw(solid.clone(), 0..1);
                             }
 
-                            // #[cfg(feature = "vbo-fallback")]
-                            {
-                                let buffers = arena.alloc(chunk.buffers.load());
-
-                                let buffers = match &***buffers {
-                                    None => continue,
-                                    Some(buffers) => buffers
-                                };
-
-                                let range = sections[0][section_index].clone();
+                            #[cfg(feature = "vbo-fallback")]
+                            if let Some(ref buffers) = section.buffers {
                                 render_pass.set_vertex_buffer(0, buffers.vertex_buffer.slice(..));
                                 render_pass.set_index_buffer(buffers.index_buffer.slice(..), IndexFormat::Uint32);
 
-                                render_pass.draw_indexed(range, 0, 0..1);
+                                render_pass.draw_indexed(solid.clone(), 0, 0..1);
                             }
-
                         }
 
                     }
-
                 },
-                _ => {
-
-                }
+                _ => {}
             }
-
         }
 
         wm.wgpu_state.queue.submit([encoder.finish()]);
@@ -503,10 +479,10 @@ pub fn set_push_constants(
     mc_state: &MinecraftState,
     pipeline: &PipelineConfig,
     render_pass: &mut wgpu::RenderPass,
-    chunk: Option<&Chunk>,
+    section: Option<&Section>,
     surface_config: &wgpu::SurfaceConfiguration,
-    chunk_offset: ChunkPos,
-    section_y: Option<usize>,
+    chunk_offset: IVec2,
+    section_pos: Option<IVec3>,
     parts_per_entity: Option<u32>,
 ) {
     let sky = &scene.sky_state;
@@ -534,9 +510,9 @@ pub fn set_push_constants(
                 wgpu::ShaderStages::VERTEX,
                 *offset as u32,
                 bytemuck::cast_slice(&[
-                    chunk.unwrap().pos[0] + chunk_offset[0],
-                    section_y.unwrap() as i32,
-                    chunk.unwrap().pos[1] + chunk_offset[1],
+                    section_pos.unwrap().x + chunk_offset.x,
+                    section_pos.unwrap().y,
+                    section_pos.unwrap().z + chunk_offset.y,
                 ]),
             ),
             "@pc_parts_per_entity" => render_pass.set_push_constants(

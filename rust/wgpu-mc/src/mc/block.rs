@@ -5,6 +5,7 @@ use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
 use minecraft_assets::schemas::blockstates::ModelProperties;
 use serde_derive::{Deserialize, Serialize};
+use crate::mc::chunk::RenderLayer;
 
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;
@@ -187,6 +188,7 @@ pub enum MeshBakeError {
 pub struct ModelMesh {
     pub mesh: Vec<BlockModelFaces>,
     pub is_cube: bool,
+    pub layer: RenderLayer
 }
 
 impl ModelMesh {
@@ -436,6 +438,7 @@ impl ModelMesh {
         Ok(Self {
             mesh,
             is_cube: all_elements_are_full_cubes,
+            layer: RenderLayer::Solid,
         })
     }
 }
