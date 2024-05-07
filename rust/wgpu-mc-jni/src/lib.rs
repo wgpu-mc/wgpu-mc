@@ -40,13 +40,13 @@ use wgpu_mc::mc::chunk::{
     BlockStateProvider, LightLevel, Section, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK,
 };
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
+use wgpu_mc::mc::Scene;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
-use wgpu_mc::mc::Scene;
 
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::lighting::DeserializedLightData;
@@ -125,11 +125,14 @@ static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
 static SCENE: Lazy<Scene> = Lazy::new(|| {
     let window = WINDOW.get().unwrap();
 
-    Scene::new(RENDERER.get().unwrap(), wgpu::Extent3d {
-        width: window.inner_size().width,
-        height: window.inner_size().height,
-        depth_or_array_layers: 1,
-    })
+    Scene::new(
+        RENDERER.get().unwrap(),
+        wgpu::Extent3d {
+            width: window.inner_size().width,
+            height: window.inner_size().height,
+            depth_or_array_layers: 1,
+        },
+    )
 });
 
 static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -218,7 +221,6 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
 
         self.sections[index].is_none()
     }
-
 }
 
 struct WinitWindowWrapper<'a> {
@@ -448,8 +450,8 @@ pub fn bakeChunk(
         });
     }
     THREAD_POOL.spawn(move || {
-        println!("baking {:?}", [x,y,z]);
-        bake_section([x,y,z].into(), &bsp);
+        println!("baking {:?}", [x, y, z]);
+        bake_section([x, y, z].into(), &bsp);
     })
 }
 
@@ -876,8 +878,7 @@ pub fn texImage2D(
         )
         .unwrap();
 
-        let bindable =
-            BindableTexture::from_tv(&wm, Arc::new(tsv), false);
+        let bindable = BindableTexture::from_tv(&wm, Arc::new(tsv), false);
 
         {
             GL_ALLOC.write().insert(

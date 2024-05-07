@@ -11,12 +11,14 @@ use cgmath::{Matrix4, SquareMatrix};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
+use wgpu_mc::render::graph::{
+    set_push_constants, BoundPipeline, Geometry, RenderGraph, WmBindGroup,
+};
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::{BindableBuffer, WmArena};
 use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
 use wgpu_mc::{wgpu, WmRenderer};
-use wgpu_mc::render::graph::{BoundPipeline, Geometry, RenderGraph, set_push_constants, WmBindGroup};
 
 pub static GL_ALLOC: Lazy<RwLock<HashMap<u32, GlTexture>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
@@ -232,7 +234,14 @@ pub struct ElectrumGeometry {
 }
 
 impl Geometry for ElectrumGeometry {
-    fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(&mut self, wm: &WmRenderer, render_graph: &'graph RenderGraph, bound_pipeline: &'graph BoundPipeline, render_pass: &mut wgpu::RenderPass<'pass>, arena: &WmArena<'arena>) {
+    fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(
+        &mut self,
+        wm: &WmRenderer,
+        render_graph: &'graph RenderGraph,
+        bound_pipeline: &'graph BoundPipeline,
+        render_pass: &mut wgpu::RenderPass<'pass>,
+        arena: &WmArena<'arena>,
+    ) {
         let mut buffer_pool = BufferPool { data: Vec::new() };
 
         let (_, commands) = {
@@ -318,10 +327,12 @@ impl Geometry for ElectrumGeometry {
                 DrawCall::Verts(draw) => {
                     let texture = match draw.texture {
                         None => continue,
-                        Some(texture_id) => if let Some(gl_texture) = textures_read.get(&texture_id) {
-                            gl_texture
-                        } else {
-                            continue
+                        Some(texture_id) => {
+                            if let Some(gl_texture) = textures_read.get(&texture_id) {
+                                gl_texture
+                            } else {
+                                continue;
+                            }
                         }
                     };
 
@@ -329,8 +340,13 @@ impl Geometry for ElectrumGeometry {
                         match bind_group {
                             WmBindGroup::Resource(name) => match &name[..] {
                                 "@texture_electrum_gui" => {
-                                    let bindable = texture.bindable_texture.as_ref().unwrap().clone();
-                                    render_pass.set_bind_group(*index, &arena.alloc(bindable).bind_group, &[]);
+                                    let bindable =
+                                        texture.bindable_texture.as_ref().unwrap().clone();
+                                    render_pass.set_bind_group(
+                                        *index,
+                                        &arena.alloc(bindable).bind_group,
+                                        &[],
+                                    );
                                 }
                                 _ => unimplemented!(),
                             },
@@ -343,24 +359,30 @@ impl Geometry for ElectrumGeometry {
                     render_pass.set_pipeline(&bound_pipeline.pipeline);
 
                     let mut push_constants = HashMap::new();
-                    push_constants.insert("@pc_mat4_model".into(), (Vec::from(bytemuck::cast_slice(&draw.matrix)), wgpu::ShaderStages::VERTEX));
+                    push_constants.insert(
+                        "@pc_mat4_model".into(),
+                        (
+                            Vec::from(bytemuck::cast_slice(&draw.matrix)),
+                            wgpu::ShaderStages::VERTEX,
+                        ),
+                    );
                     set_push_constants(&bound_pipeline.config, render_pass, Some(push_constants));
 
                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
 
-                    render_pass.set_vertex_buffer(
-                        0,
-                        arena.alloc(self.pool.clone()).slice(buffer_slice),
-                    );
+                    render_pass
+                        .set_vertex_buffer(0, arena.alloc(self.pool.clone()).slice(buffer_slice));
                     render_pass.draw(0..draw.count, 0..1);
                 }
                 DrawCall::Indexed(draw) => {
                     let texture = match draw.texture {
                         None => continue,
-                        Some(texture_id) => if let Some(gl_texture) = textures_read.get(&texture_id) {
-                            gl_texture
-                        } else {
-                            continue
+                        Some(texture_id) => {
+                            if let Some(gl_texture) = textures_read.get(&texture_id) {
+                                gl_texture
+                            } else {
+                                continue;
+                            }
                         }
                     };
 
@@ -368,8 +390,13 @@ impl Geometry for ElectrumGeometry {
                         match bind_group {
                             WmBindGroup::Resource(name) => match &name[..] {
                                 "@texture_electrum_gui" => {
-                                    let bindable = texture.bindable_texture.as_ref().unwrap().clone();
-                                    render_pass.set_bind_group(*index, &arena.alloc(bindable).bind_group, &[]);
+                                    let bindable =
+                                        texture.bindable_texture.as_ref().unwrap().clone();
+                                    render_pass.set_bind_group(
+                                        *index,
+                                        &arena.alloc(bindable).bind_group,
+                                        &[],
+                                    );
                                 }
                                 _ => unimplemented!(),
                             },
@@ -382,7 +409,13 @@ impl Geometry for ElectrumGeometry {
                     render_pass.set_pipeline(&bound_pipeline.pipeline);
 
                     let mut push_constants = HashMap::new();
-                    push_constants.insert("@pc_mat4_model".into(), (Vec::from(bytemuck::cast_slice(&draw.matrix)), wgpu::ShaderStages::VERTEX));
+                    push_constants.insert(
+                        "@pc_mat4_model".into(),
+                        (
+                            Vec::from(bytemuck::cast_slice(&draw.matrix)),
+                            wgpu::ShaderStages::VERTEX,
+                        ),
+                    );
                     set_push_constants(&bound_pipeline.config, render_pass, Some(push_constants));
 
                     let vertices = match draw.pipeline_state {
@@ -411,8 +444,7 @@ impl Geometry for ElectrumGeometry {
 
                     let pool_alloc = arena.alloc(self.pool.clone());
 
-                    render_pass
-                        .set_vertex_buffer(0, pool_alloc.slice(vert_slice));
+                    render_pass.set_vertex_buffer(0, pool_alloc.slice(vert_slice));
                     render_pass
                         .set_index_buffer(pool_alloc.slice(index_slice), IndexFormat::Uint32);
                     render_pass.draw_indexed(0..draw.count, 0, 0..1);
@@ -429,8 +461,7 @@ impl Geometry for ElectrumGeometry {
             }
         }
 
-        wm
-            .wgpu_state
+        wm.wgpu_state
             .queue
             .write_buffer(&self.pool, 0, &buffer_pool.data);
 

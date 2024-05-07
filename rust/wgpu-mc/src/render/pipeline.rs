@@ -164,18 +164,16 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
             "texture".into(),
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Texture Bind Group Layout Descriptor"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    }
-                ]
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                }],
             }),
         ),
         (
@@ -259,9 +257,7 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
                         binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage {
-                                read_only: true,
-                            },
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -271,9 +267,7 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
                         binding: 1,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage {
-                                read_only: true,
-                            },
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -283,16 +277,16 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
                         binding: 2,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage {
-                                read_only: true,
-                            },
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
                         count: None,
-                    }
+                    },
                 ],
             }),
-        )
-    ].into_iter().collect()
+        ),
+    ]
+    .into_iter()
+    .collect()
 }

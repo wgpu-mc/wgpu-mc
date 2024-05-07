@@ -31,19 +31,22 @@ use winit::platform::scancode::PhysicalKeyExtScancode;
 use wgpu_mc::mc::block::{BlockMeshVertex, BlockstateKey};
 use wgpu_mc::mc::chunk::{LightLevel, RenderLayer};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
+use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
 use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferAddress, BufferBindingType, BufferUsages, PresentMode, TextureFormat};
-use wgpu_mc::{WgpuState, WmRenderer};
 use wgpu_mc::{wgpu, WindowSize};
-use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
+use wgpu_mc::{WgpuState, WmRenderer};
 
-use crate::gl::{ElectrumVertex, GlTexture, GL_ALLOC, ElectrumGeometry};
+use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
 use crate::lighting::LIGHTMAP_GLID;
-use crate::{MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, CLEAR_COLOR, MC_STATE, RENDERER, THREAD_POOL, WINDOW, SCENE};
+use crate::{
+    MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
+    CHANNELS, CLEAR_COLOR, MC_STATE, RENDERER, SCENE, THREAD_POOL, WINDOW,
+};
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
@@ -96,11 +99,15 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatA
 }
 
 fn create_matrix_buffer(wm: &WmRenderer) -> Arc<wgpu::Buffer> {
-    Arc::new(wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
-        label: None,
-        contents: &[0; 64],
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
-    }))
+    Arc::new(
+        wm.wgpu_state
+            .device
+            .create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &[0; 64],
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+            }),
+    )
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -157,7 +164,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         force_fallback_adapter: false,
         compatible_surface: Some(&surface),
     }))
-        .unwrap();
+    .unwrap();
 
     let required_limits = wgpu::Limits {
         max_push_constant_size: 128,
@@ -180,7 +187,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         },
         None, // Trace path
     ))
-        .unwrap();
+    .unwrap();
 
     const VSYNC: bool = false;
 
@@ -252,43 +259,65 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     render_resources.insert(
         "@mat4_view".into(),
-        ResourceBacking::Buffer(mat4_view.clone(), BufferBindingType::Uniform)
+        ResourceBacking::Buffer(mat4_view.clone(), BufferBindingType::Uniform),
     );
 
     render_resources.insert(
         "@mat4_perspective".into(),
-        ResourceBacking::Buffer(mat4_projection.clone(), BufferBindingType::Uniform)
+        ResourceBacking::Buffer(mat4_projection.clone(), BufferBindingType::Uniform),
     );
 
     render_resources.insert(
         "@mat4_model".into(),
-        ResourceBacking::Buffer(mat4_model.clone(), BufferBindingType::Uniform)
+        ResourceBacking::Buffer(mat4_model.clone(), BufferBindingType::Uniform),
     );
 
     let mut custom_bind_groups = HashMap::new();
-    custom_bind_groups.insert("@texture_electrum_gui".into(), wm.bind_group_layouts.get("texture").unwrap());
-    custom_bind_groups.insert("@mat4_electrum_gui".into(), wm.bind_group_layouts.get("matrix").unwrap());
+    custom_bind_groups.insert(
+        "@texture_electrum_gui".into(),
+        wm.bind_group_layouts.get("texture").unwrap(),
+    );
+    custom_bind_groups.insert(
+        "@mat4_electrum_gui".into(),
+        wm.bind_group_layouts.get("matrix").unwrap(),
+    );
 
     let mut custom_geometry = HashMap::new();
-    custom_geometry.insert("@geo_electrum_gui".into(), vec![
-        wgpu::VertexBufferLayout {
+    custom_geometry.insert(
+        "@geo_electrum_gui".into(),
+        vec![wgpu::VertexBufferLayout {
             array_stride: size_of::<ElectrumVertex>() as BufferAddress,
             step_mode: Default::default(),
             attributes: &ElectrumVertex::VAO,
-        }
-    ]);
+        }],
+    );
 
-    let render_graph = RenderGraph::new(&wm, shader_pack, render_resources, Some(custom_bind_groups), Some(custom_geometry));
+    let render_graph = RenderGraph::new(
+        &wm,
+        shader_pack,
+        render_resources,
+        Some(custom_bind_groups),
+        Some(custom_geometry),
+    );
 
     let mut geometry = HashMap::new();
-    geometry.insert("@geo_electrum_gui".into(), Box::new(ElectrumGeometry {
-        pool: Arc::new(wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: &vec![0; 1_000_000],
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::INDEX,
-        })),
-        last_bytes: None,
-    }) as Box<dyn Geometry>);
+    geometry.insert(
+        "@geo_electrum_gui".into(),
+        Box::new(ElectrumGeometry {
+            pool: Arc::new(
+                wm.wgpu_state
+                    .device
+                    .create_buffer_init(&BufferInitDescriptor {
+                        label: None,
+                        contents: &vec![0; 1_000_000],
+                        usage: wgpu::BufferUsages::COPY_DST
+                            | wgpu::BufferUsages::VERTEX
+                            | wgpu::BufferUsages::INDEX,
+                    }),
+            ),
+            last_bytes: None,
+        }) as Box<dyn Geometry>,
+    );
 
     event_loop
         .run(move |event, target| {
@@ -345,9 +374,21 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                             {
                                 let matrices = MATRICES.lock();
 
-                                wm.wgpu_state.queue.write_buffer(&mat4_projection, 0, bytemuck::cast_slice(&matrices.projection));
-                                wm.wgpu_state.queue.write_buffer(&mat4_view, 0, bytemuck::cast_slice(&matrices.view));
-                                wm.wgpu_state.queue.write_buffer(&mat4_model, 0, bytemuck::cast_slice(&matrices.terrain_transformation));
+                                wm.wgpu_state.queue.write_buffer(
+                                    &mat4_projection,
+                                    0,
+                                    bytemuck::cast_slice(&matrices.projection),
+                                );
+                                wm.wgpu_state.queue.write_buffer(
+                                    &mat4_view,
+                                    0,
+                                    bytemuck::cast_slice(&matrices.view),
+                                );
+                                wm.wgpu_state.queue.write_buffer(
+                                    &mat4_model,
+                                    0,
+                                    bytemuck::cast_slice(&matrices.terrain_transformation),
+                                );
                             }
 
                             let mut surface_guard = wm.wgpu_state.surface.write();
@@ -355,7 +396,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                             let surface = surface.as_ref().unwrap();
 
                             let texture = surface.get_current_texture().unwrap_or_else(|_| {
-
                                 //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
                                 let size = wm.wgpu_state.size.as_ref().unwrap().load();
 
@@ -380,9 +420,9 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                             {
                                 let entity_instances = ENTITY_INSTANCES.lock();
 
-                                let mut encoder = wm.wgpu_state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                    label: None,
-                                });
+                                let mut encoder = wm.wgpu_state.device.create_command_encoder(
+                                    &wgpu::CommandEncoderDescriptor { label: None },
+                                );
 
                                 render_graph.render(
                                     &wm,
@@ -390,7 +430,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                     &SCENE,
                                     &view,
                                     [0; 3],
-                                    &mut geometry
+                                    &mut geometry,
                                 );
 
                                 wm.wgpu_state.queue.submit([encoder.finish()]);

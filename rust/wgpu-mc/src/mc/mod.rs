@@ -11,8 +11,8 @@ use guillotiere::euclid::default;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
-use wgpu::BufferBinding;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::BufferBinding;
 
 use crate::mc::chunk::Section;
 use crate::mc::entity::{BundledEntityInstances, Entity};
@@ -20,8 +20,8 @@ use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
 use crate::texture::BindableTexture;
-use crate::{WgpuState, WmRenderer};
 use crate::util::BindableBuffer;
+use crate::{WgpuState, WmRenderer};
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -182,7 +182,7 @@ pub struct SectionGPULookupTable {
     pub bind_group: Option<wgpu::BindGroup>,
     pub sections_stored_count: u32,
     //The amount of vertices to be rendered, equal to the sum of the lengths of all the referenced index buffers
-    pub size: u32
+    pub size: u32,
 }
 
 pub struct Scene {
@@ -203,11 +203,14 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
-        let lookup_buffer = wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: &vec![0; 1_000_000],
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
+        let lookup_buffer = wm
+            .wgpu_state
+            .device
+            .create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: &vec![0; 1_000_000],
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
 
         Self {
             chunk_sections: DashMap::new(),
@@ -240,11 +243,20 @@ impl Scene {
     }
 
     pub fn build_lookup_table(&self, wm: &WmRenderer) {
-        let buffers: Vec<(Arc<wgpu::Buffer>, Arc<wgpu::Buffer>, u32, IVec3)> = self.chunk_sections.iter().filter_map(|chunk| {
-            chunk.buffers.as_ref().map(|buffers| {
-                (buffers.vertex_buffer.clone(), buffers.index_buffer.clone(), buffers.index_count, chunk.pos)
+        let buffers: Vec<(Arc<wgpu::Buffer>, Arc<wgpu::Buffer>, u32, IVec3)> = self
+            .chunk_sections
+            .iter()
+            .filter_map(|chunk| {
+                chunk.buffers.as_ref().map(|buffers| {
+                    (
+                        buffers.vertex_buffer.clone(),
+                        buffers.index_buffer.clone(),
+                        buffers.index_count,
+                        chunk.pos,
+                    )
+                })
             })
-        }).collect();
+            .collect();
 
         let mut vertex_bindings = vec![];
         let mut index_bindings = vec![];
@@ -255,44 +267,58 @@ impl Scene {
         for (vertex, index, index_length, pos) in &buffers {
             vertex_bindings.push(vertex.as_entire_buffer_binding());
             index_bindings.push(index.as_entire_buffer_binding());
-            lookup_table.extend(bytemuck::cast_slice(&[total_length, total_length + *index_length]));
+            lookup_table.extend(bytemuck::cast_slice(&[
+                total_length,
+                total_length + *index_length,
+            ]));
             lookup_table.extend(bytemuck::cast_slice(&pos.to_array()));
 
             total_length += *index_length;
         }
 
-        wm.wgpu_state.queue.write_buffer(&self.lookup_buffer, 0, &lookup_table);
+        wm.wgpu_state
+            .queue
+            .write_buffer(&self.lookup_buffer, 0, &lookup_table);
 
-        self.lookup_table.store(Arc::new(
-            SectionGPULookupTable {
-                bind_group: Some(Self::create_buffer_bind_group(self.lookup_buffer.as_entire_buffer_binding(), &vertex_bindings, &index_bindings, wm)),
-                sections_stored_count: vertex_bindings.len() as u32,
-                size: total_length,
-            }
-        ));
+        self.lookup_table.store(Arc::new(SectionGPULookupTable {
+            bind_group: Some(Self::create_buffer_bind_group(
+                self.lookup_buffer.as_entire_buffer_binding(),
+                &vertex_bindings,
+                &index_bindings,
+                wm,
+            )),
+            sections_stored_count: vertex_bindings.len() as u32,
+            size: total_length,
+        }));
     }
 
-    pub fn create_buffer_bind_group<'a>(lookup_table: BufferBinding<'a>, vertex_buffers: &[BufferBinding<'a>], index_buffers: &[BufferBinding<'a>], wm: &WmRenderer) -> wgpu::BindGroup {
-        wm.wgpu_state.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: wm.bind_group_layouts.get("section_lookup_table").unwrap(),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::BufferArray(vertex_buffers),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::BufferArray(index_buffers),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Buffer(lookup_table),
-                }
-            ],
-        })
+    pub fn create_buffer_bind_group<'a>(
+        lookup_table: BufferBinding<'a>,
+        vertex_buffers: &[BufferBinding<'a>],
+        index_buffers: &[BufferBinding<'a>],
+        wm: &WmRenderer,
+    ) -> wgpu::BindGroup {
+        wm.wgpu_state
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: wm.bind_group_layouts.get("section_lookup_table").unwrap(),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::BufferArray(vertex_buffers),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::BufferArray(index_buffers),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(lookup_table),
+                    },
+                ],
+            })
     }
-
 }
 
 /// Minecraft-specific state and data structures go in here

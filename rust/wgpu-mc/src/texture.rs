@@ -107,11 +107,7 @@ pub struct BindableTexture {
 
 impl BindableTexture {
     #[must_use]
-    pub fn from_tv(
-        wm: &WmRenderer,
-        tv: Arc<TextureAndView>,
-        depth: bool,
-    ) -> Self {
+    pub fn from_tv(wm: &WmRenderer, tv: Arc<TextureAndView>, depth: bool) -> Self {
         let bind_group = wm
             .wgpu_state
             .device
@@ -121,12 +117,10 @@ impl BindableTexture {
                     .bind_group_layouts
                     .get(if depth { "texture_depth" } else { "texture" })
                     .unwrap(),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&tv.view),
-                    }
-                ],
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&tv.view),
+                }],
             });
 
         Self { tv, bind_group }

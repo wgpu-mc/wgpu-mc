@@ -367,13 +367,20 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
 
                             wm.submit_chunk_updates();
 
-                            let mut command_encoder = wm.wgpu_state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: None
-                            });
+                            let mut command_encoder = wm.wgpu_state.device.create_command_encoder(
+                                &wgpu::CommandEncoderDescriptor { label: None },
+                            );
 
                             let mut geometry = HashMap::new();
 
-                            render_graph.render(&wm, &mut command_encoder, &scene, &view, [0; 3], &mut geometry);
+                            render_graph.render(
+                                &wm,
+                                &mut command_encoder,
+                                &scene,
+                                &view,
+                                [0; 3],
+                                &mut geometry,
+                            );
 
                             wm.wgpu_state.queue.submit([command_encoder.finish()]);
 

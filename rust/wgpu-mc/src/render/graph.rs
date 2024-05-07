@@ -2,25 +2,36 @@ use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 
-use wgpu::{BindGroup, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp};
+use wgpu::{
+    BindGroup, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp,
+};
 
 use crate::mc::chunk::RenderLayer;
 use crate::mc::entity::InstanceVertex;
 use crate::mc::resource::ResourcePath;
 use crate::mc::Scene;
 use crate::render::entity::EntityVertex;
-use crate::render::pipeline::{BLOCK_ATLAS, QuadVertex};
+use crate::render::pipeline::{QuadVertex, BLOCK_ATLAS};
 use crate::render::shader::WgslShader;
-use crate::render::shaderpack::{BindGroupDef, LonghandResourceConfig, PipelineConfig, ShaderPackConfig, ShorthandResourceConfig, TypeResourceConfig};
+use crate::render::shaderpack::{
+    BindGroupDef, LonghandResourceConfig, PipelineConfig, ShaderPackConfig,
+    ShorthandResourceConfig, TypeResourceConfig,
+};
 use crate::render::sky::{SkyVertex, SunMoonVertex};
 use crate::texture::TextureAndView;
 use crate::util::WmArena;
 use crate::WmRenderer;
 
 pub trait Geometry {
-
-    fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(&mut self, wm: &WmRenderer, render_graph: &'graph RenderGraph, bound_pipeline: &'graph BoundPipeline, render_pass: &mut wgpu::RenderPass<'pass>, arena: &WmArena<'arena>);
-
+    fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(
+        &mut self,
+        wm: &WmRenderer,
+        render_graph: &'graph RenderGraph,
+        bound_pipeline: &'graph BoundPipeline,
+        render_pass: &mut wgpu::RenderPass<'pass>,
+        arena: &WmArena<'arena>,
+    );
 }
 
 pub enum ResourceBacking {
@@ -107,7 +118,7 @@ pub enum WmBindGroup {
 pub struct BoundPipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_groups: Vec<(u32, WmBindGroup)>,
-    pub config: PipelineConfig
+    pub config: PipelineConfig,
 }
 
 pub struct RenderGraph {
@@ -117,7 +128,12 @@ pub struct RenderGraph {
 }
 
 impl RenderGraph {
-    fn create_pipelines(&mut self, wm: &WmRenderer, custom_bind_groups: Option<HashMap<String, &wgpu::BindGroupLayout>>, geometry_vertex_layouts: Option<HashMap<String, Vec<wgpu::VertexBufferLayout>>>) {
+    fn create_pipelines(
+        &mut self,
+        wm: &WmRenderer,
+        custom_bind_groups: Option<HashMap<String, &wgpu::BindGroupLayout>>,
+        geometry_vertex_layouts: Option<HashMap<String, Vec<wgpu::VertexBufferLayout>>>,
+    ) {
         self.pipelines.clear();
 
         let arena = WmArena::new(1024);
@@ -143,17 +159,21 @@ impl RenderGraph {
                             },
                         ))
                     }
-                    BindGroupDef::Resource(resource) => match (&resource[..], &custom_bind_groups) {
-                        ("@bg_section_lookup_table", _) => wm.bind_group_layouts.get("section_lookup_table").unwrap(),
-                        (_, Some(custom)) => {
-                            if let Some(entry) = custom.get(resource) {
-                                entry
-                            } else {
-                                unimplemented!()
+                    BindGroupDef::Resource(resource) => {
+                        match (&resource[..], &custom_bind_groups) {
+                            ("@bg_section_lookup_table", _) => {
+                                wm.bind_group_layouts.get("section_lookup_table").unwrap()
                             }
-                        },
-                        (_, None) => unimplemented!(),
-                    },
+                            (_, Some(custom)) => {
+                                if let Some(entry) = custom.get(resource) {
+                                    entry
+                                } else {
+                                    unimplemented!()
+                                }
+                            }
+                            (_, None) => unimplemented!(),
+                        }
+                    }
                 })
                 .collect::<Vec<&wgpu::BindGroupLayout>>();
 
@@ -189,25 +209,29 @@ impl RenderGraph {
                 })
                 .collect::<Vec<(u32, WmBindGroup)>>();
 
-            let push_constants = pipeline_config.push_constants.iter().map(|(index, name)| {
-                let index = *index as u32;
+            let push_constants = pipeline_config
+                .push_constants
+                .iter()
+                .map(|(index, name)| {
+                    let index = *index as u32;
 
-                match &name[..] {
-                    "@pc_mat4_model" => wgpu::PushConstantRange {
-                        stages: wgpu::ShaderStages::VERTEX,
-                        range: index..index + 64,
-                    },
-                    "@pc_section_position" => wgpu::PushConstantRange {
-                        stages: wgpu::ShaderStages::VERTEX,
-                        range: index..index + 96,
-                    },
-                    "@pc_total_sections" => wgpu::PushConstantRange {
-                        stages: wgpu::ShaderStages::VERTEX,
-                        range: index..index + 4,
-                    },
-                    _ => unimplemented!()
-                }
-            }).collect::<Vec<wgpu::PushConstantRange>>();
+                    match &name[..] {
+                        "@pc_mat4_model" => wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::VERTEX,
+                            range: index..index + 64,
+                        },
+                        "@pc_section_position" => wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::VERTEX,
+                            range: index..index + 96,
+                        },
+                        "@pc_total_sections" => wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::VERTEX,
+                            range: index..index + 4,
+                        },
+                        _ => unimplemented!(),
+                    }
+                })
+                .collect::<Vec<wgpu::PushConstantRange>>();
 
             let layout =
                 wm.wgpu_state
@@ -252,11 +276,15 @@ impl RenderGraph {
                     Some(vec![SkyVertex::desc()])
                 }
                 _ => {
-                    match geometry_vertex_layouts.as_ref().map(|layouts| layouts.get(&pipeline_config.geometry)).flatten() {
+                    match geometry_vertex_layouts
+                        .as_ref()
+                        .map(|layouts| layouts.get(&pipeline_config.geometry))
+                        .flatten()
+                    {
                         None => unimplemented!(),
-                        Some(layout) => Some(layout.clone())
+                        Some(layout) => Some(layout.clone()),
                     }
-                },
+                }
             };
 
             let label = format!("{}", pipeline_name);
@@ -337,7 +365,7 @@ impl RenderGraph {
                 BoundPipeline {
                     pipeline: render_pipeline,
                     bind_groups: wm_bind_groups,
-                    config: pipeline_config.clone()
+                    config: pipeline_config.clone(),
                 },
             );
         }
@@ -348,9 +376,8 @@ impl RenderGraph {
         config: ShaderPackConfig,
         mut resources: HashMap<String, ResourceBacking>,
         custom_bind_groups: Option<HashMap<String, &wgpu::BindGroupLayout>>,
-        custom_geometry: Option<HashMap<String, Vec<wgpu::VertexBufferLayout>>>
+        custom_geometry: Option<HashMap<String, Vec<wgpu::VertexBufferLayout>>>,
     ) -> Self {
-
         for (resource_id, shorthand) in &config.resources.resources {
             match shorthand {
                 ShorthandResourceConfig::Int(_) => {}
@@ -362,19 +389,22 @@ impl RenderGraph {
                         TypeResourceConfig::Blob { .. } => {}
                         TypeResourceConfig::Texture3d { .. } => {}
                         TypeResourceConfig::Texture2d { src } => {
-                            let bytes = wm.mc.resource_provider.get_bytes(&ResourcePath::from(&src[..])).unwrap();
+                            let bytes = wm
+                                .mc
+                                .resource_provider
+                                .get_bytes(&ResourcePath::from(&src[..]))
+                                .unwrap();
 
                             let tav = TextureAndView::from_image_file_bytes(
                                 &wm.wgpu_state,
                                 &bytes,
-                                resource_id
-                            ).unwrap();
+                                resource_id,
+                            )
+                            .unwrap();
 
                             resources.insert(
                                 resource_id.clone(),
-                                ResourceBacking::Texture2D(
-                                    Arc::new(tav)
-                                )
+                                ResourceBacking::Texture2D(Arc::new(tav)),
                             );
                         }
                         TypeResourceConfig::TextureDepth => {}
@@ -388,7 +418,6 @@ impl RenderGraph {
                 }
             }
         }
-
 
         let mut graph = Self {
             config,
@@ -409,7 +438,7 @@ impl RenderGraph {
             (
                 "@sampler".into(),
                 ResourceBacking::Sampler(wm.mc.texture_manager.default_sampler.clone()),
-            )
+            ),
         ]);
 
         graph.create_pipelines(wm, custom_bind_groups, custom_geometry);
@@ -424,7 +453,7 @@ impl RenderGraph {
         scene: &Scene,
         render_target: &wgpu::TextureView,
         clear_color: [u8; 3],
-        geometry: &mut HashMap<String, Box<dyn Geometry>>
+        geometry: &mut HashMap<String, Box<dyn Geometry>>,
     ) {
         let arena = WmArena::new(4096);
 
@@ -525,21 +554,24 @@ impl RenderGraph {
                             let mut push_constants = HashMap::new();
                             push_constants.insert(
                                 "@pc_total_sections".into(),
-                                (Vec::from(section_lookup.sections_stored_count.to_ne_bytes()), wgpu::ShaderStages::VERTEX)
+                                (
+                                    Vec::from(section_lookup.sections_stored_count.to_ne_bytes()),
+                                    wgpu::ShaderStages::VERTEX,
+                                ),
                             );
 
-                            set_push_constants(pipeline_config, &mut render_pass, Some(push_constants));
+                            set_push_constants(
+                                pipeline_config,
+                                &mut render_pass,
+                                Some(push_constants),
+                            );
 
                             for (index, bind_group) in bound_pipeline.bind_groups.iter() {
                                 match bind_group {
                                     WmBindGroup::Resource(name) => match &name[..] {
                                         "@bg_section_lookup_table" => {
                                             // #[cfg(not(feature = "vbo-fallback"))]
-                                            render_pass.set_bind_group(
-                                                *index,
-                                                lookup_binding,
-                                                &[],
-                                            );
+                                            render_pass.set_bind_group(*index, lookup_binding, &[]);
 
                                             #[cfg(feature = "vbo-fallback")]
                                             {
@@ -574,17 +606,14 @@ impl RenderGraph {
                         }
                     }
 
-
                     // }
                 }
-                _ => {
-                    match geometry.get_mut(&pipeline_config.geometry) {
-                        None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),
-                        Some(geometry) => {
-                            geometry.render(wm, self, bound_pipeline, &mut render_pass, &arena);
-                        }
+                _ => match geometry.get_mut(&pipeline_config.geometry) {
+                    None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),
+                    Some(geometry) => {
+                        geometry.render(wm, self, bound_pipeline, &mut render_pass, &arena);
                     }
-                }
+                },
             }
         }
     }
@@ -593,18 +622,21 @@ impl RenderGraph {
 pub fn set_push_constants(
     pipeline: &PipelineConfig,
     render_pass: &mut wgpu::RenderPass,
-    push_constants: Option<HashMap<String, (Vec<u8>, wgpu::ShaderStages)>>
+    push_constants: Option<HashMap<String, (Vec<u8>, wgpu::ShaderStages)>>,
 ) {
     pipeline
         .push_constants
         .iter()
-        .for_each(|(offset, resource)|
-            match push_constants.as_ref().map(|others| others.get(resource)).flatten() {
+        .for_each(|(offset, resource)| {
+            match push_constants
+                .as_ref()
+                .map(|others| others.get(resource))
+                .flatten()
+            {
                 None => unimplemented!("Unknown push constant resource value"),
-                Some((data, stages)) => render_pass.set_push_constants(
-                    *stages,
-                    *offset as u32,
-                    data,
-                )
-            });
+                Some((data, stages)) => {
+                    render_pass.set_push_constants(*stages, *offset as u32, data)
+                }
+            }
+        });
 }

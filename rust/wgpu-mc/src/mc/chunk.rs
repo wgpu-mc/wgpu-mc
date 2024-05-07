@@ -75,7 +75,7 @@ pub struct ChunkBuffers {
     // pub bind_group: wgpu::BindGroup,
     pub vertex_buffer_size: u32,
     pub index_buffer_size: u32,
-    pub index_count: u32
+    pub index_count: u32,
 }
 
 ///The struct representing a Chunk, with various render layers, split into sections
@@ -94,7 +94,7 @@ impl Section {
             pos,
         }
     }
-    
+
     pub fn bake_section<T: BlockStateProvider>(
         &mut self,
         wm: &WmRenderer,
@@ -189,7 +189,7 @@ impl Section {
                         // bind_group,
                         vertex_buffer_size: aligned_vertex_data_len as u32,
                         index_buffer_size: aligned_index_data_len as u32,
-                        index_count: index_data.len() as u32
+                        index_count: index_data.len() as u32,
                     });
 
                     (vertex_buffer, index_buffer)
@@ -197,8 +197,8 @@ impl Section {
                 Some(ChunkBuffers {
                     vertex_buffer,
                     index_buffer,
-                         vertex_buffer_size: vertex_size,
-                         index_buffer_size: index_size,
+                    vertex_buffer_size: vertex_size,
+                    index_buffer_size: index_size,
                     ..
                 }) => {
                     if ((*vertex_size) as usize) < vertex_data.len()
@@ -263,7 +263,7 @@ impl Section {
                             // bind_group,
                             vertex_buffer_size: aligned_vertex_data_len as u32,
                             index_buffer_size: aligned_index_data_len as u32,
-                            index_count: index_data.len() as u32
+                            index_count: index_data.len() as u32,
                         });
 
                         (vertex_buffer, index_buffer)
