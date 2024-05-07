@@ -71,10 +71,11 @@ pub enum RenderLayer {
 pub struct ChunkBuffers {
     pub vertex_buffer: Arc<wgpu::Buffer>,
     pub index_buffer: Arc<wgpu::Buffer>,
-    #[cfg(not(feature = "vbo-fallback"))]
-    pub bind_group: wgpu::BindGroup,
-    pub vertex_size: u32,
-    pub index_size: u32,
+    // #[cfg(not(feature = "vbo-fallback"))]
+    // pub bind_group: wgpu::BindGroup,
+    pub vertex_buffer_size: u32,
+    pub index_buffer_size: u32,
+    pub index_count: u32
 }
 
 ///The struct representing a Chunk, with various render layers, split into sections
@@ -93,9 +94,8 @@ impl Section {
             pos,
         }
     }
-
-    /// Bakes the layers, and uploads them to the GPU.
-    pub fn bake_chunk<T: BlockStateProvider>(
+    
+    pub fn bake_section<T: BlockStateProvider>(
         &mut self,
         wm: &WmRenderer,
         block_manager: &BlockManager,
@@ -119,6 +119,8 @@ impl Section {
                 index_offset..index_offset + (index_data.len() as u32),
             );
         }
+
+        dbg!(index_data.len());
 
         self.layers = layers;
 
@@ -158,35 +160,36 @@ impl Section {
                             mapped_at_creation: false,
                         }));
 
-                    #[cfg(not(feature = "vbo-fallback"))]
-                    let bind_group = {
-                        let layout = &wm.bind_group_layouts["chunk_ssbos"];
-
-                        wm.wgpu_state
-                            .device
-                            .create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: None,
-                                layout,
-                                entries: &[
-                                    wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: vertex_buffer.as_entire_binding(),
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: index_buffer.as_entire_binding(),
-                                    },
-                                ],
-                            })
-                    };
+                    // #[cfg(not(feature = "vbo-fallback"))]
+                    // let bind_group = {
+                    //     let layout = &wm.bind_group_layouts["chunk_ssbos"];
+                    //
+                    //     wm.wgpu_state
+                    //         .device
+                    //         .create_bind_group(&wgpu::BindGroupDescriptor {
+                    //             label: None,
+                    //             layout,
+                    //             entries: &[
+                    //                 wgpu::BindGroupEntry {
+                    //                     binding: 0,
+                    //                     resource: vertex_buffer.as_entire_binding(),
+                    //                 },
+                    //                 wgpu::BindGroupEntry {
+                    //                     binding: 1,
+                    //                     resource: index_buffer.as_entire_binding(),
+                    //                 },
+                    //             ],
+                    //         })
+                    // };
 
                     self.buffers = Some(ChunkBuffers {
                         vertex_buffer: vertex_buffer.clone(),
                         index_buffer: index_buffer.clone(),
-                        #[cfg(not(feature = "vbo-fallback"))]
-                        bind_group,
-                        vertex_size: aligned_vertex_data_len as u32,
-                        index_size: aligned_index_data_len as u32,
+                        // #[cfg(not(feature = "vbo-fallback"))]
+                        // bind_group,
+                        vertex_buffer_size: aligned_vertex_data_len as u32,
+                        index_buffer_size: aligned_index_data_len as u32,
+                        index_count: index_data.len() as u32
                     });
 
                     (vertex_buffer, index_buffer)
@@ -194,8 +197,8 @@ impl Section {
                 Some(ChunkBuffers {
                     vertex_buffer,
                     index_buffer,
-                    vertex_size,
-                    index_size,
+                         vertex_buffer_size: vertex_size,
+                         index_buffer_size: index_size,
                     ..
                 }) => {
                     if ((*vertex_size) as usize) < vertex_data.len()
@@ -256,10 +259,11 @@ impl Section {
                         self.buffers = Some(ChunkBuffers {
                             vertex_buffer: vertex_buffer.clone(),
                             index_buffer: index_buffer.clone(),
-                            #[cfg(not(feature = "vbo-fallback"))]
-                            bind_group,
-                            vertex_size: aligned_vertex_data_len as u32,
-                            index_size: aligned_index_data_len as u32,
+                            // #[cfg(not(feature = "vbo-fallback"))]
+                            // bind_group,
+                            vertex_buffer_size: aligned_vertex_data_len as u32,
+                            index_buffer_size: aligned_index_data_len as u32,
+                            index_count: index_data.len() as u32
                         });
 
                         (vertex_buffer, index_buffer)

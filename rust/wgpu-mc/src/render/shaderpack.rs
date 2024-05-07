@@ -276,22 +276,8 @@ pipelines:
     geometry: wm_geo_entities
     depth: wm_framebuffer_depth
     output: [wm_framebuffer_texture]
-    uniforms:
-      0:
-        resource: model_view_mat4
-        visibility: [vert, frag]
-      1:
-        resource: shadow_ortho_mat4
-        visibility: [vert, frag]
-      2:
-        resource: wm_ssbo_entity_part_transforms
-        visibility: [vert, frag]
-      3:
-        resource: mvp_mat4
-        visibility: [vert, frag]
-      4:
-        resource: shadowmap_texture_depth
-        visibility: [frag]
+    bind_groups:
+      
 "#;
 
     #[test]

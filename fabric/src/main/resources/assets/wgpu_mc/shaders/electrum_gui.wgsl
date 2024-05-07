@@ -5,13 +5,12 @@ struct VO {
     @location(2) use_uv: u32
 }
 
-@group(0) @binding(0)
-var<uniform> projection: mat4x4<f32>;
+var<push_constant> projection: mat4x4<f32>;
 
-@group(1) @binding(0)
+@group(0) @binding(0)
 var t_texture: texture_2d<f32>;
 
-@group(1) @binding(1)
+@group(1) @binding(0)
 var t_sampler: sampler;
 
 @vertex

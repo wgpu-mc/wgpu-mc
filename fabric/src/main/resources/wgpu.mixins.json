@@ -38,7 +38,8 @@
     "render.WorldRendererMixin",
     "render.ItemRendererMixin",
     "world.BlockStateMixin",
-    "DebugHudMixin"
+    "DebugHudMixin",
+    "core.MainTestRenderdocMixin"
   ],
   "injectors": {
     "defaultRequire": 1

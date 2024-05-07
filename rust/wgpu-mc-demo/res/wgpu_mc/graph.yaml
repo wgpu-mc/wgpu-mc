@@ -15,11 +15,13 @@ pipelines:
     depth: "@texture_depth"
     output: [ "@framebuffer_texture" ]
     blending: premultiplied_alpha_blending
+    push_constants:
+      0: "@pc_total_sections"
     bind_groups:
       0:
         0: "@mat4_model"
         1: "@mat4_view"
         2: "@mat4_perspective"
-        3: "@tex_block_atlas"
+        3: "@texture_block_atlas"
         4: "@sampler"
-      1: "@bg_chunk_ssbos"
+      1: "@bg_section_lookup_table"

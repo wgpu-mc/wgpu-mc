@@ -36,16 +36,14 @@ use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult, ShaderPackConfig};
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu_mc::wgpu::{BufferUsages, TextureFormat};
-use wgpu_mc::WmRenderer;
+use wgpu_mc::wgpu::{BufferAddress, BufferBindingType, BufferUsages, PresentMode, TextureFormat};
+use wgpu_mc::{WgpuState, WmRenderer};
 use wgpu_mc::{wgpu, WindowSize};
+use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
 
-use crate::gl::{ElectrumVertex, GlTexture, GL_ALLOC};
+use crate::gl::{ElectrumVertex, GlTexture, GL_ALLOC, ElectrumGeometry};
 use crate::lighting::LIGHTMAP_GLID;
-use crate::{
-    MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper,
-    CHANNELS, CLEAR_COLOR, MC_STATE, RENDERER, THREAD_POOL, WINDOW,
-};
+use crate::{MinecraftRenderState, MinecraftResourceManagerAdapter, RenderMessage, WinitWindowWrapper, CHANNELS, CLEAR_COLOR, MC_STATE, RENDERER, THREAD_POOL, WINDOW, SCENE};
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {
@@ -85,8 +83,7 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatA
             MATRICES.lock().projection = slice_4x4;
         }
         1 => {
-            todo!()
-            // MATRICES.lock().model = slice_4x4;
+            // MATRICES.lock(). = slice_4x4;
         }
         2 => {
             MATRICES.lock().view = slice_4x4;
@@ -96,6 +93,14 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatA
         }
         _ => {}
     }
+}
+
+fn create_matrix_buffer(wm: &WmRenderer) -> Arc<wgpu::Buffer> {
+    Arc::new(wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        contents: &[0; 64],
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+    }))
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -137,15 +142,79 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     WINDOW.set(window.clone()).unwrap();
 
-    let wrapper = &WinitWindowWrapper { window: &window };
-
-    let wgpu_state = block_on(WmRenderer::init_wgpu(
-        wrapper, true, // super::SETTINGS.read().as_ref().unwrap().vsync.value,
-    ));
-
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap(),
     });
+
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::PRIMARY,
+        ..Default::default()
+    });
+
+    let surface = instance.create_surface(window.clone()).unwrap();
+    let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        force_fallback_adapter: false,
+        compatible_surface: Some(&surface),
+    }))
+        .unwrap();
+
+    let required_limits = wgpu::Limits {
+        max_push_constant_size: 128,
+        max_bind_groups: 8,
+        max_storage_buffers_per_shader_stage: 100000,
+        ..Default::default()
+    };
+
+    let (device, queue) = block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            label: None,
+            required_features: wgpu::Features::default()
+                | wgpu::Features::DEPTH_CLIP_CONTROL
+                | wgpu::Features::PUSH_CONSTANTS
+                | wgpu::Features::BUFFER_BINDING_ARRAY
+                | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY
+                | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
+                | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY,
+            required_limits,
+        },
+        None, // Trace path
+    ))
+        .unwrap();
+
+    const VSYNC: bool = false;
+
+    let surface_caps = surface.get_capabilities(&adapter);
+    let surface_config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: wgpu::TextureFormat::Bgra8Unorm,
+        width: window.inner_size().width,
+        height: window.inner_size().height,
+        present_mode: if VSYNC {
+            PresentMode::AutoVsync
+        } else if surface_caps.present_modes.contains(&PresentMode::Immediate) {
+            PresentMode::Immediate
+        } else {
+            surface_caps.present_modes[0]
+        },
+
+        desired_maximum_frame_latency: 2,
+        alpha_mode: surface_caps.alpha_modes[0],
+        view_formats: vec![],
+    };
+
+    surface.configure(&device, &surface_config);
+
+    let wgpu_state = WgpuState {
+        surface: RwLock::new((Some(surface), surface_config)),
+        adapter,
+        device,
+        queue,
+        size: Some(ArcSwap::new(Arc::new(WindowSize {
+            width: window.inner_size().width,
+            height: window.inner_size().height,
+        }))),
+    };
 
     let wm = WmRenderer::new(wgpu_state, resource_provider);
 
@@ -164,184 +233,62 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
     log::trace!("Starting event loop");
 
+    // {
+    //     let tex_id = LIGHTMAP_GLID.lock().unwrap();
+    //     let textures_read = GL_ALLOC.read();
+    //     let lightmap = textures_read.get(&*tex_id).unwrap();
+    //     let bindable = lightmap.bindable_texture.as_ref().unwrap();
+    //     let asaa = ArcSwap::new(bindable.clone());
+    // }
+
     let shader_pack: ShaderPackConfig =
         serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
 
-    let mut render_geometry = HashMap::new();
+    let mut render_resources = HashMap::new();
 
-    render_geometry.insert(
-        "wm_geo_electrum_gui".into(),
-        Box::new(ElectrumGeometry {
-            blank: wm.create_texture_handle(
-                "electrum_blank_texture".into(),
-                TextureFormat::Bgra8Unorm,
-                &wm.wgpu_state.surface.read().1,
-            ),
-            pool: Arc::new(
-                wm.wgpu_state
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: &vec![0u8; 10_000_000],
-                        usage: BufferUsages::VERTEX | BufferUsages::INDEX | BufferUsages::COPY_DST,
-                    }),
-            ),
-            last_bytes: RwLock::new(None),
-        }) as Box<dyn GeometryCallback>,
+    let mat4_projection = create_matrix_buffer(&wm);
+    let mat4_view = create_matrix_buffer(&wm);
+    let mat4_model = create_matrix_buffer(&wm);
+
+    render_resources.insert(
+        "@mat4_view".into(),
+        ResourceBacking::Buffer(mat4_view.clone(), BufferBindingType::Uniform)
     );
 
-    let mut resources = HashMap::new();
-
-    let matrix = Matrix4::identity();
-    let mat: Mat4 = matrix.into();
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
+    render_resources.insert(
+        "@mat4_perspective".into(),
+        ResourceBacking::Buffer(mat4_projection.clone(), BufferBindingType::Uniform)
     );
 
-    resources.insert(
-        "wm_mat4_projection".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
+    render_resources.insert(
+        "@mat4_model".into(),
+        ResourceBacking::Buffer(mat4_model.clone(), BufferBindingType::Uniform)
     );
 
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
-    );
+    let mut custom_bind_groups = HashMap::new();
+    custom_bind_groups.insert("@texture_electrum_gui".into(), wm.bind_group_layouts.get("texture").unwrap());
+    custom_bind_groups.insert("@mat4_electrum_gui".into(), wm.bind_group_layouts.get("matrix").unwrap());
 
-    resources.insert(
-        "wm_mat4_model".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
-    );
-
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
-    );
-
-    resources.insert(
-        "wm_mat4_terrain_transformation".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
-    );
-
-    {
-        // Sun
-        let sky_texture_sun = "minecraft:textures/environment/sun.png";
-        let sky_texture_sun_label = "wm_texture_sky_sun";
-        let sun_texture = BindableTexture::from_resource_path(
-            &wm,
-            pipelines.as_ref(),
-            sky_texture_sun,
-            sky_texture_sun_label,
-        );
-
-        // Moon
-        let sky_texture_moon = "minecraft:textures/environment/moon_phases.png";
-        let sky_texture_moon_label = "wm_texture_sky_moon";
-        let moon_texture = BindableTexture::from_resource_path(
-            &wm,
-            pipelines.as_ref(),
-            sky_texture_moon,
-            sky_texture_moon_label,
-        );
-
-        let mut texture_map: HashMap<String, Arc<BindableTexture>> = HashMap::new();
-
-        texture_map.insert(sky_texture_sun_label.into(), Arc::new(sun_texture));
-        texture_map.insert(sky_texture_moon_label.into(), Arc::new(moon_texture));
-
-        let mut sky_data = (**wm.mc.sky_data.load()).clone();
-        sky_data.textures = texture_map;
-        wm.mc.sky_data.swap(Arc::new(sky_data));
-    }
-
-    {
-        let tex_id = LIGHTMAP_GLID.lock().unwrap();
-        let textures_read = GL_ALLOC.read();
-        let lightmap = textures_read.get(&*tex_id).unwrap();
-        let bindable = lightmap.bindable_texture.as_ref().unwrap();
-        let asaa = ArcSwap::new(bindable.clone());
-        resources.insert(
-            "wm_tex_electrum_lightmap".into(),
-            CustomResource {
-                update: None,
-                data: Arc::new(ResourceInternal::Texture(
-                    wgpu_mc::render::graph::TextureResource::Bindable(asaa.into()),
-                    false,
-                )),
-            },
-        );
-        println!("Added resources");
-    }
-
-    let matrix = Matrix4::identity();
-    let mat: Mat4 = matrix.into();
-    let bindable_buffer = BindableBuffer::new(
-        &wm,
-        bytemuck::cast_slice(&mat),
-        BufferUsages::UNIFORM,
-        "matrix",
-    );
-
-    resources.insert(
-        "wm_mat4_view".into(),
-        CustomResource {
-            update: None,
-            data: Arc::new(ResourceInternal::Mat4(
-                Mat4ValueOrMult::Value { value: mat },
-                Arc::new(RwLock::new(matrix)),
-                Arc::new(bindable_buffer),
-            )),
-        },
-    );
-
-    let mut shader_graph = ShaderGraph::new(shader_pack, resources, render_geometry);
-
-    let mut types = HashMap::new();
-
-    types.insert("wm_electrum_mat4".into(), "matrix".into());
-    types.insert("wm_electrum_gl_texture".into(), "texture".into());
-    types.insert("wm_tex_electrum_lightmap".into(), "texture".into());
-
-    let mut geometry_layouts = HashMap::new();
-
-    geometry_layouts.insert(
-        "wm_geo_electrum_gui".into(),
-        vec![wgpu::VertexBufferLayout {
-            array_stride: size_of::<ElectrumVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
+    let mut custom_geometry = HashMap::new();
+    custom_geometry.insert("@geo_electrum_gui".into(), vec![
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<ElectrumVertex>() as BufferAddress,
+            step_mode: Default::default(),
             attributes: &ElectrumVertex::VAO,
-        }],
-    );
+        }
+    ]);
 
-    shader_graph.init(&wm, Some(&types), Some(geometry_layouts));
+    let render_graph = RenderGraph::new(&wm, shader_pack, render_resources, Some(custom_bind_groups), Some(custom_geometry));
+
+    let mut geometry = HashMap::new();
+    geometry.insert("@geo_electrum_gui".into(), Box::new(ElectrumGeometry {
+        pool: Arc::new(wm.wgpu_state.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: &vec![0; 1_000_000],
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::INDEX,
+        })),
+        last_bytes: None,
+    }) as Box<dyn Geometry>);
 
     event_loop
         .run(move |event, target| {
@@ -351,90 +298,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
 
             match event {
                 Event::AboutToWait => {
-                    wm.submit_chunk_updates();
-
-                    {
-                        let matrices = MATRICES.lock();
-                        let res_mat_proj = shader_graph
-                            .resources
-                            .get_mut("wm_mat4_projection")
-                            .unwrap();
-
-                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_proj.data {
-                            let matrix4: Matrix4<f32> = matrices.projection.into();
-                            *lock.write() = matrix4;
-                        }
-
-                        let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_model").unwrap();
-
-                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                            let matrix4: Matrix4<f32> = matrices.model.into();
-                            *lock.write() = matrix4;
-                        }
-
-                        let res_mat_mod = shader_graph.resources.get_mut("wm_mat4_view").unwrap();
-
-                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                            let matrix4: Matrix4<f32> = matrices.view.into();
-                            *lock.write() = matrix4;
-                        }
-
-                        let res_mat_mod = shader_graph
-                            .resources
-                            .get_mut("wm_mat4_terrain_transformation")
-                            .unwrap();
-
-                        if let ResourceInternal::Mat4(_val, lock, _) = &*res_mat_mod.data {
-                            let matrix4: Matrix4<f32> = matrices.terrain_transformation.into();
-                            *lock.write() = matrix4;
-                        }
-                    }
-
-                    let surface_state = wm.wgpu_state.surface.write();
-
-                    let surface = surface_state.0.as_ref().unwrap();
-                    let texture = surface.get_current_texture().unwrap_or_else(|_| {
-                        //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-                        let size = wm.wgpu_state.size.as_ref().unwrap().load();
-                        let new_config = wm
-                            .update_surface_size(
-                                surface_state.1.clone(),
-                                WindowSize {
-                                    width: size.width,
-                                    height: size.height,
-                                },
-                            )
-                            .unwrap();
-                        surface.configure(&wm.wgpu_state.device, &new_config);
-                        surface.get_current_texture().unwrap()
-                    });
-
-                    let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
-                        label: None,
-                        format: Some(TextureFormat::Bgra8Unorm),
-                        dimension: Some(wgpu::TextureViewDimension::D2),
-                        aspect: Default::default(),
-                        base_mip_level: 0,
-                        mip_level_count: None,
-                        base_array_layer: 0,
-                        array_layer_count: None,
-                    });
-
-                    let clear_color =
-                        *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
-                    {
-                        let entity_instances = ENTITY_INSTANCES.lock();
-                        wm.render(
-                            &shader_graph,
-                            &view,
-                            &surface_state.1,
-                            &entity_instances,
-                            Some(clear_color),
-                        )
-                        .unwrap();
-                    }
-                    texture.present();
-                    window.request_redraw()
+                    window.request_redraw();
                 }
                 Event::WindowEvent {
                     ref event,
@@ -474,6 +338,65 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                 .0
                                 .send(RenderMessage::CursorMove(position.x, position.y))
                                 .unwrap();
+                        }
+                        WindowEvent::RedrawRequested => {
+                            wm.submit_chunk_updates();
+
+                            {
+                                let matrices = MATRICES.lock();
+
+                                wm.wgpu_state.queue.write_buffer(&mat4_projection, 0, bytemuck::cast_slice(&matrices.projection));
+                                wm.wgpu_state.queue.write_buffer(&mat4_view, 0, bytemuck::cast_slice(&matrices.view));
+                                wm.wgpu_state.queue.write_buffer(&mat4_model, 0, bytemuck::cast_slice(&matrices.terrain_transformation));
+                            }
+
+                            let mut surface_guard = wm.wgpu_state.surface.write();
+                            let (surface, surface_config) = &mut *surface_guard;
+                            let surface = surface.as_ref().unwrap();
+
+                            let texture = surface.get_current_texture().unwrap_or_else(|_| {
+
+                                //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+                                let size = wm.wgpu_state.size.as_ref().unwrap().load();
+
+                                surface_config.width = size.width;
+                                surface_config.height = size.height;
+
+                                surface.configure(&wm.wgpu_state.device, &surface_config);
+                                surface.get_current_texture().unwrap()
+                            });
+
+                            let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+                                label: None,
+                                format: Some(TextureFormat::Bgra8Unorm),
+                                dimension: Some(wgpu::TextureViewDimension::D2),
+                                aspect: Default::default(),
+                                base_mip_level: 0,
+                                mip_level_count: None,
+                                base_array_layer: 0,
+                                array_layer_count: None,
+                            });
+
+                            {
+                                let entity_instances = ENTITY_INSTANCES.lock();
+
+                                let mut encoder = wm.wgpu_state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                    label: None,
+                                });
+
+                                render_graph.render(
+                                    &wm,
+                                    &mut encoder,
+                                    &SCENE,
+                                    &view,
+                                    [0; 3],
+                                    &mut geometry
+                                );
+
+                                wm.wgpu_state.queue.submit([encoder.finish()]);
+                            }
+
+                            texture.present();
                         }
                         WindowEvent::KeyboardInput {
                             event:
@@ -810,31 +733,29 @@ pub fn setEntityInstanceBuffer(
     Instant::now().duration_since(now).as_nanos() as jlong
 }
 
-// #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-// pub fn bindSkyData(
-//     _env: JNIEnv,
-//     _class: JClass,
-//     r: jfloat,
-//     g: jfloat,
-//     b: jfloat,
-//     angle: jfloat,
-//     brightness: jfloat,
-//     star_shimmer: jfloat,
-//     moon_phase: jint,
-// ) {
-//     let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
-//     sky_data.color_r = r;
-//     sky_data.color_g = g;
-//     sky_data.color_b = b;
-//     sky_data.angle = angle;
-//     sky_data.brightness = brightness;
-//     sky_data.star_shimmer = star_shimmer;
-//     sky_data.moon_phase = moon_phase;
-//
-//     RENDERER.get().unwrap().mc.sky_data.swap(Arc::new(sky_data));
-// }
-
-//public static native void bindRenderEffectsData(float fogStart, float fogEnd, int fogShape, float[] fogColor, float[] colorModulator);
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bindSkyData(
+    _env: JNIEnv,
+    _class: JClass,
+    r: jfloat,
+    g: jfloat,
+    b: jfloat,
+    angle: jfloat,
+    brightness: jfloat,
+    star_shimmer: jfloat,
+    moon_phase: jint,
+) {
+    // let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
+    // sky_data.color_r = r;
+    // sky_data.color_g = g;
+    // sky_data.color_b = b;
+    // sky_data.angle = angle;
+    // sky_data.brightness = brightness;
+    // sky_data.star_shimmer = star_shimmer;
+    // sky_data.moon_phase = moon_phase;
+    //
+    // RENDERER.get().unwrap().mc.sky_data.swap(Arc::new(sky_data));
+}
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn bindRenderEffectsData(

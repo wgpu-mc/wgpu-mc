@@ -1,7 +1,3 @@
-struct CameraUniform {
-    view: mat4x4<f32>
-};
-
 struct UV {
     uv1: vec2<f32>,
     uv2: vec2<f32>,
@@ -19,27 +15,25 @@ struct ChunkOffset {
 }
 
 struct PushConstants {
-    chunk_x: i32,
-    chunk_y: i32,
-    chunk_z: i32,
-    fb_width: f32,
-    fb_height: f32
+    total_chunk_sections: u32
+}
+
+struct Buffer {
+    buffer: array<u32>
 }
 
 var<push_constant> push_constants: PushConstants;
 
-@group(0) @binding(0) var<uniform> camera_uniform: CameraUniform;
+@group(0) @binding(0) var<uniform> mat4_model: mat4x4<f32>;
+@group(0) @binding(1) var<uniform> mat4_view: mat4x4<f32>;
+@group(0) @binding(2) var<uniform> mat4_persp: mat4x4<f32>;
 
-@group(1) @binding(0) var t_texture: texture_2d<f32>;
-@group(1) @binding(1) var t_sampler: sampler;
+@group(0) @binding(3) var t_texture: texture_2d<f32>;
+@group(0) @binding(4) var t_sampler: sampler;
 
-@group(2) @binding(0) var<storage> vertex_data: array<u32>;
-@group(3) @binding(0) var<storage> index_data: array<u32>;
-
-@group(4) @binding(0) var lightmap_texture: texture_2d<f32>;
-@group(4) @binding(1) var lightmap_sampler: sampler;
-
-@group(5) @binding(0) var<uniform> proj: mat4x4<f32>;
+@group(1) @binding(0) var<storage> vertex_data: binding_array<Buffer>;
+@group(1) @binding(1) var<storage> index_data: binding_array<Buffer>;
+@group(1) @binding(2) var<storage> ranges: array<u32>;
 
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
@@ -48,23 +42,72 @@ struct VertexResult {
     @location(2) blend: f32,
     @location(3) normal: vec3<f32>,
     @location(4) world_pos: vec3<f32>,
-    @location(5) @interpolate(flat) light_coords: vec2<f32>
+    @location(5) @interpolate(flat) light_coords: vec2<f32>,
+    @location(6) section: u32
 };
+
+
+fn search_iter(size: ptr<function, u32>, left: ptr<function, u32>, right: ptr<function, u32>, section_index: ptr<function, u32>, done: ptr<function, bool>, vertex_index: u32) {
+    var mid = *left + *size / 2;
+
+    var begin_range = ranges[mid * 5];
+    var end_range = ranges[mid * 5 + 1];
+
+    *left = select(*left, mid + 1, end_range < vertex_index);
+    *right = select(*right, mid, begin_range > vertex_index);
+
+    *section_index = select(mid, *section_index, *done);
+
+    *done |= vertex_index >= begin_range && vertex_index < end_range;
+
+    *size = *right - *left;
+}
 
 @vertex
 fn vert(
     @builtin(vertex_index) vertex_index: u32
 ) -> VertexResult {
-    // var uv = uv_offsets.uvs[uv_offset];
-
     var vr: VertexResult;
 
-    var index: u32 = index_data[vertex_index];
+    var section_index: u32 = 0;
 
-    var v1 = vertex_data[index * 4u];
-    var v2 = vertex_data[(index * 4u) + 1u];
-    var v3 = vertex_data[(index * 4u) + 2u];
-    var v4 = vertex_data[(index * 4u) + 3u];
+    var size = push_constants.total_chunk_sections;
+    var left: u32 = 0u;
+    var right: u32 = size;
+    var done: bool = false;
+
+    //18 binary search iterations, supports up to 2^18 chunk sections
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
+
+    vr.section = section_index;
+
+    var section_vert_start = ranges[section_index * 5];
+    var section_x: u32 = ranges[section_index * 5 + 2];
+    var section_y: u32 = ranges[section_index * 5 + 3];
+    var section_z: u32 = ranges[section_index * 5 + 4];
+
+    var index: u32 = index_data[0].buffer[vertex_index - section_vert_start];
+
+    var v1 = vertex_data[section_index].buffer[index * 4u];
+    var v2 = vertex_data[section_index].buffer[(index * 4u) + 1u];
+    var v3 = vertex_data[section_index].buffer[(index * 4u) + 2u];
+    var v4 = vertex_data[section_index].buffer[(index * 4u) + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
@@ -87,9 +130,9 @@ fn vert(
 
     var pos = vec3<f32>(x, y, z);
 
-    var world_pos = pos + vec3<f32>(f32(push_constants.chunk_x) * 16.0, f32(push_constants.chunk_y) * 16.0, f32(push_constants.chunk_z) * 16.0);
+    var world_pos = pos + vec3<f32>(f32(section_x) * 16.0, f32(section_y) * 16.0, f32(section_z) * 16.0);
 
-    vr.pos = proj * camera_uniform.view * vec4(world_pos, 1.0);
+    vr.pos = mat4_persp * mat4_view * mat4_model * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
     vr.tex_coords2 = vec2(0.0, 0.0);
     vr.world_pos = world_pos;
@@ -113,7 +156,7 @@ fn frag(
     let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
-    let light = max(in.light_coords.x, in.light_coords.y);
+//    let light = max(in.light_coords.x, in.light_coords.y);
 
-    return vec4(light, light, light, 1.0) * col1;
+    return col1;
 }

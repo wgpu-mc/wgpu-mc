@@ -99,6 +99,7 @@ fn main() {
     let required_limits = wgpu::Limits {
         max_push_constant_size: 128,
         max_bind_groups: 8,
+        max_storage_buffers_per_shader_stage: 100000,
         ..Default::default()
     };
 
@@ -107,7 +108,11 @@ fn main() {
             label: None,
             required_features: wgpu::Features::default()
                 | wgpu::Features::DEPTH_CLIP_CONTROL
-                | wgpu::Features::PUSH_CONSTANTS,
+                | wgpu::Features::PUSH_CONSTANTS
+                | wgpu::Features::BUFFER_BINDING_ARRAY
+                | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY
+                | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
+                | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY,
             required_limits,
         },
         None, // Trace path
@@ -209,23 +214,23 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
     let resource_backings = [
         (
             "@mat4_model".into(),
-            ResourceBacking::BufferBacked(mat4_model_buffer.clone(), BufferBindingType::Uniform),
+            ResourceBacking::Buffer(mat4_model_buffer.clone(), BufferBindingType::Uniform),
         ),
         (
             "@mat4_view".into(),
-            ResourceBacking::BufferBacked(mat4_view_buffer.clone(), BufferBindingType::Uniform),
+            ResourceBacking::Buffer(mat4_view_buffer.clone(), BufferBindingType::Uniform),
         ),
         (
             "@mat4_perspective".into(),
-            ResourceBacking::BufferBacked(mat4_persp_buffer.clone(), BufferBindingType::Uniform),
+            ResourceBacking::Buffer(mat4_persp_buffer.clone(), BufferBindingType::Uniform),
         ),
     ]
     .into_iter()
     .collect::<HashMap<String, ResourceBacking>>();
 
-    let render_graph = RenderGraph::new(&wm, resource_backings, pack.unwrap());
+    let render_graph = RenderGraph::new(&wm, pack.unwrap(), resource_backings, None, None);
 
-    let scene = Scene::new(
+    let mut scene = Scene::new(
         &wm,
         Extent3d {
             width: window.inner_size().width,
@@ -234,8 +239,14 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
         },
     );
 
-    let section = make_chunks(&wm);
-    scene.chunk_sections.insert([0, 0, 0].into(), section);
+    for x in 0..20 {
+        for z in 0..20 {
+            let section = make_chunks(&wm, [x, 0, z].into());
+            scene.chunk_sections.insert([x, 0, z].into(), section);
+        }
+    }
+
+    scene.build_lookup_table(&wm);
 
     let mut forward = 0.0;
 
@@ -355,7 +366,16 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
                                     });
 
                             wm.submit_chunk_updates();
-                            render_graph.render(&wm, &scene, &view, [0; 3]);
+
+                            let mut command_encoder = wm.wgpu_state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: None
+                            });
+
+                            let mut geometry = HashMap::new();
+
+                            render_graph.render(&wm, &mut command_encoder, &scene, &view, [0; 3], &mut geometry);
+
+                            wm.wgpu_state.queue.submit([command_encoder.finish()]);
 
                             surface_texture.present();
                         }

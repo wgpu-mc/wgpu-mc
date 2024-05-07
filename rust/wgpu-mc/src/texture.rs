@@ -110,7 +110,6 @@ impl BindableTexture {
     pub fn from_tv(
         wm: &WmRenderer,
         tv: Arc<TextureAndView>,
-        sampler: &wgpu::Sampler,
         depth: bool,
     ) -> Self {
         let bind_group = wm
@@ -126,11 +125,7 @@ impl BindableTexture {
                     wgpu::BindGroupEntry {
                         binding: 0,
                         resource: wgpu::BindingResource::TextureView(&tv.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(sampler),
-                    },
+                    }
                 ],
             });
 

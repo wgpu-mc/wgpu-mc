@@ -10,24 +10,13 @@ import net.minecraft.client.render.chunk.ChunkBuilder;
 import net.minecraft.client.render.chunk.ChunkRendererRegionBuilder;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.network.PacketByteBuf;
-import net.minecraft.util.collection.IndexedIterable;
 import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.util.collection.PaletteStorage;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.util.math.Vec3i;
-import net.minecraft.world.chunk.ChunkNibbleArray;
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.Palette;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.chunk.*;
 import net.minecraft.world.chunk.light.ChunkLightProvider;
-
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-
-import org.lwjgl.PointerBuffer;
-import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -36,6 +25,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
+
+import java.util.Arrays;
 
 @Mixin(ChunkBuilder.BuiltChunk.class)
 public class BuiltChunkMixin {
@@ -138,6 +129,7 @@ public class BuiltChunkMixin {
                 }
             }
         }
+
         WgpuNative.bakeChunk(sectionCoord.getX(),world.sectionCoordToIndex(sectionCoord.getY()),sectionCoord.getZ(),paletteIndices, storageIndices, blockIndices, skyIndices);
         cir.setReturnValue(null);
     }

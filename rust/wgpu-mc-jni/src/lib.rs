@@ -46,6 +46,7 @@ use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
+use wgpu_mc::mc::Scene;
 
 use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::lighting::DeserializedLightData;
@@ -119,6 +120,16 @@ static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
         .unwrap()
         .0 as u16,
     augment: 0,
+});
+
+static SCENE: Lazy<Scene> = Lazy::new(|| {
+    let window = WINDOW.get().unwrap();
+
+    Scene::new(RENDERER.get().unwrap(), wgpu::Extent3d {
+        width: window.inner_size().width,
+        height: window.inner_size().height,
+        depth_or_array_layers: 1,
+    })
 });
 
 static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -207,9 +218,7 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
 
         self.sections[index].is_none()
     }
-    fn get_pos(&self) -> IVec3 {
-        return self.pos;
-    }
+
 }
 
 struct WinitWindowWrapper<'a> {
@@ -333,33 +342,33 @@ pub fn registerBlockState(
         .push((block_name, state_key, global_ref));
 }
 
-pub fn bake_chunk(bsp: MinecraftBlockstateProvider) {
+pub fn bake_section(pos: IVec3, bsp: &MinecraftBlockstateProvider) {
     puffin::profile_scope!("jni bake chunk");
     let wm = RENDERER.get().unwrap();
 
     let bm = wm.mc.block_manager.read();
 
-    // let mut section_option = wm.mc.chunk_store.get_mut(&bsp.pos);
-    //
-    // match section_option {
-    //     None => {
-    //         let mut section = Section::new();
-    //         section.bake_chunk(wm, &bm, &bsp);
-    //         wm.mc.insert(bsp.pos, section);
-    //     }
-    //     Some(ref mut section) => {
-    //         let section = section.value_mut();
-    //         section.bake_chunk(wm, &bm, &bsp);
-    //     }
-    // }
-    //
-    // todo!();
+    let mut section_option = SCENE.chunk_sections.get_mut(&bsp.pos);
+
+    match section_option {
+        None => {
+            let mut section = Section::new(pos);
+            section.bake_section(wm, &bm, bsp);
+            SCENE.chunk_sections.insert(pos, section);
+        }
+        Some(ref mut section) => {
+            let section = section.value_mut();
+            section.bake_section(wm, &bm, bsp);
+        }
+    }
+
+    SCENE.build_lookup_table(wm);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearChunks(_env: JNIEnv, _class: JClass) {
     let wm = RENDERER.get().unwrap();
-    wm.mc.chunk_store.clear();
+    SCENE.chunk_sections.clear();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -439,7 +448,8 @@ pub fn bakeChunk(
         });
     }
     THREAD_POOL.spawn(move || {
-        bake_chunk(bsp);
+        println!("baking {:?}", [x,y,z]);
+        bake_section([x,y,z].into(), &bsp);
     })
 }
 
@@ -866,20 +876,20 @@ pub fn texImage2D(
         )
         .unwrap();
 
-        // let bindable =
-        //     BindableTexture::from_tv(&wm, Arc::new(tsv), false);
-        //
-        // {
-        //     GL_ALLOC.write().insert(
-        //         texture_id as u32,
-        //         GlTexture {
-        //             width: width as u16,
-        //             height: height as u16,
-        //             bindable_texture: Some(Arc::new(bindable)),
-        //             pixels: data,
-        //         },
-        //     );
-        // }
+        let bindable =
+            BindableTexture::from_tv(&wm, Arc::new(tsv), false);
+
+        {
+            GL_ALLOC.write().insert(
+                texture_id as u32,
+                GlTexture {
+                    width: width as u16,
+                    height: height as u16,
+                    bindable_texture: Some(Arc::new(bindable)),
+                    pixels: data,
+                },
+            );
+        }
     };
 
     let tx = &TASK_CHANNELS.0;

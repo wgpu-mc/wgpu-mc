@@ -13,7 +13,8 @@ struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
-        if (0..1).contains(&x) && (0..1).contains(&z) && y == 0 {
+        // if (0..1).contains(&x) && (0..1).contains(&z) && y == 0 {
+        if y == 0 {
             ChunkBlockState::State(self.1)
         } else {
             ChunkBlockState::Air
@@ -35,7 +36,7 @@ impl Debug for SimpleBlockstateProvider {
     }
 }
 
-pub fn make_chunks(wm: &WmRenderer) -> Section {
+pub fn make_chunks(wm: &WmRenderer, pos: IVec3) -> Section {
     let bm = wm.mc.block_manager.read();
     let atlas = wm
         .mc
@@ -68,10 +69,10 @@ pub fn make_chunks(wm: &WmRenderer) -> Section {
         },
     );
 
-    let mut chunk = Section::new([0, 0, 0].into());
+    let mut chunk = Section::new(pos.into());
     let time = Instant::now();
 
-    chunk.bake_chunk(wm, &bm, &provider);
+    chunk.bake_section(wm, &bm, &provider);
 
     println!(
         "Built 1 chunk in {} microseconds",
