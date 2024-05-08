@@ -239,12 +239,12 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
         },
     );
 
-    for x in 0..20 {
-        for z in 0..20 {
-            let section = make_chunks(&wm, [x, 0, z].into());
-            scene.chunk_sections.insert([x, 0, z].into(), section);
-        }
-    }
+    // for x in 0..20 {
+    //     for z in 0..20 {
+    //         let section = make_chunks(&wm, [x, 0, z].into());
+    //         scene.chunk_sections.insert([x, 0, z].into(), section);
+    //     }
+    // }
 
     scene.build_lookup_table(&wm);
 

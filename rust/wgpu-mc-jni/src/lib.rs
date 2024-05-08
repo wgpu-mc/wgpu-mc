@@ -1,27 +1,27 @@
 pub extern crate wgpu_mc;
 
 use core::slice;
+use std::{mem, ptr, thread};
 use std::fmt::Debug;
-use std::io::{stdout, Cursor, Write};
+use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
-use std::{mem, thread};
+use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, AsRaw};
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 use glam::{ivec3, IVec3};
+use jni::{JavaVM, JNIEnv};
 use jni::objects::{
-    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject,
-    JObjectArray, JPrimitiveArray, JString, JValue, ReleaseMode,
+    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JObject
+    , JString, JValue, ReleaseMode,
 };
 use jni::sys::{
-    jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jobject, jobjectArray, jsize, jstring,
-    JNI_FALSE, JNI_TRUE,
+    jboolean, jbyte, jbyteArray, jfloat, jint, jlong, JNI_FALSE,
+    JNI_TRUE, jstring,
 };
-use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
@@ -30,14 +30,14 @@ use raw_window_handle::{
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
-use wgpu_mc::wgpu::util::DeviceExt;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
 use winit::window::{CursorGrabMode, Window};
 
+use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{
-    BlockStateProvider, LightLevel, Section, CHUNK_HEIGHT, CHUNK_SECTION_HEIGHT, SECTIONS_PER_CHUNK,
+    BlockStateProvider, CHUNK_HEIGHT, LightLevel, Section,
 };
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::mc::Scene;
@@ -46,12 +46,12 @@ use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
-use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
+use wgpu_mc::wgpu::util::DeviceExt;
 
-use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
+use crate::gl::{GL_ALLOC, GL_COMMANDS, GLCommand, GlTexture};
 use crate::lighting::DeserializedLightData;
-use crate::palette::{JavaPalette, PALETTE_STORAGE};
-use crate::pia::{PackedIntegerArray, PIA_STORAGE};
+use crate::palette::{JavaPalette};
+use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
 
 mod alloc;
@@ -106,7 +106,7 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 static CLEAR_COLOR: Lazy<ArcSwap<[f32; 3]>> = Lazy::new(|| ArcSwap::new(Arc::new([0.0; 3])));
 
 static THREAD_POOL: Lazy<ThreadPool> =
-    Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
+    Lazy::new(|| ThreadPoolBuilder::new().num_threads(20).build().unwrap());
 
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     block: RENDERER
@@ -346,111 +346,97 @@ pub fn registerBlockState(
 
 pub fn bake_section(pos: IVec3, bsp: &MinecraftBlockstateProvider) {
     puffin::profile_scope!("jni bake chunk");
+    let now = Instant::now();
     let wm = RENDERER.get().unwrap();
 
     let bm = wm.mc.block_manager.read();
 
-    let mut section_option = SCENE.chunk_sections.get_mut(&bsp.pos);
+    {
+        let sections = SCENE.chunk_sections.read();
+        let section_guard_option = sections.get(&bsp.pos);
 
-    match section_option {
-        None => {
-            let mut section = Section::new(pos);
-            section.bake_section(wm, &bm, bsp);
-            SCENE.chunk_sections.insert(pos, section);
-        }
-        Some(ref mut section) => {
-            let section = section.value_mut();
-            section.bake_section(wm, &bm, bsp);
+        match section_guard_option {
+            None => {
+                let mut section = Section::new(pos);
+                section.bake_section(wm, &bm, bsp);
+                drop(sections);
+                SCENE.chunk_sections.write().insert(pos, RwLock::new(section));
+            }
+            Some(lock) => {
+                let mut section = lock.write();
+                section.bake_section(wm, &bm, bsp);
+            }
         }
     }
 
+    let lookup = Instant::now();
     SCENE.build_lookup_table(wm);
+    // println!("lookup table in {}ms, total time {}ms", lookup.duration_since(Instant::now()).as_millis(), now.duration_since(Instant::now()).as_millis())
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearChunks(_env: JNIEnv, _class: JClass) {
     let wm = RENDERER.get().unwrap();
-    SCENE.chunk_sections.clear();
+    SCENE.chunk_sections.write().clear();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bakeChunk(
-    mut env: JNIEnv,
+pub fn bakeSection(
+    _env: JNIEnv,
     _class: JClass,
     x: jint,
     y: jint,
     z: jint,
-    paletteIndices: JLongArray,
-    storageIndices: JLongArray,
-    blockBytes: JObjectArray,
-    skyBytes: JObjectArray,
+    storage_ptrs: jlong,
+    palette_ptrs: jlong,
+    sky_ptrs: jlong,
+    block_ptrs: jlong,
 ) {
-    let palette_elements =
-        unsafe { env.get_array_elements(&paletteIndices, ReleaseMode::NoCopyBack) }.unwrap();
-    let palettes =
-        unsafe { slice::from_raw_parts(palette_elements.as_ptr(), palette_elements.len()) };
-    let storage_elements =
-        unsafe { env.get_array_elements(&storageIndices, ReleaseMode::NoCopyBack) }.unwrap();
-    let storages =
-        unsafe { slice::from_raw_parts(storage_elements.as_ptr(), storage_elements.len()) };
+    let storages = unsafe {
+        std::slice::from_raw_parts(storage_ptrs as *mut *mut PackedIntegerArray, 27)
+    };
+
+    let palettes = unsafe {
+        std::slice::from_raw_parts(palette_ptrs as *mut *mut JavaPalette, 27)
+    };
+
+    let skys = unsafe {
+        std::slice::from_raw_parts(sky_ptrs as *mut *mut [u8; 2048], 27)
+    };
+
+    let blocks = unsafe {
+        std::slice::from_raw_parts(block_ptrs as *mut *mut [u8; 2048], 27)
+    };
+
     const NONE: Option<SectionHolder> = None;
     let mut bsp = MinecraftBlockstateProvider {
         pos: ivec3(x, y, z),
         sections: [NONE; 27],
         air: *AIR,
     };
-    let mut counter = 0u32;
-    for i in 0..27 {
-        let mut palette_storage = PALETTE_STORAGE.write();
-        let mut pia_storage = PIA_STORAGE.write();
 
-        let block_data = if palette_storage.contains(palettes[i] as usize)
-            && pia_storage.contains(storages[i] as usize)
-        {
-            counter += 1;
+    for i in 0..27 {
+        let block_data = if !palettes[i].is_null() && !storages[i].is_null() {
             Some((
-                palette_storage.remove(palettes[i] as usize),
-                pia_storage.remove(storages[i] as usize),
+                *unsafe { Box::from_raw(palettes[i]) },
+                *unsafe { Box::from_raw(storages[i]) },
             ))
         } else {
             None
         };
-        let sky_array = unsafe {
-            JPrimitiveArray::from_raw(
-                env.get_object_array_element(&skyBytes, i as jsize)
-                    .unwrap()
-                    .into_raw(),
-            )
-        };
-        let sky_bytes =
-            unsafe { env.get_array_elements(&sky_array, ReleaseMode::NoCopyBack) }.unwrap();
-        let block_array = unsafe {
-            JPrimitiveArray::from_raw(
-                env.get_object_array_element(&blockBytes, i as jsize)
-                    .unwrap()
-                    .into_raw(),
-            )
-        };
-        let block_bytes =
-            unsafe { env.get_array_elements(&block_array, ReleaseMode::NoCopyBack) }.unwrap();
+
         bsp.sections[i] = Some(SectionHolder {
             block_data,
-            light_data: Some(DeserializedLightData {
-                sky_light: Box::new(
-                    unsafe { slice::from_raw_parts(sky_bytes.as_ptr(), sky_bytes.len()) }
-                        .try_into()
-                        .unwrap(),
-                ),
-                block_light: Box::new(
-                    unsafe { slice::from_raw_parts(block_bytes.as_ptr(), block_bytes.len()) }
-                        .try_into()
-                        .unwrap(),
-                ),
-            }),
+            light_data: if !skys[i].is_null() && !blocks[i].is_null() {
+                Some(DeserializedLightData {
+                    sky_light: Box::new(unsafe { *skys[i] }),
+                    block_light: Box::new(unsafe { *blocks[i] }),
+                })
+            } else { None },
         });
     }
+
     THREAD_POOL.spawn(move || {
-        println!("baking {:?}", [x, y, z]);
         bake_section([x, y, z].into(), &bsp);
     })
 }

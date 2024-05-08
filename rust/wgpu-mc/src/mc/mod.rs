@@ -186,7 +186,7 @@ pub struct SectionGPULookupTable {
 }
 
 pub struct Scene {
-    pub chunk_sections: DashMap<IVec3, Section>,
+    pub chunk_sections: RwLock<HashMap<IVec3, RwLock<Section>>>,
     pub lookup_table: ArcSwap<SectionGPULookupTable>,
     pub lookup_buffer: wgpu::Buffer,
 
@@ -213,7 +213,7 @@ impl Scene {
             });
 
         Self {
-            chunk_sections: DashMap::new(),
+            chunk_sections: RwLock::new(HashMap::new()),
             lookup_table: ArcSwap::new(Arc::new(SectionGPULookupTable {
                 bind_group: None,
                 sections_stored_count: 0,
@@ -245,14 +245,17 @@ impl Scene {
     pub fn build_lookup_table(&self, wm: &WmRenderer) {
         let buffers: Vec<(Arc<wgpu::Buffer>, Arc<wgpu::Buffer>, u32, IVec3)> = self
             .chunk_sections
-            .iter()
-            .filter_map(|chunk| {
-                chunk.buffers.as_ref().map(|buffers| {
+            .write()
+            .iter_mut()
+            .filter_map(|(_, chunk_lock)| {
+                let section = chunk_lock.get_mut();
+
+                section.buffers.as_ref().map(|buffers| {
                     (
                         buffers.vertex_buffer.clone(),
                         buffers.index_buffer.clone(),
                         buffers.index_count,
-                        chunk.pos,
+                        section.pos,
                     )
                 })
             })

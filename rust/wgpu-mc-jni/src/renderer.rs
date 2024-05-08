@@ -154,7 +154,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
     });
 
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::PRIMARY,
+        backends: wgpu::Backends::VULKAN,
         ..Default::default()
     });
 
@@ -319,6 +319,14 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
         }) as Box<dyn Geometry>,
     );
 
+    let wm_clone = wm.clone();
+    thread::spawn(move || {
+        loop {
+            wm_clone.submit_chunk_updates();
+            thread::sleep(Duration::from_millis(10));
+        }
+    });
+
     event_loop
         .run(move |event, target| {
             if SHOULD_STOP.get().is_some() {
@@ -369,7 +377,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                 .unwrap();
                         }
                         WindowEvent::RedrawRequested => {
-                            wm.submit_chunk_updates();
+                            println!("draw");
 
                             {
                                 let matrices = MATRICES.lock();
@@ -395,6 +403,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                             let (surface, surface_config) = &mut *surface_guard;
                             let surface = surface.as_ref().unwrap();
 
+                            println!("surface");
+
                             let texture = surface.get_current_texture().unwrap_or_else(|_| {
                                 //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
                                 let size = wm.wgpu_state.size.as_ref().unwrap().load();
@@ -405,6 +415,8 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                 surface.configure(&wm.wgpu_state.device, &surface_config);
                                 surface.get_current_texture().unwrap()
                             });
+
+                            println!("texture");
 
                             let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                                 label: None,
@@ -417,8 +429,10 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                 array_layer_count: None,
                             });
 
+                            println!("view");
+
                             {
-                                let entity_instances = ENTITY_INSTANCES.lock();
+                                println!("1");
 
                                 let mut encoder = wm.wgpu_state.device.create_command_encoder(
                                     &wgpu::CommandEncoderDescriptor { label: None },
@@ -433,10 +447,16 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                     &mut geometry,
                                 );
 
+                                println!("2");
+
                                 wm.wgpu_state.queue.submit([encoder.finish()]);
+
+                                println!("3");
                             }
 
                             texture.present();
+
+                            println!("4");
                         }
                         WindowEvent::KeyboardInput {
                             event:

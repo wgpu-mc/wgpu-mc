@@ -120,8 +120,6 @@ impl Section {
             );
         }
 
-        dbg!(index_data.len());
-
         self.layers = layers;
 
         //the formulas below align the given value to the nearest multiple of the constant + 1
@@ -234,27 +232,27 @@ impl Section {
                                 mapped_at_creation: false,
                             }));
 
-                        #[cfg(not(feature = "vbo-fallback"))]
-                        let bind_group = {
-                            let layout = &wm.bind_group_layouts["chunk_ssbos"];
-
-                            wm.wgpu_state
-                                .device
-                                .create_bind_group(&wgpu::BindGroupDescriptor {
-                                    label: None,
-                                    layout,
-                                    entries: &[
-                                        wgpu::BindGroupEntry {
-                                            binding: 0,
-                                            resource: vertex_buffer.as_entire_binding(),
-                                        },
-                                        wgpu::BindGroupEntry {
-                                            binding: 1,
-                                            resource: index_buffer.as_entire_binding(),
-                                        },
-                                    ],
-                                })
-                        };
+                        // #[cfg(not(feature = "vbo-fallback"))]
+                        // let bind_group = {
+                        //     let layout = &wm.bind_group_layouts["chunk_ssbos"];
+                        //
+                        //     wm.wgpu_state
+                        //         .device
+                        //         .create_bind_group(&wgpu::BindGroupDescriptor {
+                        //             label: None,
+                        //             layout,
+                        //             entries: &[
+                        //                 wgpu::BindGroupEntry {
+                        //                     binding: 0,
+                        //                     resource: vertex_buffer.as_entire_binding(),
+                        //                 },
+                        //                 wgpu::BindGroupEntry {
+                        //                     binding: 1,
+                        //                     resource: index_buffer.as_entire_binding(),
+                        //                 },
+                        //             ],
+                        //         })
+                        // };
 
                         self.buffers = Some(ChunkBuffers {
                             vertex_buffer: vertex_buffer.clone(),
