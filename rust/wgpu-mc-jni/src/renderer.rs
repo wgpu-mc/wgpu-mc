@@ -403,8 +403,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                             let (surface, surface_config) = &mut *surface_guard;
                             let surface = surface.as_ref().unwrap();
 
-                            println!("surface");
-
                             let texture = surface.get_current_texture().unwrap_or_else(|_| {
                                 //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
                                 let size = wm.wgpu_state.size.as_ref().unwrap().load();
@@ -415,8 +413,6 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                 surface.configure(&wm.wgpu_state.device, &surface_config);
                                 surface.get_current_texture().unwrap()
                             });
-
-                            println!("texture");
 
                             let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
                                 label: None,
@@ -429,11 +425,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                 array_layer_count: None,
                             });
 
-                            println!("view");
-
                             {
-                                println!("1");
-
                                 let mut encoder = wm.wgpu_state.device.create_command_encoder(
                                     &wgpu::CommandEncoderDescriptor { label: None },
                                 );
@@ -447,16 +439,10 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                     &mut geometry,
                                 );
 
-                                println!("2");
-
                                 wm.wgpu_state.queue.submit([encoder.finish()]);
-
-                                println!("3");
                             }
 
                             texture.present();
-
-                            println!("4");
                         }
                         WindowEvent::KeyboardInput {
                             event:

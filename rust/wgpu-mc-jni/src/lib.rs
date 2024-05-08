@@ -358,19 +358,18 @@ pub fn bake_section(pos: IVec3, bsp: &MinecraftBlockstateProvider) {
         match section_guard_option {
             None => {
                 let mut section = Section::new(pos);
-                section.bake_section(wm, &bm, bsp);
+                section.bake_section(wm, &bm, &mut *SCENE.chunk_allocator.lock(), SCENE.chunk_buffer.buffer.clone(), bsp);
                 drop(sections);
                 SCENE.chunk_sections.write().insert(pos, RwLock::new(section));
             }
             Some(lock) => {
                 let mut section = lock.write();
-                section.bake_section(wm, &bm, bsp);
+                section.bake_section(wm, &bm, &mut *SCENE.chunk_allocator.lock(), SCENE.chunk_buffer.buffer.clone(), bsp);
             }
         }
     }
 
     let lookup = Instant::now();
-    SCENE.build_lookup_table(wm);
     // println!("lookup table in {}ms, total time {}ms", lookup.duration_since(Instant::now()).as_millis(), now.duration_since(Instant::now()).as_millis())
 }
 

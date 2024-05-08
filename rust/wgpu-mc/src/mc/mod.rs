@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
@@ -10,7 +10,8 @@ use glam::{IVec2, IVec3};
 use guillotiere::euclid::default;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
+use range_alloc::RangeAllocator;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::BufferBinding;
 
@@ -187,8 +188,9 @@ pub struct SectionGPULookupTable {
 
 pub struct Scene {
     pub chunk_sections: RwLock<HashMap<IVec3, RwLock<Section>>>,
-    pub lookup_table: ArcSwap<SectionGPULookupTable>,
-    pub lookup_buffer: wgpu::Buffer,
+    pub chunk_allocator: Mutex<RangeAllocator<u32>>,
+    pub chunk_buffer: Arc<BindableBuffer>,
+    pub indirect_buffer: Arc<wgpu::Buffer>,
 
     pub entity_instances: HashMap<String, BundledEntityInstances>,
     pub sky_state: SkyState,
@@ -203,23 +205,27 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
-        let lookup_buffer = wm
+        let indirect_buffer = wm
             .wgpu_state
             .device
-            .create_buffer_init(&BufferInitDescriptor {
+            .create_buffer(&wgpu::BufferDescriptor {
                 label: None,
-                contents: &vec![0; 1_000_000],
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                size: 4 * 4 * 40_000,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
+                mapped_at_creation: false,
             });
 
         Self {
             chunk_sections: RwLock::new(HashMap::new()),
-            lookup_table: ArcSwap::new(Arc::new(SectionGPULookupTable {
-                bind_group: None,
-                sections_stored_count: 0,
-                size: 0,
-            })),
-            lookup_buffer,
+            chunk_allocator: Mutex::new(RangeAllocator::new(0..100_000_000)),
+            chunk_buffer: Arc::new(BindableBuffer::new_deferred(
+                wm,
+                400000,
+                wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+                "ssbo"
+            )),
+            indirect_buffer: Arc::new(indirect_buffer),
+
             entity_instances: Default::default(),
             sky_state: Default::default(),
             stars_index_buffer: None,
@@ -242,86 +248,6 @@ impl Scene {
         }
     }
 
-    pub fn build_lookup_table(&self, wm: &WmRenderer) {
-        let buffers: Vec<(Arc<wgpu::Buffer>, Arc<wgpu::Buffer>, u32, IVec3)> = self
-            .chunk_sections
-            .write()
-            .iter_mut()
-            .filter_map(|(_, chunk_lock)| {
-                let section = chunk_lock.get_mut();
-
-                section.buffers.as_ref().map(|buffers| {
-                    (
-                        buffers.vertex_buffer.clone(),
-                        buffers.index_buffer.clone(),
-                        buffers.index_count,
-                        section.pos,
-                    )
-                })
-            })
-            .collect();
-
-        let mut vertex_bindings = vec![];
-        let mut index_bindings = vec![];
-        let mut lookup_table: Vec<u8> = vec![];
-
-        let mut total_length = 0;
-
-        for (vertex, index, index_length, pos) in &buffers {
-            vertex_bindings.push(vertex.as_entire_buffer_binding());
-            index_bindings.push(index.as_entire_buffer_binding());
-            lookup_table.extend(bytemuck::cast_slice(&[
-                total_length,
-                total_length + *index_length,
-            ]));
-            lookup_table.extend(bytemuck::cast_slice(&pos.to_array()));
-
-            total_length += *index_length;
-        }
-
-        wm.wgpu_state
-            .queue
-            .write_buffer(&self.lookup_buffer, 0, &lookup_table);
-
-        self.lookup_table.store(Arc::new(SectionGPULookupTable {
-            bind_group: Some(Self::create_buffer_bind_group(
-                self.lookup_buffer.as_entire_buffer_binding(),
-                &vertex_bindings,
-                &index_bindings,
-                wm,
-            )),
-            sections_stored_count: vertex_bindings.len() as u32,
-            size: total_length,
-        }));
-    }
-
-    pub fn create_buffer_bind_group<'a>(
-        lookup_table: BufferBinding<'a>,
-        vertex_buffers: &[BufferBinding<'a>],
-        index_buffers: &[BufferBinding<'a>],
-        wm: &WmRenderer,
-    ) -> wgpu::BindGroup {
-        wm.wgpu_state
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: wm.bind_group_layouts.get("section_lookup_table").unwrap(),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::BufferArray(vertex_buffers),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::BufferArray(index_buffers),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Buffer(lookup_table),
-                    },
-                ],
-            })
-    }
 }
 
 /// Minecraft-specific state and data structures go in here

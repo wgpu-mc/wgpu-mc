@@ -5,7 +5,7 @@ use std::time::Instant;
 use glam::IVec3;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{BlockStateProvider, LightLevel, Section};
-use wgpu_mc::mc::MinecraftState;
+use wgpu_mc::mc::{MinecraftState, Scene};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
@@ -36,7 +36,7 @@ impl Debug for SimpleBlockstateProvider {
     }
 }
 
-pub fn make_chunks(wm: &WmRenderer, pos: IVec3) -> Section {
+pub fn make_chunks(wm: &WmRenderer, pos: IVec3, scene: &Scene) -> Section {
     let bm = wm.mc.block_manager.read();
     let atlas = wm
         .mc
@@ -72,7 +72,7 @@ pub fn make_chunks(wm: &WmRenderer, pos: IVec3) -> Section {
     let mut chunk = Section::new(pos.into());
     let time = Instant::now();
 
-    chunk.bake_section(wm, &bm, &provider);
+    chunk.bake_section(wm, &bm, &mut scene.chunk_allocator.lock(), scene.chunk_buffer.buffer.clone(), &provider);
 
     println!(
         "Built 1 chunk in {} microseconds",

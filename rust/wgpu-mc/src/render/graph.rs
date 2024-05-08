@@ -6,6 +6,7 @@ use wgpu::{
     BindGroup, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
     RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp,
 };
+use wgpu::util::DrawIndirectArgs;
 
 use crate::mc::chunk::RenderLayer;
 use crate::mc::entity::InstanceVertex;
@@ -161,8 +162,8 @@ impl RenderGraph {
                     }
                     BindGroupDef::Resource(resource) => {
                         match (&resource[..], &custom_bind_groups) {
-                            ("@bg_section_lookup_table", _) => {
-                                wm.bind_group_layouts.get("section_lookup_table").unwrap()
+                            ("@bg_ssbo_chunks", _) => {
+                                wm.bind_group_layouts.get("ssbo").unwrap()
                             }
                             (_, Some(custom)) => {
                                 if let Some(entry) = custom.get(resource) {
@@ -459,8 +460,6 @@ impl RenderGraph {
 
         let mut should_clear_depth = true;
 
-        let section_lookup = scene.lookup_table.load();
-
         for (pipeline_name, bound_pipeline) in &self.pipelines {
             let pipeline_config = self.config.pipelines.pipelines.get(pipeline_name).unwrap();
 
@@ -546,67 +545,64 @@ impl RenderGraph {
                     //         Some(buffers) => buffers,
                     //     };
 
-                    match &section_lookup.bind_group {
-                        None => {}
-                        Some(lookup_binding) => {
-                            render_pass.set_pipeline(&bound_pipeline.pipeline);
+                    let mut indirect: Vec<DrawIndirectArgs> = vec![];
 
-                            let mut push_constants = HashMap::new();
-                            push_constants.insert(
-                                "@pc_total_sections".into(),
-                                (
-                                    Vec::from(section_lookup.sections_stored_count.to_ne_bytes()),
-                                    wgpu::ShaderStages::VERTEX,
-                                ),
-                            );
+                    let mut sections = scene.chunk_sections.write();
 
-                            set_push_constants(
-                                pipeline_config,
-                                &mut render_pass,
-                                Some(push_constants),
-                            );
+                    for (pos, section_lock) in sections.iter_mut() {
+                        let section = section_lock.get_mut();
 
-                            for (index, bind_group) in bound_pipeline.bind_groups.iter() {
-                                match bind_group {
-                                    WmBindGroup::Resource(name) => match &name[..] {
-                                        "@bg_section_lookup_table" => {
-                                            // #[cfg(not(feature = "vbo-fallback"))]
-                                            render_pass.set_bind_group(*index, lookup_binding, &[]);
-
-                                            #[cfg(feature = "vbo-fallback")]
-                                            {
-                                                panic!("SSBOs are not supported on WebGL")
-                                            }
-                                        }
-                                        _ => unimplemented!(),
-                                    },
-                                    WmBindGroup::Custom(bind_group) => {
-                                        render_pass.set_bind_group(*index, bind_group, &[]);
-                                    }
+                        if let Some(layer) = section.layers.get(&RenderLayer::Solid) {
+                            indirect.push(
+                                DrawIndirectArgs {
+                                    vertex_count: layer.index_range.end - layer.index_range.start,
+                                    instance_count: 1,
+                                    first_vertex: 0,
+                                    first_instance: layer.index_range.start,
                                 }
-                            }
-
-                            // if let Some(solid) = section.layers.get(&RenderLayer::Solid) {
-                            // #[cfg(not(feature = "vbo-fallback"))]
-                            {
-                                render_pass.draw(0..section_lookup.size, 0..1);
-                            }
-
-                            // #[cfg(feature = "vbo-fallback")]
-                            // if let Some(ref buffers) = section.buffers {
-                            //     render_pass.set_vertex_buffer(0, buffers.vertex_buffer.slice(..));
-                            //     render_pass.set_index_buffer(
-                            //         buffers.index_buffer.slice(..),
-                            //         IndexFormat::Uint32,
-                            //     );
-                            //
-                            //     render_pass.draw_indexed(solid.clone(), 0, 0..1);
-                            // }
-                            // }
+                            );
                         }
                     }
 
-                    // }
+                    let indirect_bytes: Vec<u8> = indirect.iter().map(|args| args.as_bytes()).flatten().copied().collect();
+
+                    wm.wgpu_state.queue.write_buffer(&scene.indirect_buffer, 0, &indirect_bytes);
+
+                    render_pass.set_pipeline(&bound_pipeline.pipeline);
+
+                    set_push_constants(
+                        pipeline_config,
+                        &mut render_pass,
+                        None,
+                    );
+
+                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                        match bind_group {
+                            WmBindGroup::Resource(name) => match &name[..] {
+                                "@bg_ssbo_chunks" => {
+                                    // #[cfg(not(feature = "vbo-fallback"))]
+                                    render_pass.set_bind_group(*index, &scene.chunk_buffer.bind_group, &[]);
+
+                                    #[cfg(feature = "vbo-fallback")]
+                                    {
+                                        panic!("SSBOs are not supported on WebGL")
+                                    }
+                                }
+                                _ => unimplemented!(),
+                            },
+                            WmBindGroup::Custom(bind_group) => {
+                                render_pass.set_bind_group(*index, bind_group, &[]);
+                            }
+                        }
+                    }
+
+                    render_pass.set_vertex_buffer(0, scene.chunk_buffer.buffer.slice(..));
+
+                    render_pass.multi_draw_indirect(
+                        &scene.indirect_buffer,
+                        0,
+                        indirect.len() as u32
+                    );
                 }
                 _ => match geometry.get_mut(&pipeline_config.geometry) {
                     None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),

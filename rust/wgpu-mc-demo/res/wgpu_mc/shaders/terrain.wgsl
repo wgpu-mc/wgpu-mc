@@ -14,15 +14,9 @@ struct ChunkOffset {
     z: i32
 }
 
-struct PushConstants {
-    total_chunk_sections: u32
-}
-
 struct Buffer {
     buffer: array<u32>
 }
-
-var<push_constant> push_constants: PushConstants;
 
 @group(0) @binding(0) var<uniform> mat4_model: mat4x4<f32>;
 @group(0) @binding(1) var<uniform> mat4_view: mat4x4<f32>;
@@ -31,9 +25,7 @@ var<push_constant> push_constants: PushConstants;
 @group(0) @binding(3) var t_texture: texture_2d<f32>;
 @group(0) @binding(4) var t_sampler: sampler;
 
-@group(1) @binding(0) var<storage> vertex_data: binding_array<Buffer>;
-@group(1) @binding(1) var<storage> index_data: binding_array<Buffer>;
-@group(1) @binding(2) var<storage> ranges: array<u32>;
+@group(1) @binding(0) var<storage> chunk_data: array<u32>;
 
 struct VertexResult {
     @builtin(position) pos: vec4<f32>,
@@ -46,67 +38,23 @@ struct VertexResult {
     @location(6) section: u32
 };
 
-fn search_iter(size: ptr<function, u32>, left: ptr<function, u32>, right: ptr<function, u32>, section_index: ptr<function, u32>, done: ptr<function, bool>, vertex_index: u32) {
-    var mid = *left + *size / 2;
-
-    var begin_range = ranges[mid * 5];
-    var end_range = ranges[mid * 5 + 1];
-
-    *left = select(*left, mid + 1, end_range < vertex_index);
-    *right = select(*right, mid, begin_range > vertex_index);
-
-    *section_index = select(mid, *section_index, *done);
-
-    *done |= vertex_index >= begin_range && vertex_index < end_range;
-
-    *size = *right - *left;
-}
-
 @vertex
 fn vert(
-    @builtin(vertex_index) vertex_index: u32
+    @builtin(vertex_index) vertex_index: u32,
+    @builtin(instance_index) index_offset: u32
 ) -> VertexResult {
     var vr: VertexResult;
 
-    var section_index: u32 = 0;
+    var section_x: u32 = 0;
+    var section_y: u32 = 0;
+    var section_z: u32 = 0;
 
-    var size = push_constants.total_chunk_sections;
-    var left: u32 = 0u;
-    var right: u32 = size;
-    var done: bool = false;
+    var index: u32 = chunk_data[vertex_index + index_offset];
 
-    //18 binary search iterations, supports up to 2^18 chunk sections
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-    search_iter(&size, &left, &right, &section_index, &done, vertex_index);
-
-    vr.section = section_index;
-
-    var section_vert_start = ranges[section_index * 5];
-    var section_x: u32 = ranges[section_index * 5 + 2];
-    var section_y: u32 = ranges[section_index * 5 + 3];
-    var section_z: u32 = ranges[section_index * 5 + 4];
-
-    var index: u32 = index_data[0].buffer[vertex_index - section_vert_start];
-
-    var v1 = vertex_data[section_index].buffer[index * 4u];
-    var v2 = vertex_data[section_index].buffer[(index * 4u) + 1u];
-    var v3 = vertex_data[section_index].buffer[(index * 4u) + 2u];
-    var v4 = vertex_data[section_index].buffer[(index * 4u) + 3u];
+    var v1 = chunk_data[index * 4u];
+    var v2 = chunk_data[(index * 4u) + 1u];
+    var v3 = chunk_data[(index * 4u) + 2u];
+    var v4 = chunk_data[(index * 4u) + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;

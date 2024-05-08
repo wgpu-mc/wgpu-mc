@@ -13,6 +13,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use glam::IVec3;
+use range_alloc::RangeAllocator;
 use wgpu::BufferAddress;
 
 use crate::mc::block::{BlockstateKey, ChunkBlockState, ModelMesh};
@@ -68,21 +69,17 @@ pub enum RenderLayer {
 }
 
 #[derive(Debug)]
-pub struct ChunkBuffers {
-    pub vertex_buffer: Arc<wgpu::Buffer>,
-    pub index_buffer: Arc<wgpu::Buffer>,
+pub struct SectionRanges {
+    pub vertex_range: Range<u32>,
+    pub index_range: Range<u32>,
     // #[cfg(not(feature = "vbo-fallback"))]
     // pub bind_group: wgpu::BindGroup,
-    pub vertex_buffer_size: u32,
-    pub index_buffer_size: u32,
-    pub index_count: u32,
 }
 
 ///The struct representing a Chunk, with various render layers, split into sections
 #[derive(Debug)]
 pub struct Section {
-    pub buffers: Option<ChunkBuffers>,
-    pub layers: HashMap<RenderLayer, Range<u32>>,
+    pub layers: HashMap<RenderLayer, SectionRanges>,
     pub pos: IVec3,
 }
 
@@ -90,7 +87,6 @@ impl Section {
     pub fn new(pos: IVec3) -> Self {
         Self {
             layers: HashMap::new(),
-            buffers: None,
             pos,
         }
     }
@@ -99,183 +95,46 @@ impl Section {
         &mut self,
         wm: &WmRenderer,
         block_manager: &BlockManager,
+        allocator: &mut RangeAllocator<u32>,
+        buffer: Arc<wgpu::Buffer>,
         provider: &T,
     ) {
         let baked_layers = bake_section(self.pos, block_manager, provider);
 
-        let mut vertex_data = Vec::new();
-        let mut index_data = Vec::new();
-
         let mut layers = HashMap::new();
 
         for (layer, baked) in baked_layers {
-            let index_offset = index_data.len() as u32;
+            let mut vertex_data = Vec::new();
+            let mut index_data = Vec::new();
+
+            let vertex_size = baked.vertices.len() * size_of::<Vertex>();
+
+            if vertex_size == 0 {
+                continue;
+            }
+
+            let vertex_range = allocator.allocate_range(vertex_size.div_ceil(4) as u32).unwrap();
+            let index_range = allocator.allocate_range(baked.indices.len() as u32).unwrap();
+
+            dbg!(&vertex_range);
+            dbg!(&index_range);
 
             vertex_data.extend(baked.vertices.iter().flat_map(Vertex::compressed));
-            index_data.extend(baked.indices.iter().map(|index| *index + index_offset));
+            index_data.extend(baked.indices.iter().map(|index| (*index + vertex_range.start).to_ne_bytes()).flatten());
+
+            wm.chunk_update_queue.0.send((buffer.clone(), vertex_data, vertex_range.start * 4)).unwrap();
+            wm.chunk_update_queue.0.send((buffer.clone(), index_data, index_range.start * 4)).unwrap();
 
             layers.insert(
                 layer,
-                index_offset..index_offset + (index_data.len() as u32),
+                SectionRanges {
+                    vertex_range: vertex_range.start * 4..vertex_range.end * 4,
+                    index_range: index_range.start * 4..index_range.end * 4,
+                }
             );
         }
 
         self.layers = layers;
-
-        //the formulas below align the given value to the nearest multiple of the constant + 1
-        let aligned_vertex_data_len = (vertex_data.len() + 16383 & !16383) as BufferAddress;
-        let aligned_index_data_len =
-            ((index_data.len() * size_of::<u32>()) + 1023 & !1023) as BufferAddress;
-
-        if !vertex_data.is_empty() {
-            let (vertex_buffer, index_buffer) = match &self.buffers {
-                None => {
-                    let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
-                    let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
-
-                    (&mut aligned_vertex_buffer[..vertex_data.len()]).copy_from_slice(&vertex_data);
-                    (&mut aligned_index_buffer[..index_data.len()]).copy_from_slice(&index_data);
-
-                    let vertex_buffer =
-                        Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
-                            label: None,
-                            size: aligned_vertex_data_len,
-                            #[cfg(not(feature = "vbo-fallback"))]
-                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                            #[cfg(feature = "vbo-fallback")]
-                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                            mapped_at_creation: false,
-                        }));
-
-                    let index_buffer =
-                        Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
-                            label: None,
-                            size: aligned_index_data_len,
-                            #[cfg(not(feature = "vbo-fallback"))]
-                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                            #[cfg(feature = "vbo-fallback")]
-                            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                            mapped_at_creation: false,
-                        }));
-
-                    // #[cfg(not(feature = "vbo-fallback"))]
-                    // let bind_group = {
-                    //     let layout = &wm.bind_group_layouts["chunk_ssbos"];
-                    //
-                    //     wm.wgpu_state
-                    //         .device
-                    //         .create_bind_group(&wgpu::BindGroupDescriptor {
-                    //             label: None,
-                    //             layout,
-                    //             entries: &[
-                    //                 wgpu::BindGroupEntry {
-                    //                     binding: 0,
-                    //                     resource: vertex_buffer.as_entire_binding(),
-                    //                 },
-                    //                 wgpu::BindGroupEntry {
-                    //                     binding: 1,
-                    //                     resource: index_buffer.as_entire_binding(),
-                    //                 },
-                    //             ],
-                    //         })
-                    // };
-
-                    self.buffers = Some(ChunkBuffers {
-                        vertex_buffer: vertex_buffer.clone(),
-                        index_buffer: index_buffer.clone(),
-                        // #[cfg(not(feature = "vbo-fallback"))]
-                        // bind_group,
-                        vertex_buffer_size: aligned_vertex_data_len as u32,
-                        index_buffer_size: aligned_index_data_len as u32,
-                        index_count: index_data.len() as u32,
-                    });
-
-                    (vertex_buffer, index_buffer)
-                }
-                Some(ChunkBuffers {
-                    vertex_buffer,
-                    index_buffer,
-                    vertex_buffer_size: vertex_size,
-                    index_buffer_size: index_size,
-                    ..
-                }) => {
-                    if ((*vertex_size) as usize) < vertex_data.len()
-                        || (*index_size as usize) < (index_data.len() * size_of::<u32>())
-                    {
-                        let mut aligned_vertex_buffer = vec![0u8; aligned_vertex_data_len as usize];
-                        let mut aligned_index_buffer = vec![0u32; aligned_index_data_len as usize];
-
-                        (&mut aligned_vertex_buffer[..vertex_data.len()])
-                            .copy_from_slice(&vertex_data);
-                        (&mut aligned_index_buffer[..index_data.len()])
-                            .copy_from_slice(&index_data);
-
-                        let vertex_buffer =
-                            Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
-                                label: None,
-                                size: aligned_vertex_data_len,
-                                #[cfg(not(feature = "vbo-fallback"))]
-                                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                                #[cfg(feature = "vbo-fallback")]
-                                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                                mapped_at_creation: false,
-                            }));
-
-                        let index_buffer =
-                            Arc::new(wm.wgpu_state.device.create_buffer(&wgpu::BufferDescriptor {
-                                label: None,
-                                size: aligned_index_data_len,
-                                #[cfg(not(feature = "vbo-fallback"))]
-                                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                                #[cfg(feature = "vbo-fallback")]
-                                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                                mapped_at_creation: false,
-                            }));
-
-                        // #[cfg(not(feature = "vbo-fallback"))]
-                        // let bind_group = {
-                        //     let layout = &wm.bind_group_layouts["chunk_ssbos"];
-                        //
-                        //     wm.wgpu_state
-                        //         .device
-                        //         .create_bind_group(&wgpu::BindGroupDescriptor {
-                        //             label: None,
-                        //             layout,
-                        //             entries: &[
-                        //                 wgpu::BindGroupEntry {
-                        //                     binding: 0,
-                        //                     resource: vertex_buffer.as_entire_binding(),
-                        //                 },
-                        //                 wgpu::BindGroupEntry {
-                        //                     binding: 1,
-                        //                     resource: index_buffer.as_entire_binding(),
-                        //                 },
-                        //             ],
-                        //         })
-                        // };
-
-                        self.buffers = Some(ChunkBuffers {
-                            vertex_buffer: vertex_buffer.clone(),
-                            index_buffer: index_buffer.clone(),
-                            // #[cfg(not(feature = "vbo-fallback"))]
-                            // bind_group,
-                            vertex_buffer_size: aligned_vertex_data_len as u32,
-                            index_buffer_size: aligned_index_data_len as u32,
-                            index_count: index_data.len() as u32,
-                        });
-
-                        (vertex_buffer, index_buffer)
-                    } else {
-                        (vertex_buffer.clone(), index_buffer.clone())
-                    }
-                }
-            };
-
-            let mut queue = wm.chunk_update_queue.lock();
-
-            queue.push((vertex_buffer, vertex_data));
-            queue.push((index_buffer, Vec::from(bytemuck::cast_slice(&index_data))));
-        }
     }
 }
 

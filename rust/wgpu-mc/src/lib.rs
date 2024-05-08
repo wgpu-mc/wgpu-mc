@@ -42,15 +42,14 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use arc_swap::ArcSwap;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
 use wgpu::util::StagingBelt;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferDescriptor, PresentMode,
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor, PresentMode};
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -83,7 +82,7 @@ pub struct WmRenderer {
     pub wgpu_state: Arc<WgpuState>,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: Arc<MinecraftState>,
-    pub chunk_update_queue: Arc<Mutex<Vec<(Arc<Buffer>, Vec<u8>)>>>,
+    pub chunk_update_queue: Arc<(Sender<(Arc<Buffer>, Vec<u8>, u32)>, Mutex<Receiver<(Arc<Buffer>, Vec<u8>, u32)>>)>,
     pub chunk_staging_belt: Arc<Mutex<StagingBelt>>,
     #[cfg(feature = "tracing")]
     pub puffin_http: Arc<puffin_http::Server>,
@@ -116,7 +115,10 @@ impl WmRenderer {
             bind_group_layouts: Arc::new(create_bind_group_layouts(&wgpu_state.device)),
             wgpu_state: Arc::new(wgpu_state),
             mc: Arc::new(mc),
-            chunk_update_queue: Arc::new(Mutex::new(Vec::new())),
+            chunk_update_queue: Arc::new({
+                let (sender, receiver) = channel();
+                (sender, Mutex::new(receiver))
+            }),
             chunk_staging_belt: Arc::new(Mutex::new(StagingBelt::new(CHUNK_STAGING_BELT_SIZE))),
             #[cfg(feature = "tracing")]
             puffin_http,
@@ -181,14 +183,9 @@ impl WmRenderer {
     pub fn submit_chunk_updates(&self) {
         puffin::profile_function!();
 
-        let updates = {
-            let mut updates = self.chunk_update_queue.lock();
-            std::mem::take(&mut *updates)
-        };
+        let receiver = self.chunk_update_queue.1.lock();
 
-        if updates.len() == 0 {
-            return;
-        }
+        let updates = receiver.try_iter();
 
         let mut encoder = self
             .wgpu_state
@@ -197,11 +194,11 @@ impl WmRenderer {
 
         let mut staging_belt = self.chunk_staging_belt.lock();
 
-        updates.into_iter().for_each(|(queue, data)| {
+        updates.for_each(|(queue, data, offset)| {
             let mut view = staging_belt.write_buffer(
                 &mut encoder,
                 &queue,
-                0,
+                offset as BufferAddress,
                 NonZeroU64::new(data.len() as u64).unwrap(),
                 &self.wgpu_state.device,
             );

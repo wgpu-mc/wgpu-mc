@@ -109,10 +109,7 @@ fn main() {
             required_features: wgpu::Features::default()
                 | wgpu::Features::DEPTH_CLIP_CONTROL
                 | wgpu::Features::PUSH_CONSTANTS
-                | wgpu::Features::BUFFER_BINDING_ARRAY
-                | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY
-                | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
-                | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY,
+                | wgpu::Features::MULTI_DRAW_INDIRECT,
             required_limits,
         },
         None, // Trace path
@@ -230,7 +227,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
 
     let render_graph = RenderGraph::new(&wm, pack.unwrap(), resource_backings, None, None);
 
-    let mut scene = Scene::new(
+    let scene = Scene::new(
         &wm,
         Extent3d {
             width: window.inner_size().width,
@@ -239,14 +236,17 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
         },
     );
 
-    // for x in 0..20 {
-    //     for z in 0..20 {
-    //         let section = make_chunks(&wm, [x, 0, z].into());
-    //         scene.chunk_sections.insert([x, 0, z].into(), section);
-    //     }
-    // }
+    {
+        let mut sections = scene.chunk_sections.write();
 
-    scene.build_lookup_table(&wm);
+        for x in 0..1 {
+            for z in 0..1 {
+                let section = make_chunks(&wm, [x, 0, z].into(), &scene);
+
+                sections.insert([x, 0, z].into(), RwLock::new(section));
+            }
+        }
+    }
 
     let mut forward = 0.0;
 
