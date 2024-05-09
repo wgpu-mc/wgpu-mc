@@ -40,16 +40,14 @@ struct VertexResult {
 
 @vertex
 fn vert(
-    @builtin(vertex_index) vertex_index: u32,
-    @builtin(instance_index) index_offset: u32
+    @location(0) index: u32,
+    @builtin(instance_index) pos_index: u32,
 ) -> VertexResult {
     var vr: VertexResult;
 
-    var section_x: u32 = 0;
-    var section_y: u32 = 0;
-    var section_z: u32 = 0;
-
-    var index: u32 = chunk_data[vertex_index + index_offset];
+    var section_x: u32 = chunk_data[pos_index];
+    var section_y: u32 = chunk_data[pos_index + 1];
+    var section_z: u32 = chunk_data[pos_index + 2];
 
     var v1 = chunk_data[index * 4u];
     var v2 = chunk_data[(index * 4u) + 1u];

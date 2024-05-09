@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use futures::executor::block_on;
 use parking_lot::RwLock;
@@ -24,7 +25,7 @@ use wgpu_mc::render::pipeline::Vertex;
 use wgpu_mc::render::shaderpack::ShaderPackConfig;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferBindingType, Extent3d, PresentMode};
-use wgpu_mc::{wgpu, HasWindowSize, WgpuState, WindowSize, WmRenderer};
+use wgpu_mc::{wgpu, HasWindowSize, WgpuState, WindowSize, WmRenderer, Frustum};
 
 use crate::camera::Camera;
 use crate::chunk::make_chunks;
@@ -239,11 +240,13 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
     {
         let mut sections = scene.chunk_sections.write();
 
-        for x in 0..1 {
-            for z in 0..1 {
-                let section = make_chunks(&wm, [x, 0, z].into(), &scene);
+        for x in 0..5 {
+            for y in 0..24 {
+                for z in 0..5 {
+                    let section = make_chunks(&wm, [x, y, z].into(), &scene);
 
-                sections.insert([x, 0, z].into(), RwLock::new(section));
+                    sections.insert([x, y, z].into(), RwLock::new(section));
+                }
             }
         }
     }
@@ -252,6 +255,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
 
     let mut camera =
         Camera::new(window.inner_size().width as f32 / window.inner_size().height as f32);
+
+    let mut last_frame = Instant::now();
 
     event_loop
         .run(move |event, target| {
@@ -316,6 +321,9 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
                             }));
                         }
                         WindowEvent::RedrawRequested => {
+                            let frame_time = Instant::now().duration_since(last_frame).as_secs_f32();
+                            last_frame = Instant::now();
+
                             let perspective: [[f32; 4]; 4] =
                                 camera.build_perspective_matrix().into();
                             let view: [[f32; 4]; 4] = camera.build_view_matrix().into();
@@ -332,7 +340,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
                                 bytemuck::cast_slice(&view),
                             );
 
-                            camera.position += camera.get_direction() * forward * 0.01;
+                            camera.position += camera.get_direction() * forward * 50.0 * frame_time;
 
                             let mut surface_guard = wm.wgpu_state.surface.write();
                             let (surface, ref mut config) = &mut *surface_guard;
@@ -373,6 +381,8 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
 
                             let mut geometry = HashMap::new();
 
+                            let mvp = (camera.build_perspective_matrix() * camera.build_view_matrix()).into();
+
                             render_graph.render(
                                 &wm,
                                 &mut command_encoder,
@@ -380,6 +390,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
                                 &view,
                                 [0; 3],
                                 &mut geometry,
+                                &Frustum::from_modelview_projection(mvp)
                             );
 
                             wm.wgpu_state.queue.submit([command_encoder.finish()]);

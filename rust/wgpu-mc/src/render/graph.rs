@@ -1,11 +1,10 @@
+use std::alloc::alloc;
 use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
+use treeculler::{AABB, BVol, Frustum, Vec3};
 
-use wgpu::{
-    BindGroup, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp,
-};
+use wgpu::{BindGroup, BufferAddress, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp};
 use wgpu::util::DrawIndirectArgs;
 
 use crate::mc::chunk::RenderLayer;
@@ -254,7 +253,17 @@ impl RenderGraph {
 
             let vertex_buffer = match &pipeline_config.geometry[..] {
                 #[cfg(not(feature = "vbo-fallback"))]
-                "@geo_terrain" => None,
+                "@geo_terrain" => {
+                    const VAA: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
+                        0 => Uint32
+                    ];
+
+                    Some(vec![wgpu::VertexBufferLayout {
+                        array_stride: (mem::size_of::<u32>()) as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &VAA,
+                    }])
+                }
                 #[cfg(feature = "vbo-fallback")]
                 "@geo_terrain" => {
                     const VAA: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
@@ -455,6 +464,7 @@ impl RenderGraph {
         render_target: &wgpu::TextureView,
         clear_color: [u8; 3],
         geometry: &mut HashMap<String, Box<dyn Geometry>>,
+        frustum: &Frustum<f32>
     ) {
         let arena = WmArena::new(4096);
 
@@ -549,16 +559,32 @@ impl RenderGraph {
 
                     let mut sections = scene.chunk_sections.write();
 
+                    let mut allocator = scene.chunk_allocator.lock();
+                    let mut pos_ranges = vec![];
+
                     for (pos, section_lock) in sections.iter_mut() {
                         let section = section_lock.get_mut();
 
+                        let a: Vec3<f32> = [pos.x as f32, pos.y as f32, pos.z as f32].into();
+                        let b: Vec3<f32> = a + Vec3::new(16.0, 16.0, 16.0);
+
+                        let bounds: AABB<f32> = AABB::new(a.into_array(), b.into_array());
+
+                        if !bounds.coherent_test_against_frustum(frustum, 0).0 {
+                            continue;
+                        }
+
                         if let Some(layer) = section.layers.get(&RenderLayer::Solid) {
+                            let range = allocator.allocate_range(3).unwrap();
+                            pos_ranges.push(range.clone());
+                            wm.wgpu_state.queue.write_buffer(&scene.chunk_buffer.buffer, (range.start * 4) as BufferAddress, bytemuck::cast_slice(&pos.to_array()));
+
                             indirect.push(
                                 DrawIndirectArgs {
                                     vertex_count: layer.index_range.end - layer.index_range.start,
                                     instance_count: 1,
-                                    first_vertex: 0,
-                                    first_instance: layer.index_range.start,
+                                    first_vertex: layer.index_range.start / 4,
+                                    first_instance: range.start,
                                 }
                             );
                         }
@@ -603,6 +629,10 @@ impl RenderGraph {
                         0,
                         indirect.len() as u32
                     );
+
+                    for pos_range in pos_ranges {
+                        allocator.free_range(pos_range);
+                    }
                 }
                 _ => match geometry.get_mut(&pipeline_config.geometry) {
                     None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),

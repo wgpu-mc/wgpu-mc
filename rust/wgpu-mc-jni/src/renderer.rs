@@ -38,7 +38,7 @@ use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::BindableBuffer;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferAddress, BufferBindingType, BufferUsages, PresentMode, TextureFormat};
-use wgpu_mc::{wgpu, WindowSize};
+use wgpu_mc::{Frustum, wgpu, WindowSize};
 use wgpu_mc::{WgpuState, WmRenderer};
 
 use crate::gl::{ElectrumGeometry, ElectrumVertex, GlTexture, GL_ALLOC};
@@ -437,6 +437,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
                                     &view,
                                     [0; 3],
                                     &mut geometry,
+                                    &Frustum::from_modelview_projection([[0.0; 4]; 4])
                                 );
 
                                 wm.wgpu_state.queue.submit([encoder.finish()]);

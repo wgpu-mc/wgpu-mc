@@ -190,6 +190,7 @@ pub struct Scene {
     pub chunk_sections: RwLock<HashMap<IVec3, RwLock<Section>>>,
     pub chunk_allocator: Mutex<RangeAllocator<u32>>,
     pub chunk_buffer: Arc<BindableBuffer>,
+
     pub indirect_buffer: Arc<wgpu::Buffer>,
 
     pub entity_instances: HashMap<String, BundledEntityInstances>,
@@ -217,10 +218,10 @@ impl Scene {
 
         Self {
             chunk_sections: RwLock::new(HashMap::new()),
-            chunk_allocator: Mutex::new(RangeAllocator::new(0..100_000_000)),
+            chunk_allocator: Mutex::new(RangeAllocator::new(0..(100000000 / 4))),
             chunk_buffer: Arc::new(BindableBuffer::new_deferred(
                 wm,
-                400000,
+                100000000,
                 wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
                 "ssbo"
             )),

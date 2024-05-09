@@ -61,6 +61,8 @@ pub mod render;
 pub mod texture;
 pub mod util;
 
+pub use treeculler::Frustum;
+
 pub const CHUNK_STAGING_BELT_SIZE: u64 = 64_000_000;
 
 /// Provides access to most of the wgpu structs relating directly to communicating/getting
