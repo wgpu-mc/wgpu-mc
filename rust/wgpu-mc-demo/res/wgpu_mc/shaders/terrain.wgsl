@@ -45,7 +45,7 @@ fn vert(
 ) -> VertexResult {
     var vr: VertexResult;
 
-    var section_x: i32 = i32(chunk_data[pos_index] + pos_index%11);
+    var section_x: i32 = i32(chunk_data[pos_index]);
     var section_y: i32 = i32(chunk_data[pos_index + 1]);
     var section_z: i32 = i32(chunk_data[pos_index + 2]);
 
