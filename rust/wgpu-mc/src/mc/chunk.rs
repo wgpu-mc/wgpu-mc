@@ -26,7 +26,6 @@ pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
 pub const CHUNK_HEIGHT: usize = 384;
 pub const CHUNK_VOLUME: usize = CHUNK_AREA * CHUNK_HEIGHT;
 pub const CHUNK_SECTION_HEIGHT: usize = 16;
-pub const SECTIONS_PER_CHUNK: usize = CHUNK_HEIGHT / CHUNK_SECTION_HEIGHT;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
 pub const MAX_CHUNKS: usize = 1000;
@@ -176,7 +175,7 @@ struct BakedSection {
     pub indices: Vec<u32>,
 }
 
-pub fn bake_section<Provider: BlockStateProvider>(
+fn bake_section<Provider: BlockStateProvider>(
     pos: IVec3,
     block_manager: &BlockManager,
     state_provider: &Provider,

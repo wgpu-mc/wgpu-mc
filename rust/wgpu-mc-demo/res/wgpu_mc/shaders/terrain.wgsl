@@ -40,19 +40,19 @@ struct VertexResult {
 
 @vertex
 fn vert(
-    @location(0) index: u32,
     @builtin(instance_index) pos_index: u32,
+    @builtin(vertex_index) vi: u32
 ) -> VertexResult {
     var vr: VertexResult;
 
-    var section_x: u32 = chunk_data[pos_index];
-    var section_y: u32 = chunk_data[pos_index + 1];
-    var section_z: u32 = chunk_data[pos_index + 2];
+    var section_x: i32 = i32(chunk_data[pos_index] + pos_index%11);
+    var section_y: i32 = i32(chunk_data[pos_index + 1]);
+    var section_z: i32 = i32(chunk_data[pos_index + 2]);
 
-    var v1 = chunk_data[index * 4u];
-    var v2 = chunk_data[(index * 4u) + 1u];
-    var v3 = chunk_data[(index * 4u) + 2u];
-    var v4 = chunk_data[(index * 4u) + 3u];
+    var v1 = chunk_data[vi * 4u];
+    var v2 = chunk_data[(vi * 4u) + 1u];
+    var v3 = chunk_data[(vi * 4u) + 2u];
+    var v4 = chunk_data[(vi * 4u) + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;

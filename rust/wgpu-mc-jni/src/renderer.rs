@@ -169,7 +169,7 @@ pub fn start_rendering(mut env: JNIEnv, title: JString) {
     let required_limits = wgpu::Limits {
         max_push_constant_size: 128,
         max_bind_groups: 8,
-        max_storage_buffers_per_shader_stage: 100000,
+        max_storage_buffers_per_shader_stage: 10000,
         ..Default::default()
     };
 

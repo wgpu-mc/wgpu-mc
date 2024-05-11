@@ -218,11 +218,11 @@ impl Scene {
 
         Self {
             chunk_sections: RwLock::new(HashMap::new()),
-            chunk_allocator: Mutex::new(RangeAllocator::new(0..(100000000 / 4))),
+            chunk_allocator: Mutex::new(RangeAllocator::new(0..100000000/4)),
             chunk_buffer: Arc::new(BindableBuffer::new_deferred(
                 wm,
                 100000000,
-                wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDEX ,
                 "ssbo"
             )),
             indirect_buffer: Arc::new(indirect_buffer),

@@ -14,7 +14,7 @@ struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
         // if (0..1).contains(&x) && (0..1).contains(&z) && y == 0 {
-        if y == 0 {
+        if x^y^z == 0 {
             ChunkBlockState::State(self.1)
         } else {
             ChunkBlockState::Air

@@ -60,6 +60,7 @@ impl HasWindowSize for WinitWindowWrapper {
 }
 
 fn main() {
+
     let event_loop = EventLoop::new().unwrap();
     let title = "wgpu-mc test";
     let window = Arc::new(
@@ -100,7 +101,7 @@ fn main() {
     let required_limits = wgpu::Limits {
         max_push_constant_size: 128,
         max_bind_groups: 8,
-        max_storage_buffers_per_shader_stage: 100000,
+        max_storage_buffers_per_shader_stage: 10000,
         ..Default::default()
     };
 
@@ -117,7 +118,7 @@ fn main() {
     ))
     .unwrap();
 
-    const VSYNC: bool = false;
+    const VSYNC: bool = true;
 
     let surface_caps = surface.get_capabilities(&adapter);
     let surface_config = wgpu::SurfaceConfiguration {
@@ -241,7 +242,7 @@ fn begin_rendering(event_loop: EventLoop<()>, window: Arc<Window>, wm: WmRendere
         let mut sections = scene.chunk_sections.write();
 
         for x in 0..5 {
-            for y in 0..24 {
+            for y in 0..5 {
                 for z in 0..5 {
                     let section = make_chunks(&wm, [x, y, z].into(), &scene);
 

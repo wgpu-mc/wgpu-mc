@@ -5,7 +5,7 @@ use std::sync::Arc;
 use treeculler::{AABB, BVol, Frustum, Vec3};
 
 use wgpu::{BindGroup, BufferAddress, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp};
-use wgpu::util::DrawIndirectArgs;
+use wgpu::util::{DrawIndexedIndirectArgs, DrawIndirectArgs};
 
 use crate::mc::chunk::RenderLayer;
 use crate::mc::entity::InstanceVertex;
@@ -168,7 +168,7 @@ impl RenderGraph {
                                 if let Some(entry) = custom.get(resource) {
                                     entry
                                 } else {
-                                    unimplemented!()
+                                    unimplemented!("{}",resource)
                                 }
                             }
                             (_, None) => unimplemented!(),
@@ -555,7 +555,7 @@ impl RenderGraph {
                     //         Some(buffers) => buffers,
                     //     };
 
-                    let mut indirect: Vec<DrawIndirectArgs> = vec![];
+                    let mut indirect: Vec<DrawIndexedIndirectArgs> = vec![];
 
                     let mut sections = scene.chunk_sections.write();
 
@@ -566,9 +566,9 @@ impl RenderGraph {
                         let section = section_lock.get_mut();
 
                         let a: Vec3<f32> = [pos.x as f32, pos.y as f32, pos.z as f32].into();
-                        let b: Vec3<f32> = a + Vec3::new(16.0, 16.0, 16.0);
+                        let b: Vec3<f32> = a + Vec3::new(1.0, 1.0, 1.0);
 
-                        let bounds: AABB<f32> = AABB::new(a.into_array(), b.into_array());
+                        let bounds: AABB<f32> = AABB::new((a*16.0).into_array(), (b*16.0).into_array());
 
                         if !bounds.coherent_test_against_frustum(frustum, 0).0 {
                             continue;
@@ -580,11 +580,12 @@ impl RenderGraph {
                             wm.wgpu_state.queue.write_buffer(&scene.chunk_buffer.buffer, (range.start * 4) as BufferAddress, bytemuck::cast_slice(&pos.to_array()));
 
                             indirect.push(
-                                DrawIndirectArgs {
-                                    vertex_count: layer.index_range.end - layer.index_range.start,
+                                DrawIndexedIndirectArgs {
                                     instance_count: 1,
-                                    first_vertex: layer.index_range.start / 4,
                                     first_instance: range.start,
+                                    index_count: (layer.index_range.end - layer.index_range.start)/4,
+                                    first_index: (layer.index_range.start/4),
+                                    base_vertex: (layer.vertex_range.start/4) as i32,
                                 }
                             );
                         }
@@ -623,13 +624,12 @@ impl RenderGraph {
                     }
 
                     render_pass.set_vertex_buffer(0, scene.chunk_buffer.buffer.slice(..));
-
-                    render_pass.multi_draw_indirect(
+                    render_pass.set_index_buffer(scene.chunk_buffer.buffer.slice(..),wgpu::IndexFormat::Uint32);
+                    render_pass.multi_draw_indexed_indirect(
                         &scene.indirect_buffer,
                         0,
                         indirect.len() as u32
                     );
-
                     for pos_range in pos_ranges {
                         allocator.free_range(pos_range);
                     }
