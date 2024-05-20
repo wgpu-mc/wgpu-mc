@@ -112,7 +112,7 @@ impl Section {
             let index_data:Vec<u8> = baked.indices.iter().flat_map(|index| index.to_ne_bytes()).collect();
 
             let vertex_range = allocator.allocate_range(vertex_data.len().div_ceil(4) as u32).unwrap();
-            let index_range = allocator.allocate_range(index_data.len().div_ceil(4) as u32).unwrap();
+            let index_range = allocator.allocate_range(index_data.len() as u32).unwrap();
 
             dbg!(&vertex_range);
             dbg!(&index_range);
