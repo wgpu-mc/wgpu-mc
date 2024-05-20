@@ -564,7 +564,6 @@ impl RenderGraph {
 
                     for (pos, section_lock) in sections.iter_mut() {
                         let section = section_lock.get_mut();
-
                         let a: Vec3<f32> = [pos.x as f32, pos.y as f32, pos.z as f32].into();
                         let b: Vec3<f32> = a + Vec3::new(1.0, 1.0, 1.0);
 
@@ -573,11 +572,12 @@ impl RenderGraph {
                         if !bounds.coherent_test_against_frustum(frustum, 0).0 {
                             continue;
                         }
-
                         if let Some(layer) = section.layers.get(&RenderLayer::Solid) {
-                            let range = allocator.allocate_range(3).unwrap();
+                            let range = allocator.allocate_range(4).unwrap();
                             pos_ranges.push(range.clone());
-                            wm.wgpu_state.queue.write_buffer(&scene.chunk_buffer.buffer, (range.start * 4) as BufferAddress, bytemuck::cast_slice(&pos.to_array()));
+                            let mut data = pos.to_array().to_vec();
+                            data.push((layer.vertex_range.start/4) as i32);
+                            wm.wgpu_state.queue.write_buffer(&scene.chunk_buffer.buffer, (range.start * 4) as BufferAddress, bytemuck::cast_slice(&data));
 
                             indirect.push(
                                 DrawIndexedIndirectArgs {
@@ -585,14 +585,13 @@ impl RenderGraph {
                                     first_instance: range.start,
                                     index_count: (layer.index_range.end - layer.index_range.start)/4,
                                     first_index: (layer.index_range.start/4),
-                                    base_vertex: (layer.vertex_range.start/4) as i32,
+                                    base_vertex: 0,
                                 }
                             );
                         }
                     }
-
-                    let indirect_bytes: Vec<u8> = indirect.iter().map(|args| args.as_bytes()).flatten().copied().collect();
-
+                    
+                    let indirect_bytes: Vec<u8> = indirect.iter().flat_map(|args| args.as_bytes()).copied().collect();
                     wm.wgpu_state.queue.write_buffer(&scene.indirect_buffer, 0, &indirect_bytes);
 
                     render_pass.set_pipeline(&bound_pipeline.pipeline);

@@ -189,27 +189,13 @@ impl WmRenderer {
 
         let updates = receiver.try_iter();
 
-        let mut encoder = self
-            .wgpu_state
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-        let mut staging_belt = self.chunk_staging_belt.lock();
-
         updates.for_each(|(queue, data, offset)| {
-            let mut view = staging_belt.write_buffer(
-                &mut encoder,
+            self.wgpu_state.queue.write_buffer(
                 &queue,
                 offset as BufferAddress,
-                NonZeroU64::new(data.len() as u64).unwrap(),
-                &self.wgpu_state.device,
+                &data
             );
-            view.copy_from_slice(&data);
         });
-
-        staging_belt.finish();
-        self.wgpu_state.queue.submit([encoder.finish()]);
-        staging_belt.recall();
     }
 
     pub fn get_backend_description(&self) -> String {

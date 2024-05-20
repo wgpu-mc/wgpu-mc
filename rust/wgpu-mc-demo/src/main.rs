@@ -60,7 +60,6 @@ impl HasWindowSize for WinitWindowWrapper {
 }
 
 fn main() {
-
     let event_loop = EventLoop::new().unwrap();
     let title = "wgpu-mc test";
     let window = Arc::new(
@@ -90,7 +89,7 @@ fn main() {
         ..Default::default()
     });
 
-    let surface = unsafe { instance.create_surface(window.clone()) }.unwrap();
+    let surface = instance.create_surface(window.clone()).unwrap();
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
         force_fallback_adapter: false,

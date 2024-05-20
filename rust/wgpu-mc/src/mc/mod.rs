@@ -211,7 +211,7 @@ impl Scene {
             .device
             .create_buffer(&wgpu::BufferDescriptor {
                 label: None,
-                size: 4 * 4 * 40_000,
+                size: 4 * 5 * 1000,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
                 mapped_at_creation: false,
             });

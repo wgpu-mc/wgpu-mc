@@ -103,23 +103,19 @@ impl Section {
         let mut layers = HashMap::new();
 
         for (layer, baked) in baked_layers {
-            let mut vertex_data = Vec::new();
-            let mut index_data = Vec::new();
 
-            let vertex_size = baked.vertices.len() * size_of::<Vertex>();
 
-            if vertex_size == 0 {
+            let vertex_data:Vec<u8> = baked.vertices.iter().flat_map(Vertex::compressed).collect();
+            if vertex_data.len() == 0 {
                 continue;
             }
+            let index_data:Vec<u8> = baked.indices.iter().flat_map(|index| index.to_ne_bytes()).collect();
 
-            let vertex_range = allocator.allocate_range(vertex_size.div_ceil(4) as u32).unwrap();
-            let index_range = allocator.allocate_range(baked.indices.len() as u32).unwrap();
+            let vertex_range = allocator.allocate_range(vertex_data.len().div_ceil(4) as u32).unwrap();
+            let index_range = allocator.allocate_range(index_data.len().div_ceil(4) as u32).unwrap();
 
             dbg!(&vertex_range);
             dbg!(&index_range);
-
-            vertex_data.extend(baked.vertices.iter().flat_map(Vertex::compressed));
-            index_data.extend(baked.indices.iter().map(|index| (*index + vertex_range.start).to_ne_bytes()).flatten());
 
             wm.chunk_update_queue.0.send((buffer.clone(), vertex_data, vertex_range.start * 4)).unwrap();
             wm.chunk_update_queue.0.send((buffer.clone(), index_data, index_range.start * 4)).unwrap();
@@ -127,8 +123,8 @@ impl Section {
             layers.insert(
                 layer,
                 SectionRanges {
-                    vertex_range: vertex_range.start * 4..vertex_range.end * 4,
-                    index_range: index_range.start * 4..index_range.end * 4,
+                    vertex_range: (vertex_range.start * 4)..(vertex_range.end * 4),
+                    index_range: (index_range.start * 4)..(index_range.end * 4),
                 }
             );
         }
