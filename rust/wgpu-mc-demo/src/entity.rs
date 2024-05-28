@@ -40,7 +40,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, BundledEntityInstances)
     let entity_atlas_guard = {
         let pipelines = wm.pipelines.load();
         let atlas = Arc::new(ArcSwap::new(Arc::new(Atlas::new(
-            &wm.wgpu_state,
+            &wm.display,
             &pipelines,
             false,
         ))));
@@ -62,7 +62,7 @@ pub fn describe_entity(wm: &WmRenderer) -> (Arc<Entity>, BundledEntityInstances)
     let entity = Arc::new(Entity::new(
         ENTITY_NAME.into(),
         wm_entity.unwrap(),
-        &wm.wgpu_state,
+        &wm.display,
     ));
 
     let one_transform = EntityInstance {

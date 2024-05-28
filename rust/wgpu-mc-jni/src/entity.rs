@@ -193,7 +193,7 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
             .map(|(name, wrapper)| (name, wrapper.data.data))
             .collect();
 
-    let atlases = wm.mc.texture_manager.atlases.load();
+    let atlases = wm.mc.texture_manager.atlases.write();
     let _atlas = atlases.get(ENTITY_ATLAS).unwrap();
 
     let entities: HashMap<String, Arc<Entity>> = mpd
@@ -203,7 +203,7 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
 
             (
                 name.clone(),
-                Arc::new(Entity::new(name.clone(), entity_part, &wm.wgpu_state)),
+                Arc::new(Entity::new(name.clone(), entity_part, &wm.display)),
             )
         })
         .collect();

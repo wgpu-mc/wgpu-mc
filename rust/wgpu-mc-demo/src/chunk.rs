@@ -9,13 +9,13 @@ use wgpu_mc::mc::{MinecraftState, Scene};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
-struct SimpleBlockstateProvider(Arc<MinecraftState>, BlockstateKey);
+struct SimpleBlockstateProvider(BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
         // if (0..1).contains(&x) && (0..1).contains(&z) && y == 0 {
         if x^y^z == 0 {
-            ChunkBlockState::State(self.1)
+            ChunkBlockState::State(self.0)
         } else {
             ChunkBlockState::Air
         }
@@ -38,14 +38,13 @@ impl Debug for SimpleBlockstateProvider {
 
 pub fn make_chunks(wm: &WmRenderer, pos: IVec3, scene: &Scene) -> Section {
     let bm = wm.mc.block_manager.read();
-    let atlas = wm
+    let atlases = wm
         .mc
         .texture_manager
-        .atlases
-        .load()
+        .atlases.read();
+    let atlas = atlases
         .get(BLOCK_ATLAS)
-        .unwrap()
-        .load();
+        .unwrap();
 
     let (index, _, block) = bm.blocks.get_full("minecraft:furnace").unwrap();
 
@@ -62,14 +61,13 @@ pub fn make_chunks(wm: &WmRenderer, pos: IVec3, scene: &Scene) -> Section {
         .unwrap();
 
     let provider = SimpleBlockstateProvider(
-        wm.mc.clone(),
         BlockstateKey {
             block: index as u16,
             augment,
         },
     );
 
-    let mut chunk = Section::new(pos.into());
+    let mut chunk = Section::new(pos);
     let time = Instant::now();
 
     chunk.bake_section(wm, &bm, &mut scene.chunk_allocator.lock(), scene.chunk_buffer.buffer.clone(), &provider);

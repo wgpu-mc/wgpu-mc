@@ -14,9 +14,6 @@ struct ChunkOffset {
     z: i32
 }
 
-struct Buffer {
-    buffer: array<u32>
-}
 
 @group(0) @binding(0) var<uniform> mat4_model: mat4x4<f32>;
 @group(0) @binding(1) var<uniform> mat4_view: mat4x4<f32>;
@@ -40,19 +37,20 @@ struct VertexResult {
 
 @vertex
 fn vert(
-    @location(0) index: u32,
     @builtin(instance_index) pos_index: u32,
+    @builtin(vertex_index) vi: u32
 ) -> VertexResult {
     var vr: VertexResult;
 
-    var section_x: u32 = chunk_data[pos_index];
-    var section_y: u32 = chunk_data[pos_index + 1];
-    var section_z: u32 = chunk_data[pos_index + 2];
-
-    var v1 = chunk_data[index * 4u];
-    var v2 = chunk_data[(index * 4u) + 1u];
-    var v3 = chunk_data[(index * 4u) + 2u];
-    var v4 = chunk_data[(index * 4u) + 3u];
+    var section_x: i32 = i32(chunk_data[pos_index]);
+    var section_y: i32 = i32(chunk_data[pos_index + 1]);
+    var section_z: i32 = i32(chunk_data[pos_index + 2]);
+    let bv = chunk_data[pos_index + 3];
+    let id = vi*4u+bv;
+    var v1 = chunk_data[id];
+    var v2 = chunk_data[id + 1u];
+    var v3 = chunk_data[id + 2u];
+    var v4 = chunk_data[id + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
@@ -61,18 +59,17 @@ fn vert(
     var u: f32 = f32((v2 >> 16u) & 0xffffu) * 0.00048828125;
     var v: f32 = f32(v3 & 0xffffu) * 0.00048828125;
 
-    if(((v3 >> 61u) & 1u) == 1u) {
+    if(((v3 >> 29u) & 1u) == 1u) {
         x = 16.0;
     }
 
-    if(((v3 >> 62u) & 1u) == 1u) {
+    if(((v3 >> 30u) & 1u) == 1u) {
         y = 16.0;
     }
 
-    if((v3 >> 63u) == 1u) {
+    if((v3 >> 31u) == 1u) {
         z = 16.0;
     }
-
     var pos = vec3<f32>(x, y, z);
 
     var world_pos = pos + vec3<f32>(f32(section_x) * 16.0, f32(section_y) * 16.0, f32(section_z) * 16.0);

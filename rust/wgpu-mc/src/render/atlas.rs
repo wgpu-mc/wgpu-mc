@@ -14,7 +14,7 @@ use wgpu::Extent3d;
 
 use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::texture::{BindableTexture, TextureAndView, UV};
-use crate::{WgpuState, WmRenderer};
+use crate::{Display, WmRenderer};
 
 /// The width and height of an [atlas](Atlas];
 pub const ATLAS_DIMENSIONS: u32 = 2048;
@@ -27,10 +27,10 @@ pub const ATLAS_DIMENSIONS: u32 = 2048;
 ///```ignore
 /// # use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 /// # use wgpu_mc::render::atlas::Atlas;
-/// # use wgpu_mc::{WgpuState, WmRenderer};
+/// # use wgpu_mc::{Display, WmRenderer};
 /// # use wgpu_mc::render::pipeline::RenderPipelineManager;
 ///
-/// # let wgpu_state: WgpuState;
+/// # let wgpu_state: Display;
 /// # let wm_renderer: WmRenderer;
 /// # let pipelines: RenderPipelineManager;
 /// # let resource_provider: Box<dyn ResourceProvider>;
@@ -78,9 +78,9 @@ impl Debug for Atlas {
 }
 
 impl Atlas {
-    pub fn new(wgpu_state: &WgpuState, resizes: bool) -> Self {
+    pub fn new(display: &Display, resizes: bool) -> Self {
         let tv = TextureAndView::from_rgb_bytes(
-            wgpu_state,
+            display,
             &vec![0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
             Extent3d {
                 width: ATLAS_DIMENSIONS,
@@ -189,7 +189,7 @@ impl Atlas {
     /// become obsolete if you .load() the BindableTexture before calling upload(), so you should get the BindableTexture after calling this function and not before-hand.
     /// Returns true if the atlas was resized.
     pub fn upload(&self, wm: &WmRenderer) -> bool {
-        wm.wgpu_state.queue.write_texture(
+        wm.display.queue.write_texture(
             self.texture.texture.as_image_copy(),
             self.image.read().as_raw(),
             wgpu::ImageDataLayout {
@@ -220,12 +220,12 @@ impl Atlas {
 pub struct TextureManager {
     pub default_sampler: Arc<wgpu::Sampler>,
 
-    pub atlases: ArcSwap<HashMap<String, Arc<ArcSwap<Atlas>>>>,
+    pub atlases: RwLock<HashMap<String, Atlas>>,
 }
 
 impl TextureManager {
     #[must_use]
-    pub fn new(wgpu_state: &WgpuState) -> Self {
+    pub fn new(wgpu_state: &Display) -> Self {
         let sampler = wgpu_state.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
@@ -238,7 +238,7 @@ impl TextureManager {
 
         Self {
             default_sampler: Arc::new(sampler),
-            atlases: ArcSwap::new(Arc::new(HashMap::new())),
+            atlases: RwLock::new(HashMap::new()),
         }
     }
 }

@@ -152,7 +152,7 @@ impl RenderGraph {
                             })
                             .collect::<Vec<wgpu::BindGroupLayoutEntry>>();
 
-                        &*arena.alloc(wm.wgpu_state.device.create_bind_group_layout(
+                        &*arena.alloc(wm.display.device.create_bind_group_layout(
                             &wgpu::BindGroupLayoutDescriptor {
                                 label: None,
                                 entries: &layout_entries,
@@ -193,7 +193,7 @@ impl RenderGraph {
                             .collect::<Vec<wgpu::BindGroupEntry>>();
 
                         let bind_group =
-                            wm.wgpu_state
+                            wm.display
                                 .device
                                 .create_bind_group(&wgpu::BindGroupDescriptor {
                                     label: None,
@@ -234,7 +234,7 @@ impl RenderGraph {
                 .collect::<Vec<wgpu::PushConstantRange>>();
 
             let layout =
-                wm.wgpu_state
+                wm.display
                     .device
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: None,
@@ -245,7 +245,7 @@ impl RenderGraph {
             let shader = WgslShader::init(
                 &ResourcePath(format!("wgpu_mc:shaders/{}.wgsl", pipeline_name)),
                 &*wm.mc.resource_provider,
-                &wm.wgpu_state.device,
+                &wm.display.device,
                 "frag".into(),
                 "vert".into(),
             )
@@ -300,7 +300,7 @@ impl RenderGraph {
             let label = format!("{}", pipeline_name);
 
             let render_pipeline =
-                wm.wgpu_state
+                wm.display
                     .device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                         label: Some(&label),
@@ -406,7 +406,7 @@ impl RenderGraph {
                                 .unwrap();
 
                             let tav = TextureAndView::from_image_file_bytes(
-                                &wm.wgpu_state,
+                                &wm.display,
                                 &bytes,
                                 resource_id,
                             )
@@ -435,10 +435,9 @@ impl RenderGraph {
             resources,
         };
 
-        let atlases = wm.mc.texture_manager.atlases.load();
+        let atlases = wm.mc.texture_manager.atlases.read();
 
-        let atlas_swap = atlases.get(BLOCK_ATLAS).unwrap();
-        let block_atlas = atlas_swap.load();
+        let block_atlas = atlases.get(BLOCK_ATLAS).unwrap();
 
         graph.resources.extend([
             (
@@ -577,7 +576,7 @@ impl RenderGraph {
                             pos_ranges.push(range.clone());
                             let mut data = pos.to_array().to_vec();
                             data.push((layer.vertex_range.start/4) as i32);
-                            wm.wgpu_state.queue.write_buffer(&scene.chunk_buffer.buffer, (range.start * 4) as BufferAddress, bytemuck::cast_slice(&data));
+                            wm.display.queue.write_buffer(&scene.chunk_buffer.buffer, (range.start * 4) as BufferAddress, bytemuck::cast_slice(&data));
 
                             indirect.push(
                                 DrawIndexedIndirectArgs {
@@ -592,7 +591,7 @@ impl RenderGraph {
                     }
                     
                     let indirect_bytes: Vec<u8> = indirect.iter().flat_map(|args| args.as_bytes()).copied().collect();
-                    wm.wgpu_state.queue.write_buffer(&scene.indirect_buffer, 0, &indirect_bytes);
+                    wm.display.queue.write_buffer(&scene.indirect_buffer, 0, &indirect_bytes);
 
                     render_pass.set_pipeline(&bound_pipeline.pipeline);
 

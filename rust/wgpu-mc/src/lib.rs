@@ -48,8 +48,9 @@ use arc_swap::ArcSwap;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
-use wgpu::util::StagingBelt;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor, PresentMode};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor, Surface};
+use winit::dpi::PhysicalSize;
+use winit::window::Window;
 
 use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
@@ -63,29 +64,29 @@ pub mod util;
 
 pub use treeculler::Frustum;
 
-pub const CHUNK_STAGING_BELT_SIZE: u64 = 64_000_000;
 
 /// Provides access to most of the wgpu structs relating directly to communicating/getting
 /// information about the gpu.
-pub struct WgpuState {
-    pub surface: RwLock<(Option<wgpu::Surface<'static>>, wgpu::SurfaceConfiguration)>,
-    pub adapter: wgpu::Adapter,
+
+pub struct Display{
+    pub window:Arc<Window>,
+    pub instance:wgpu::Instance,
+    pub adapter:wgpu::Adapter,
+    pub size: RwLock<PhysicalSize<u32>>,
+    pub surface:Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub size: Option<ArcSwap<WindowSize>>,
+    pub config: RwLock<wgpu::SurfaceConfiguration>,
 }
-
 /// The main wgpu-mc renderer struct
 /// Resources pertaining to Minecraft go in `MinecraftState`.
 ///
 /// `RenderGraph` is used in tandem with `World` to render scenes.
-#[derive(Clone)]
 pub struct WmRenderer {
-    pub wgpu_state: Arc<WgpuState>,
+    pub display: Display,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
-    pub mc: Arc<MinecraftState>,
-    pub chunk_update_queue: Arc<(Sender<(Arc<Buffer>, Vec<u8>, u32)>, Mutex<Receiver<(Arc<Buffer>, Vec<u8>, u32)>>)>,
-    pub chunk_staging_belt: Arc<Mutex<StagingBelt>>,
+    pub mc: MinecraftState,
+    pub chunk_update_queue: (Sender<(Arc<Buffer>, Vec<u8>, u32)>, Mutex<Receiver<(Arc<Buffer>, Vec<u8>, u32)>>),
     #[cfg(feature = "tracing")]
     pub puffin_http: Arc<puffin_http::Server>,
 }
@@ -101,7 +102,7 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-    pub fn new(wgpu_state: WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
+    pub fn new(display: Display, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         #[cfg(feature = "tracing")]
         let puffin_http = {
             let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
@@ -111,17 +112,13 @@ impl WmRenderer {
             Arc::new(puffin_server)
         };
 
-        let mc = MinecraftState::new(&wgpu_state, resource_provider);
-
+        let mc = MinecraftState::new(&display, resource_provider);
+        let (sender,receiver) = channel();
         Self {
-            bind_group_layouts: Arc::new(create_bind_group_layouts(&wgpu_state.device)),
-            wgpu_state: Arc::new(wgpu_state),
-            mc: Arc::new(mc),
-            chunk_update_queue: Arc::new({
-                let (sender, receiver) = channel();
-                (sender, Mutex::new(receiver))
-            }),
-            chunk_staging_belt: Arc::new(Mutex::new(StagingBelt::new(CHUNK_STAGING_BELT_SIZE))),
+            bind_group_layouts: Arc::new(create_bind_group_layouts(&display.device)),
+            display,
+            mc,
+            chunk_update_queue: (sender,Mutex::new(receiver)),
             #[cfg(feature = "tracing")]
             puffin_http,
         }
@@ -133,12 +130,12 @@ impl WmRenderer {
             .map(|&name| {
                 (
                     name.into(),
-                    Arc::new(ArcSwap::new(Arc::new(Atlas::new(&self.wgpu_state, false)))),
+                    Atlas::new(&self.display, false),
                 )
             })
             .collect();
 
-        self.mc.texture_manager.atlases.store(Arc::new(atlases));
+        *self.mc.texture_manager.atlases.write() = atlases;
     }
 
     pub fn upload_animated_block_buffer(&self, data: Vec<f32>) {
@@ -147,14 +144,14 @@ impl WmRenderer {
         let buf = self.mc.animated_block_buffer.borrow().load_full();
 
         if buf.is_none() {
-            let animated_block_buffer = self.wgpu_state.device.create_buffer(&BufferDescriptor {
+            let animated_block_buffer = self.display.device.create_buffer(&BufferDescriptor {
                 label: None,
                 size: (d.len() * 8) as wgpu::BufferAddress,
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
             let animated_block_bind_group =
-                self.wgpu_state
+                self.display
                     .device
                     .create_bind_group(&BindGroupDescriptor {
                         label: None,
@@ -175,7 +172,7 @@ impl WmRenderer {
                 .store(Arc::new(Some(animated_block_bind_group)));
         }
 
-        self.wgpu_state.queue.write_buffer(
+        self.display.queue.write_buffer(
             (**self.mc.animated_block_buffer.load()).as_ref().unwrap(),
             0,
             bytemuck::cast_slice(d),
@@ -184,13 +181,11 @@ impl WmRenderer {
 
     pub fn submit_chunk_updates(&self) {
         puffin::profile_function!();
-
         let receiver = self.chunk_update_queue.1.lock();
-
         let updates = receiver.try_iter();
 
         updates.for_each(|(queue, data, offset)| {
-            self.wgpu_state.queue.write_buffer(
+            self.display.queue.write_buffer(
                 &queue,
                 offset as BufferAddress,
                 &data
@@ -200,8 +195,8 @@ impl WmRenderer {
 
     pub fn get_backend_description(&self) -> String {
         format!(
-            "wgpu 0.18 ({:?})",
-            self.wgpu_state.adapter.get_info().backend
+            "wgpu 0.20 ({:?})",
+            self.display.adapter.get_info().backend
         )
     }
 }

@@ -12,7 +12,7 @@ use crate::render::entity::EntityVertex;
 use crate::texture::{BindableTexture, UV};
 use crate::util::BindableBuffer;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use crate::{WgpuState, WmRenderer};
+use crate::{Display, WmRenderer};
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -25,7 +25,7 @@ pub struct EntityManager {
 }
 
 impl EntityManager {
-    pub fn new(wgpu_state: &WgpuState) -> Self {
+    pub fn new(wgpu_state: &Display) -> Self {
         Self {
             mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, false)),
             //TODO: support resizing the atlas
@@ -433,7 +433,7 @@ fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<S
 
 impl Entity {
     ///Create an entity from an [EntityPart] and upload it's mesh to the GPU
-    pub fn new(name: String, root: EntityPart, wgpu_state: &WgpuState) -> Self {
+    pub fn new(name: String, root: EntityPart, wgpu_state: &Display) -> Self {
         let mut parts = HashMap::new();
 
         recurse_get_names(&root, &mut 0, &mut parts);
@@ -512,7 +512,7 @@ impl BundledEntityInstances {
                     BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     "ssbo",
                 )),
-                instance_vbo: Arc::new(wm.wgpu_state.device.create_buffer(&BufferDescriptor {
+                instance_vbo: Arc::new(wm.display.device.create_buffer(&BufferDescriptor {
                     label: None,
                     usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
                     size: 100000,
@@ -561,7 +561,7 @@ impl BundledEntityInstances {
 
         let instances_bytes = bytemuck::cast_slice(&instances[..]);
 
-        let instance_vbo = Arc::new(wm.wgpu_state.device.create_buffer_init(
+        let instance_vbo = Arc::new(wm.display.device.create_buffer_init(
             &BufferInitDescriptor {
                 label: None,
                 contents: instances_bytes,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use image::GenericImageView;
 use wgpu::Extent3d;
 
-use crate::{WgpuState, WmRenderer};
+use crate::{Display, WmRenderer};
 
 pub type TextureId = u32;
 pub type UV = ((u16, u16), (u16, u16));
@@ -20,7 +20,7 @@ impl TextureAndView {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn from_image_file_bytes(
-        wgpu_state: &WgpuState,
+        wgpu_state: &Display,
         bytes: &[u8],
         label: &str,
     ) -> Result<Self, anyhow::Error> {
@@ -29,7 +29,7 @@ impl TextureAndView {
     }
 
     pub fn from_image(
-        wgpu_state: &WgpuState,
+        wgpu_state: &Display,
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self, anyhow::Error> {
@@ -51,7 +51,7 @@ impl TextureAndView {
     }
 
     pub fn from_rgb_bytes(
-        wgpu_state: &WgpuState,
+        wgpu_state: &Display,
         bytes: &[u8],
         size: Extent3d,
         label: Option<&str>,
@@ -109,7 +109,7 @@ impl BindableTexture {
     #[must_use]
     pub fn from_tv(wm: &WmRenderer, tv: Arc<TextureAndView>, depth: bool) -> Self {
         let bind_group = wm
-            .wgpu_state
+            .display
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,

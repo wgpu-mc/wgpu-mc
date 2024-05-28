@@ -25,7 +25,7 @@ impl BindableBuffer {
         let layout = wm.bind_group_layouts.get(layout_name).unwrap();
 
         let buffer = Arc::new(
-            wm.wgpu_state
+            wm.display
                 .device
                 .create_buffer_init(&BufferInitDescriptor {
                     label: None,
@@ -35,7 +35,7 @@ impl BindableBuffer {
         );
 
         let bind_group = wm
-            .wgpu_state
+            .display
             .device
             .create_bind_group(&BindGroupDescriptor {
                 label: None,
@@ -64,7 +64,7 @@ impl BindableBuffer {
 
         let layout = wm.bind_group_layouts.get(layout_name).unwrap();
 
-        let buffer = Arc::new(wm.wgpu_state.device.create_buffer(&BufferDescriptor {
+        let buffer = Arc::new(wm.display.device.create_buffer(&BufferDescriptor {
             label: None,
             size,
             usage,
@@ -72,7 +72,7 @@ impl BindableBuffer {
         }));
 
         let bind_group = wm
-            .wgpu_state
+            .display
             .device
             .create_bind_group(&BindGroupDescriptor {
                 label: None,

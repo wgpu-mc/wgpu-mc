@@ -461,7 +461,7 @@ impl Geometry for ElectrumGeometry {
             }
         }
 
-        wm.wgpu_state
+        wm.display
             .queue
             .write_buffer(&self.pool, 0, &buffer_pool.data);
 

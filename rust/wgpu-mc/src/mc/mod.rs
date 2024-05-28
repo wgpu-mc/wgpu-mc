@@ -22,7 +22,7 @@ use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
 use crate::texture::BindableTexture;
 use crate::util::BindableBuffer;
-use crate::{WgpuState, WmRenderer};
+use crate::{Display, WmRenderer};
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -207,7 +207,7 @@ pub struct Scene {
 impl Scene {
     pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
         let indirect_buffer = wm
-            .wgpu_state
+            .display
             .device
             .create_buffer(&wgpu::BufferDescriptor {
                 label: None,
@@ -234,7 +234,7 @@ impl Scene {
             stars_length: 0,
             render_effects: Default::default(),
             depth_texture: wm
-                .wgpu_state
+                .display
                 .device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: None,
@@ -266,7 +266,7 @@ pub struct MinecraftState {
 
 impl MinecraftState {
     #[must_use]
-    pub fn new(wgpu_state: &WgpuState, resource_provider: Arc<dyn ResourceProvider>) -> Self {
+    pub fn new(wgpu_state: &Display, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
             entity_models: RwLock::new(HashMap::new()),
 
@@ -307,13 +307,11 @@ impl MinecraftState {
         puffin::profile_function!();
 
         let mut block_manager = self.block_manager.write();
-        let block_atlas = self
-            .texture_manager
-            .atlases
-            .load()
-            .get(BLOCK_ATLAS)
-            .unwrap()
-            .load();
+        let atlases = self
+        .texture_manager
+        .atlases
+        .read();
+        let block_atlas = atlases.get(BLOCK_ATLAS).unwrap();
 
         //Figure out which block models there are
         block_states

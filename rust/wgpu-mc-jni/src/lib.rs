@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use application::Application;
 use arc_swap::{ArcSwap, AsRaw};
 use byteorder::{LittleEndian, ReadBytesExt};
 use cgmath::Matrix4;
@@ -25,14 +26,11 @@ use jni::sys::{
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::{Mutex, RwLock};
-use raw_window_handle::{
-    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use wgpu::Extent3d;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
-use winit::window::{CursorGrabMode, Window};
+use winit::window::{self, CursorGrabMode, Window};
 
 use wgpu_mc::{HasWindowSize, WindowSize, WmRenderer};
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
@@ -46,7 +44,6 @@ use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::wgpu;
 use wgpu_mc::wgpu::ImageDataLayout;
-use wgpu_mc::wgpu::util::DeviceExt;
 
 use crate::gl::{GL_ALLOC, GL_COMMANDS, GLCommand, GlTexture};
 use crate::lighting::DeserializedLightData;
@@ -62,6 +59,7 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
+mod application;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -90,7 +88,6 @@ struct MouseState {
 
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
-static WINDOW: OnceCell<Arc<Window>> = OnceCell::new();
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
 type Task = Box<dyn FnOnce() + Send + Sync>;
@@ -123,13 +120,13 @@ static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
 });
 
 static SCENE: Lazy<Scene> = Lazy::new(|| {
-    let window = WINDOW.get().unwrap();
+    let wm = RENDERER.get().unwrap();
 
     Scene::new(
-        RENDERER.get().unwrap(),
+        wm,
         wgpu::Extent3d {
-            width: window.inner_size().width,
-            height: window.inner_size().height,
+            width: wm.display.window.inner_size().width,
+            height: wm.display.window.inner_size().height,
             depth_or_array_layers: 1,
         },
     )
@@ -140,7 +137,7 @@ static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::n
 pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 #[derive(Debug)]
-struct SectionHolder {
+pub struct SectionHolder {
     pub block_data: Option<(JavaPalette, PackedIntegerArray)>,
     pub light_data: Option<DeserializedLightData>,
 }
@@ -223,30 +220,6 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
     }
 }
 
-struct WinitWindowWrapper<'a> {
-    window: &'a Window,
-}
-
-impl HasWindowSize for WinitWindowWrapper<'_> {
-    fn get_window_size(&self) -> WindowSize {
-        WindowSize {
-            width: self.window.inner_size().width,
-            height: self.window.inner_size().height,
-        }
-    }
-}
-
-unsafe impl HasRawWindowHandle for WinitWindowWrapper<'_> {
-    fn raw_window_handle(&self) -> RawWindowHandle {
-        self.window.raw_window_handle()
-    }
-}
-
-unsafe impl HasRawDisplayHandle for WinitWindowWrapper<'_> {
-    fn raw_display_handle(&self) -> RawDisplayHandle {
-        self.window.raw_display_handle()
-    }
-}
 
 struct MinecraftResourceManagerAdapter {
     jvm: JavaVM,
@@ -265,13 +238,13 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
                 "(Ljava/lang/String;)[B",
                 &[JValue::Object(&path.into())],
             )
-            .ok()?
+            .expect(&id.0)
             .l()
-            .ok()?
+            .expect(&id.0)
             .into();
 
         let elements: AutoElements<jbyte> =
-            unsafe { env.get_array_elements(&bytes, ReleaseMode::NoCopyBack) }.ok()?;
+            unsafe { env.get_array_elements(&bytes, ReleaseMode::NoCopyBack) }.unwrap();
 
         let size = elements.len();
         // let vec = elements.iter().map(|&x| x as u8).collect::<Vec<_>>();
@@ -448,8 +421,29 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn startRendering(env: JNIEnv, _class: JClass, title: JString) {
-    renderer::start_rendering(env, title);
+pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
+    let title: String = env.get_string(&title).unwrap().into();
+    let jvm = env.get_java_vm().unwrap();
+
+
+    thread::spawn(move ||{
+        let mut application = Application::new(jvm,title);
+        let mut event_loop = winit::event_loop::EventLoop::builder();
+
+        #[cfg(target_os = "linux")]
+        {
+            // double hacky fix B)
+            if std::env::var("WAYLAND_DISPLAY").is_ok() {
+                use winit::platform::wayland::EventLoopBuilderExtWayland;
+                event_loop.with_any_thread(true);
+            } else {
+                use winit::platform::x11::EventLoopBuilderExtX11;
+                event_loop.with_any_thread(true);
+            }
+        }
+        let event_loop = event_loop.build().unwrap();
+        event_loop.run_app(&mut application);
+    });
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -510,23 +504,19 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
             } else {
                 vec![]
             };
-
-            let atlas = wm
-                .mc
-                .texture_manager
-                .atlases
-                .load()
-                .get(BLOCK_ATLAS)
-                .unwrap()
-                .load_full();
-
+            let atlases = wm
+                            .mc
+                            .texture_manager
+                            .atlases
+                            .write();
+            let atlas = &atlases[BLOCK_ATLAS];
             let model = wm_block.get_model_by_key(
                 key_iter
                     .iter()
                     .filter(|(a, _)| *a != "waterlogged")
                     .map(|(a, b)| (*a, b)),
                 &*wm.mc.resource_provider,
-                &atlas,
+                atlas,
                 0,
             );
             let fallback_key = block_manager.blocks.get_full("minecraft:bedrock").unwrap();
@@ -587,7 +577,7 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
 pub fn runHelperThread(mut env: JNIEnv, _class: JClass) {
     //Wait until wgpu-mc is initialized
     while RENDERER.get().is_none() {}
-
+    let wm = RENDERER.get().unwrap();
     thread::spawn(|| {
         let rx = &TASK_CHANNELS.1;
         for task in rx.iter() {
@@ -599,7 +589,7 @@ pub fn runHelperThread(mut env: JNIEnv, _class: JClass) {
 
     for render_message in rx.iter() {
         match render_message {
-            RenderMessage::SetTitle(title) => WINDOW.get().unwrap().set_title(&title),
+            RenderMessage::SetTitle(title) => wm.display.window.set_title(&title),
             RenderMessage::KeyPressed(_) => {}
             RenderMessage::MouseMove(x, y) => {
                 env.call_static_method(
@@ -688,7 +678,8 @@ pub fn runHelperThread(mut env: JNIEnv, _class: JClass) {
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn centerCursor(_env: JNIEnv, _class: JClass, _locked: jboolean) {
-    if let Some(window) = WINDOW.get() {
+    if let Some(wm) = RENDERER.get() {
+        let window = &wm.display.window;
         let inner = window.inner_position().unwrap();
         let size = window.inner_size();
         window
@@ -703,7 +694,8 @@ pub fn centerCursor(_env: JNIEnv, _class: JClass, _locked: jboolean) {
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
-    if let Some(window) = WINDOW.get() {
+    if let Some(wm) = RENDERER.get() {
+        let window = &wm.display.window;
         if locked == JNI_TRUE {
             window.set_cursor_visible(false);
             window
@@ -847,7 +839,7 @@ pub fn texImage2D(
         let wm = RENDERER.get().unwrap();
 
         let tsv = TextureAndView::from_rgb_bytes(
-            &wm.wgpu_state,
+            &wm.display,
             &data[..],
             Extent3d {
                 width: width as u32,
@@ -965,7 +957,7 @@ pub fn subImage2D(
             }
         }
 
-        wm.wgpu_state.queue.write_texture(
+        wm.display.queue.write_texture(
             gl_texture
                 .bindable_texture
                 .as_ref()
@@ -995,21 +987,21 @@ pub fn subImage2D(
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn getMaxTextureSize(_env: JNIEnv, _class: JClass) -> jint {
     let wm = RENDERER.get().unwrap();
-    wm.wgpu_state.adapter.limits().max_texture_dimension_2d as i32
+    wm.display.adapter.limits().max_texture_dimension_2d as i32
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn getWindowWidth(_env: JNIEnv, _class: JClass) -> jint {
     RENDERER
         .get()
-        .map_or(1280, |wm| wm.wgpu_state.surface.read().1.width as i32)
+        .map_or(1280, |wm| wm.display.config.read().width as i32)
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn getWindowHeight(_env: JNIEnv, _class: JClass) -> jint {
     RENDERER
         .get()
-        .map_or(720, |wm| wm.wgpu_state.surface.read().1.height as i32)
+        .map_or(720, |wm| wm.display.config.read().height as i32)
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1035,9 +1027,11 @@ pub fn wmUsePipeline(_env: JNIEnv, _class: JClass, pipeline: jint) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn getVideoMode(env: JNIEnv, _class: JClass) -> jstring {
-    let video_mode = WINDOW
+    let video_mode = RENDERER
         .get()
         .unwrap()
+        .display
+        .window
         .current_monitor()
         .unwrap()
         .video_modes()
@@ -1123,9 +1117,11 @@ pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: JIntArray) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setCursorPosition(_env: JNIEnv, _class: JClass, x: f64, y: f64) {
-    WINDOW
+    RENDERER
         .get()
         .unwrap()
+        .display
+        .window
         .set_cursor_position(PhysicalPosition { x, y })
         .unwrap();
 }
@@ -1137,36 +1133,29 @@ const GLFW_CURSOR_DISABLED: i32 = 212995;
 /// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
+    let window = &RENDERER.get().unwrap().display.window;
     match mode {
         GLFW_CURSOR_NORMAL => {
-            WINDOW
-                .get()
-                .unwrap()
+            window
                 .set_cursor_grab(CursorGrabMode::None)
                 .unwrap();
-            WINDOW.get().unwrap().set_cursor_visible(true);
+            window.set_cursor_visible(true);
         }
         GLFW_CURSOR_HIDDEN => {
-            WINDOW
-                .get()
-                .unwrap()
+            window
                 .set_cursor_grab(CursorGrabMode::None)
                 .unwrap();
-            WINDOW.get().unwrap().set_cursor_visible(false);
+            window.set_cursor_visible(false);
         }
         GLFW_CURSOR_DISABLED => {
-            WINDOW
-                .get()
-                .unwrap()
+            window
                 .set_cursor_grab(CursorGrabMode::Confined)
                 .or_else(|_e| {
-                    WINDOW
-                        .get()
-                        .unwrap()
+                    window
                         .set_cursor_grab(CursorGrabMode::Locked)
                 })
                 .unwrap();
-            WINDOW.get().unwrap().set_cursor_visible(false);
+            window.set_cursor_visible(false);
         }
         _ => {
             log::warn!("Set cursor mode had an invalid mode.")
