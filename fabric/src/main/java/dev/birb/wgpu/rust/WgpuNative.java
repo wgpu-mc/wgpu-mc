@@ -16,6 +16,16 @@ public class WgpuNative {
         loadWm();
     }
 
+    public static ClassLoader getClassLoader() {
+        try {
+            ClassLoader c = WgpuNative.class.getClassLoader();
+            return c;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return null;
+        }
+    }
+
     public static void loadWm() {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
@@ -71,8 +81,6 @@ public class WgpuNative {
     public static native void registerBlockState(Object state, String blockId, String stateKey);
 
     public static native void doEventLoop();
-
-    public static native byte[] digestInputStream(InputStream stream);
 
     public static native String getBackend();
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use futures::executor::block_on;
-use jni::{objects::{JString, JValue}, JNIEnv, JavaVM};
+use jni::{objects::{JObject, JString, JValue, WeakRef}, JNIEnv, JavaVM};
 use once_cell::sync::OnceCell;
 use parking_lot::lock_api::RwLock;
 use wgpu_mc::{render::graph::Geometry, wgpu::{self, util::{BufferInitDescriptor, DeviceExt}, BufferAddress, BufferBindingType, PresentMode, Surface, TextureFormat}, Display, Frustum, WindowSize, WmRenderer};
@@ -14,8 +14,6 @@ use std::collections::HashMap;
 
 pub static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 
-
-
 pub struct Application{
     title:String,
     render_graph:Option<RenderGraph>,
@@ -24,13 +22,10 @@ pub struct Application{
     geometry:HashMap<String,Box<dyn Geometry>>
 }
 impl Application{
-    pub fn new(mut jvm: JavaVM, title: String)->Self{
+    pub fn new(jvm: JavaVM, title: String)->Self{
         
-
-        let mut current_modifiers = ModifiersState::empty();
-    
-        log::trace!("Starting event loop");
-    
+        
+        let current_modifiers = ModifiersState::empty();
         // {
         //     let tex_id = LIGHTMAP_GLID.lock().unwrap();
         //     let textures_read = GL_ALLOC.read();
@@ -50,7 +45,10 @@ impl Application{
 }
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut env = self.jvm.attach_current_thread().unwrap();
+
+        log::trace!("Starting event loop");
+
+        let env = self.jvm.attach_current_thread().unwrap();
 
         // initialisation, should only occure once on desktop
         let window_attributes = 
@@ -216,14 +214,6 @@ impl ApplicationHandler for Application {
         );
 
         let _ = RENDERER.set(wm);
-        
-        
-        env.set_static_field(
-            "dev/birb/wgpu/render/Wgpu",
-            ("dev/birb/wgpu/render/Wgpu", "initialized", "Z"),
-            JValue::Bool(true.into()),
-        )
-        .unwrap();
 
     }
 

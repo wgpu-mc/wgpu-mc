@@ -35,17 +35,9 @@ public abstract class MinecraftClientRenderMixin {
         return (WindowProvider) Wgpu.getUnsafe().allocateInstance(WindowProvider.class);
     }
 
-    @Redirect(method = "<init>", at = @At(value = "NEW", target = "(Lnet/minecraft/resource/ResourceType;)Lnet/minecraft/resource/ReloadableResourceManagerImpl;"))
-    private ReloadableResourceManagerImpl redirectWindowProvider(ResourceType type) {
-        // todo can't this use fabric's resource loader api or something?
-        ReloadableResourceManagerImpl manager = new ReloadableResourceManagerImpl(type);
-        WgpuResourceProvider.setManager(manager);
-
-        return manager;
-    }
-
     @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/WindowProvider;createWindow(Lnet/minecraft/client/WindowSettings;Ljava/lang/String;Ljava/lang/String;)Lnet/minecraft/client/util/Window;"))
     private Window redirectWindow(WindowProvider windowProvider, WindowSettings settings, String videoMode, String title) throws InstantiationException {
+        
         //Warning, zero-initialized!
         Window window = (Window) Wgpu.getUnsafe().allocateInstance(Window.class);
         window.width = 1280;
@@ -54,7 +46,6 @@ public abstract class MinecraftClientRenderMixin {
         // fixes the message saying that it recovers from an invalid resolution
         window.setFramebufferWidth(1280);
         window.setFramebufferHeight(720);
-
         return window;
     }
 

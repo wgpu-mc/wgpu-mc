@@ -17,7 +17,7 @@ use glam::{ivec3, IVec3};
 use jni::{JavaVM, JNIEnv};
 use jni::objects::{
     AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JObject
-    , JString, JValue, ReleaseMode,
+    , JString, JValue, ReleaseMode, WeakRef,
 };
 use jni::sys::{
     jboolean, jbyte, jbyteArray, jfloat, jint, jlong, JNI_FALSE,
@@ -136,6 +136,9 @@ static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::new());
 pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
+
+pub static CLASSLOADER: OnceCell<WeakRef> = OnceCell::new();
+
 #[derive(Debug)]
 pub struct SectionHolder {
     pub block_data: Option<(JavaPalette, PackedIntegerArray)>,
@@ -231,9 +234,17 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 
         let path = env.new_string(&id.0).unwrap();
 
+        let class_loader = CLASSLOADER.get().unwrap().upgrade_local(&*env).unwrap().unwrap();
+        let arg = env.new_string("WgpuResourceProvider").unwrap();
+        let class:JClass = env.call_method(class_loader,
+             "findClass",
+              "(Ljava/lang/String;)Ljava/lang/Class;",
+              &[JValue::Object(&arg.into())])
+              .unwrap().l().unwrap().into();
+        println!("call WgpuResourceProvider");
         let bytes: JByteArray = env
             .call_static_method(
-                "dev/birb/wgpu/rust/WgpuResourceProvider",
+                class,
                 "getResource",
                 "(Ljava/lang/String;)[B",
                 &[JValue::Object(&path.into())],
@@ -242,6 +253,7 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
             .l()
             .expect(&id.0)
             .into();
+        println!("call done");
 
         let elements: AutoElements<jbyte> =
             unsafe { env.get_array_elements(&bytes, ReleaseMode::NoCopyBack) }.unwrap();
@@ -319,7 +331,6 @@ pub fn registerBlockState(
 
 pub fn bake_section(pos: IVec3, bsp: &MinecraftBlockstateProvider) {
     puffin::profile_scope!("jni bake chunk");
-    let now = Instant::now();
     let wm = RENDERER.get().unwrap();
 
     let bm = wm.mc.block_manager.read();
@@ -348,7 +359,6 @@ pub fn bake_section(pos: IVec3, bsp: &MinecraftBlockstateProvider) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearChunks(_env: JNIEnv, _class: JClass) {
-    let wm = RENDERER.get().unwrap();
     SCENE.chunk_sections.write().clear();
 }
 
@@ -425,6 +435,14 @@ pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
     let title: String = env.get_string(&title).unwrap().into();
     let jvm = env.get_java_vm().unwrap();
 
+    let class_loader = env.call_static_method(
+        "dev/birb/wgpu/rust/WgpuNative",
+        "getClassLoader",
+        "()Ljava/lang/ClassLoader;",
+        &[],
+    )
+    .unwrap();
+    let Ok(_) = CLASSLOADER.set(env.new_weak_ref::<'_,JObject>(class_loader.try_into().unwrap()).unwrap().unwrap()) else { panic!("Failed to set classloader") };
 
     thread::spawn(move ||{
         let mut application = Application::new(jvm,title);
@@ -442,8 +460,16 @@ pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
             }
         }
         let event_loop = event_loop.build().unwrap();
-        event_loop.run_app(&mut application);
+        event_loop.run_app(&mut application).unwrap();
     });
+    let _ = RENDERER.wait();
+
+    env.set_static_field(
+        "dev/birb/wgpu/render/Wgpu",
+        ("dev/birb/wgpu/render/Wgpu", "initialized", "Z"),
+        JValue::Bool(true.into()),
+    )
+    .unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -734,46 +760,6 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
             &[JValue::Object(&JObject::from(jstring))],
         );
     }))
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn digestInputStream(mut env: JNIEnv, _class: JClass, input_stream: JObject) -> jbyteArray {
-    let mut vec = Vec::with_capacity(1024);
-    let array = env.new_byte_array(1024).unwrap();
-
-    loop {
-        let bytes_read = env
-            .call_method(&input_stream, "read", "([B)I", &[JValue::Object(&array)])
-            .unwrap()
-            .i()
-            .unwrap();
-
-        //bytes_read being -1 means EOF
-        if bytes_read > 0 {
-            let elements =
-                unsafe { env.get_array_elements(&array, ReleaseMode::NoCopyBack) }.unwrap();
-
-            let slice: &[u8] = unsafe {
-                mem::transmute(slice::from_raw_parts(
-                    elements.as_ptr(),
-                    bytes_read as usize,
-                ))
-            };
-
-            vec.extend_from_slice(slice);
-        } else {
-            break;
-        }
-    }
-
-    let bytes = env.new_byte_array(vec.len() as i32).unwrap();
-    let bytes_elements = unsafe { env.get_array_elements(&bytes, ReleaseMode::CopyBack) }.unwrap();
-
-    unsafe {
-        std::ptr::copy(vec.as_ptr(), bytes_elements.as_ptr() as *mut u8, vec.len());
-    }
-
-    bytes.as_raw()
 }
 
 #[allow(unused_must_use)]
