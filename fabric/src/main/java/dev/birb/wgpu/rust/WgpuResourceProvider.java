@@ -13,7 +13,6 @@ import java.util.Optional;
 
 public class WgpuResourceProvider {
     public static byte[] getResource(String path) {
-        System.out.println("!!!getResource");
         try {
             return MinecraftClient.getInstance().getResourceManager().getResource(new Identifier(path)).orElseThrow().getInputStream().readAllBytes();
         } catch (Exception e) {

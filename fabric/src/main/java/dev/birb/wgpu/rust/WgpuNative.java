@@ -17,13 +17,7 @@ public class WgpuNative {
     }
 
     public static ClassLoader getClassLoader() {
-        try {
-            ClassLoader c = WgpuNative.class.getClassLoader();
-            return c;
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return null;
-        }
+        return WgpuNative.class.getClassLoader();
     }
 
     public static void loadWm() {

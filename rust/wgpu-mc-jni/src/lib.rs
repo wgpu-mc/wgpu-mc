@@ -16,8 +16,7 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use glam::{ivec3, IVec3};
 use jni::{JavaVM, JNIEnv};
 use jni::objects::{
-    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JObject
-    , JString, JValue, ReleaseMode, WeakRef,
+    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JObject, JString, JValue, JValueGen, JValueOwned, ReleaseMode, WeakRef
 };
 use jni::sys::{
     jboolean, jbyte, jbyteArray, jfloat, jint, jlong, JNI_FALSE,
@@ -139,6 +138,15 @@ pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
 pub static CLASSLOADER: OnceCell<WeakRef> = OnceCell::new();
 
+pub fn call_static_from_class_loader<'env>(env:&mut JNIEnv<'env>,class:&str,method:&str,sig:&str,args:&[JValue])->jni::errors::Result<JValueOwned<'env>>{
+    let class_loader = CLASSLOADER.get().unwrap().upgrade_local(&*env).unwrap().unwrap();
+    let arg = env.new_string(class).unwrap();
+    let class_obj:JClass = env.call_method(class_loader,"findClass","(Ljava/lang/String;)Ljava/lang/Class;",&[JValue::Object(&arg)])
+        .unwrap().l().unwrap().into();
+    env.call_static_method(class_obj,method,sig,args)
+}
+
+
 #[derive(Debug)]
 pub struct SectionHolder {
     pub block_data: Option<(JavaPalette, PackedIntegerArray)>,
@@ -233,27 +241,17 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
         let mut env = self.jvm.attach_current_thread().unwrap();
 
         let path = env.new_string(&id.0).unwrap();
-
-        let class_loader = CLASSLOADER.get().unwrap().upgrade_local(&*env).unwrap().unwrap();
-        let arg = env.new_string("WgpuResourceProvider").unwrap();
-        let class:JClass = env.call_method(class_loader,
-             "findClass",
-              "(Ljava/lang/String;)Ljava/lang/Class;",
-              &[JValue::Object(&arg.into())])
-              .unwrap().l().unwrap().into();
-        println!("call WgpuResourceProvider");
-        let bytes: JByteArray = env
-            .call_static_method(
-                class,
-                "getResource",
-                "(Ljava/lang/String;)[B",
-                &[JValue::Object(&path.into())],
+       
+        let bytes: JByteArray = call_static_from_class_loader(
+            &mut env,
+            "dev.birb.wgpu.rust.WgpuResourceProvider",
+            "getResource", "(Ljava/lang/String;)[B",
+            &[JValue::Object(&path.into())],
             )
             .expect(&id.0)
             .l()
             .expect(&id.0)
             .into();
-        println!("call done");
 
         let elements: AutoElements<jbyte> =
             unsafe { env.get_array_elements(&bytes, ReleaseMode::NoCopyBack) }.unwrap();
