@@ -368,6 +368,7 @@ impl RenderGraph {
                                 .collect::<Vec<_>>(),
                         }),
                         multiview: None,
+                        cache: None,
                     });
 
             self.pipelines.insert(

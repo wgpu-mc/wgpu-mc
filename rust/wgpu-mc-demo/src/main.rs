@@ -115,6 +115,7 @@ impl ApplicationHandler for Application {
                     | wgpu::Features::PUSH_CONSTANTS
                     | wgpu::Features::MULTI_DRAW_INDIRECT,
                 required_limits,
+                memory_hints: wgpu::MemoryHints::Performance,
             },
             None, // Trace path
         ))
@@ -349,8 +350,8 @@ impl ApplicationHandler for Application {
                     self.last_frame = Instant::now();
 
                     let perspective: [[f32; 4]; 4] =
-                        camera.build_perspective_matrix().into();
-                    let view: [[f32; 4]; 4] = camera.build_view_matrix().into();
+                        camera.build_perspective_matrix().to_cols_array_2d();
+                    let view: [[f32; 4]; 4] = camera.build_view_matrix().to_cols_array_2d();
 
                     if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_perspective"]{
                         wm.display.queue.write_buffer(
@@ -405,7 +406,7 @@ impl ApplicationHandler for Application {
 
                     let mut geometry = HashMap::new();
 
-                    let mvp = (camera.build_perspective_matrix() * camera.build_view_matrix()).into();
+                    let mvp = (camera.build_perspective_matrix() * camera.build_view_matrix()).to_cols_array_2d();
 
                     self.render_graph.as_ref().unwrap().render(
                         &wm,
@@ -431,7 +432,7 @@ impl ApplicationHandler for Application {
 fn main() {
     let event_loop = EventLoop::new().unwrap();
     let mut application = Application::new();
-    event_loop.run_app(&mut application);
+    event_loop.run_app(&mut application).unwrap();
 }
 
 pub struct TerrainLayer;

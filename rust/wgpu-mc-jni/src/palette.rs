@@ -1,7 +1,6 @@
 use core::fmt::Debug;
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::num::NonZeroUsize;
 use std::slice;
 
 use jni::objects::{GlobalRef, JByteArray, JClass, JLongArray, JObject, JValue, ReleaseMode};
@@ -15,6 +14,8 @@ use slab::Slab;
 
 use wgpu_mc::mc::block::BlockstateKey;
 
+pub static PALETTE_STORAGE: Lazy<RwLock<Slab<JavaPalette>>> =
+    Lazy::new(|| RwLock::new(Slab::with_capacity(4096)));
 
 #[derive(Clone)]
 pub struct JavaPalette {
@@ -73,12 +74,13 @@ impl Debug for JavaPalette {
 pub fn createPalette(_env: JNIEnv, _class: JClass) -> jlong {
     let palette = JavaPalette::new();
 
-    Box::into_raw(Box::new(palette)) as jlong
+    PALETTE_STORAGE.write().insert(palette) as jlong
 }
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn clearPalette(_env: JNIEnv, _class: JClass, palette_long: jlong) {
-    unsafe { (&mut *(palette_long as *mut JavaPalette)).clear(); }
+    let mut storage_access = PALETTE_STORAGE.write();
+    let palette = storage_access.get_mut(palette_long as usize).unwrap();
+    palette.clear();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -95,12 +97,18 @@ pub fn paletteIndex(
     object: JObject,
     blockstate_index: jint,
 ) -> jint {
-    unsafe { &mut *(palette_long as *mut JavaPalette) }.index((blockstate_index as u32).into()) as jint
+    let mut storage_access = PALETTE_STORAGE.write();
+    let palette = storage_access.get_mut(palette_long as usize).unwrap();
+    palette.index((blockstate_index as u32).into()) as jint
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn paletteSize(_env: JNIEnv, _class: JClass, palette_long: jlong) -> jint {
-    unsafe { &*(palette_long as *mut JavaPalette) }.size() as jint
+    PALETTE_STORAGE
+        .read()
+        .get(palette_long as usize)
+        .unwrap()
+        .size() as jint
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -112,7 +120,8 @@ pub fn paletteReadPacket(
     current_position: jint,
     blockstate_offsets: JLongArray,
 ) -> jint {
-    let palette = unsafe { &mut *(palette_long as *mut JavaPalette) };
+    let mut storage_access = PALETTE_STORAGE.write();
+    let palette = storage_access.get_mut(palette_long as usize).unwrap();
     let array = unsafe { env.get_array_elements(&array, ReleaseMode::NoCopyBack) }.unwrap();
     let blockstate_offsets_elements =
         unsafe { env.get_array_elements(&blockstate_offsets, ReleaseMode::NoCopyBack) }.unwrap();

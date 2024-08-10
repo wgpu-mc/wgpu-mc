@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use futures::executor::block_on;
-use jni::{objects::{JObject, JString, JValue, WeakRef}, JNIEnv, JavaVM};
+use jni::{objects::JValue, JavaVM};
 use once_cell::sync::OnceCell;
 use parking_lot::lock_api::RwLock;
-use wgpu_mc::{render::graph::Geometry, wgpu::{self, util::{BufferInitDescriptor, DeviceExt}, BufferAddress, BufferBindingType, PresentMode, Surface, TextureFormat}, Display, Frustum, WindowSize, WmRenderer};
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{DeviceEvent, ElementState, KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{KeyCode, ModifiersState, PhysicalKey}, platform::scancode::PhysicalKeyExtScancode, window::Window};
+use wgpu_mc::{render::graph::Geometry, wgpu::{self, util::{BufferInitDescriptor, DeviceExt}, BufferAddress, BufferBindingType, PresentMode, TextureFormat}, Display, Frustum, WmRenderer};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{DeviceEvent, ElementState, KeyEvent, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, ModifiersState, PhysicalKey}, platform::scancode::PhysicalKeyExtScancode};
 
 use crate::{gl::{ElectrumGeometry, ElectrumVertex}, renderer::MATRICES, MinecraftResourceManagerAdapter, RenderMessage, CHANNELS, RENDERER, SCENE};
 use wgpu_mc::render::{shaderpack::ShaderPackConfig,graph::{RenderGraph,ResourceBacking}};
@@ -48,7 +48,7 @@ impl ApplicationHandler for Application {
 
         log::trace!("Starting event loop");
 
-        let env = self.jvm.attach_current_thread().unwrap();
+        let mut env = self.jvm.attach_current_thread().unwrap();
 
         // initialisation, should only occure once on desktop
         let window_attributes = 
@@ -111,8 +111,10 @@ impl ApplicationHandler for Application {
                     | wgpu::Features::BUFFER_BINDING_ARRAY
                     | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY
                     | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
-                    | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY,
+                    | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY
+                    | wgpu::Features::MULTI_DRAW_INDIRECT,
                 required_limits,
+                memory_hints:wgpu::MemoryHints::Performance,
             },
             None, // Trace path
         ))
@@ -214,6 +216,12 @@ impl ApplicationHandler for Application {
         );
 
         let _ = RENDERER.set(wm);
+        env.set_static_field(
+            "dev/birb/wgpu/render/Wgpu",
+            ("dev/birb/wgpu/render/Wgpu", "initialized", "Z"),
+            JValue::Bool(true.into()),
+        )
+        .unwrap();
 
     }
 
@@ -244,8 +252,7 @@ impl ApplicationHandler for Application {
         }
     }
 
-    fn exiting(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let _ = event_loop;
+    fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
     }
     
     fn window_event(
@@ -291,7 +298,7 @@ impl ApplicationHandler for Application {
 
                     {
                         let matrices = MATRICES.lock();
-                        if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_projection"]{
+                        if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_perspective"]{
                             wm.display.queue.write_buffer(
                                 &buffer,
                                 0,

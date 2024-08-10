@@ -226,7 +226,6 @@ public abstract class WorldRendererMixin {
             if(this.client.world.getRegistryKey().equals(ClientWorld.OVERWORLD)) {
                 offsetY = -64;
             }
-
             matrices.multiplyPositionMatrix(new Matrix4f().translation(
                 (float) -translate.x,
                 (float) -translate.y + offsetY,

@@ -1,6 +1,5 @@
 package dev.birb.wgpu.mixin.core;
 
-import dev.birb.wgpu.render.Wgpu;
 import net.minecraft.client.main.Main;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

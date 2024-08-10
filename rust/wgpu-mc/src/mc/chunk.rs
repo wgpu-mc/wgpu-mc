@@ -8,13 +8,11 @@
 //! rendering purposes.
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::mem::size_of;
 use std::ops::Range;
 use std::sync::Arc;
 
 use glam::IVec3;
 use range_alloc::RangeAllocator;
-use wgpu::BufferAddress;
 
 use crate::mc::block::{BlockstateKey, ChunkBlockState, ModelMesh};
 use crate::mc::BlockManager;
@@ -24,11 +22,9 @@ use crate::WmRenderer;
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;
 pub const CHUNK_HEIGHT: usize = 384;
-pub const CHUNK_VOLUME: usize = CHUNK_AREA * CHUNK_HEIGHT;
 pub const CHUNK_SECTION_HEIGHT: usize = 16;
 pub const SECTION_VOLUME: usize = CHUNK_AREA * CHUNK_SECTION_HEIGHT;
 
-pub const MAX_CHUNKS: usize = 1000;
 
 #[derive(Clone, Copy, Debug)]
 pub struct LightLevel {

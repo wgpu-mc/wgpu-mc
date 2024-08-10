@@ -179,8 +179,6 @@ pub struct Wrapper1 {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
-    println!("registerentities");
-    stdout().flush().unwrap();
     let wm = RENDERER.get().unwrap();
 
     let entities_json_javastr = env.get_string(&string).unwrap();
@@ -196,6 +194,8 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
     let atlases = wm.mc.texture_manager.atlases.write();
     let _atlas = atlases.get(ENTITY_ATLAS).unwrap();
 
+
+    println!("registerentities");
     let entities: HashMap<String, Arc<Entity>> = mpd
         .iter()
         .map(|(name, mpd)| {
@@ -207,24 +207,20 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
             )
         })
         .collect();
-
+    println!("end registerentities");
     entities.iter().for_each(|(_entity_name, entity)| {
         let entity_string = env.new_string(&entity.name).unwrap();
-        let entity_string_raw = entity_string.into_raw();
 
         entity.parts.iter().for_each(|(name, index)| {
             let part_string = env.new_string(name).unwrap();
-
-            let entity_string_object = unsafe { JObject::from_raw(entity_string_raw) };
-            let part_string_object = unsafe { JObject::from_raw(part_string.into_raw()) };
 
             env.call_static_method(
                 "dev/birb/wgpu/render/Wgpu",
                 "helperSetPartIndex",
                 "(Ljava/lang/String;Ljava/lang/String;I)V",
                 &[
-                    JValue::Object(&entity_string_object),
-                    JValue::Object(&part_string_object),
+                    JValue::Object(&entity_string),
+                    JValue::Object(&part_string),
                     JValue::Int(*index as jint),
                 ],
             )
@@ -234,6 +230,4 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
 
     *wm.mc.entity_models.write() = entities;
 
-    println!("end registerentities");
-    stdout().flush().unwrap();
 }

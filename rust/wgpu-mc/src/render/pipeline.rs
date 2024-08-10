@@ -1,19 +1,6 @@
-use crate::render::shader::WmShader;
 use wgpu::{BindGroupLayout, ComputePipeline, PipelineLayout, SamplerBindingType};
 
-use crate::mc::chunk::RenderLayer;
-use arc_swap::ArcSwap;
-use encase::ShaderType;
-use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::num::NonZeroU32;
-use std::sync::{Arc, OnceLock};
-
-use crate::WmRenderer;
-
-use crate::mc::resource::ResourceProvider;
-
-use crate::wgpu::RenderPipeline;
 
 pub const BLOCK_ATLAS: &str = "wgpu_mc:atlases/block";
 pub const ENTITY_ATLAS: &str = "wgpu_mc:atlases/entity";
@@ -75,7 +62,6 @@ impl Vertex {
         array[8] = self.uv[1].to_le_bytes()[0];
         array[9] = self.uv[1].to_le_bytes()[1];
 
-        #[allow(illegal_floating_point_literal_pattern)]
         let normal_bits: u8 = match self.normal {
             [-1.0, 0.0, 0.0] => 0b00000100,
             [1.0, 0.0, 0.0] => 0b00000000,

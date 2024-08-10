@@ -1,7 +1,5 @@
 package dev.birb.wgpu.rust;
 
-import net.minecraft.util.collection.IndexedIterable;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -140,7 +138,7 @@ public class WgpuNative {
 
     public static native void setCamera(double x, double y, double z, float renderYaw, float renderPitch);
 
-    public static native void bakeChunk(int x, int y, int z, long[] paletteIndices, long[] storageIndices, byte[][] blockIndices, byte[][] skyIndices);
+    public static native void bakeSection(int x, int y, int z, long[] paletteIndices, long[] storageIndices, byte[][] blockIndices, byte[][] skyIndices);
 
     public static native void setMatrix(int type, float[] mat);
 

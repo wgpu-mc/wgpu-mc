@@ -129,8 +129,7 @@ public class BuiltChunkMixin {
                 }
             }
         }
-
-        WgpuNative.bakeChunk(sectionCoord.getX(),world.sectionCoordToIndex(sectionCoord.getY()),sectionCoord.getZ(),paletteIndices, storageIndices, blockIndices, skyIndices);
+        WgpuNative.bakeSection(sectionCoord.getX(),world.sectionCoordToIndex(sectionCoord.getY()),sectionCoord.getZ(),paletteIndices, storageIndices, blockIndices, skyIndices);
         cir.setReturnValue(null);
     }
 

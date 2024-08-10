@@ -74,7 +74,7 @@ fn vert(
 
     var world_pos = pos + vec3<f32>(f32(section_x) * 16.0, f32(section_y) * 16.0, f32(section_z) * 16.0);
 
-    vr.pos = mat4_persp * mat4_view * vec4(world_pos, 1.0);
+    vr.pos = mat4_persp * mat4_view * mat4_model * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
     vr.tex_coords2 = vec2(0.0, 0.0);
     vr.world_pos = world_pos;

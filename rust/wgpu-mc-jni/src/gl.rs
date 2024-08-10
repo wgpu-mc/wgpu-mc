@@ -5,16 +5,14 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::vec::Vec;
 
-use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
-use cgmath::{Matrix4, SquareMatrix};
+use glam::Mat4;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
 use wgpu_mc::render::graph::{
     set_push_constants, BoundPipeline, Geometry, RenderGraph, WmBindGroup,
 };
-use wgpu_mc::render::shaderpack::{Mat4, Mat4ValueOrMult};
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
 use wgpu_mc::util::{BindableBuffer, WmArena};
 use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
@@ -27,7 +25,7 @@ pub static GL_COMMANDS: Lazy<RwLock<(Vec<GLCommand>, Vec<GLCommand>)>> =
 
 #[derive(Clone, Debug)]
 pub enum GLCommand {
-    SetMatrix(Matrix4<f32>),
+    SetMatrix(Mat4),
     ClearColor([f32; 3]),
     UsePipeline(usize),
     SetVertexBuffer(Vec<u8>),
@@ -252,7 +250,7 @@ impl Geometry for ElectrumGeometry {
 
         let mut vertex_buffer = vec![];
         let mut index_buffer = vec![];
-        let mut matrix = Matrix4::<f32>::identity();
+        let mut matrix = Mat4::IDENTITY;
         let mut texture = None;
         let mut pipeline_state = None;
 
@@ -276,7 +274,7 @@ impl Geometry for ElectrumGeometry {
                         ),
                         index_buffer: vec![0,1,2,0,3,2],
                         count: 6,
-                        matrix: Matrix4::<f32>::identity().into(),
+                        matrix: Mat4::IDENTITY.to_cols_array_2d(),
                         texture: None,
                         pipeline_state: PipelineState::PositionColorF32,
                     }));
@@ -302,7 +300,7 @@ impl Geometry for ElectrumGeometry {
                         vertex_buffer: std::mem::take(&mut vertex_buffer),
                         index_buffer: std::mem::take(&mut index_buffer),
                         count,
-                        matrix: matrix.into(),
+                        matrix: matrix.to_cols_array_2d(),
                         texture: texture.take(),
                         pipeline_state: pipeline_state.take().unwrap(),
                     }));
@@ -311,7 +309,7 @@ impl Geometry for ElectrumGeometry {
                     calls.push(DrawCall::Verts(Draw {
                         vertex_buffer: std::mem::take(&mut vertex_buffer),
                         count,
-                        matrix: matrix.into(),
+                        matrix: matrix.to_cols_array_2d(),
                         texture: texture.take(),
                     }));
                 }
