@@ -12,7 +12,7 @@ use application::Application;
 use arc_swap::{ArcSwap, AsRaw};
 use byteorder::{LittleEndian, ReadBytesExt};
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use glam::{ivec3, IVec3, Mat4};
+use glam::{ivec2, ivec3, IVec3, Mat4};
 use jni::{JavaVM, JNIEnv};
 use jni::objects::{
     AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject, JObjectArray, JPrimitiveArray, JString, JValue, JValueGen, JValueOwned, ReleaseMode, WeakRef
@@ -34,7 +34,7 @@ use winit::window::CursorGrabMode;
 use wgpu_mc::WmRenderer;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{
-    BlockStateProvider, CHUNK_HEIGHT, LightLevel, Section,
+    bake_section, BlockStateProvider, LightLevel, Section, CHUNK_HEIGHT
 };
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::mc::Scene;
@@ -46,7 +46,7 @@ use wgpu_mc::wgpu::ImageDataLayout;
 
 use crate::gl::{GL_ALLOC, GL_COMMANDS, GLCommand, GlTexture};
 use crate::lighting::DeserializedLightData;
-use crate::palette::{JavaPalette};
+use crate::palette::JavaPalette;
 use crate::pia::PackedIntegerArray;
 use crate::settings::Settings;
 
@@ -156,7 +156,6 @@ pub struct SectionHolder {
 #[derive(Debug)]
 pub struct MinecraftBlockstateProvider {
     pub sections: [Option<SectionHolder>; 27],
-    pub pos: IVec3,
     pub air: BlockstateKey,
 }
 impl BlockStateProvider for MinecraftBlockstateProvider {
@@ -222,12 +221,12 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         LightLevel::from_sky_and_block(sky_light, block_light)
     }
 
-    fn is_section_empty(&self, index: usize) -> bool {
-        if index >= 27 {
+    fn is_section_empty(&self, rel_pos: IVec3) -> bool {
+        if rel_pos.abs().cmpgt(ivec3(1, 1, 1)).any() {
             return true;
         }
 
-        self.sections[index].is_none()
+        self.sections[(rel_pos+1).dot(ivec3(1, 3, 9)) as usize].is_none()
     }
 }
 
@@ -327,34 +326,17 @@ pub fn registerBlockState(
         .push((block_name, state_key, global_ref));
 }
 
-pub fn bake_section(pos: IVec3, bsp: &MinecraftBlockstateProvider) {
-    puffin::profile_scope!("jni bake chunk");
-    let wm = RENDERER.get().unwrap();
 
-    let bm = wm.mc.block_manager.read();
-
-    {
-        let sections = SCENE.chunk_sections.read();
-        let section_guard_option = sections.get(&bsp.pos);
-
-        match section_guard_option {
-            None => {
-                let mut section = Section::new(pos);
-                section.bake_section(wm, &bm, &mut *SCENE.chunk_allocator.lock(), SCENE.chunk_buffer.buffer.clone(), bsp);
-                drop(sections);
-                SCENE.chunk_sections.write().insert(pos, RwLock::new(section));
-            }
-            Some(lock) => {
-                let mut section = lock.write();
-                section.bake_section(wm, &bm, &mut *SCENE.chunk_allocator.lock(), SCENE.chunk_buffer.buffer.clone(), bsp);
-            }
-        }
-    }
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn reload(_env: JNIEnv, _class: JClass,clampedViewDistance:jint) {
+    let mut section_storage = SCENE.section_storage.write();
+    section_storage.clear();
+    section_storage.set_width(clampedViewDistance);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn clearChunks(_env: JNIEnv, _class: JClass) {
-    SCENE.chunk_sections.write().clear();
+pub fn setSectionPos(_env: JNIEnv, _class: JClass, x:jint,z:jint){
+    *SCENE.camera_section_pos.write() = ivec2(x, z);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -379,7 +361,6 @@ pub fn bakeSection(
         unsafe { slice::from_raw_parts(storage_elements.as_ptr(), storage_elements.len()) };
     const NONE: Option<SectionHolder> = None;
     let mut bsp = MinecraftBlockstateProvider {
-        pos: ivec3(x, y, z),
         sections: [NONE; 27],
         air: *AIR,
     };
@@ -434,7 +415,8 @@ pub fn bakeSection(
     }
 
     THREAD_POOL.spawn(move || {
-        bake_section([x, y, z].into(), &bsp);
+        let wm = RENDERER.get().unwrap();
+        bake_section(ivec3(x, y, z), wm ,&bsp);
     })
 }
 

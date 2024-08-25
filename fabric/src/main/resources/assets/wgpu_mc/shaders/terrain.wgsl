@@ -35,18 +35,15 @@ struct VertexResult {
     @location(6) section: u32
 };
 
+var<push_constant> section_pos: vec3i;
+
 @vertex
 fn vert(
-    @builtin(instance_index) pos_index: u32,
-    @builtin(vertex_index) vi: u32
+    @builtin(vertex_index) vi: u32,
+    @builtin(instance_index) base_vertex: u32
 ) -> VertexResult {
     var vr: VertexResult;
-
-    var section_x: i32 = i32(chunk_data[pos_index]);
-    var section_y: i32 = i32(chunk_data[pos_index + 1]);
-    var section_z: i32 = i32(chunk_data[pos_index + 2]);
-    let bv = chunk_data[pos_index + 3];
-    let id = vi*4u+bv;
+    let id = vi*4u+base_vertex;
     var v1 = chunk_data[id];
     var v2 = chunk_data[id + 1u];
     var v3 = chunk_data[id + 2u];
@@ -72,7 +69,7 @@ fn vert(
     }
     var pos = vec3<f32>(x, y, z);
 
-    var world_pos = pos + vec3<f32>(f32(section_x) * 16.0, f32(section_y) * 16.0, f32(section_z) * 16.0);
+    var world_pos = pos + vec3<f32>(f32(section_pos.x) * 16.0, f32(section_pos.y) * 16.0, f32(section_pos.z) * 16.0);
 
     vr.pos = mat4_persp * mat4_view * mat4_model * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
@@ -95,10 +92,13 @@ fn minecraft_sample_lighting(uv: vec2<u32> ) -> f32 {
 fn frag(
     in: VertexResult
 ) -> @location(0) vec4<f32> {
-    let col1 = textureSample(t_texture, t_sampler, in.tex_coords);
+    let col = textureSample(t_texture, t_sampler, in.tex_coords);
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
 //    let light = max(in.light_coords.x, in.light_coords.y);
 
-    return col1;
+    if(col.a == 0.0f){
+        discard;
+    }
+    return col;
 }

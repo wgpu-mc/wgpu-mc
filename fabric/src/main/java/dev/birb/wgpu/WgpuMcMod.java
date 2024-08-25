@@ -39,12 +39,6 @@ public class WgpuMcMod implements ClientModInitializer {
 				"category.examplemod.test" // The translation key of the keybinding's category.
 		));
 
-		KeyBinding keyBinding1 = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-				"key.examplemod.n", // The translation key of the keybinding's name
-				InputUtil.Type.KEYSYM, // The type of the keybinding, KEYSYM for keyboard, MOUSE for mouse.
-				GLFW.GLFW_KEY_N, // The keycode of the key
-				"category.examplemod.test" // The translation key of the keybinding's category.
-		));
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (keyBinding.wasPressed()) {
@@ -52,16 +46,6 @@ public class WgpuMcMod implements ClientModInitializer {
 				int skyLightlevel = client.world.getLightLevel(LightType.SKY, client.player.getBlockPos());
 				client.player.sendMessage(Text.literal( skyLightlevel+ " " + blockLightlevel), false);
 				WgpuNative.debugLight(client.player.getBlockX(), client.player.getBlockY(), client.player.getBlockZ());
-			}
-		});
-
-		ClientTickEvents.END_CLIENT_TICK.register(client -> {
-			while (keyBinding1.wasPressed()) {
-//				WgpuNative.bakeChunk(client.player.getChunkPos().x, client.player.getChunkPos().z);
-				client.player.sendMessage(Text.literal("force baking chunk"));
-				//TODO:redo
-				//WmChunk chunk = new WmChunk(client.player.getWorld().getWorldChunk(client.player.getBlockPos()));
-				//chunk.uploadAndBake();
 			}
 		});
 	}

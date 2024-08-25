@@ -2,9 +2,10 @@ use std::alloc::alloc;
 use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
+use glam::ivec3;
 use treeculler::{AABB, BVol, Frustum, Vec3};
 
-use wgpu::{BindGroup, BufferAddress, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, StoreOp};
+use wgpu::{BindGroup, BufferAddress, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, ShaderStages, StoreOp};
 use wgpu::util::{DrawIndexedIndirectArgs, DrawIndirectArgs};
 
 use crate::mc::chunk::RenderLayer;
@@ -222,7 +223,7 @@ impl RenderGraph {
                         },
                         "@pc_section_position" => wgpu::PushConstantRange {
                             stages: wgpu::ShaderStages::VERTEX,
-                            range: index..index + 96,
+                            range: index..index + 12,
                         },
                         "@pc_total_sections" => wgpu::PushConstantRange {
                             stages: wgpu::ShaderStages::VERTEX,
@@ -252,33 +253,7 @@ impl RenderGraph {
             .unwrap();
 
             let vertex_buffer = match &pipeline_config.geometry[..] {
-                #[cfg(not(feature = "vbo-fallback"))]
-                "@geo_terrain" => {
-                    const VAA: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
-                        0 => Uint32
-                    ];
-
-                    Some(vec![wgpu::VertexBufferLayout {
-                        array_stride: (mem::size_of::<u32>()) as wgpu::BufferAddress,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &VAA,
-                    }])
-                }
-                #[cfg(feature = "vbo-fallback")]
-                "@geo_terrain" => {
-                    const VAA: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-                        0 => Uint32,
-                        1 => Uint32,
-                        2 => Uint32,
-                        3 => Uint32
-                    ];
-
-                    Some(vec![wgpu::VertexBufferLayout {
-                        array_stride: (mem::size_of::<u32>() * 4) as wgpu::BufferAddress,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &VAA,
-                    }])
-                }
+                "@geo_terrain" => None,
                 "@geo_entities" => Some(vec![EntityVertex::desc(), InstanceVertex::desc()]),
                 "@geo_quad" => Some(vec![QuadVertex::desc()]),
                 "@geo_sun_moon" => Some(vec![SunMoonVertex::desc()]),
@@ -547,72 +522,13 @@ impl RenderGraph {
 
             match &pipeline_config.geometry[..] {
                 "@geo_terrain" => {
-                    // for section in scene.chunk_sections.iter() {
-                    //     let pos = section.key();
-                    //
-                    //     let buffers = match &section.buffers {
-                    //         None => continue,
-                    //         Some(buffers) => buffers,
-                    //     };
-
-                    let mut indirect: Vec<DrawIndexedIndirectArgs> = vec![];
-
-                    let mut sections = scene.chunk_sections.write();
-
-                    let mut allocator = scene.chunk_allocator.lock();
-                    let mut pos_ranges = vec![];
-
-                    for (pos, section_lock) in sections.iter_mut() {
-                        let section = section_lock.get_mut();
-                        let a: Vec3<f32> = [pos.x as f32, pos.y as f32, pos.z as f32].into();
-                        let b: Vec3<f32> = a + Vec3::new(1.0, 1.0, 1.0);
-
-                        let bounds: AABB<f32> = AABB::new((a*16.0).into_array(), (b*16.0).into_array());
-
-                        if !bounds.coherent_test_against_frustum(frustum, 0).0 {
-                            continue;
-                        }
-                        if let Some(layer) = section.layers.get(&RenderLayer::Solid) {
-                            let range = allocator.allocate_range(4).unwrap();
-                            pos_ranges.push(range.clone());
-                            let mut data = pos.to_array().to_vec();
-                            data.push((layer.vertex_range.start/4) as i32);
-                            wm.display.queue.write_buffer(&scene.chunk_buffer.buffer, (range.start * 4) as BufferAddress, bytemuck::cast_slice(&data));
-
-                            indirect.push(
-                                DrawIndexedIndirectArgs {
-                                    instance_count: 1,
-                                    first_instance: range.start,
-                                    index_count: (layer.index_range.end - layer.index_range.start)/4,
-                                    first_index: (layer.index_range.start/4),
-                                    base_vertex: 0,
-                                }
-                            );
-                        }
-                    }
-                    
-                    let indirect_bytes: Vec<u8> = indirect.iter().flat_map(|args| args.as_bytes()).copied().collect();
-                    wm.display.queue.write_buffer(&scene.indirect_buffer, 0, &indirect_bytes);
-
                     render_pass.set_pipeline(&bound_pipeline.pipeline);
-
-                    set_push_constants(
-                        pipeline_config,
-                        &mut render_pass,
-                        None,
-                    );
 
                     for (index, bind_group) in bound_pipeline.bind_groups.iter() {
                         match bind_group {
                             WmBindGroup::Resource(name) => match &name[..] {
                                 "@bg_ssbo_chunks" => {
-                                    // #[cfg(not(feature = "vbo-fallback"))]
-                                    render_pass.set_bind_group(*index, &scene.chunk_buffer.bind_group, &[]);
-
-                                    #[cfg(feature = "vbo-fallback")]
-                                    {
-                                        panic!("SSBOs are not supported on WebGL")
-                                    }
+                                    render_pass.set_bind_group(*index,&scene.chunk_buffer.bind_group,&[]);
                                 }
                                 _ => unimplemented!(),
                             },
@@ -622,16 +538,52 @@ impl RenderGraph {
                         }
                     }
 
-                    render_pass.set_vertex_buffer(0, scene.chunk_buffer.buffer.slice(..));
                     render_pass.set_index_buffer(scene.chunk_buffer.buffer.slice(..),wgpu::IndexFormat::Uint32);
-                    render_pass.multi_draw_indexed_indirect(
-                        &scene.indirect_buffer,
-                        0,
-                        indirect.len() as u32
-                    );
-                    for pos_range in pos_ranges {
-                        allocator.free_range(pos_range);
+
+                    let sections = scene.section_storage.write();
+                    let camera_pos = scene.camera_section_pos.read().clone();
+                    for (pos, section) in sections.iter() {
+                        let rel_pos = ivec3(pos.x-camera_pos.x, pos.y, pos.z-camera_pos.y);
+                        let a: Vec3<f32> = [rel_pos.x as f32, rel_pos.y as f32, rel_pos.z as f32].into();
+                        let b: Vec3<f32> = a + Vec3::new(1.0, 1.0, 1.0);
+
+                        let bounds: AABB<f32> = AABB::new((a*16.0).into_array(), (b*16.0).into_array());
+
+                        if !bounds.coherent_test_against_frustum(frustum, 0).0 {
+                            continue;
+                        }
+                        if let Some(layer) = &section.layers[RenderLayer::Solid as usize] {
+                            let mut pc:HashMap<String,(Vec<u8>,ShaderStages)> = HashMap::new();
+                            //println!("draw {pos}");
+                            pc.insert("@pc_section_position".to_string(),  (bytemuck::cast_slice(&rel_pos.to_array()).to_vec(),ShaderStages::VERTEX));
+                            set_push_constants(
+                                pipeline_config,
+                                &mut render_pass,
+                                Some(pc),
+                            );
+                            render_pass.draw_indexed(
+                                layer.index_range.clone(),
+                                0,
+                                layer.vertex_range.start..layer.vertex_range.start + 1
+                            );
+                        }
                     }
+
+
+                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                        match bind_group {
+                            WmBindGroup::Resource(name) => match &name[..] {
+                                "@bg_ssbo_chunks" => {
+                                    render_pass.set_bind_group(*index, &scene.chunk_buffer.bind_group, &[]);
+                                }
+                                _ => unimplemented!(),
+                            },
+                            WmBindGroup::Custom(bind_group) => {
+                                render_pass.set_bind_group(*index, bind_group, &[]);
+                            }
+                        }
+                    }
+
                 }
                 _ => match geometry.get_mut(&pipeline_config.geometry) {
                     None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),

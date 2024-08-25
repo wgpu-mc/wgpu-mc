@@ -146,8 +146,6 @@ public class WgpuNative {
 
     public static native void centerCursor();
 
-    public static native void clearChunks();
-
     public static native void registerEntities(String toString);
 
     public static native long setEntityInstanceBuffer(String entity, long mat4Ptr, int position, long overlayPtr, int overlayArrayPosition, int instanceCount, int textureId);
@@ -173,5 +171,9 @@ public class WgpuNative {
     public static native void bindStarData(int length, int[] indices, byte[] vertices);
 
     public static native void bindRenderEffectsData(float fogStart, float fogEnd, int fogShape, float[] fogColor, float[] colorModulator, float[] dimensionFogColor);
+
+    public static native void reload(int clampedViewDistance,int minSectionHeight);
+
+    public static native void setSectionPos(int x,int z);
 
 }

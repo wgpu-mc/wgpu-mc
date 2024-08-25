@@ -246,7 +246,9 @@ impl ApplicationHandler for Application {
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let wm = RENDERER.get().unwrap();
         wm.display.window.request_redraw();
-        wm.submit_chunk_updates();
+        wm.submit_chunk_updates(&SCENE);
+        let pos = SCENE.camera_section_pos.read().clone();
+        SCENE.section_storage.write().trim(pos);
         if SHOULD_STOP.get().is_some() {
             event_loop.exit();
         }

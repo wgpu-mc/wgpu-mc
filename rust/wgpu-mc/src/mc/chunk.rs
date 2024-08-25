@@ -11,7 +11,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::sync::Arc;
 
-use glam::IVec3;
+use glam::{ivec3, IVec2, IVec3, Vec2Swizzles, Vec3Swizzles};
 use range_alloc::RangeAllocator;
 
 use crate::mc::block::{BlockstateKey, ChunkBlockState, ModelMesh};
@@ -53,79 +53,99 @@ pub trait BlockStateProvider: Send + Sync {
 
     fn get_light_level(&self, x: i32, y: i32, z: i32) -> LightLevel;
 
-    fn is_section_empty(&self, index: usize) -> bool;
+    fn is_section_empty(&self, rel_pos: IVec3) -> bool;
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum RenderLayer {
-    Solid,
-    Cutout,
-    Transparent,
+    Solid=0,
+    Cutout=1,
+    Transparent=2,
 }
 
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct SectionRanges {
     pub vertex_range: Range<u32>,
     pub index_range: Range<u32>,
-    // #[cfg(not(feature = "vbo-fallback"))]
-    // pub bind_group: wgpu::BindGroup,
 }
 
-///The struct representing a Chunk, with various render layers, split into sections
-#[derive(Debug)]
+
+///The struct representing a Chunk section, with various render layers, split into sections
+pub struct SectionStorage{
+    storage:HashMap<IVec3,Section>,
+    allocator:RangeAllocator<u32>,
+    width:i32,
+}
+impl SectionStorage {
+    pub fn new(range:u32)->Self{
+        SectionStorage{
+            storage:HashMap::new(),
+            width:0,
+            allocator: RangeAllocator::new(0..range),
+        }
+    }
+    pub fn clear(&mut self){
+        self.allocator.reset();
+        self.storage.clear();
+    }
+    pub fn set_width(&mut self,w:i32){
+        self.width = w;
+    }
+    pub fn trim(&mut self,pos:IVec2){
+        let mut to_remove = vec![];
+        for (k,section) in &self.storage{
+            let dist = (k.xz()-pos).abs();
+            let radius = self.width + 2;//temp fix until proper sync
+            if dist.x>radius || dist.y>radius{
+                to_remove.push(*k);
+                for layer in &section.layers{
+                    if let Some(l) = layer.as_ref(){
+                        self.allocator.free_range(l.vertex_range.clone());
+                        self.allocator.free_range(l.index_range.clone());
+                    }
+                }
+            }
+        }
+        to_remove.iter().for_each(|pos|{self.storage.remove(pos);});
+    }
+    pub fn replace(&mut self, pos:IVec3,baked_layers:&Vec<BakedLayer>)->Section{
+        if let Some(previous_section) = self.storage.get(&pos){
+            for layer in &previous_section.layers{
+                if let Some(l) = layer.as_ref(){
+                    self.allocator.free_range(l.vertex_range.clone());
+                    self.allocator.free_range(l.index_range.clone());
+                }
+            }
+        }
+        let section = Section{layers:baked_layers.iter().map(|layer|{
+            if layer.indices.len()>0{
+                Some(SectionRanges{
+                    vertex_range:self.allocator.allocate_range(layer.vertices.len() as u32/4).unwrap(),
+                    index_range:self.allocator.allocate_range(layer.indices.len() as u32/4).unwrap()
+                })
+            }
+            else{
+                None
+            }
+        }).collect()};
+        self.storage.insert(pos,section.clone());
+        section
+    }
+    pub fn iter(&self)->std::collections::hash_map::Iter<IVec3, Section>{
+        self.storage.iter()
+    }
+}
+
+#[derive(Clone)]
 pub struct Section {
-    pub layers: HashMap<RenderLayer, SectionRanges>,
-    pub pos: IVec3,
+    pub layers: Vec<Option<SectionRanges>>,
 }
 
 impl Section {
-    pub fn new(pos: IVec3) -> Self {
+    pub fn new() -> Self {
         Self {
-            layers: HashMap::new(),
-            pos,
+            layers: Vec::new(),
         }
-    }
-
-    pub fn bake_section<T: BlockStateProvider>(
-        &mut self,
-        wm: &WmRenderer,
-        block_manager: &BlockManager,
-        allocator: &mut RangeAllocator<u32>,
-        buffer: Arc<wgpu::Buffer>,
-        provider: &T,
-    ) {
-        let baked_layers = bake_section(self.pos, block_manager, provider);
-
-        let mut layers = HashMap::new();
-
-        for (layer, baked) in baked_layers {
-
-
-            let vertex_data:Vec<u8> = baked.vertices.iter().flat_map(Vertex::compressed).collect();
-            if vertex_data.len() == 0 {
-                continue;
-            }
-            let index_data:Vec<u8> = baked.indices.iter().flat_map(|index| index.to_ne_bytes()).collect();
-
-            let vertex_range = allocator.allocate_range(vertex_data.len().div_ceil(4) as u32).unwrap();
-            let index_range = allocator.allocate_range(index_data.len() as u32).unwrap();
-
-            dbg!(&vertex_range);
-            dbg!(&index_range);
-
-            wm.chunk_update_queue.0.send((buffer.clone(), vertex_data, vertex_range.start * 4)).unwrap();
-            wm.chunk_update_queue.0.send((buffer.clone(), index_data, index_range.start * 4)).unwrap();
-
-            layers.insert(
-                layer,
-                SectionRanges {
-                    vertex_range: (vertex_range.start * 4)..(vertex_range.end * 4),
-                    index_range: (index_range.start * 4)..(index_range.end * 4),
-                }
-            );
-        }
-
-        self.layers = layers;
     }
 }
 
@@ -161,23 +181,29 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
     )
 }
 
-#[derive(Clone, Default)]
-struct BakedSection {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
+pub fn bake_section<Provider: BlockStateProvider>(pos: IVec3, wm:&WmRenderer ,bsp: &Provider, ) {
+
+    let bm = wm.mc.block_manager.read();
+
+    let baked_section = bake_layers(pos, &bm, bsp);
+
+    wm.chunk_update_queue.0.send((pos,baked_section)).unwrap();
 }
 
-fn bake_section<Provider: BlockStateProvider>(
+#[derive(Clone, Default)]
+pub struct BakedLayer {
+    pub vertices: Vec<u8>,
+    pub indices: Vec<u8>,
+}
+
+fn bake_layers<Provider: BlockStateProvider>(
     pos: IVec3,
     block_manager: &BlockManager,
     state_provider: &Provider,
-) -> HashMap<RenderLayer, BakedSection> {
-    let mut layers = HashMap::new();
-    layers.insert(RenderLayer::Solid, BakedSection::default());
-    layers.insert(RenderLayer::Cutout, BakedSection::default());
-    layers.insert(RenderLayer::Transparent, BakedSection::default());
+) -> Vec<BakedLayer> {
+    let mut layers = vec![BakedLayer::default();3];
 
-    if state_provider.is_section_empty(pos.y as usize) {
+    if state_provider.is_section_empty(ivec3(0, 0, 0)) {
         return layers;
     }
 
@@ -217,8 +243,8 @@ fn bake_section<Provider: BlockStateProvider>(
 
                 let mut extend_vertices =
                     |layer: RenderLayer, index: u32, light_level: LightLevel| {
-                        let baked_layer = layers.get_mut(&layer).unwrap();
-                        let vec_index = baked_layer.vertices.len();
+                        let baked_layer = &mut layers[layer as usize];
+                        let vec_index = baked_layer.vertices.len()/Vertex::VERTEX_LENGTH;
 
                         baked_layer
                             .vertices
@@ -238,10 +264,8 @@ fn bake_section<Provider: BlockStateProvider>(
                                     lightmap_coords: state_provider.get_light_level(x, y, z).byte,
                                     dark: false,
                                 }
-                            }));
-                        baked_layer
-                            .indices
-                            .extend(INDICES.map(|index| index + (vec_index as u32)));
+                            }).flat_map(Vertex::compressed));
+                        baked_layer.indices.extend(INDICES.iter().flat_map(|index| (index + (vec_index as u32)).to_ne_bytes()));
                     };
 
                 // dbg!(absolute_x, absolute_z, render_up, render_down, render_north, render_south, render_west, render_east);
@@ -292,8 +316,8 @@ fn bake_section<Provider: BlockStateProvider>(
                 .iter()
                 .filter_map(|face| *face)
                 .for_each(|index| {
-                    let baked_layer = layers.get_mut(&model_mesh.layer).unwrap();
-                    let vec_index = baked_layer.vertices.len();
+                    let baked_layer = &mut layers[model_mesh.layer as usize];
+                    let vec_index = baked_layer.vertices.len()/Vertex::VERTEX_LENGTH;
 
                     baked_layer
                         .vertices
@@ -313,10 +337,8 @@ fn bake_section<Provider: BlockStateProvider>(
                                 lightmap_coords: state_provider.get_light_level(x, y, z).byte,
                                 dark: false,
                             }
-                        }));
-                    baked_layer
-                        .indices
-                        .extend(INDICES.map(|index| index + (vec_index as u32)));
+                        }).flat_map(Vertex::compressed));
+                    baked_layer.indices.extend(INDICES.iter().flat_map(|index| (index + (vec_index as u32)).to_ne_bytes()));
                 });
             }
         }

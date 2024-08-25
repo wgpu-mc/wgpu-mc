@@ -219,18 +219,10 @@ public abstract class WorldRendererMixin {
         RenderSystem.getProjectionMatrix().get(floatBuffer);
         WgpuNative.setMatrix(0, floatBuffer); // Actual projection
 
-            
 
         if(player != null) {
-            float offsetY = 0.0f;
-            if(this.client.world.getRegistryKey().equals(ClientWorld.OVERWORLD)) {
-                offsetY = -64;
-            }
-            matrices.multiplyPositionMatrix(new Matrix4f().translation(
-                (float) -translate.x,
-                (float) -translate.y + offsetY,
-                (float) -translate.z
-            ));
+            WgpuNative.setSectionPos((int)Math.floor(translate.x/16.0),(int)Math.floor(translate.z/16.0));
+            matrices.translate(-(translate.x%16+16)%16, -translate.y, -(translate.z%16+16)%16);
 
             floatBuffer = new float[16];
             matrices.peek().getPositionMatrix().get(floatBuffer);
@@ -238,11 +230,6 @@ public abstract class WorldRendererMixin {
         }
 
         ci.cancel();
-    }
-
-    @Inject(method = "setWorld", at = @At("HEAD"))
-    public void setWorld(ClientWorld world, CallbackInfo ci) {
-        WgpuNative.clearChunks();
     }
 
     public void bindSkyData(MatrixStack matrices, Matrix4f projectionMatrix, float tickDelta, Camera camera) {
@@ -267,4 +254,9 @@ public abstract class WorldRendererMixin {
             fogColorOverride == null ? new float[4] : fogColorOverride);
     }
 
+
+    @Inject(method = "reload", cancellable = true, at = @At("HEAD"))
+    public void reload(CallbackInfo ci) {
+        WgpuNative.reload(this.client.options.getClampedViewDistance(),this.world.getBottomSectionCoord());
+    }
 }

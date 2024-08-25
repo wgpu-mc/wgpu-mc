@@ -245,14 +245,12 @@ impl ApplicationHandler for Application {
         ));
 
         {
-            let mut sections = self.scene.as_ref().unwrap().chunk_sections.write();
+            let mut sections = self.scene.as_ref().unwrap().section_storage.write();
 
             for x in 0..10 {
                 for y in 0..5 {
                     for z in 0..5 {
-                        let section = make_chunks(&wm, [x, y, z].into(), self.scene.as_ref().unwrap());
-
-                        sections.insert([x, y, z].into(), RwLock::new(section));
+                        make_chunks(&wm, [x, y, z].into(), self.scene.as_ref().unwrap());
                     }
                 }
             }
@@ -282,7 +280,8 @@ impl ApplicationHandler for Application {
     }
 
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.wm.as_ref().unwrap().display.window.request_redraw()
+        let wm = self.wm.as_ref().unwrap();
+        wm.display.window.request_redraw()
     }
     
     fn window_event(
@@ -398,7 +397,7 @@ impl ApplicationHandler for Application {
                                 array_layer_count: None,
                             });
 
-                    wm.submit_chunk_updates();
+                    wm.submit_chunk_updates(self.scene.as_ref().unwrap());
 
                     let mut command_encoder = wm.display.device.create_command_encoder(
                         &wgpu::CommandEncoderDescriptor { label: None },

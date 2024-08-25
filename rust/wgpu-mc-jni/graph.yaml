@@ -60,6 +60,8 @@ pipelines:
         3: "@texture_block_atlas"
         4: "@sampler"
       1: "@bg_ssbo_chunks"
+    push_constants:
+      0: "@pc_section_position"
 #  entity:
 #    geometry: @geo_entities
 #    depth: @framebuffer_depth

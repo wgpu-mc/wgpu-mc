@@ -40,11 +40,12 @@ See the [render::entity] module for an example of rendering an example entity.
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use arc_swap::ArcSwap;
+use glam::IVec3;
+use mc::chunk::BakedLayer;
+use mc::Scene;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
@@ -86,7 +87,7 @@ pub struct WmRenderer {
     pub display: Display,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: MinecraftState,
-    pub chunk_update_queue: (Sender<(Arc<Buffer>, Vec<u8>, u32)>, Mutex<Receiver<(Arc<Buffer>, Vec<u8>, u32)>>),
+    pub chunk_update_queue: (Sender<(IVec3, Vec<BakedLayer>)>, Mutex<Receiver<(IVec3, Vec<BakedLayer>)>>),
     #[cfg(feature = "tracing")]
     pub puffin_http: Arc<puffin_http::Server>,
 }
@@ -179,17 +180,19 @@ impl WmRenderer {
         );
     }
 
-    pub fn submit_chunk_updates(&self) {
-        puffin::profile_function!();
+    pub fn submit_chunk_updates(&self,scene:&Scene) {
         let receiver = self.chunk_update_queue.1.lock();
         let updates = receiver.try_iter();
-
-        updates.for_each(|(queue, data, offset)| {
-            self.display.queue.write_buffer(
-                &queue,
-                offset as BufferAddress,
-                &data
-            );
+        
+        updates.for_each(|(pos, layers)| {
+            let mut storage = scene.section_storage.write();
+            let section = storage.replace(pos, &layers);
+            for (i,ranges) in section.layers.iter().enumerate(){
+                if let Some(ranges) = ranges{
+                    self.display.queue.write_buffer(&scene.chunk_buffer.buffer,ranges.vertex_range.start as u64 * 4,&layers[i].vertices);
+                    self.display.queue.write_buffer(&scene.chunk_buffer.buffer,ranges.index_range.start as u64 * 4,&layers[i].indices);
+                }
+            }
         });
     }
 

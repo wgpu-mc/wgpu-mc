@@ -5,8 +5,9 @@ use std::ops::Deref;
 use std::sync::{Arc};
 
 use arc_swap::ArcSwap;
+use chunk::SectionStorage;
 use dashmap::DashMap;
-use glam::{IVec2, IVec3};
+use glam::{ivec2, ivec3, IVec2, IVec3};
 use guillotiere::euclid::default;
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
@@ -179,16 +180,10 @@ pub struct RenderEffectsData {
     pub dimension_fog_color: [f32; 4],
 }
 
-pub struct SectionGPULookupTable {
-    pub bind_group: Option<wgpu::BindGroup>,
-    pub sections_stored_count: u32,
-    //The amount of vertices to be rendered, equal to the sum of the lengths of all the referenced index buffers
-    pub size: u32,
-}
 
 pub struct Scene {
-    pub chunk_sections: RwLock<HashMap<IVec3, RwLock<Section>>>,
-    pub chunk_allocator: Mutex<RangeAllocator<u32>>,
+    pub section_storage: RwLock<SectionStorage>,
+    pub camera_section_pos: RwLock<IVec2>,
     pub chunk_buffer: Arc<BindableBuffer>,
 
     pub indirect_buffer: Arc<wgpu::Buffer>,
@@ -215,13 +210,13 @@ impl Scene {
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
                 mapped_at_creation: false,
             });
-
+        let buffer_size = 100000000u64;
         Self {
-            chunk_sections: RwLock::new(HashMap::new()),
-            chunk_allocator: Mutex::new(RangeAllocator::new(0..100000000/4)),
+            section_storage: RwLock::new(SectionStorage::new((buffer_size/4) as u32)),
+            camera_section_pos:RwLock::new(ivec2(0, 0)),
             chunk_buffer: Arc::new(BindableBuffer::new_deferred(
                 wm,
-                100000000,
+                buffer_size,
                 wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDEX ,
                 "ssbo"
             )),
@@ -248,7 +243,6 @@ impl Scene {
                 }),
         }
     }
-
 }
 
 /// Minecraft-specific state and data structures go in here

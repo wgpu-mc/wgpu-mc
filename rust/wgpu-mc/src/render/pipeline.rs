@@ -1,4 +1,4 @@
-use wgpu::{BindGroupLayout, ComputePipeline, PipelineLayout, SamplerBindingType};
+use wgpu::{BindGroupLayout, SamplerBindingType};
 
 use std::collections::HashMap;
 
@@ -19,7 +19,7 @@ pub struct Vertex {
 impl Vertex {
     pub const VERTEX_LENGTH: usize = 16;
 
-    pub fn compressed(&self) -> [u8; Self::VERTEX_LENGTH] {
+    pub fn compressed(self) -> [u8; Self::VERTEX_LENGTH] {
         // XYZ: 4 bytes (1 for each axis)
         // Normal: 3 bits
         // Color: 3 bytes
