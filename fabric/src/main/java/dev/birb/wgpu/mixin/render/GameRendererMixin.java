@@ -15,8 +15,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import dev.birb.wgpu.rust.WgpuNative;
+
 @Mixin(GameRenderer.class)
-public abstract class GameRendererCameraMixin {
+public abstract class GameRendererMixin {
 
     /**
      * @author wgpu-mc
@@ -31,6 +33,12 @@ public abstract class GameRendererCameraMixin {
     public void renderHand(MatrixStack matrices, Camera camera, float tickDelta, CallbackInfo ci) {
         ci.cancel();
     }
+
+    @Inject(at = @At("RETURN"), method = "render")
+    public void render(float tickDelta, long startTime, boolean tick, CallbackInfo ci) {
+        WgpuNative.render(tickDelta,startTime,tick);
+    }
+
 
     /**
      * @author wgpu-mc

@@ -298,7 +298,6 @@ impl MinecraftState {
         wm: &WmRenderer,
         block_states: impl IntoIterator<Item = (impl AsRef<str>, &'a ResourcePath)>,
     ) {
-        puffin::profile_function!();
 
         let mut block_manager = self.block_manager.write();
         let atlases = self

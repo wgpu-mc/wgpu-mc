@@ -24,7 +24,7 @@ use crate::texture::TextureAndView;
 use crate::util::WmArena;
 use crate::WmRenderer;
 
-pub trait Geometry {
+pub trait Geometry:Send+Sync {
     fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(
         &mut self,
         wm: &WmRenderer,
@@ -292,8 +292,8 @@ impl RenderGraph {
                         primitive: wgpu::PrimitiveState {
                             topology: wgpu::PrimitiveTopology::TriangleList,
                             strip_index_format: None,
-                            front_face: wgpu::FrontFace::Cw,
-                            cull_mode: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: Some(wgpu::Face::Back),
                             unclipped_depth: false,
                             polygon_mode: Default::default(),
                             conservative: false,

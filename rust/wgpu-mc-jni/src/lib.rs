@@ -1,6 +1,7 @@
 pub extern crate wgpu_mc;
 
 use core::slice;
+use std::collections::HashMap;
 use std::{mem, ptr, thread};
 use std::fmt::Debug;
 use std::io::{Cursor, Write};
@@ -26,12 +27,14 @@ use palette::PALETTE_STORAGE;
 use parking_lot::{Mutex, RwLock};
 use pia::PIA_STORAGE;
 use rayon::{ThreadPool, ThreadPoolBuilder};
+use renderer::MATRICES;
 use wgpu::Extent3d;
+use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
 use winit::window::CursorGrabMode;
 
-use wgpu_mc::WmRenderer;
+use wgpu_mc::{Frustum, WmRenderer};
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{
     bake_section, BlockStateProvider, LightLevel, Section, CHUNK_HEIGHT
@@ -41,7 +44,7 @@ use wgpu_mc::mc::Scene;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
-use wgpu_mc::wgpu;
+use wgpu_mc::wgpu::{self, TextureFormat};
 use wgpu_mc::wgpu::ImageDataLayout;
 
 use crate::gl::{GL_ALLOC, GL_COMMANDS, GLCommand, GlTexture};
@@ -87,6 +90,10 @@ struct MouseState {
 
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
+
+pub static RENDER_GRAPH: OnceCell<RenderGraph> = OnceCell::new();
+pub static CUSTOM_GEOMETRY: OnceCell<Mutex<HashMap<String, Box<dyn Geometry>>>> = OnceCell::new();
+
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
 
 type Task = Box<dyn FnOnce() + Send + Sync>;
@@ -102,7 +109,7 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 static CLEAR_COLOR: Lazy<ArcSwap<[f32; 3]>> = Lazy::new(|| ArcSwap::new(Arc::new([0.0; 3])));
 
 static THREAD_POOL: Lazy<ThreadPool> =
-    Lazy::new(|| ThreadPoolBuilder::new().num_threads(0).build().unwrap());
+    Lazy::new(|| ThreadPoolBuilder::new().num_threads(4).build().unwrap());
 
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     block: RENDERER
@@ -338,7 +345,6 @@ pub fn reload(_env: JNIEnv, _class: JClass,clampedViewDistance:jint) {
 pub fn setSectionPos(_env: JNIEnv, _class: JClass, x:jint,z:jint){
     *SCENE.camera_section_pos.write() = ivec2(x, z);
 }
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn bakeSection(
     mut env: JNIEnv,
@@ -429,6 +435,7 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
+
     let title: String = env.get_string(&title).unwrap().into();
     let jvm = env.get_java_vm().unwrap();
 
@@ -459,6 +466,84 @@ pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
     event_loop.run_app(&mut application).unwrap();
 
 }
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn render(mut env: JNIEnv, _class: JClass, tick_delta:jfloat, start_time:jlong, tick:jlong) {
+    let wm = RENDERER.wait();
+    let render_graph = RENDER_GRAPH.get().unwrap();
+    let mut geometry = CUSTOM_GEOMETRY.get().unwrap().lock();
+    wm.display.window.request_redraw();
+    wm.submit_chunk_updates(&SCENE);
+    let pos = SCENE.camera_section_pos.read().clone();
+    SCENE.section_storage.write().trim(pos);
+
+    let matrices = MATRICES.lock();
+    if let ResourceBacking::Buffer(buffer,_) = &render_graph.resources["@mat4_perspective"]{
+        wm.display.queue.write_buffer(
+            &buffer,
+            0,
+            bytemuck::cast_slice(&matrices.projection),
+        );
+    }
+    if let ResourceBacking::Buffer(buffer,_) = &render_graph.resources["@mat4_view"]{
+        wm.display.queue.write_buffer(
+            &buffer,
+            0,
+            bytemuck::cast_slice(&matrices.view),
+        );
+    }
+    if let ResourceBacking::Buffer(buffer,_) = &render_graph.resources["@mat4_model"]{
+        wm.display.queue.write_buffer(
+            &buffer,
+            0,
+            bytemuck::cast_slice(&matrices.terrain_transformation),
+        );
+    }
+
+    let texture = wm.display.surface.get_current_texture().unwrap_or_else(|_| {
+        //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+        
+        let mut surface_config = wm.display.config.write();
+        let size = wm.display.size.read();
+        surface_config.width = size.width;
+        surface_config.height = size.height;
+
+        wm.display.surface.configure(&wm.display.device, &surface_config);
+        wm.display.surface.get_current_texture().unwrap()
+    });
+
+    let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+        label: None,
+        format: Some(TextureFormat::Bgra8Unorm),
+        dimension: Some(wgpu::TextureViewDimension::D2),
+        aspect: Default::default(),
+        base_mip_level: 0,
+        mip_level_count: None,
+        base_array_layer: 0,
+        array_layer_count: None,
+    });
+
+    {
+        let mut encoder = wm.display.device.create_command_encoder(
+            &wgpu::CommandEncoderDescriptor { label: None },
+        );
+
+        render_graph.render(
+            &wm,
+            &mut encoder,
+            &SCENE,
+            &view,
+            [0; 3],
+            &mut geometry,
+            &Frustum::from_modelview_projection([[0.0; 4]; 4])
+        );
+
+        wm.display.queue.submit([encoder.finish()]);
+    }
+
+    texture.present();
+}
+
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {

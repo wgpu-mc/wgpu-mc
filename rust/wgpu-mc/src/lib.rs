@@ -88,8 +88,6 @@ pub struct WmRenderer {
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: MinecraftState,
     pub chunk_update_queue: (Sender<(IVec3, Vec<BakedLayer>)>, Mutex<Receiver<(IVec3, Vec<BakedLayer>)>>),
-    #[cfg(feature = "tracing")]
-    pub puffin_http: Arc<puffin_http::Server>,
 }
 
 #[derive(Copy, Clone)]
@@ -104,14 +102,6 @@ pub trait HasWindowSize {
 
 impl WmRenderer {
     pub fn new(display: Display, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
-        #[cfg(feature = "tracing")]
-        let puffin_http = {
-            let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-            let puffin_server = puffin_http::Server::new(&server_addr).unwrap();
-            eprintln!("Run this to view profiling data:  puffin_viewer {server_addr}");
-            puffin::set_scopes_on(true);
-            Arc::new(puffin_server)
-        };
 
         let mc = MinecraftState::new(&display, resource_provider);
         let (sender,receiver) = channel();
@@ -120,8 +110,6 @@ impl WmRenderer {
             display,
             mc,
             chunk_update_queue: (sender,Mutex::new(receiver)),
-            #[cfg(feature = "tracing")]
-            puffin_http,
         }
     }
 

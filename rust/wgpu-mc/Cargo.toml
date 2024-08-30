@@ -6,13 +6,13 @@ edition = "2021"
 
 [features]
 default = []
-tracing = ["dep:puffin_http"]
+tracing = []
 
 [dependencies]
 # if you upgrade this, also change WmRenderer::get_backend_description in wgpu-mc/src/lib.rs
 wgpu = { version = "22", features = ["glsl"] }
 image = "0.25"
-glam = "0.28"
+glam = "0.29"
 bytemuck = { version = "1.13", features = ["derive"] }
 anyhow = "1.0"
 winit = "0.30.0"
@@ -39,7 +39,5 @@ treeculler = "0.4"
 range-alloc = "0.1.3"
 array-init = "2.1.0"
 itertools = "0.13"
-puffin =  { version = "0.19" }
 intrusive-collections = "0.9"
 encase = "0.9.0"
-puffin_http = { version = "0.16", optional = true }

@@ -26,7 +26,7 @@
     "render.BufferRendererMixin",
     "render.BuiltChunkMixin",
     "render.FramebufferMixin",
-    "render.GameRendererCameraMixin",
+    "render.GameRendererMixin",
     "render.GLXMixin",
     "render.InGameHudMixin",
     "render.LightmapTextureManagerMixin",

@@ -176,4 +176,6 @@ public class WgpuNative {
 
     public static native void setSectionPos(int x,int z);
 
+    public static native void render(float tickDelta, long startTime, boolean tick);
+
 }

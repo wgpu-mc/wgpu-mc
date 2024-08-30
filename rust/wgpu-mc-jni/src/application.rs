@@ -3,11 +3,11 @@ use std::sync::Arc;
 use futures::executor::block_on;
 use jni::{objects::JValue, JavaVM};
 use once_cell::sync::OnceCell;
-use parking_lot::lock_api::RwLock;
+use parking_lot::lock_api::{Mutex, RwLock};
 use wgpu_mc::{render::graph::Geometry, wgpu::{self, util::{BufferInitDescriptor, DeviceExt}, BufferAddress, BufferBindingType, PresentMode, TextureFormat}, Display, Frustum, WmRenderer};
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{DeviceEvent, ElementState, KeyEvent, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, ModifiersState, PhysicalKey}, platform::scancode::PhysicalKeyExtScancode};
 
-use crate::{gl::{ElectrumGeometry, ElectrumVertex}, renderer::MATRICES, MinecraftResourceManagerAdapter, RenderMessage, CHANNELS, RENDERER, SCENE};
+use crate::{gl::{ElectrumGeometry, ElectrumVertex}, renderer::MATRICES, MinecraftResourceManagerAdapter, RenderMessage, CHANNELS, CUSTOM_GEOMETRY, RENDERER, RENDER_GRAPH, SCENE};
 use wgpu_mc::render::{shaderpack::ShaderPackConfig,graph::{RenderGraph,ResourceBacking}};
 use std::collections::HashMap;
 
@@ -16,10 +16,8 @@ pub static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 
 pub struct Application{
     title:String,
-    render_graph:Option<RenderGraph>,
     current_modifiers:ModifiersState,
     jvm:JavaVM,
-    geometry:HashMap<String,Box<dyn Geometry>>
 }
 impl Application{
     pub fn new(jvm: JavaVM, title: String)->Self{
@@ -33,13 +31,12 @@ impl Application{
         //     let bindable = lightmap.bindable_texture.as_ref().unwrap();
         //     let asaa = ArcSwap::new(bindable.clone());
         // }
-    
+        
+        profiling::register_thread!("Winit Thread");
         Self{
             title,
             current_modifiers,
-            render_graph: None,
             jvm,
-            geometry: HashMap::new(),
         }
     }
 }
@@ -195,9 +192,9 @@ impl ApplicationHandler for Application {
             Some(custom_bind_groups),
             Some(custom_geometry),
         );
-
-        self.render_graph = Some(render_graph);
-        self.geometry.insert(
+        RENDER_GRAPH.set(render_graph);
+        let mut geometry = HashMap::new();
+        geometry.insert(
             "@geo_electrum_gui".to_string(),
             Box::new(ElectrumGeometry {
                 pool: Arc::new(
@@ -214,6 +211,7 @@ impl ApplicationHandler for Application {
                 last_bytes: None,
             }) as Box<dyn Geometry>,
         );
+        CUSTOM_GEOMETRY.set(Mutex::new(geometry));
 
         let _ = RENDERER.set(wm);
         env.set_static_field(
@@ -244,11 +242,6 @@ impl ApplicationHandler for Application {
     }
 
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let wm = RENDERER.get().unwrap();
-        wm.display.window.request_redraw();
-        wm.submit_chunk_updates(&SCENE);
-        let pos = SCENE.camera_section_pos.read().clone();
-        SCENE.section_storage.write().trim(pos);
         if SHOULD_STOP.get().is_some() {
             event_loop.exit();
         }
@@ -295,76 +288,6 @@ impl ApplicationHandler for Application {
                         .0
                         .send(RenderMessage::CursorMove(position.x, position.y))
                         .unwrap();
-                }
-                WindowEvent::RedrawRequested => {
-
-                    {
-                        let matrices = MATRICES.lock();
-                        if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_perspective"]{
-                            wm.display.queue.write_buffer(
-                                &buffer,
-                                0,
-                                bytemuck::cast_slice(&matrices.projection),
-                            );
-                        }
-                        if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_view"]{
-                            wm.display.queue.write_buffer(
-                                &buffer,
-                                0,
-                                bytemuck::cast_slice(&matrices.view),
-                            );
-                        }
-                        if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_model"]{
-                            wm.display.queue.write_buffer(
-                                &buffer,
-                                0,
-                                bytemuck::cast_slice(&matrices.terrain_transformation),
-                            );
-                        }
-                    }
-
-                    let texture = wm.display.surface.get_current_texture().unwrap_or_else(|_| {
-                        //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-                         
-                        let mut surface_config = wm.display.config.write();
-                        let size = wm.display.size.read();
-                        surface_config.width = size.width;
-                        surface_config.height = size.height;
-
-                        wm.display.surface.configure(&wm.display.device, &surface_config);
-                        wm.display.surface.get_current_texture().unwrap()
-                    });
-
-                    let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
-                        label: None,
-                        format: Some(TextureFormat::Bgra8Unorm),
-                        dimension: Some(wgpu::TextureViewDimension::D2),
-                        aspect: Default::default(),
-                        base_mip_level: 0,
-                        mip_level_count: None,
-                        base_array_layer: 0,
-                        array_layer_count: None,
-                    });
-
-                    {
-                        let mut encoder = wm.display.device.create_command_encoder(
-                            &wgpu::CommandEncoderDescriptor { label: None },
-                        );
-
-                        self.render_graph.as_ref().unwrap().render(
-                            &wm,
-                            &mut encoder,
-                            &SCENE,
-                            &view,
-                            [0; 3],
-                            &mut self.geometry,
-                            &Frustum::from_modelview_projection([[0.0; 4]; 4])
-                        );
-
-                        wm.display.queue.submit([encoder.finish()]);
-                    }
-
-                    texture.present();
                 }
                 WindowEvent::KeyboardInput {
                     event:
