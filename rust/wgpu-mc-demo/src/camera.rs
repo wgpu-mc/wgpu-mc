@@ -40,7 +40,8 @@ impl Camera {
     }
 
     pub fn build_view_matrix(&self) -> Mat4 {
-        Mat4::look_at_rh(self.position, self.position + self.get_direction(), self.up)
+        let pos = vec3(self.position.x.rem_euclid(16.0), self.position.y, self.position.z.rem_euclid(16.0));
+        Mat4::look_at_rh(pos, pos + self.get_direction(), self.up)
     }
 
     pub fn build_perspective_matrix(&self) -> Mat4 {

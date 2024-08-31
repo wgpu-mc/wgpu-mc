@@ -1,5 +1,6 @@
 
 use arc_swap::ArcSwap;
+use glam::{ivec2, ivec3, vec3, Mat4};
 use parking_lot::lock_api::RwLock;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -348,9 +349,20 @@ impl ApplicationHandler for Application {
                     let frame_time = Instant::now().duration_since(self.last_frame).as_secs_f32();
                     self.last_frame = Instant::now();
 
+                    camera.position += camera.get_direction() * self.forward * 50.0 * frame_time;
+
                     let perspective: [[f32; 4]; 4] =
                         camera.build_perspective_matrix().to_cols_array_2d();
                     let view: [[f32; 4]; 4] = camera.build_view_matrix().to_cols_array_2d();
+
+                    if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_model"]{
+                        wm.display.queue.write_buffer(
+                            &buffer,
+                            0,
+                            bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array())
+                        );
+                    }
+                    *self.scene.as_mut().unwrap().camera_section_pos.write() = ivec2(camera.position.x.floor() as i32>>4, camera.position.z.floor() as i32>>4);
 
                     if let ResourceBacking::Buffer(buffer,_) = &self.render_graph.as_ref().unwrap().resources["@mat4_perspective"]{
                         wm.display.queue.write_buffer(
@@ -367,7 +379,6 @@ impl ApplicationHandler for Application {
                             bytemuck::cast_slice(&view),
                         );
                     }
-                    camera.position += camera.get_direction() * self.forward * 50.0 * frame_time;
 
                     let mut config_guard = wm.display.config.write();
 

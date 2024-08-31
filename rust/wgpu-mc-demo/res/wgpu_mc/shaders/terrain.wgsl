@@ -69,7 +69,7 @@ fn vert(
     }
     var pos = vec3<f32>(x, y, z);
 
-    var world_pos = pos;// + vec3<f32>(f32(section_pos.x) * 16.0, f32(section_pos.y) * 16.0, f32(section_pos.z) * 16.0);
+    var world_pos = pos + vec3<f32>(f32(section_pos.x) * 16.0, f32(section_pos.y) * 16.0, f32(section_pos.z) * 16.0);
 
     vr.pos = mat4_persp * mat4_view * mat4_model * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
@@ -96,8 +96,9 @@ fn frag(
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
 //    let light = max(in.light_coords.x, in.light_coords.y);
+
     if(col.a == 0.0f){
         discard;
     }
-    return col1;
+    return col;
 }
