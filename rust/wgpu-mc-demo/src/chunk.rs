@@ -46,13 +46,12 @@ pub fn make_chunks(wm: &WmRenderer, pos: IVec3, scene: &Scene){
         .get(BLOCK_ATLAS)
         .unwrap();
 
-    let (index, _, block) = bm.blocks.get_full("minecraft:furnace").unwrap();
+    let (index, _, block) = bm.blocks.get_full("minecraft:wall_torch").unwrap();
 
     let (_, augment) = block
         .get_model_by_key(
             [
-                ("facing", &StateValue::String("north".into())),
-                ("lit", &StateValue::Bool(true)),
+            ("facing", &StateValue::String("north".into())),
             ],
             &*wm.mc.resource_provider,
             &atlas,

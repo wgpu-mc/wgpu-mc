@@ -1,10 +1,11 @@
 use crate::mc::chunk::RenderLayer;
 use bytemuck::{Pod, Zeroable};
-use glam::{vec4, Mat4};
+use glam::{vec3, vec4, Mat3, Mat4, Vec3};
 use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
 use minecraft_assets::schemas::blockstates::ModelProperties;
+use minecraft_assets::schemas::models::Element;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::mc::resource::ResourceProvider;
@@ -140,33 +141,24 @@ fn resolve_model(
 }
 
 fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Option<UV> {
+    let uv = face.uv.unwrap_or([0.0,0.0,16.0,16.0]).map(|x|x as u16);
     let atlas_map = block_atlas.uv_map.read();
-
-    // atlas_map.get(&(&face.texture.0).into()).copied().map(|uv| {
-    //     let u = Vector2::new(uv.0.0 as i32, uv.0.1 as i32);
-    //     let v = Vector2::new(uv.1.0 as i32, uv.1.1 as i32);
-    //
-    //     let d = v - u;
-    //     let center = u + (d / 2);
-    //
-    //     let u_shift = u - center;
-    //     let v_shift = v - center;
-    //
-    //     let matrix = match face.rotation {
-    //         0 => Matrix2::new(1.0, 0.0, 0.0, 1.0),
-    //         90 => Matrix2::new(0.0, 1.0, -1.0, 0.0),
-    //         180 => Matrix2::new(-1.0, 0.0, 0.0, -1.0),
-    //         270 => Matrix2::new(0.0, -1.0, 1.0, 0.0),
-    //         _ => unreachable!()
-    //     };
-    //
-    //     let u = matrix * u_shift.cast::<f32>().unwrap();
-    //     let v = matrix * v_shift.cast::<f32>().unwrap();
-    //
-    //     ((u.x as u16 + center.x as u16, u.y as u16 + center.y as u16), (v.x as u16 + center.x as u16, v.y as u16 + center.y as u16))
-    // })
-
-    atlas_map.get(&(&face.texture.0).into()).copied()
+    atlas_map.get(&(&face.texture.0).into()).copied().map(|tex| {
+        let tw = (tex.1.0-tex.0.0,tex.1.1-tex.0.1);
+        let uvs = match face.rotation {
+            0 => ((uv[0],uv[1]),(uv[2],uv[3])),
+            90 => ((tw.1-uv[1],uv[0]),(tw.1-uv[3],uv[2])),
+            180 => ((tw.0-uv[0],tw.1-uv[1]),(tw.0-uv[2],tw.1-uv[3])),
+            270 => ((uv[1],tw.0-uv[0]),(uv[3],tw.0-uv[2])),
+            _ => unreachable!()
+        };
+        (
+            (tex.0.0 + uvs.0.0,
+            tex.0.1 + uvs.0.1),
+            (tex.0.0 + uvs.1.0,
+            tex.0.1 + uvs.1.1),
+        )
+    })
 }
 
 pub struct RenderSettings {
@@ -247,9 +239,6 @@ impl ModelMesh {
                     }
                 };
 
-                // let matrix = Matrix4::from_angle_y(Deg(45.0));
-                let matrix = Mat4::IDENTITY;
-
                 let _is_cube = model.elements.iter().len() == 1 && {
                     match model.elements.iter().flatten().next() {
                         Some(first) => {
@@ -263,14 +252,12 @@ impl ModelMesh {
                         None => false,
                     }
                 };
-
                 let results = model
                     .elements
                     .iter()
                     .flatten()
                     .map(|element| {
                         //Face textures
-
                         let north = element.faces.get(&schemas::models::BlockFace::North).as_ref().and_then(|tex|
                             get_atlas_uv(
                                 tex,
@@ -354,16 +341,23 @@ impl ModelMesh {
                                     .unwrap_or(&0)
                             ))
                         );
-
-                        let a = (matrix * vec4(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
-                        let b = (matrix * vec4(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
-                        let c = (matrix * vec4(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
-                        let d = (matrix * vec4(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0, 1.0)).truncate().into();
-                        let e = (matrix * vec4(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
-                        let f = (matrix * vec4(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
-                        let g = (matrix * vec4(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
-                        let h = (matrix * vec4(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0, 1.0)).truncate().into();
-
+                        let rot = &element.rotation;
+                        let matrix = match rot.axis {
+                            schemas::models::Axis::X => Mat3::from_rotation_x(rot.angle.to_radians()),
+                            schemas::models::Axis::Y => Mat3::from_rotation_y(rot.angle.to_radians()),
+                            schemas::models::Axis::Z => Mat3::from_rotation_z(rot.angle.to_radians()),
+                        };
+                        let vec_origin = Vec3::from_array(rot.origin)/16.0;
+                        let translation = vec_origin - matrix * vec_origin;
+                        
+                        let a = (matrix * vec3(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0) + translation).into();
+                        let b = (matrix * vec3(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0) + translation).into();
+                        let c = (matrix * vec3(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0) + translation).into();
+                        let d = (matrix * vec3(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0) + translation).into();
+                        let e = (matrix * vec3(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0) + translation).into();
+                        let f = (matrix * vec3(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0) + translation).into();
+                        let g = (matrix * vec3(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0) + translation).into();
+                        let h = (matrix * vec3(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0) + translation).into();
                         const NO_UV: (UV, u32) = (((0, 0), (0, 0)), 0);
 
                         //It's valid behavior for a face to not be defined in a block model. If that happens it won't be included

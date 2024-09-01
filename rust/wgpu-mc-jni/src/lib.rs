@@ -201,12 +201,6 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
             Some(chunk) => chunk,
         };
 
-        if y as usize >= CHUNK_HEIGHT {
-            return LightLevel::from_sky_and_block(15, 0);
-        } else if y < 0 {
-            return LightLevel::from_sky_and_block(0, 0);
-        }
-
         let light_data = match &chunk.light_data {
             None => return LightLevel::from_sky_and_block(0, 0),
             Some(light_data) => light_data,

@@ -248,8 +248,8 @@ impl ApplicationHandler for Application {
         {
             let mut sections = self.scene.as_ref().unwrap().section_storage.write();
 
-            for x in 0..10 {
-                for y in 0..5 {
+            for x in 0..5 {
+                for y in 0..2 {
                     for z in 0..5 {
                         make_chunks(&wm, [x, y, z].into(), self.scene.as_ref().unwrap());
                     }

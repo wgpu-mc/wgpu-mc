@@ -44,10 +44,10 @@ fn vert(
 ) -> VertexResult {
     var vr: VertexResult;
     let id = vi*4u+base_vertex;
-    var v1 = chunk_data[id];
-    var v2 = chunk_data[id + 1u];
-    var v3 = chunk_data[id + 2u];
-    var v4 = chunk_data[id + 3u];
+    let v1 = chunk_data[id];
+    let v2 = chunk_data[id + 1u];
+    let v3 = chunk_data[id + 2u];
+    let v4 = chunk_data[id + 3u];
 
     var x: f32 = f32(v1 & 0xffu) * 0.0625;
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
@@ -95,10 +95,10 @@ fn frag(
     let col = textureSample(t_texture, t_sampler, in.tex_coords);
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
-//    let light = max(in.light_coords.x, in.light_coords.y);
+    let light = max(in.light_coords.x, in.light_coords.y);
 
     if(col.a == 0.0f){
         discard;
     }
-    return col;
+    return vec4(col.rgb*light,col.a);
 }

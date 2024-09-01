@@ -261,7 +261,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                                     normal: model_vertex.normal,
                                     color: u32::MAX,
                                     uv_offset: 0,
-                                    lightmap_coords: state_provider.get_light_level(x, y, z).byte,
+                                    lightmap_coords: light_level.byte,
                                     dark: false,
                                 }
                             }).flat_map(Vertex::compressed));
@@ -303,7 +303,6 @@ fn bake_layers<Provider: BlockStateProvider>(
                     extend_vertices(model_mesh.layer, *face, light_level);
                 }
             } else {
-                let light_level: LightLevel = state_provider.get_light_level(x, y, z);
 
                 [
                     model.north,
