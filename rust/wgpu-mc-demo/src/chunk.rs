@@ -12,16 +12,16 @@ use wgpu_mc::WmRenderer;
 struct SimpleBlockstateProvider(BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
-    fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
+    fn get_state(&self,pos:IVec3) -> ChunkBlockState {
         // if (0..1).contains(&x) && (0..1).contains(&z) && y == 0 {
-        if x^y^z == 0 {
+        if pos.x^pos.y^pos.z == 0 {
             ChunkBlockState::State(self.0)
         } else {
             ChunkBlockState::Air
         }
     }
 
-    fn get_light_level(&self, _x: i32, _y: i32, _z: i32) -> LightLevel {
+    fn get_light_level(&self,_pos:IVec3) -> LightLevel {
         LightLevel::from_sky_and_block(15, 15)
     }
 

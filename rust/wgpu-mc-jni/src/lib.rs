@@ -166,8 +166,8 @@ pub struct MinecraftBlockstateProvider {
     pub air: BlockstateKey,
 }
 impl BlockStateProvider for MinecraftBlockstateProvider {
-    fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState {
-        let section_pos = ivec3((x >> 4) + 1, (y >> 4) + 1, (z >> 4) + 1);
+    fn get_state(&self, pos:IVec3) -> ChunkBlockState {
+        let section_pos:IVec3 = (pos>>4)+1;
         let section_option =
             &self.sections[(section_pos.x + section_pos.y * 3 + section_pos.z * 9) as usize];
 
@@ -181,7 +181,7 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
             None => return ChunkBlockState::Air,
         };
 
-        let palette_key = storage.get(x & 15, y & 15, z & 15);
+        let palette_key = storage.get(pos.x & 15, pos.y & 15, pos.z & 15);
         let block = palette.get(palette_key as usize).unwrap();
 
         if *block == self.air {
@@ -191,8 +191,8 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         }
     }
 
-    fn get_light_level(&self, x: i32, y: i32, z: i32) -> LightLevel {
-        let section_pos = ivec3((x >> 4) + 1, (y >> 4) + 1, (z >> 4) + 1);
+    fn get_light_level(&self, pos:IVec3) -> LightLevel {
+        let section_pos:IVec3 = (pos>>4)+1;
         let chunk_option =
             &self.sections[(section_pos.x + section_pos.y * 3 + section_pos.z * 9) as usize];
 
@@ -206,9 +206,9 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
             Some(light_data) => light_data,
         };
 
-        let local_x = x & 0b1111;
-        let local_y = y & 0b1111;
-        let local_z = z & 0b1111;
+        let local_x = pos.x & 0b1111;
+        let local_y = pos.y & 0b1111;
+        let local_z = pos.z & 0b1111;
 
         let packed_coords = ((local_y << 8) | (local_z << 4) | (local_x)) as usize;
 

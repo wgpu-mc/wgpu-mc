@@ -7,7 +7,7 @@ edition = "2021"
 [features]
 default = ["tracing"]
 libc_alloc = []
-tracing = ["profiling/profile-with-tracy"]
+tracing = []
 
 [dependencies]
 crate-root = "0.1.3"

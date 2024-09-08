@@ -1,6 +1,6 @@
 use crate::mc::chunk::RenderLayer;
 use bytemuck::{Pod, Zeroable};
-use glam::{vec3, vec4, Mat3, Mat4, Vec3};
+use glam::{vec3, vec4, IVec3, Mat3, Mat4, Vec3};
 use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
@@ -8,11 +8,11 @@ use minecraft_assets::schemas::blockstates::ModelProperties;
 use minecraft_assets::schemas::models::Element;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::mc::resource::ResourceProvider;
+use crate::mc::resource::{ResourceProvider,ResourcePath};
+use crate::mc::direction::Direction;
 use crate::render::atlas::Atlas;
 use crate::texture::UV;
 
-use super::resource::ResourcePath;
 
 /// A block position: x, y, z
 pub type BlockPos = (i32, u16, i32);
@@ -61,24 +61,16 @@ impl ChunkBlockState {
 
 ///Represents a vertex in a block mesh, including an additional UV offset index for animated textures.
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Pod, Zeroable)]
+#[derive(Copy, Clone, Debug)]
 pub struct BlockMeshVertex {
-    pub position: [f32; 3],
+    pub position: Vec3,
     pub tex_coords: [u16; 2],
-    pub normal: [f32; 3],
-    pub animation_uv_offset: u32,
 }
-
-#[derive(Debug)]
-pub struct BlockModelFaces {
-    pub vertices: [BlockMeshVertex; 24],
-    pub north: Option<u32>,
-    pub east: Option<u32>,
-    pub south: Option<u32>,
-    pub west: Option<u32>,
-    pub up: Option<u32>,
-    pub down: Option<u32>,
-    pub cube: bool,
+#[derive(Debug,Clone,Copy)]
+pub struct BlockModelFace {
+    pub vertices:[BlockMeshVertex; 4],
+    pub normal: Vec3,
+    pub animation_uv_offset: u32,
 }
 
 fn recurse_model_parents(
@@ -174,12 +166,16 @@ pub enum MeshBakeError {
 }
 
 /// A block model which has been baked into a mesh and is ready for rendering
-/// The bool is true when the blocks next to this block should be rendered,
-/// i.e. when this block does not fully obscure all six faces.
 #[derive(Debug)]
 pub struct ModelMesh {
-    pub mesh: Vec<BlockModelFaces>,
-    pub is_cube: bool,
+    pub north: Vec<BlockModelFace>,
+    pub south: Vec<BlockModelFace>,
+    pub west: Vec<BlockModelFace>,
+    pub east: Vec<BlockModelFace>,
+    pub up: Vec<BlockModelFace>,
+    pub down: Vec<BlockModelFace>,
+    pub any: Vec<BlockModelFace>,
+    pub cull:u8,
     pub layer: RenderLayer,
 }
 
@@ -189,8 +185,7 @@ impl ModelMesh {
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
     ) -> Result<Self, MeshBakeError> {
-        let mut all_elements_are_full_cubes = true;
-
+        
         let mesh = model_properties.into_iter()
             .map(|model_properties: &ModelProperties| {
                 let model_resource_path = ResourcePath::from(&model_properties.model).prepend("models/").append(".json");
@@ -205,7 +200,6 @@ impl ModelMesh {
                     ).map_err(MeshBakeError::JsonError)?,
                     resource_provider
                 );
-
                 if let Some(textures) = model.textures {
                     //Make sure the textures in the model are fully resolved with no references
                     if let Some(reference) = textures.iter().find(|(_key, value)| value.reference().is_some()) { return Err(MeshBakeError::UnresolvedTextureReference(format!("key: {} value: {:?}", reference.0, reference.1))) }
@@ -239,24 +233,11 @@ impl ModelMesh {
                     }
                 };
 
-                let _is_cube = model.elements.iter().len() == 1 && {
-                    match model.elements.iter().flatten().next() {
-                        Some(first) => {
-                            first.from[0] == 0.0
-                            && first.from[1] == 0.0
-                            && first.from[2] == 0.0
-                            && first.to[0] == 16.0
-                            && first.to[1] == 16.0
-                            && first.to[2] == 16.0
-                        },
-                        None => false,
-                    }
-                };
-                let results = model
+                Ok(model
                     .elements
                     .iter()
                     .flatten()
-                    .map(|element| {
+                    .flat_map(|element| {
                         //Face textures
                         let north = element.faces.get(&schemas::models::BlockFace::North).as_ref().and_then(|tex|
                             get_atlas_uv(
@@ -348,91 +329,158 @@ impl ModelMesh {
                             schemas::models::Axis::Z => Mat3::from_rotation_z(rot.angle.to_radians()),
                         };
                         let vec_origin = Vec3::from_array(rot.origin)/16.0;
-                        let translation = vec_origin - matrix * vec_origin;
-                        
-                        let a = (matrix * vec3(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0) + translation).into();
-                        let b = (matrix * vec3(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0) + translation).into();
-                        let c = (matrix * vec3(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0) + translation).into();
-                        let d = (matrix * vec3(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0) + translation).into();
-                        let e = (matrix * vec3(1.0 - element.from[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0) + translation).into();
-                        let f = (matrix * vec3(1.0 - element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0) + translation).into();
-                        let g = (matrix * vec3(1.0 - element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0) + translation).into();
-                        let h = (matrix * vec3(1.0 - element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0) + translation).into();
-                        const NO_UV: (UV, u32) = (((0, 0), (0, 0)), 0);
 
-                        //It's valid behavior for a face to not be defined in a block model. If that happens it won't be included
-                        //in the chunk indices when rendering, but we need some placeholder, so we zero it out, which is fine because
-                        //the face won't be taken into account when calculating chunk indices.
-                        let north_face = north.unwrap_or(NO_UV);
-                        let east_face = east.unwrap_or(NO_UV);
-                        let south_face = south.unwrap_or(NO_UV);
-                        let west_face = west.unwrap_or(NO_UV);
-                        let up_face = up.unwrap_or(NO_UV);
-                        let down_face = down.unwrap_or(NO_UV);
-
-                        let current_element_is_full_cube = element.from[0] == 0.0
-                            && element.from[1] == 0.0
-                            && element.from[2] == 0.0
-                            && element.to[0] == 16.0
-                            && element.to[1] == 16.0
-                            && element.to[2] == 16.0;
-
-                        #[rustfmt::skip]
-                        let faces = BlockModelFaces {
-                            vertices: [
-                                BlockMeshVertex { position: h, tex_coords: [south_face.0.1.0, south_face.0.0.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
-                                BlockMeshVertex { position: g, tex_coords: [south_face.0.0.0, south_face.0.0.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
-                                BlockMeshVertex { position: f, tex_coords: [south_face.0.0.0, south_face.0.1.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
-                                BlockMeshVertex { position: e, tex_coords: [south_face.0.1.0, south_face.0.1.1], normal: [0.0, 0.0, 1.0], animation_uv_offset: south_face.1 },
-
-                                BlockMeshVertex { position: f, tex_coords: [west_face.0.1.0, west_face.0.1.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
-                                BlockMeshVertex { position: g, tex_coords: [west_face.0.1.0, west_face.0.0.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
-                                BlockMeshVertex { position: c, tex_coords: [west_face.0.0.0, west_face.0.0.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
-                                BlockMeshVertex { position: b, tex_coords: [west_face.0.0.0, west_face.0.1.1], normal: [-1.0, 0.0, 0.0], animation_uv_offset: west_face.1 },
-
-                                BlockMeshVertex { position: a, tex_coords: [north_face.0.0.0, north_face.0.1.1], normal: [0.0, 0.0, -1.0], animation_uv_offset: north_face.1 },
-                                BlockMeshVertex { position: b, tex_coords: [north_face.0.1.0, north_face.0.1.1], normal: [0.0, 0.0, -1.0], animation_uv_offset: north_face.1 },
-                                BlockMeshVertex { position: c, tex_coords: [north_face.0.1.0, north_face.0.0.1], normal: [0.0, 0.0, -1.0], animation_uv_offset: north_face.1 },
-                                BlockMeshVertex { position: d, tex_coords: [north_face.0.0.0, north_face.0.0.1], normal: [0.0, 0.0, -1.0], animation_uv_offset: north_face.1 },
-
-                                BlockMeshVertex { position: h, tex_coords: [east_face.0.0.0, east_face.0.0.1], normal: [1.0, 0.0, 0.0], animation_uv_offset: east_face.1 },
-                                BlockMeshVertex { position: e, tex_coords: [east_face.0.0.0, east_face.0.1.1], normal: [1.0, 0.0, 0.0], animation_uv_offset: east_face.1 },
-                                BlockMeshVertex { position: a, tex_coords: [east_face.0.1.0, east_face.0.1.1], normal: [1.0, 0.0, 0.0], animation_uv_offset: east_face.1 },
-                                BlockMeshVertex { position: d, tex_coords: [east_face.0.1.0, east_face.0.0.1], normal: [1.0, 0.0, 0.0], animation_uv_offset: east_face.1 },
-
-                                BlockMeshVertex { position: d, tex_coords: [up_face.0.0.0, up_face.0.1.1], normal: [0.0, 1.0, 0.0], animation_uv_offset: up_face.1 },
-                                BlockMeshVertex { position: c, tex_coords: [up_face.0.1.0, up_face.0.1.1], normal: [0.0, 1.0, 0.0], animation_uv_offset: up_face.1 },
-                                BlockMeshVertex { position: g, tex_coords: [up_face.0.1.0, up_face.0.0.1], normal: [0.0, 1.0, 0.0], animation_uv_offset: up_face.1 },
-                                BlockMeshVertex { position: h, tex_coords: [up_face.0.0.0, up_face.0.0.1], normal: [0.0, 1.0, 0.0], animation_uv_offset: up_face.1 },
-
-                                BlockMeshVertex { position: e, tex_coords: [down_face.0.1.0, down_face.0.1.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
-                                BlockMeshVertex { position: f, tex_coords: [down_face.0.0.0, down_face.0.1.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
-                                BlockMeshVertex { position: b, tex_coords: [down_face.0.0.0, down_face.0.0.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
-                                BlockMeshVertex { position: a, tex_coords: [down_face.0.1.0, down_face.0.0.1], normal: [0.0, -1.0, 0.0], animation_uv_offset: down_face.1 },
-                            ],
-                            south: south.map(|_| 0),
-                            west: west.map(|_| 4),
-                            north: north.map(|_| 8),
-                            east: east.map(|_| 12),
-                            up: up.map(|_| 16),
-                            down: down.map(|_| 20),
-                            cube: current_element_is_full_cube,
+                        let vertex_transform = |v:Vec3|{
+                            let v = match model_properties.x{
+                                0=>v,
+                                90=>vec3(v.x,1.0-v.z, v.y),
+                                180=>vec3(v.x,1.0-v.y, 1.0-v.z),
+                                270=>vec3(v.x,v.z, 1.0-v.y),
+                                _=>panic!("invalid rotation")
+                            };
+                            let v = matrix * (v-vec_origin) + vec_origin;
+                            let v = match model_properties.y{
+                                0=>v,
+                                90=>vec3(1.0-v.z, v.y, v.x),
+                                180=>vec3(1.0-v.x, v.y,1.0-v.z),
+                                270=>vec3(v.z, v.y, 1.0-v.x),
+                                _=>panic!("invalid rotation")
+                            };
+                            v
                         };
+                        
+                        let p000 = vertex_transform(vec3(element.from[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0));
+                        let p001 = vertex_transform(vec3(element.from[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0));
+                        let p010 = vertex_transform(vec3(element.from[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0));
+                        let p011 = vertex_transform(vec3(element.from[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0));
+                        let p100 = vertex_transform(vec3(element.to[0] / 16.0, element.from[1] / 16.0, element.from[2] / 16.0));
+                        let p101 = vertex_transform(vec3(element.to[0] / 16.0, element.from[1] / 16.0, element.to[2] / 16.0));
+                        let p110 = vertex_transform(vec3(element.to[0] / 16.0, element.to[1] / 16.0, element.from[2] / 16.0));
+                        let p111 = vertex_transform(vec3(element.to[0] / 16.0, element.to[1] / 16.0, element.to[2] / 16.0));
 
-                        all_elements_are_full_cubes &= current_element_is_full_cube;
+                        let mut faces = vec![];
+                        faces.extend(south.map(|south_face|{
+                                BlockModelFace{
+                                    vertices: [
+                                        BlockMeshVertex { position: p101, tex_coords: [south_face.0.1.0, south_face.0.1.1]},
+                                        BlockMeshVertex { position: p111, tex_coords: [south_face.0.1.0, south_face.0.0.1]},
+                                        BlockMeshVertex { position: p011, tex_coords: [south_face.0.0.0, south_face.0.0.1]},
+                                        BlockMeshVertex { position: p001, tex_coords: [south_face.0.0.0, south_face.0.1.1]},            
+                                    ],
+                                    normal: vec3(0.0, 0.0, 1.0),
+                                    animation_uv_offset: south_face.1,
+                                }
+                            }));
+                        faces.extend(west.map(|west_face|{
+                                BlockModelFace{
+                                    vertices: [
+                                        BlockMeshVertex { position: p001, tex_coords: [west_face.0.1.0, west_face.0.1.1]},
+                                        BlockMeshVertex { position: p011, tex_coords: [west_face.0.1.0, west_face.0.0.1]},
+                                        BlockMeshVertex { position: p010, tex_coords: [west_face.0.0.0, west_face.0.0.1]},
+                                        BlockMeshVertex { position: p000, tex_coords: [west_face.0.0.0, west_face.0.1.1]},
+                                    ],
+                                    normal: vec3(-1.0, 0.0, 0.0),
+                                    animation_uv_offset: west_face.1 ,
+                                }
+                            }));
+                        faces.extend(north.map(|north_face|{
+                            BlockModelFace{
+                                vertices: [
+                                    BlockMeshVertex { position: p000, tex_coords: [north_face.0.1.0, north_face.0.1.1]},
+                                    BlockMeshVertex { position: p010, tex_coords: [north_face.0.1.0, north_face.0.0.1]},
+                                    BlockMeshVertex { position: p110, tex_coords: [north_face.0.0.0, north_face.0.0.1]},
+                                    BlockMeshVertex { position: p100, tex_coords: [north_face.0.0.0, north_face.0.1.1]},
+                                ],
+                                normal: vec3(0.0, 0.0, -1.0),
+                                animation_uv_offset: north_face.1,
+                            }
+                        }));
+                        faces.extend(east.map(|east_face|{
+                            BlockModelFace{
+                                vertices: [
+                                    BlockMeshVertex { position: p100, tex_coords: [east_face.0.1.0, east_face.0.1.1]},
+                                    BlockMeshVertex { position: p110, tex_coords: [east_face.0.1.0, east_face.0.0.1]},
+                                    BlockMeshVertex { position: p111, tex_coords: [east_face.0.0.0, east_face.0.0.1]},
+                                    BlockMeshVertex { position: p101, tex_coords: [east_face.0.0.0, east_face.0.1.1]},
+                                ],
+                                normal: vec3(1.0, 0.0, 0.0),
+                                animation_uv_offset: east_face.1,
+                            }
+                        }));
+                        faces.extend(up.map(|up_face|{
+                            BlockModelFace{
+                                vertices: [
+                                    BlockMeshVertex { position: p010, tex_coords: [up_face.0.1.0, up_face.0.1.1]},
+                                    BlockMeshVertex { position: p011, tex_coords: [up_face.0.1.0, up_face.0.0.1]},
+                                    BlockMeshVertex { position: p111, tex_coords: [up_face.0.0.0, up_face.0.0.1]},
+                                    BlockMeshVertex { position: p110, tex_coords: [up_face.0.0.0, up_face.0.1.1]},
+                                ],
+                                normal: vec3(0.0, 1.0, 0.0),
+                                animation_uv_offset: up_face.1,
+                            }
+                        }));
 
-                        Ok(faces)
-                    }).collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>();
-
-                results
+                        faces.extend(down.map(|down_face|{
+                            BlockModelFace{
+                                vertices: [
+                                    BlockMeshVertex { position: p000, tex_coords: [down_face.0.1.0, down_face.0.1.1]},
+                                    BlockMeshVertex { position: p100, tex_coords: [down_face.0.1.0, down_face.0.0.1]},
+                                    BlockMeshVertex { position: p101, tex_coords: [down_face.0.0.0, down_face.0.0.1]},
+                                    BlockMeshVertex { position: p001, tex_coords: [down_face.0.0.0, down_face.0.1.1]},
+                                ],
+                                normal: vec3(0.0, -1.0, 0.0),
+                                animation_uv_offset: down_face.1,
+                            }
+                        }));
+                        faces
+                    }).collect::<Vec<BlockModelFace>>())
             })
             .flatten_ok()
-            .collect::<Result<Vec<BlockModelFaces>, MeshBakeError>>()?;
-
-        Ok(Self {
-            mesh,
-            is_cube: all_elements_are_full_cubes,
+            .collect::<Result<Vec<BlockModelFace>, MeshBakeError>>()?;
+        let mut result = Self {
             layer: RenderLayer::Solid,
-        })
+            north: vec![],
+            south: vec![],
+            west: vec![],
+            east: vec![],
+            up: vec![],
+            down: vec![],
+            any: vec![],
+            cull: 0,
+        };
+        mesh.iter().for_each(|face|{
+            let full_face = (face.vertices[0].position.fract() == vec3(0.0, 0.0, 0.0)
+                && face.vertices[1].position.fract() == vec3(0.0, 0.0, 0.0)
+                && face.vertices[2].position.fract() == vec3(0.0, 0.0, 0.0)
+                && face.vertices[3].position.fract() == vec3(0.0, 0.0, 0.0)) as u8;
+            if face.vertices[0].position.x==0.0 && face.vertices[1].position.x==0.0 && face.vertices[2].position.x==0.0{
+                result.west.push(*face);
+                result.cull |= full_face<<Direction::West as u8;
+            }
+            else if face.vertices[0].position.x==1.0 && face.vertices[1].position.x==1.0 && face.vertices[2].position.x==1.0{
+                result.east.push(*face);
+                result.cull |= full_face<<Direction::East as u8;
+            }
+            else if face.vertices[0].position.y==0.0 && face.vertices[1].position.y==0.0 && face.vertices[2].position.y==0.0{
+                result.down.push(*face);
+                result.cull |= full_face<<Direction::Down as u8;
+            }
+            else if face.vertices[0].position.y==1.0 && face.vertices[1].position.y==1.0 && face.vertices[2].position.y==1.0{
+                result.up.push(*face);
+                result.cull |= full_face<<Direction::Up as u8;
+            }
+            else if face.vertices[0].position.z==0.0 && face.vertices[1].position.z==0.0 && face.vertices[2].position.z==0.0{
+                result.north.push(*face);
+                result.cull |= full_face<<Direction::North as u8;
+            }
+            else if face.vertices[0].position.z==1.0 && face.vertices[1].position.z==1.0 && face.vertices[2].position.z==1.0{
+                result.south.push(*face);
+                result.cull |= full_face<<Direction::South as u8;
+            }
+            else{
+                result.any.push(*face);
+            }
+        });
+        Ok(result)
     }
 }

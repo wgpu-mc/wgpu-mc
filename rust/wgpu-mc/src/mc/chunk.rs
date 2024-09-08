@@ -11,10 +11,11 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::sync::Arc;
 
-use glam::{ivec3, IVec2, IVec3, Vec2Swizzles, Vec3Swizzles};
+use glam::{ivec3, vec3, IVec2, IVec3, Vec2Swizzles, Vec3, Vec3Swizzles};
 use range_alloc::RangeAllocator;
 
-use crate::mc::block::{BlockstateKey, ChunkBlockState, ModelMesh};
+use crate::mc::block::{BlockModelFace, BlockstateKey, ChunkBlockState, ModelMesh};
+use crate::mc::direction::Direction;
 use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
 use crate::WmRenderer;
@@ -49,9 +50,9 @@ impl LightLevel {
 
 /// Return a [ChunkBlockState] within the provided world coordinates.
 pub trait BlockStateProvider: Send + Sync {
-    fn get_state(&self, x: i32, y: i32, z: i32) -> ChunkBlockState;
+    fn get_state(&self, pos:IVec3) -> ChunkBlockState;
 
-    fn get_light_level(&self, x: i32, y: i32, z: i32) -> LightLevel;
+    fn get_light_level(&self, pos:IVec3) -> LightLevel;
 
     fn is_section_empty(&self, rel_pos: IVec3) -> bool;
 }
@@ -149,21 +150,6 @@ impl Section {
     }
 }
 
-/// Returns true if the block at the given coordinates is either not a full cube or has transparency
-#[inline]
-fn block_allows_neighbor_render(
-    block_manager: &BlockManager,
-    state_provider: &impl BlockStateProvider,
-    x: i32,
-    y: i32,
-    z: i32,
-) -> bool {
-    let state = get_block(block_manager, state_provider.get_state(x, y, z));
-    match state {
-        Some(mesh) => !mesh.is_cube,
-        None => true,
-    }
-}
 
 #[inline]
 fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc<ModelMesh>> {
@@ -208,140 +194,79 @@ fn bake_layers<Provider: BlockStateProvider>(
     }
 
     for block_index in 0..16 * 16 * 16 {
-        let x = block_index & 15;
-        let y = block_index >> 8;
-        let z = (block_index & 255) >> 4;
+        let pos = ivec3(block_index & 15, block_index >> 8, (block_index & 255) >> 4);
 
-        let xf32 = x as f32;
-        let yf32 = y as f32;
-        let zf32 = z as f32;
+        let fpos= vec3(pos.x as f32,pos.y as f32,pos.z as f32);
 
-        let block_state: ChunkBlockState = state_provider.get_state(x, y, z);
+        let block_state: ChunkBlockState = state_provider.get_state(pos);
 
-        let state_key = match block_state {
-            ChunkBlockState::Air => continue,
-            ChunkBlockState::State(key) => key,
-        };
+        if let Some(model_mesh) = get_block(block_manager, block_state){
 
-        let model_mesh = get_block(block_manager, block_state).unwrap();
+            const INDICES: [u32; 6] = [1, 3, 0, 2, 3, 1];
+            let mut add_quad = |face:&BlockModelFace,light_level: LightLevel|{
+                let baked_layer = &mut layers[RenderLayer::Solid as usize];
+                let vec_index = baked_layer.vertices.len()/Vertex::VERTEX_LENGTH;
 
-        // TODO: randomly select a mesh if there are multiple models in a variant
+                baked_layer
+                    .vertices
+                    .extend((0..4).map(|vert_index| {
+                        let model_vertex = face.vertices[vert_index as usize];
 
-        const INDICES: [u32; 6] = [1, 3, 0, 2, 3, 1];
+                        Vertex {
+                            position: [
+                                fpos.x + model_vertex.position[0],
+                                fpos.y + model_vertex.position[1],
+                                fpos.z + model_vertex.position[2],
+                            ],
+                            uv: model_vertex.tex_coords,
+                            normal: face.normal.to_array(),
+                            color: u32::MAX,
+                            uv_offset: 0,
+                            lightmap_coords: light_level.byte,
+                            dark: false,
+                        }
+                    }).flat_map(Vertex::compressed));
+                baked_layer.indices.extend(INDICES.iter().flat_map(|index| (index + (vec_index as u32)).to_ne_bytes()));
+            };
 
-        for model in &model_mesh.mesh {
-            if model.cube {
-                let baked_should_render_face = |x_: i32, y_: i32, z_: i32| {
-                    block_allows_neighbor_render(block_manager, state_provider, x_, y_, z_)
+
+            let mut add_face = |face:&BlockModelFace,dir:Direction|{
+                let cull =if let Some(mesh) = get_block(block_manager, state_provider.get_state(pos + dir.to_vec())){
+                    (mesh.cull>>dir.opposite() as u8)&1 == 1
+                }
+                else {
+                    false
                 };
-                let render_east = baked_should_render_face(x + 1, y, z);
-                let render_west = baked_should_render_face(x - 1, y, z);
-                let render_up = baked_should_render_face(x, y + 1, z);
-                let render_down = baked_should_render_face(x, y - 1, z);
-                let render_south = baked_should_render_face(x, y, z + 1);
-                let render_north = baked_should_render_face(x, y, z - 1);
-
-                let mut extend_vertices =
-                    |layer: RenderLayer, index: u32, light_level: LightLevel| {
-                        let baked_layer = &mut layers[layer as usize];
-                        let vec_index = baked_layer.vertices.len()/Vertex::VERTEX_LENGTH;
-
-                        baked_layer
-                            .vertices
-                            .extend((index..index + 4).map(|vert_index| {
-                                let model_vertex = model.vertices[vert_index as usize];
-
-                                Vertex {
-                                    position: [
-                                        xf32 + model_vertex.position[0],
-                                        yf32 + model_vertex.position[1],
-                                        zf32 + model_vertex.position[2],
-                                    ],
-                                    uv: model_vertex.tex_coords,
-                                    normal: model_vertex.normal,
-                                    color: u32::MAX,
-                                    uv_offset: 0,
-                                    lightmap_coords: light_level.byte,
-                                    dark: false,
-                                }
-                            }).flat_map(Vertex::compressed));
-                        baked_layer.indices.extend(INDICES.iter().flat_map(|index| (index + (vec_index as u32)).to_ne_bytes()));
-                    };
-
-                // dbg!(absolute_x, absolute_z, render_up, render_down, render_north, render_south, render_west, render_east);
-
-                //"face" contains offsets into the array containing the model vertices.
-                //We use those offsets to get the relevant vertices, and add them into the chunk vertices.
-                //We then add the starting offset into the vertices to the face indices so that they match up.
-                if let (true, Some(face)) = (render_north, &model.north) {
-                    let light_level: LightLevel = state_provider.get_light_level(x, y, z - 1);
-                    extend_vertices(model_mesh.layer, *face, light_level);
+                if !cull{
+                    let light_level: LightLevel = state_provider.get_light_level(pos+dir.to_vec());
+                    add_quad(face,light_level);
                 }
+            };
 
-                if let (true, Some(face)) = (render_east, &model.east) {
-                    let light_level: LightLevel = state_provider.get_light_level(x + 1, y, z);
-                    extend_vertices(model_mesh.layer, *face, light_level);
-                }
+            model_mesh.west.iter().for_each(|face|{
+                add_face(face,Direction::West);
+            });
+            model_mesh.east.iter().for_each(|face|{
+                add_face(face,Direction::East);
+            });
+            model_mesh.down.iter().for_each(|face|{
+                add_face(face,Direction::Down);
+            });
+            model_mesh.up.iter().for_each(|face|{
+                add_face(face,Direction::Up);
+            });
+            model_mesh.north.iter().for_each(|face|{
+                add_face(face,Direction::North);
+            });
+            model_mesh.south.iter().for_each(|face|{
+                add_face(face,Direction::South);
+            });
+            model_mesh.any.iter().for_each(|face|{
+                let light_level: LightLevel = state_provider.get_light_level(pos);
+                add_quad(face,light_level);
+            });
 
-                if let (true, Some(face)) = (render_south, &model.south) {
-                    let light_level: LightLevel = state_provider.get_light_level(x, y, z + 1);
-                    extend_vertices(model_mesh.layer, *face, light_level);
-                }
-
-                if let (true, Some(face)) = (render_west, &model.west) {
-                    let light_level: LightLevel = state_provider.get_light_level(x - 1, y, z);
-                    extend_vertices(model_mesh.layer, *face, light_level);
-                }
-
-                if let (true, Some(face)) = (render_up, &model.up) {
-                    let light_level: LightLevel = state_provider.get_light_level(x, y + 1, z);
-                    extend_vertices(model_mesh.layer, *face, light_level);
-                }
-
-                if let (true, Some(face)) = (render_down, &model.down) {
-                    let light_level: LightLevel = state_provider.get_light_level(x, y - 1, z);
-                    extend_vertices(model_mesh.layer, *face, light_level);
-                }
-            } else {
-
-                [
-                    model.north,
-                    model.east,
-                    model.south,
-                    model.west,
-                    model.up,
-                    model.down,
-                ]
-                .iter()
-                .filter_map(|face| *face)
-                .for_each(|index| {
-                    let baked_layer = &mut layers[model_mesh.layer as usize];
-                    let vec_index = baked_layer.vertices.len()/Vertex::VERTEX_LENGTH;
-
-                    baked_layer
-                        .vertices
-                        .extend((index..index + 4).map(|vert_index| {
-                            let model_vertex = model.vertices[vert_index as usize];
-
-                            Vertex {
-                                position: [
-                                    xf32 + model_vertex.position[0],
-                                    yf32 + model_vertex.position[1],
-                                    zf32 + model_vertex.position[2],
-                                ],
-                                uv: model_vertex.tex_coords,
-                                normal: model_vertex.normal,
-                                color: u32::MAX,
-                                uv_offset: 0,
-                                lightmap_coords: state_provider.get_light_level(x, y, z).byte,
-                                dark: false,
-                            }
-                        }).flat_map(Vertex::compressed));
-                    baked_layer.indices.extend(INDICES.iter().flat_map(|index| (index + (vec_index as u32)).to_ne_bytes()));
-                });
-            }
         }
     }
-
     layers
 }

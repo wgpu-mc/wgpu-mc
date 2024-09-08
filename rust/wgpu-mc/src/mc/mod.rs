@@ -32,7 +32,7 @@ pub mod block;
 pub mod chunk;
 pub mod entity;
 pub mod resource;
-
+pub mod direction;
 /// Take in a block name (not a [ResourcePath]!) and optionally a variant state key, e.g. "facing=north" and format it some way
 /// for example, `minecraft:anvil[facing=north]` or `Block{minecraft:anvil}[facing=north]`
 pub type BlockVariantFormatter = dyn Fn(&str, Option<&str>) -> String;

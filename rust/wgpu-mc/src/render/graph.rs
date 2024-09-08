@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 use glam::ivec3;
+use linked_hash_map::LinkedHashMap;
 use treeculler::{AABB, BVol, Frustum, Vec3};
 
 use wgpu::{BindGroup, BufferAddress, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, ShaderStages, StoreOp};
@@ -124,7 +125,7 @@ pub struct BoundPipeline {
 
 pub struct RenderGraph {
     pub config: ShaderPackConfig,
-    pub pipelines: HashMap<String, BoundPipeline>,
+    pub pipelines: LinkedHashMap<String, BoundPipeline>,
     pub resources: HashMap<String, ResourceBacking>,
 }
 
@@ -407,7 +408,7 @@ impl RenderGraph {
 
         let mut graph = Self {
             config,
-            pipelines: HashMap::new(),
+            pipelines: LinkedHashMap::new(),
             resources,
         };
 
