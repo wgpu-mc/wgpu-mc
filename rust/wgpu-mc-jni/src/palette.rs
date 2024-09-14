@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::slice;
 
-use jni::objects::{GlobalRef, JByteArray, JClass, JLongArray, JObject, JValue, ReleaseMode};
-use jni::sys::{jint, jlong, jobject};
+use jni::objects::{JByteArray, JClass, JLongArray, JObject, ReleaseMode};
+use jni::sys::{jint, jlong};
 use jni::JNIEnv;
 use jni_fn::jni_fn;
 use mc_varint::VarIntRead;
@@ -22,6 +22,12 @@ pub struct JavaPalette {
     pub store: Vec<BlockstateKey>,
     pub indices: HashMap<BlockstateKey, usize>,
 }
+impl Default for JavaPalette {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JavaPalette {
     pub fn new() -> Self {
         Self {

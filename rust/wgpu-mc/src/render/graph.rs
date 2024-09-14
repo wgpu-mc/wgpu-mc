@@ -1,13 +1,14 @@
-use std::alloc::alloc;
-use std::collections::HashMap;
-use std::mem;
-use std::sync::Arc;
 use glam::ivec3;
 use linked_hash_map::LinkedHashMap;
-use treeculler::{AABB, BVol, Frustum, Vec3};
+use std::collections::HashMap;
+use std::sync::Arc;
+use treeculler::{BVol, Frustum, Vec3, AABB};
 
-use wgpu::{BindGroup, BufferAddress, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, ShaderStages, StoreOp};
-use wgpu::util::{DrawIndexedIndirectArgs, DrawIndirectArgs};
+use wgpu::{
+    Color, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, ShaderStages,
+    StoreOp,
+};
 
 use crate::mc::chunk::RenderLayer;
 use crate::mc::entity::InstanceVertex;
@@ -25,7 +26,7 @@ use crate::texture::TextureAndView;
 use crate::util::WmArena;
 use crate::WmRenderer;
 
-pub trait Geometry:Send+Sync {
+pub trait Geometry: Send + Sync {
     fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(
         &mut self,
         wm: &WmRenderer,
@@ -163,14 +164,13 @@ impl RenderGraph {
                     }
                     BindGroupDef::Resource(resource) => {
                         match (&resource[..], &custom_bind_groups) {
-                            ("@bg_ssbo_chunks", _) => {
-                                wm.bind_group_layouts.get("ssbo").unwrap()
-                            }
+                            ("@bg_ssbo_chunks", _) => wm.bind_group_layouts.get("ssbo").unwrap(),
+                            ("@bg_entity", _) => wm.bind_group_layouts.get("entity").unwrap(),
                             (_, Some(custom)) => {
                                 if let Some(entry) = custom.get(resource) {
                                     entry
                                 } else {
-                                    unimplemented!("{}",resource)
+                                    unimplemented!("{}", resource)
                                 }
                             }
                             (_, None) => unimplemented!(),
@@ -187,11 +187,10 @@ impl RenderGraph {
                     BindGroupDef::Entries(entries) => {
                         let entries = entries
                             .iter()
-                            .map(|(index, resource_id)| {
+                            .flat_map(|(index, resource_id)| {
                                 let resource = self.resources.get(resource_id).unwrap();
                                 resource.get_bind_group_entries(*index as u32)
                             })
-                            .flatten()
                             .collect::<Vec<wgpu::BindGroupEntry>>();
 
                         let bind_group =
@@ -199,7 +198,7 @@ impl RenderGraph {
                                 .device
                                 .create_bind_group(&wgpu::BindGroupDescriptor {
                                     label: None,
-                                    layout: &bind_group_layouts[vec_index],
+                                    layout: bind_group_layouts[vec_index],
                                     entries: &entries,
                                 });
 
@@ -227,6 +226,10 @@ impl RenderGraph {
                             range: index..index + 12,
                         },
                         "@pc_total_sections" => wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::VERTEX,
+                            range: index..index + 4,
+                        },
+                        "@pc_parts_per_entity" => wgpu::PushConstantRange {
                             stages: wgpu::ShaderStages::VERTEX,
                             range: index..index + 4,
                         },
@@ -264,8 +267,7 @@ impl RenderGraph {
                 _ => {
                     match geometry_vertex_layouts
                         .as_ref()
-                        .map(|layouts| layouts.get(&pipeline_config.geometry))
-                        .flatten()
+                        .and_then(|layouts| layouts.get(&pipeline_config.geometry))
                     {
                         None => unimplemented!(),
                         Some(layout) => Some(layout.clone()),
@@ -273,7 +275,7 @@ impl RenderGraph {
                 }
             };
 
-            let label = format!("{}", pipeline_name);
+            let label = pipeline_name.to_string();
 
             let render_pipeline =
                 wm.display
@@ -324,6 +326,7 @@ impl RenderGraph {
                                             "premultiplied_alpha_blending" => {
                                                 wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING
                                             }
+                                            "replace" => wgpu::BlendState::REPLACE,
                                             "color_add_alpha_blending" => wgpu::BlendState {
                                                 color: wgpu::BlendComponent {
                                                     src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -440,7 +443,7 @@ impl RenderGraph {
         render_target: &wgpu::TextureView,
         clear_color: [u8; 3],
         geometry: &mut HashMap<String, Box<dyn Geometry>>,
-        frustum: &Frustum<f32>
+        frustum: &Frustum<f32>,
     ) {
         let arena = WmArena::new(4096);
 
@@ -501,13 +504,13 @@ impl RenderGraph {
                             ))
                         } else {
                             match self.resources.get(depth_texture) {
-                                Some(&ResourceBacking::Texture2D(ref view)) => &view.view,
+                                Some(ResourceBacking::Texture2D(view)) => &view.view,
                                 _ => unimplemented!("Unknown depth target {}", depth_texture),
                             }
                         };
 
                     RenderPassDepthStencilAttachment {
-                        view: &depth_view,
+                        view: depth_view,
                         depth_ops: Some(Operations {
                             load: if will_clear_depth {
                                 LoadOp::Clear(1.0)
@@ -529,7 +532,11 @@ impl RenderGraph {
                         match bind_group {
                             WmBindGroup::Resource(name) => match &name[..] {
                                 "@bg_ssbo_chunks" => {
-                                    render_pass.set_bind_group(*index,&scene.chunk_buffer.bind_group,&[]);
+                                    render_pass.set_bind_group(
+                                        *index,
+                                        &scene.chunk_buffer.bind_group,
+                                        &[],
+                                    );
                                 }
                                 _ => unimplemented!(),
                             },
@@ -539,50 +546,82 @@ impl RenderGraph {
                         }
                     }
 
-                    render_pass.set_index_buffer(scene.chunk_buffer.buffer.slice(..),wgpu::IndexFormat::Uint32);
+                    render_pass.set_index_buffer(
+                        scene.chunk_buffer.buffer.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
 
                     let sections = scene.section_storage.write();
-                    let camera_pos = scene.camera_section_pos.read().clone();
+                    let camera_pos = *scene.camera_section_pos.read();
                     for (pos, section) in sections.iter() {
-                        let rel_pos = ivec3(pos.x-camera_pos.x, pos.y, pos.z-camera_pos.y);
-                        let a: Vec3<f32> = [rel_pos.x as f32, rel_pos.y as f32, rel_pos.z as f32].into();
+                        let rel_pos = ivec3(pos.x - camera_pos.x, pos.y, pos.z - camera_pos.y);
+                        let a: Vec3<f32> =
+                            [rel_pos.x as f32, rel_pos.y as f32, rel_pos.z as f32].into();
                         let b: Vec3<f32> = a + Vec3::new(1.0, 1.0, 1.0);
 
-                        let bounds: AABB<f32> = AABB::new((a*16.0).into_array(), (b*16.0).into_array());
+                        let bounds: AABB<f32> =
+                            AABB::new((a * 16.0).into_array(), (b * 16.0).into_array());
 
                         if !bounds.coherent_test_against_frustum(frustum, 0).0 {
                             continue;
                         }
                         if let Some(layer) = &section.layers[RenderLayer::Solid as usize] {
-                            let mut pc:HashMap<String,(Vec<u8>,ShaderStages)> = HashMap::new();
+                            let mut pc: HashMap<String, (Vec<u8>, ShaderStages)> = HashMap::new();
                             //println!("draw {pos}");
-                            pc.insert("@pc_section_position".to_string(),  (bytemuck::cast_slice(&rel_pos.to_array()).to_vec(),ShaderStages::VERTEX));
-                            set_push_constants(
-                                pipeline_config,
-                                &mut render_pass,
-                                Some(pc),
+                            pc.insert(
+                                "@pc_section_position".to_string(),
+                                (
+                                    bytemuck::cast_slice(&rel_pos.to_array()).to_vec(),
+                                    ShaderStages::VERTEX,
+                                ),
                             );
+                            set_push_constants(pipeline_config, &mut render_pass, Some(pc));
                             render_pass.draw_indexed(
                                 layer.index_range.clone(),
                                 0,
-                                layer.vertex_range.start..layer.vertex_range.start + 1
+                                layer.vertex_range.start..layer.vertex_range.start + 1,
                             );
                         }
                     }
+                }
+                "@geo_entities" => {
+                    render_pass.set_pipeline(&bound_pipeline.pipeline);
 
-
-                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
-                        match bind_group {
-                            WmBindGroup::Resource(name) => match &name[..] {
-                                "@bg_ssbo_chunks" => {
-                                    render_pass.set_bind_group(*index, &scene.chunk_buffer.bind_group, &[]);
+                    let instances = { scene.entity_instances.lock().clone() };
+                    
+                    for (_, entity_instances) in &instances {
+                        for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                            match bind_group {
+                                WmBindGroup::Resource(name) => match &name[..] {
+                                    "@bg_entity" => {
+                                        render_pass.set_bind_group(
+                                            *index,
+                                            &entity_instances.uploaded.bind_group,
+                                            &[],
+                                        );
+                                    }
+                                    _ => unimplemented!(),
+                                },
+                                WmBindGroup::Custom(bind_group) => {
+                                    render_pass.set_bind_group(*index, bind_group, &[]);
                                 }
-                                _ => unimplemented!(),
-                            },
-                            WmBindGroup::Custom(bind_group) => {
-                                render_pass.set_bind_group(*index, bind_group, &[]);
                             }
                         }
+
+                        let mut pc: HashMap<String, (Vec<u8>, ShaderStages)> = HashMap::new();
+                        pc.insert(
+                            "@pc_parts_per_entity".to_string(),
+                            (
+                                bytemuck::cast_slice(&[entity_instances.entity.parts.len() as u32]).to_vec(),
+                                ShaderStages::VERTEX,
+                            ),
+                        );
+                        set_push_constants(pipeline_config, &mut render_pass, Some(pc));
+
+                        render_pass.set_vertex_buffer(0, entity_instances.entity.mesh.slice(..));
+                        render_pass.set_vertex_buffer(1, entity_instances.uploaded.instance_vbo.slice(..));
+
+                        render_pass.draw(0..entity_instances.entity.vertex_count, 0..entity_instances.capacity);
                     }
 
                 }
@@ -608,8 +647,7 @@ pub fn set_push_constants(
         .for_each(|(offset, resource)| {
             match push_constants
                 .as_ref()
-                .map(|others| others.get(resource))
-                .flatten()
+                .and_then(|others| others.get(resource))
             {
                 None => unimplemented!("Unknown push constant resource value"),
                 Some((data, stages)) => {

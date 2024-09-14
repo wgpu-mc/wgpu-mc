@@ -1,24 +1,24 @@
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::{slice, thread};
+use std::{slice};
 use std::{sync::Arc, time::Instant};
 
 use byteorder::LittleEndian;
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint, jlong};
 use jni::{
-    objects::{JString, JValue},
+    objects::{JString},
     JNIEnv,
 };
 use jni_fn::jni_fn;
-use once_cell::sync::{Lazy, OnceCell};
-use parking_lot::{Mutex, RwLock};
-use wgpu_mc::mc::{RenderEffectsData, SkyState};
-use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex, UploadedEntityInstances};
-use wgpu_mc::texture::{BindableTexture, TextureAndView};
+use once_cell::sync::{Lazy};
+use parking_lot::{Mutex};
+use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex};
+use wgpu_mc::mc::{RenderEffectsData};
+use wgpu_mc::texture::{BindableTexture};
 
 use crate::application::SHOULD_STOP;
-use crate::gl::{ GlTexture, GL_ALLOC};
+use crate::gl::{GlTexture, GL_ALLOC};
 use crate::RENDERER;
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
@@ -28,7 +28,6 @@ pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
         terrain_transformation: [[0.0; 4]; 4],
     })
 });
-
 
 pub struct Matrices {
     pub projection: [[f32; 4]; 4],
@@ -70,12 +69,10 @@ pub fn setMatrix(mut env: JNIEnv, _class: JClass, id: jint, float_array: JFloatA
     }
 }
 
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn scheduleStop(_env: JNIEnv, _class: JClass) {
     let _ = SHOULD_STOP.set(());
 }
-
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub enum MCTextureId {
@@ -142,29 +139,32 @@ pub fn setEntityInstanceBuffer(
         unsafe { slice::from_raw_parts(overlay_ptr as usize as *mut i32, overlay_len as usize) };
 
     let transforms: Vec<f32> = Vec::from(mat4s);
-    let overlays: Vec<i32> = Vec::from(overlays);
-    let verts: Vec<InstanceVertex> = (0..instance_count)
-        .map(|index| InstanceVertex {
-            entity_index: index,
+    
+    let verts: Vec<InstanceVertex> = overlays.iter()
+        .map(|overlay| InstanceVertex {
             uv_offset: [0, 0],
+            overlay: *overlay as u32,
         })
         .collect();
 
     let mut instances = ENTITY_INSTANCES.lock();
-    let bundled_entity_instances =
-        if let Some(bundled_entity_instances) = instances.get_mut(&entity_name) {
-            bundled_entity_instances.count = instance_count;
+    
+    let to_upload = match instances.get_mut(&entity_name) {
+        Some(bundled_entity_instances) if bundled_entity_instances.capacity <= instance_count => {
+            bundled_entity_instances.capacity = instance_count;
+            
             bundled_entity_instances
-        } else {
+        }
+        _ => {
             let texture = {
                 let gl_alloc = GL_ALLOC.read();
 
                 match gl_alloc.get(&(texture_id as u32)) {
                     None => return 0,
                     Some(GlTexture {
-                        bindable_texture: None,
-                        ..
-                    }) => return 0,
+                             bindable_texture: None,
+                             ..
+                         }) => return 0,
                     _ => {}
                 }
 
@@ -180,26 +180,23 @@ pub fn setEntityInstanceBuffer(
             let entity = models.get(&entity_name).unwrap();
             instances.insert(
                 entity_name.clone(),
-                BundledEntityInstances::new(wm, entity.clone(), instance_count, texture),
+                BundledEntityInstances::new(wm, entity.clone(), &texture.tv.view, 4096),
             );
             instances.get(&entity_name).unwrap()
-        };
+        }
+    };
 
     wm.display.queue.write_buffer(
-        bundled_entity_instances.uploaded.instance_vbo.as_ref(),
+        &to_upload.uploaded.instance_vbo,
         0,
         bytemuck::cast_slice(&verts),
     );
     wm.display.queue.write_buffer(
-        &bundled_entity_instances.uploaded.transform_ssbo.buffer,
+        &to_upload.uploaded.transforms_buffer,
         0,
         bytemuck::cast_slice(&transforms),
     );
-    wm.display.queue.write_buffer(
-        &bundled_entity_instances.uploaded.overlay_ssbo.buffer,
-        0,
-        bytemuck::cast_slice(&overlays),
-    );
+    
     Instant::now().duration_since(now).as_nanos() as jlong
 }
 
@@ -238,7 +235,7 @@ pub fn bindRenderEffectsData(
     color_modulator: JFloatArray,
     dimension_fog_color: JFloatArray,
 ) {
-    let mut render_effects_data = RenderEffectsData {
+    let render_effects_data = RenderEffectsData {
         fog_start,
         fog_end,
         fog_shape: fog_shape as f32,

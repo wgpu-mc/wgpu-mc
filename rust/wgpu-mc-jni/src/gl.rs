@@ -13,9 +13,9 @@ use parking_lot::RwLock;
 use wgpu_mc::render::graph::{
     set_push_constants, BoundPipeline, Geometry, RenderGraph, WmBindGroup,
 };
-use wgpu_mc::texture::{BindableTexture, TextureAndView};
-use wgpu_mc::util::{BindableBuffer, WmArena};
-use wgpu_mc::wgpu::{vertex_attr_array, Buffer, BufferUsages, IndexFormat};
+use wgpu_mc::texture::{BindableTexture};
+use wgpu_mc::util::{WmArena};
+use wgpu_mc::wgpu::{vertex_attr_array, Buffer, IndexFormat};
 use wgpu_mc::{wgpu, WmRenderer};
 
 pub static GL_ALLOC: Lazy<RwLock<HashMap<u32, GlTexture>>> =

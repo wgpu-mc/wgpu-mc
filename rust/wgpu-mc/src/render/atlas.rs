@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
 use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
@@ -13,7 +12,7 @@ use parking_lot::RwLock;
 use wgpu::Extent3d;
 
 use crate::mc::resource::{ResourcePath, ResourceProvider};
-use crate::texture::{BindableTexture, TextureAndView, UV};
+use crate::texture::{TextureAndView, UV};
 use crate::{Display, WmRenderer};
 
 /// The width and height of an [atlas](Atlas];

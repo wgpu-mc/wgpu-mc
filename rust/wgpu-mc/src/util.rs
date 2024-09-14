@@ -24,27 +24,20 @@ impl BindableBuffer {
     pub fn new(wm: &WmRenderer, data: &[u8], usage: wgpu::BufferUsages, layout_name: &str) -> Self {
         let layout = wm.bind_group_layouts.get(layout_name).unwrap();
 
-        let buffer = Arc::new(
-            wm.display
-                .device
-                .create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    contents: data,
-                    usage,
-                }),
-        );
+        let buffer = Arc::new(wm.display.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: data,
+            usage,
+        }));
 
-        let bind_group = wm
-            .display
-            .device
-            .create_bind_group(&BindGroupDescriptor {
-                label: None,
-                layout,
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding(),
-                }],
-            });
+        let bind_group = wm.display.device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
 
         Self {
             buffer,
@@ -71,17 +64,14 @@ impl BindableBuffer {
             mapped_at_creation: false,
         }));
 
-        let bind_group = wm
-            .display
-            .device
-            .create_bind_group(&BindGroupDescriptor {
-                label: None,
-                layout,
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding(),
-                }],
-            });
+        let bind_group = wm.display.device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
 
         Self {
             buffer,

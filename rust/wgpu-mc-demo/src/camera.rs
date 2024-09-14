@@ -2,8 +2,7 @@ use std::f32::consts::PI;
 
 use glam::{vec3, Mat4, Vec3};
 
-
-const DEG_TO_RAD:f32 = PI/180.0;
+const DEG_TO_RAD: f32 = PI / 180.0;
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {
     pub position: Vec3,
@@ -40,7 +39,11 @@ impl Camera {
     }
 
     pub fn build_view_matrix(&self) -> Mat4 {
-        let pos = vec3(self.position.x.rem_euclid(16.0), self.position.y, self.position.z.rem_euclid(16.0));
+        let pos = vec3(
+            self.position.x.rem_euclid(16.0),
+            self.position.y,
+            self.position.z.rem_euclid(16.0),
+        );
         Mat4::look_at_rh(pos, pos + self.get_direction(), self.up)
     }
 

@@ -13,7 +13,7 @@ public class MainTestRenderdocMixin {
 
     @Inject(method = "main", at = @At("HEAD"))
     private static void redirectIsRunning(String[] args, CallbackInfo ci) {
-        //Wgpu.linkRenderDoc();
+        Wgpu.linkRenderDoc();
     }
 
 }

@@ -4,25 +4,44 @@ use futures::executor::block_on;
 use jni::{objects::JValue, JavaVM};
 use once_cell::sync::OnceCell;
 use parking_lot::lock_api::{Mutex, RwLock};
-use wgpu_mc::{render::graph::Geometry, wgpu::{self, util::{BufferInitDescriptor, DeviceExt}, BufferAddress, BufferBindingType, PresentMode, TextureFormat}, Display, Frustum, WmRenderer};
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{DeviceEvent, ElementState, KeyEvent, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, ModifiersState, PhysicalKey}, platform::scancode::PhysicalKeyExtScancode};
+use wgpu_mc::{
+    render::graph::Geometry,
+    wgpu::{
+        self,
+        util::{BufferInitDescriptor, DeviceExt},
+        BufferAddress, BufferBindingType, PresentMode,
+    },
+    Display, WmRenderer,
+};
+use winit::{
+    application::ApplicationHandler,
+    dpi::PhysicalSize,
+    event::{DeviceEvent, ElementState, KeyEvent, WindowEvent},
+    event_loop::ActiveEventLoop,
+    keyboard::{KeyCode, ModifiersState, PhysicalKey},
+    platform::scancode::PhysicalKeyExtScancode,
+};
 
-use crate::{gl::{ElectrumGeometry, ElectrumVertex}, renderer::MATRICES, MinecraftResourceManagerAdapter, RenderMessage, CHANNELS, CUSTOM_GEOMETRY, RENDERER, RENDER_GRAPH, SCENE};
-use wgpu_mc::render::{shaderpack::ShaderPackConfig,graph::{RenderGraph,ResourceBacking}};
+use crate::{
+    gl::{ElectrumGeometry, ElectrumVertex},
+    MinecraftResourceManagerAdapter, RenderMessage, CHANNELS, CUSTOM_GEOMETRY, RENDERER,
+    RENDER_GRAPH,
+};
 use std::collections::HashMap;
-
+use wgpu_mc::render::{
+    graph::{RenderGraph, ResourceBacking},
+    shaderpack::ShaderPackConfig,
+};
 
 pub static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 
-pub struct Application{
-    title:String,
-    current_modifiers:ModifiersState,
-    jvm:JavaVM,
+pub struct Application {
+    title: String,
+    current_modifiers: ModifiersState,
+    jvm: JavaVM,
 }
-impl Application{
-    pub fn new(jvm: JavaVM, title: String)->Self{
-        
-        
+impl Application {
+    pub fn new(jvm: JavaVM, title: String) -> Self {
         let current_modifiers = ModifiersState::empty();
         // {
         //     let tex_id = LIGHTMAP_GLID.lock().unwrap();
@@ -31,9 +50,9 @@ impl Application{
         //     let bindable = lightmap.bindable_texture.as_ref().unwrap();
         //     let asaa = ArcSwap::new(bindable.clone());
         // }
-        
+
         profiling::register_thread!("Winit Thread");
-        Self{
+        Self {
             title,
             current_modifiers,
             jvm,
@@ -42,14 +61,12 @@ impl Application{
 }
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-
         log::trace!("Starting event loop");
 
         let mut env = self.jvm.attach_current_thread().unwrap();
 
         // initialisation, should only occure once on desktop
-        let window_attributes = 
-        winit::window::Window::default_attributes()
+        let window_attributes = winit::window::Window::default_attributes()
             .with_title(&self.title)
             .with_inner_size(winit::dpi::Size::Physical(PhysicalSize {
                 width: 1280,
@@ -57,7 +74,6 @@ impl ApplicationHandler for Application {
             }));
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         let size = window.inner_size();
-
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
@@ -73,7 +89,7 @@ impl ApplicationHandler for Application {
         .unwrap();
 
         const VSYNC: bool = true;
-        
+
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -82,15 +98,14 @@ impl ApplicationHandler for Application {
             height: size.height,
             present_mode: if VSYNC {
                 PresentMode::AutoVsync
-            } else{
+            } else {
                 PresentMode::AutoNoVsync
             },
-    
+
             desired_maximum_frame_latency: 2,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
-    
 
         let required_limits = wgpu::Limits {
             max_push_constant_size: 128,
@@ -111,7 +126,7 @@ impl ApplicationHandler for Application {
                     | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY
                     | wgpu::Features::MULTI_DRAW_INDIRECT,
                 required_limits,
-                memory_hints:wgpu::MemoryHints::Performance,
+                memory_hints: wgpu::MemoryHints::Performance,
             },
             None, // Trace path
         ))
@@ -119,9 +134,9 @@ impl ApplicationHandler for Application {
 
         surface.configure(&device, &surface_config);
 
-        let display = Display{
+        let display = Display {
             window,
-            size:RwLock::new(size),
+            size: RwLock::new(size),
             surface,
             device,
             queue,
@@ -130,41 +145,38 @@ impl ApplicationHandler for Application {
             adapter,
         };
 
-        
         let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
             jvm: env.get_java_vm().unwrap(),
         });
-    
 
         let wm = WmRenderer::new(display, resource_provider);
-    
-    
+
         wm.init();
 
         let shader_pack: ShaderPackConfig =
             serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
-    
+
         let mut render_resources = HashMap::new();
-    
+
         let mat4_projection = create_matrix_buffer(&wm);
         let mat4_view = create_matrix_buffer(&wm);
         let mat4_model = create_matrix_buffer(&wm);
-    
+
         render_resources.insert(
             "@mat4_view".into(),
             ResourceBacking::Buffer(mat4_view.clone(), BufferBindingType::Uniform),
         );
-    
+
         render_resources.insert(
             "@mat4_perspective".into(),
             ResourceBacking::Buffer(mat4_projection.clone(), BufferBindingType::Uniform),
         );
-    
+
         render_resources.insert(
             "@mat4_model".into(),
             ResourceBacking::Buffer(mat4_model.clone(), BufferBindingType::Uniform),
         );
-    
+
         let mut custom_bind_groups = HashMap::new();
         custom_bind_groups.insert(
             "@texture_electrum_gui".into(),
@@ -174,7 +186,7 @@ impl ApplicationHandler for Application {
             "@mat4_electrum_gui".into(),
             wm.bind_group_layouts.get("matrix").unwrap(),
         );
-    
+
         let mut custom_geometry = HashMap::new();
         custom_geometry.insert(
             "@geo_electrum_gui".into(),
@@ -184,7 +196,7 @@ impl ApplicationHandler for Application {
                 attributes: &ElectrumVertex::VAO,
             }],
         );
-    
+
         let render_graph = RenderGraph::new(
             &wm,
             shader_pack,
@@ -197,17 +209,13 @@ impl ApplicationHandler for Application {
         geometry.insert(
             "@geo_electrum_gui".to_string(),
             Box::new(ElectrumGeometry {
-                pool: Arc::new(
-                    wm.display
-                        .device
-                        .create_buffer_init(&BufferInitDescriptor {
-                            label: None,
-                            contents: &vec![0; 1_000_000],
-                            usage: wgpu::BufferUsages::COPY_DST
-                                | wgpu::BufferUsages::VERTEX
-                                | wgpu::BufferUsages::INDEX,
-                        }),
-                ),
+                pool: Arc::new(wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: &vec![0; 1_000_000],
+                    usage: wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::VERTEX
+                        | wgpu::BufferUsages::INDEX,
+                })),
                 last_bytes: None,
             }) as Box<dyn Geometry>,
         );
@@ -220,7 +228,6 @@ impl ApplicationHandler for Application {
             JValue::Bool(true.into()),
         )
         .unwrap();
-
     }
 
     fn device_event(
@@ -230,12 +237,11 @@ impl ApplicationHandler for Application {
         event: winit::event::DeviceEvent,
     ) {
         match event {
-            DeviceEvent::MouseMotion{ delta } => {
+            DeviceEvent::MouseMotion { delta } => {
                 CHANNELS
                     .0
                     .send(RenderMessage::MouseMove(delta.0, delta.1))
                     .unwrap();
-
             }
             _ => {}
         }
@@ -247,9 +253,8 @@ impl ApplicationHandler for Application {
         }
     }
 
-    fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-    }
-    
+    fn exiting(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {}
+
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
@@ -338,17 +343,12 @@ impl ApplicationHandler for Application {
     }
 }
 
-
 fn create_matrix_buffer(wm: &WmRenderer) -> Arc<wgpu::Buffer> {
-    Arc::new(
-        wm.display
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: &[0; 64],
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
-            }),
-    )
+    Arc::new(wm.display.device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        contents: &[0; 64],
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+    }))
 }
 
 fn keycode_to_glfw(code: KeyCode) -> u32 {
@@ -475,7 +475,6 @@ fn keycode_to_glfw(code: KeyCode) -> u32 {
         _ => 0,
     }
 }
-
 
 fn modifiers_to_glfw(state: ModifiersState) -> u32 {
     if state.is_empty() {

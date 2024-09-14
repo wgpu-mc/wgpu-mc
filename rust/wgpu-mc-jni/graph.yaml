@@ -62,15 +62,19 @@ pipelines:
       1: "@bg_ssbo_chunks"
     push_constants:
       0: "@pc_section_position"
-#  entity:
-#    geometry: @geo_entities
-#    depth: @framebuffer_depth
-#    output: [@framebuffer_texture]
-#    push_constants:
-#      0: @pc_parts_per_entity
-#    bind_groups:
-#      0: @bg_matrices
-#      1: @bg_entity
+  entity:
+    geometry: "@geo_entities"
+    depth: "@texture_depth"
+    blending: replace
+    output: ["@framebuffer_texture"]
+    push_constants:
+      0: "@pc_parts_per_entity"
+    bind_groups:
+      0:
+        0: "@mat4_view"
+        1: "@mat4_perspective"
+        2: "@sampler"
+      1: "@bg_entity"
   electrum_gui:
     geometry: "@geo_electrum_gui"
     output: ["@framebuffer_texture"]

@@ -2,25 +2,26 @@ pub extern crate wgpu_mc;
 
 use core::slice;
 use std::collections::HashMap;
-use std::{mem, ptr, thread};
 use std::fmt::Debug;
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
+use std::{mem, thread};
 
 use application::Application;
-use arc_swap::{ArcSwap, AsRaw};
+use arc_swap::{ArcSwap};
 use byteorder::{LittleEndian, ReadBytesExt};
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use glam::{ivec2, ivec3, IVec3, Mat4};
-use jni::{JavaVM, JNIEnv};
 use jni::objects::{
-    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject, JObjectArray, JPrimitiveArray, JString, JValue, JValueGen, JValueOwned, ReleaseMode, WeakRef
+    AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject,
+    JObjectArray, JPrimitiveArray, JString, JValue, JValueOwned, ReleaseMode, WeakRef,
 };
 use jni::sys::{
-    jboolean, jbyte, jbyteArray, jfloat, jint, jlong, jsize, jstring, JNI_FALSE, JNI_TRUE
+    jboolean, jbyte, jfloat, jint, jlong, jsize, jstring, JNI_FALSE, JNI_TRUE,
 };
+use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
 use palette::PALETTE_STORAGE;
@@ -34,26 +35,26 @@ use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
 use winit::window::CursorGrabMode;
 
-use wgpu_mc::{Frustum, WmRenderer};
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{
-    bake_section, BlockStateProvider, LightLevel, Section, CHUNK_HEIGHT
-};
+use wgpu_mc::mc::chunk::{bake_section, BlockStateProvider, LightLevel};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::mc::Scene;
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
-use wgpu_mc::wgpu::{self, TextureFormat};
 use wgpu_mc::wgpu::ImageDataLayout;
+use wgpu_mc::wgpu::{self, TextureFormat};
+use wgpu_mc::{Frustum, WmRenderer};
 
-use crate::gl::{GL_ALLOC, GL_COMMANDS, GLCommand, GlTexture};
+use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::lighting::DeserializedLightData;
 use crate::palette::JavaPalette;
 use crate::pia::PackedIntegerArray;
+use crate::renderer::ENTITY_INSTANCES;
 use crate::settings::Settings;
 
 mod alloc;
+mod application;
 pub mod entity;
 mod gl;
 mod lighting;
@@ -61,7 +62,6 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
-mod application;
 
 #[allow(dead_code)]
 enum RenderMessage {
@@ -108,8 +108,7 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 
 static CLEAR_COLOR: Lazy<ArcSwap<[f32; 3]>> = Lazy::new(|| ArcSwap::new(Arc::new([0.0; 3])));
 
-static THREAD_POOL: Lazy<ThreadPool> =
-    Lazy::new(|| ThreadPoolBuilder::new().build().unwrap());
+static THREAD_POOL: Lazy<ThreadPool> = Lazy::new(|| ThreadPoolBuilder::new().build().unwrap());
 
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     block: RENDERER
@@ -142,17 +141,35 @@ static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::new());
 pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
-
 pub static CLASSLOADER: OnceCell<WeakRef> = OnceCell::new();
 
-pub fn call_static_from_class_loader<'env>(env:&mut JNIEnv<'env>,class:&str,method:&str,sig:&str,args:&[JValue])->jni::errors::Result<JValueOwned<'env>>{
-    let class_loader = CLASSLOADER.get().unwrap().upgrade_local(&*env).unwrap().unwrap();
+pub fn call_static_from_class_loader<'env>(
+    env: &mut JNIEnv<'env>,
+    class: &str,
+    method: &str,
+    sig: &str,
+    args: &[JValue],
+) -> jni::errors::Result<JValueOwned<'env>> {
+    let class_loader = CLASSLOADER
+        .get()
+        .unwrap()
+        .upgrade_local(&*env)
+        .unwrap()
+        .unwrap();
     let arg = env.new_string(class).unwrap();
-    let class_obj:JClass = env.call_method(class_loader,"findClass","(Ljava/lang/String;)Ljava/lang/Class;",&[JValue::Object(&arg)])
-        .unwrap().l().unwrap().into();
-    env.call_static_method(class_obj,method,sig,args)
+    let class_obj: JClass = env
+        .call_method(
+            class_loader,
+            "findClass",
+            "(Ljava/lang/String;)Ljava/lang/Class;",
+            &[JValue::Object(&arg)],
+        )
+        .unwrap()
+        .l()
+        .unwrap()
+        .into();
+    env.call_static_method(class_obj, method, sig, args)
 }
-
 
 #[derive(Debug)]
 pub struct SectionHolder {
@@ -166,8 +183,8 @@ pub struct MinecraftBlockstateProvider {
     pub air: BlockstateKey,
 }
 impl BlockStateProvider for MinecraftBlockstateProvider {
-    fn get_state(&self, pos:IVec3) -> ChunkBlockState {
-        let section_pos:IVec3 = (pos>>4)+1;
+    fn get_state(&self, pos: IVec3) -> ChunkBlockState {
+        let section_pos: IVec3 = (pos >> 4) + 1;
         let section_option =
             &self.sections[(section_pos.x + section_pos.y * 3 + section_pos.z * 9) as usize];
 
@@ -191,8 +208,8 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
         }
     }
 
-    fn get_light_level(&self, pos:IVec3) -> LightLevel {
-        let section_pos:IVec3 = (pos>>4)+1;
+    fn get_light_level(&self, pos: IVec3) -> LightLevel {
+        let section_pos: IVec3 = (pos >> 4) + 1;
         let chunk_option =
             &self.sections[(section_pos.x + section_pos.y * 3 + section_pos.z * 9) as usize];
 
@@ -227,10 +244,9 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
             return true;
         }
 
-        self.sections[(rel_pos+1).dot(ivec3(1, 3, 9)) as usize].is_none()
+        self.sections[(rel_pos + 1).dot(ivec3(1, 3, 9)) as usize].is_none()
     }
 }
-
 
 struct MinecraftResourceManagerAdapter {
     jvm: JavaVM,
@@ -241,17 +257,18 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
         let mut env = self.jvm.attach_current_thread().unwrap();
 
         let path = env.new_string(&id.0).unwrap();
-       
+
         let bytes: JByteArray = call_static_from_class_loader(
             &mut env,
             "dev.birb.wgpu.rust.WgpuResourceProvider",
-            "getResource", "(Ljava/lang/String;)[B",
+            "getResource",
+            "(Ljava/lang/String;)[B",
             &[JValue::Object(&path.into())],
-            )
-            .expect(&id.0)
-            .l()
-            .expect(&id.0)
-            .into();
+        )
+        .expect(&id.0)
+        .l()
+        .expect(&id.0)
+        .into();
 
         let elements: AutoElements<jbyte> =
             unsafe { env.get_array_elements(&bytes, ReleaseMode::NoCopyBack) }.unwrap();
@@ -327,16 +344,15 @@ pub fn registerBlockState(
         .push((block_name, state_key, global_ref));
 }
 
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn reload(_env: JNIEnv, _class: JClass,clampedViewDistance:jint) {
+pub fn reload(_env: JNIEnv, _class: JClass, clampedViewDistance: jint) {
     let mut section_storage = SCENE.section_storage.write();
     section_storage.clear();
     section_storage.set_width(clampedViewDistance);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setSectionPos(_env: JNIEnv, _class: JClass, x:jint,z:jint){
+pub fn setSectionPos(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
     *SCENE.camera_section_pos.write() = ivec2(x, z);
 }
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -369,8 +385,9 @@ pub fn bakeSection(
         let mut palette_storage = PALETTE_STORAGE.write();
         let mut pia_storage = PIA_STORAGE.write();
 
-        let block_data = 
-        if palette_storage.contains(palettes[i] as usize) && pia_storage.contains(storages[i] as usize) {
+        let block_data = if palette_storage.contains(palettes[i] as usize)
+            && pia_storage.contains(storages[i] as usize)
+        {
             Some((
                 palette_storage.remove(palettes[i] as usize),
                 pia_storage.remove(storages[i] as usize),
@@ -396,7 +413,7 @@ pub fn bakeSection(
         };
         let block_bytes =
             unsafe { env.get_array_elements(&block_array, ReleaseMode::NoCopyBack) }.unwrap();
-        
+
         bsp.sections[i] = Some(SectionHolder {
             block_data,
             light_data: Some(DeserializedLightData {
@@ -416,7 +433,7 @@ pub fn bakeSection(
 
     THREAD_POOL.spawn(move || {
         let wm = RENDERER.get().unwrap();
-        bake_section(ivec3(x, y, z), wm ,&bsp);
+        bake_section(ivec3(x, y, z), wm, &bsp);
     })
 }
 
@@ -429,20 +446,26 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
-
     let title: String = env.get_string(&title).unwrap().into();
     let jvm = env.get_java_vm().unwrap();
 
-    let class_loader = env.call_static_method(
-        "dev/birb/wgpu/rust/WgpuNative",
-        "getClassLoader",
-        "()Ljava/lang/ClassLoader;",
-        &[],
-    )
-    .unwrap();
-    let Ok(_) = CLASSLOADER.set(env.new_weak_ref::<JObject>(class_loader.try_into().unwrap()).unwrap().unwrap()) else { panic!("Failed to set classloader") };
+    let class_loader = env
+        .call_static_method(
+            "dev/birb/wgpu/rust/WgpuNative",
+            "getClassLoader",
+            "()Ljava/lang/ClassLoader;",
+            &[],
+        )
+        .unwrap();
+    let Ok(_) = CLASSLOADER.set(
+        env.new_weak_ref::<JObject>(class_loader.try_into().unwrap())
+            .unwrap()
+            .unwrap(),
+    ) else {
+        panic!("Failed to set classloader")
+    };
 
-    let mut application = Application::new(jvm,title);
+    let mut application = Application::new(jvm, title);
     let mut event_loop = winit::event_loop::EventLoop::builder();
 
     #[cfg(target_os = "linux")]
@@ -458,53 +481,55 @@ pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
     }
     let event_loop = event_loop.build().unwrap();
     event_loop.run_app(&mut application).unwrap();
-
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn render(mut env: JNIEnv, _class: JClass, tick_delta:jfloat, start_time:jlong, tick:jlong) {
+pub fn render(env: JNIEnv, _class: JClass, tick_delta: jfloat, start_time: jlong, tick: jlong) {
     let wm = RENDERER.wait();
     let render_graph = RENDER_GRAPH.get().unwrap();
     let mut geometry = CUSTOM_GEOMETRY.get().unwrap().lock();
     wm.display.window.request_redraw();
     wm.submit_chunk_updates(&SCENE);
-    let pos = SCENE.camera_section_pos.read().clone();
+    let pos = *SCENE.camera_section_pos.read();
     SCENE.section_storage.write().trim(pos);
+    *SCENE.entity_instances.lock() = ENTITY_INSTANCES.lock().clone();
 
     let matrices = MATRICES.lock();
-    if let ResourceBacking::Buffer(buffer,_) = &render_graph.resources["@mat4_perspective"]{
-        wm.display.queue.write_buffer(
-            &buffer,
-            0,
-            bytemuck::cast_slice(&matrices.projection),
-        );
+    if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_perspective"] {
+        wm.display
+            .queue
+            .write_buffer(buffer, 0, bytemuck::cast_slice(&matrices.projection));
     }
-    if let ResourceBacking::Buffer(buffer,_) = &render_graph.resources["@mat4_view"]{
-        wm.display.queue.write_buffer(
-            &buffer,
-            0,
-            bytemuck::cast_slice(&matrices.view),
-        );
+    if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_view"] {
+        wm.display
+            .queue
+            .write_buffer(buffer, 0, bytemuck::cast_slice(&matrices.view));
     }
-    if let ResourceBacking::Buffer(buffer,_) = &render_graph.resources["@mat4_model"]{
+    if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_model"] {
         wm.display.queue.write_buffer(
-            &buffer,
+            buffer,
             0,
             bytemuck::cast_slice(&matrices.terrain_transformation),
         );
     }
 
-    let texture = wm.display.surface.get_current_texture().unwrap_or_else(|_| {
-        //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-        
-        let mut surface_config = wm.display.config.write();
-        let size = wm.display.size.read();
-        surface_config.width = size.width;
-        surface_config.height = size.height;
+    let texture = wm
+        .display
+        .surface
+        .get_current_texture()
+        .unwrap_or_else(|_| {
+            //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
 
-        wm.display.surface.configure(&wm.display.device, &surface_config);
-        wm.display.surface.get_current_texture().unwrap()
-    });
+            let mut surface_config = wm.display.config.write();
+            let size = wm.display.size.read();
+            surface_config.width = size.width;
+            surface_config.height = size.height;
+
+            wm.display
+                .surface
+                .configure(&wm.display.device, &surface_config);
+            wm.display.surface.get_current_texture().unwrap()
+        });
 
     let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
@@ -518,18 +543,19 @@ pub fn render(mut env: JNIEnv, _class: JClass, tick_delta:jfloat, start_time:jlo
     });
 
     {
-        let mut encoder = wm.display.device.create_command_encoder(
-            &wgpu::CommandEncoderDescriptor { label: None },
-        );
+        let mut encoder = wm
+            .display
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         render_graph.render(
-            &wm,
+            wm,
             &mut encoder,
             &SCENE,
             &view,
             [0; 3],
             &mut geometry,
-            &Frustum::from_modelview_projection([[0.0; 4]; 4])
+            &Frustum::from_modelview_projection([[0.0; 4]; 4]),
         );
 
         wm.display.queue.submit([encoder.finish()]);
@@ -537,7 +563,6 @@ pub fn render(mut env: JNIEnv, _class: JClass, tick_delta:jfloat, start_time:jlo
 
     texture.present();
 }
-
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
@@ -597,11 +622,7 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
             } else {
                 vec![]
             };
-            let atlases = wm
-                            .mc
-                            .texture_manager
-                            .atlases
-                            .write();
+            let atlases = wm.mc.texture_manager.atlases.write();
             let atlas = &atlases[BLOCK_ATLAS];
             let model = wm_block.get_model_by_key(
                 key_iter
@@ -908,7 +929,7 @@ pub fn texImage2D(
         )
         .unwrap();
 
-        let bindable = BindableTexture::from_tv(&wm, Arc::new(tsv), false);
+        let bindable = BindableTexture::from_tv(wm, Arc::new(tsv), false);
 
         {
             GL_ALLOC.write().insert(
@@ -1189,24 +1210,17 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
     let window = &RENDERER.get().unwrap().display.window;
     match mode {
         GLFW_CURSOR_NORMAL => {
-            window
-                .set_cursor_grab(CursorGrabMode::None)
-                .unwrap();
+            window.set_cursor_grab(CursorGrabMode::None).unwrap();
             window.set_cursor_visible(true);
         }
         GLFW_CURSOR_HIDDEN => {
-            window
-                .set_cursor_grab(CursorGrabMode::None)
-                .unwrap();
+            window.set_cursor_grab(CursorGrabMode::None).unwrap();
             window.set_cursor_visible(false);
         }
         GLFW_CURSOR_DISABLED => {
             window
                 .set_cursor_grab(CursorGrabMode::Confined)
-                .or_else(|_e| {
-                    window
-                        .set_cursor_grab(CursorGrabMode::Locked)
-                })
+                .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked))
                 .unwrap();
             window.set_cursor_visible(false);
         }

@@ -1,8 +1,8 @@
-use jni::objects::{JClass, JObject, JString, JValue};
+use jni::objects::{JClass, JString, JValue};
 use jni::sys::jint;
 use jni::JNIEnv;
 use jni_fn::jni_fn;
-use std::io::{stdout, Write};
+use std::io::{Write};
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
@@ -194,8 +194,6 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
     let atlases = wm.mc.texture_manager.atlases.write();
     let _atlas = atlases.get(ENTITY_ATLAS).unwrap();
 
-
-    println!("registerentities");
     let entities: HashMap<String, Arc<Entity>> = mpd
         .iter()
         .map(|(name, mpd)| {
@@ -207,7 +205,7 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
             )
         })
         .collect();
-    println!("end registerentities");
+
     entities.iter().for_each(|(_entity_name, entity)| {
         let entity_string = env.new_string(&entity.name).unwrap();
 
@@ -229,5 +227,4 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
     });
 
     *wm.mc.entity_models.write() = entities;
-
 }

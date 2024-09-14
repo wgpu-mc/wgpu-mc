@@ -40,8 +40,8 @@ See the [render::entity] module for an example of rendering an example entity.
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
 
 use glam::IVec3;
 use mc::chunk::BakedLayer;
@@ -49,7 +49,10 @@ use mc::Scene;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor, Surface};
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor,
+    Surface,
+};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
@@ -65,16 +68,15 @@ pub mod util;
 
 pub use treeculler::Frustum;
 
-
 /// Provides access to most of the wgpu structs relating directly to communicating/getting
 /// information about the gpu.
 
-pub struct Display{
-    pub window:Arc<Window>,
-    pub instance:wgpu::Instance,
-    pub adapter:wgpu::Adapter,
+pub struct Display {
+    pub window: Arc<Window>,
+    pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
     pub size: RwLock<PhysicalSize<u32>>,
-    pub surface:Surface<'static>,
+    pub surface: Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: RwLock<wgpu::SurfaceConfiguration>,
@@ -87,7 +89,10 @@ pub struct WmRenderer {
     pub display: Display,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: MinecraftState,
-    pub chunk_update_queue: (Sender<(IVec3, Vec<BakedLayer>)>, Mutex<Receiver<(IVec3, Vec<BakedLayer>)>>),
+    pub chunk_update_queue: (
+        Sender<(IVec3, Vec<BakedLayer>)>,
+        Mutex<Receiver<(IVec3, Vec<BakedLayer>)>>,
+    ),
 }
 
 #[derive(Copy, Clone)]
@@ -102,26 +107,20 @@ pub trait HasWindowSize {
 
 impl WmRenderer {
     pub fn new(display: Display, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
-
         let mc = MinecraftState::new(&display, resource_provider);
-        let (sender,receiver) = channel();
+        let (sender, receiver) = channel();
         Self {
             bind_group_layouts: Arc::new(create_bind_group_layouts(&display.device)),
             display,
             mc,
-            chunk_update_queue: (sender,Mutex::new(receiver)),
+            chunk_update_queue: (sender, Mutex::new(receiver)),
         }
     }
 
     pub fn init(&self) {
         let atlases = [BLOCK_ATLAS, ENTITY_ATLAS]
             .iter()
-            .map(|&name| {
-                (
-                    name.into(),
-                    Atlas::new(&self.display, false),
-                )
-            })
+            .map(|&name| (name.into(), Atlas::new(&self.display, false)))
             .collect();
 
         *self.mc.texture_manager.atlases.write() = atlases;
@@ -140,18 +139,16 @@ impl WmRenderer {
                 mapped_at_creation: false,
             });
             let animated_block_bind_group =
-                self.display
-                    .device
-                    .create_bind_group(&BindGroupDescriptor {
-                        label: None,
-                        layout: self.bind_group_layouts.get("ssbo").unwrap(),
-                        entries: &[BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::Buffer(
-                                animated_block_buffer.as_entire_buffer_binding(),
-                            ),
-                        }],
-                    });
+                self.display.device.create_bind_group(&BindGroupDescriptor {
+                    label: None,
+                    layout: self.bind_group_layouts.get("ssbo").unwrap(),
+                    entries: &[BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(
+                            animated_block_buffer.as_entire_buffer_binding(),
+                        ),
+                    }],
+                });
 
             self.mc
                 .animated_block_buffer
@@ -168,26 +165,31 @@ impl WmRenderer {
         );
     }
 
-    pub fn submit_chunk_updates(&self,scene:&Scene) {
+    pub fn submit_chunk_updates(&self, scene: &Scene) {
         let receiver = self.chunk_update_queue.1.lock();
         let updates = receiver.try_iter();
-        
+
         updates.for_each(|(pos, layers)| {
             let mut storage = scene.section_storage.write();
             let section = storage.replace(pos, &layers);
-            for (i,ranges) in section.layers.iter().enumerate(){
-                if let Some(ranges) = ranges{
-                    self.display.queue.write_buffer(&scene.chunk_buffer.buffer,ranges.vertex_range.start as u64 * 4,&layers[i].vertices);
-                    self.display.queue.write_buffer(&scene.chunk_buffer.buffer,ranges.index_range.start as u64 * 4,&layers[i].indices);
+            for (i, ranges) in section.layers.iter().enumerate() {
+                if let Some(ranges) = ranges {
+                    self.display.queue.write_buffer(
+                        &scene.chunk_buffer.buffer,
+                        ranges.vertex_range.start as u64 * 4,
+                        &layers[i].vertices,
+                    );
+                    self.display.queue.write_buffer(
+                        &scene.chunk_buffer.buffer,
+                        ranges.index_range.start as u64 * 4,
+                        &layers[i].indices,
+                    );
                 }
             }
         });
     }
 
     pub fn get_backend_description(&self) -> String {
-        format!(
-            "wgpu 0.20 ({:?})",
-            self.display.adapter.get_info().backend
-        )
+        format!("wgpu 0.20 ({:?})", self.display.adapter.get_info().backend)
     }
 }

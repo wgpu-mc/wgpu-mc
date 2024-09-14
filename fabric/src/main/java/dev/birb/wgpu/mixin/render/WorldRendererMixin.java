@@ -1,7 +1,7 @@
 package dev.birb.wgpu.mixin.render;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import dev.birb.wgpu.entity.DummyVertexConsumer;
-import dev.birb.wgpu.render.Wgpu;
 import dev.birb.wgpu.rust.WgpuNative;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.MinecraftClient;
@@ -14,13 +14,10 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.tick.TickManager;
-
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
@@ -32,10 +29,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import com.mojang.blaze3d.systems.RenderSystem;
-
-import com.mojang.blaze3d.systems.RenderSystem;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -198,34 +191,31 @@ public abstract class WorldRendererMixin {
 
             for(Entity entity : this.world.getEntities()) {
                 if((entity != camera.getFocusedEntity() || camera.isThirdPerson() || camera.getFocusedEntity() instanceof LivingEntity && ((LivingEntity)camera.getFocusedEntity()).isSleeping()) && (!(entity instanceof ClientPlayerEntity) || camera.getFocusedEntity() == entity)) {
-                    this.renderEntity(entity, 0.0, 64.0, 0.0, tickDelta, entityStack, dummyProvider);
+//                    this.renderEntity(entity, translate.getX(), translate.getY(), translate.getZ(), tickDelta, entityStack, dummyProvider);
+                    this.renderEntity(entity, translate.x, translate.y, translate.z, tickDelta, entityStack, dummyProvider);
                 }
             }
         }
 
         
         // Update matrices to shader
-        matrices.push();
         float[] floatBuffer = new float[16];
         matrices.peek().getPositionMatrix().get(floatBuffer);
-        WgpuNative.setMatrix(1, floatBuffer); // Model transformation for shaders
-        matrices.pop();
-
-        floatBuffer = new float[16];
-        RenderSystem.getModelViewMatrix().get(floatBuffer);
-        WgpuNative.setMatrix(2, floatBuffer); // View?
+        WgpuNative.setMatrix(2, floatBuffer);
 
         floatBuffer = new float[16];
         RenderSystem.getProjectionMatrix().get(floatBuffer);
-        WgpuNative.setMatrix(0, floatBuffer); // Actual projection
+        WgpuNative.setMatrix(0, floatBuffer);
 
 
         if(player != null) {
             WgpuNative.setSectionPos((int)Math.floor(translate.x/16.0),(int)Math.floor(translate.z/16.0));
-            matrices.translate(-(translate.x%16+16)%16, -translate.y, -(translate.z%16+16)%16);
+            MatrixStack stack = new MatrixStack();
+            stack.push();
+            stack.translate(-(translate.x%16+16)%16, -translate.y, -(translate.z%16+16)%16);
 
             floatBuffer = new float[16];
-            matrices.peek().getPositionMatrix().get(floatBuffer);
+            stack.peek().getPositionMatrix().get(floatBuffer);
             WgpuNative.setMatrix(3, floatBuffer); // Terrain transformation matrix
         }
 

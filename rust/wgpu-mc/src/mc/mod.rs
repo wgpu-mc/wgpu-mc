@@ -1,27 +1,19 @@
 //! Rust implementations of minecraft concepts that are important to us.
 
 use std::collections::HashMap;
-use std::ops::Deref;
-use std::sync::{Arc};
+use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use chunk::SectionStorage;
-use dashmap::DashMap;
-use glam::{ivec2, ivec3, IVec2, IVec3};
-use guillotiere::euclid::default;
+use glam::{ivec2, IVec2};
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use parking_lot::{Mutex, RwLock};
-use range_alloc::RangeAllocator;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::BufferBinding;
 
-use crate::mc::chunk::Section;
 use crate::mc::entity::{BundledEntityInstances, Entity};
 use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
-use crate::texture::BindableTexture;
 use crate::util::BindableBuffer;
 use crate::{Display, WmRenderer};
 
@@ -30,9 +22,9 @@ use self::resource::ResourcePath;
 
 pub mod block;
 pub mod chunk;
+pub mod direction;
 pub mod entity;
 pub mod resource;
-pub mod direction;
 /// Take in a block name (not a [ResourcePath]!) and optionally a variant state key, e.g. "facing=north" and format it some way
 /// for example, `minecraft:anvil[facing=north]` or `Block{minecraft:anvil}[facing=north]`
 pub type BlockVariantFormatter = dyn Fn(&str, Option<&str>) -> String;
@@ -180,7 +172,6 @@ pub struct RenderEffectsData {
     pub dimension_fog_color: [f32; 4],
 }
 
-
 pub struct Scene {
     pub section_storage: RwLock<SectionStorage>,
     pub camera_section_pos: RwLock<IVec2>,
@@ -188,7 +179,7 @@ pub struct Scene {
 
     pub indirect_buffer: Arc<wgpu::Buffer>,
 
-    pub entity_instances: HashMap<String, BundledEntityInstances>,
+    pub entity_instances: Mutex<HashMap<String, BundledEntityInstances>>,
     pub sky_state: SkyState,
 
     pub stars_index_buffer: Option<wgpu::Buffer>,
@@ -201,24 +192,24 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
-        let indirect_buffer = wm
-            .display
-            .device
-            .create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: 4 * 5 * 10000,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
-                mapped_at_creation: false,
-            });
+        let indirect_buffer = wm.display.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 4 * 5 * 10000,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
+            mapped_at_creation: false,
+        });
         let buffer_size = 100000000u64;
         Self {
-            section_storage: RwLock::new(SectionStorage::new((buffer_size/4) as u32)),
-            camera_section_pos:RwLock::new(ivec2(0, 0)),
+            section_storage: RwLock::new(SectionStorage::new((buffer_size / 4) as u32)),
+            camera_section_pos: RwLock::new(ivec2(0, 0)),
             chunk_buffer: Arc::new(BindableBuffer::new_deferred(
                 wm,
                 buffer_size,
-                wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDEX ,
-                "ssbo"
+                wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::VERTEX
+                    | wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::INDEX,
+                "ssbo",
             )),
             indirect_buffer: Arc::new(indirect_buffer),
 
@@ -228,19 +219,16 @@ impl Scene {
             stars_vertex_buffer: None,
             stars_length: 0,
             render_effects: Default::default(),
-            depth_texture: wm
-                .display
-                .device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: None,
-                    size: framebuffer_size,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Depth32Float,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[],
-                }),
+            depth_texture: wm.display.device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: framebuffer_size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            }),
         }
     }
 }
@@ -298,12 +286,8 @@ impl MinecraftState {
         wm: &WmRenderer,
         block_states: impl IntoIterator<Item = (impl AsRef<str>, &'a ResourcePath)>,
     ) {
-
         let mut block_manager = self.block_manager.write();
-        let atlases = self
-        .texture_manager
-        .atlases
-        .read();
+        let atlases = self.texture_manager.atlases.read();
         let block_atlas = atlases.get(BLOCK_ATLAS).unwrap();
 
         //Figure out which block models there are
@@ -329,7 +313,7 @@ impl MinecraftState {
                                                 ModelMesh::bake(
                                                     std::slice::from_ref(variation),
                                                     &*self.resource_provider,
-                                                    &block_atlas,
+                                                    block_atlas,
                                                 )
                                                 .unwrap(),
                                             )

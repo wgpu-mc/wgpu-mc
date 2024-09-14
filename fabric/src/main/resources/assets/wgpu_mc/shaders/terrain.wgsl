@@ -14,8 +14,7 @@ struct ChunkOffset {
     z: i32
 }
 
-
-@group(0) @binding(0) var<uniform> mat4_model: mat4x4<f32>;
+@group(0) @binding(0) var<uniform> mat4_terrain_shift: mat4x4<f32>;
 @group(0) @binding(1) var<uniform> mat4_view: mat4x4<f32>;
 @group(0) @binding(2) var<uniform> mat4_persp: mat4x4<f32>;
 
@@ -71,7 +70,7 @@ fn vert(
 
     var world_pos = pos + vec3<f32>(f32(section_pos.x) * 16.0, f32(section_pos.y) * 16.0, f32(section_pos.z) * 16.0);
 
-    vr.pos = mat4_persp * mat4_view * mat4_model * vec4(world_pos, 1.0);
+    vr.pos = mat4_persp * mat4_view * mat4_terrain_shift * vec4(world_pos, 1.0);
     vr.tex_coords = vec2<f32>(u, v);
     vr.tex_coords2 = vec2(0.0, 0.0);
     vr.world_pos = world_pos;

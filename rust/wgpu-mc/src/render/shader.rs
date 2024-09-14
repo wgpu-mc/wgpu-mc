@@ -34,7 +34,7 @@ impl WgslShader {
         });
 
         Some(Self {
-            module: module,
+            module,
             frag_entry,
             vert_entry,
         })

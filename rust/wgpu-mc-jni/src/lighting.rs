@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::io::{stdout, Write};
 
 use jni::objects::JClass;
 use jni::JNIEnv;

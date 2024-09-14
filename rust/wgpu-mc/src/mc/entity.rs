@@ -6,11 +6,11 @@ use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
 use glam::{vec3, vec4, Mat4};
 use parking_lot::RwLock;
-use wgpu::{BufferDescriptor, BufferUsages, ErrorFilter};
+use wgpu::{BufferDescriptor, BufferUsages, Texture};
 
 use crate::render::atlas::Atlas;
 use crate::render::entity::EntityVertex;
-use crate::texture::{BindableTexture, UV};
+use crate::texture::{BindableTexture, TextureAndView, UV};
 use crate::util::BindableBuffer;
 use crate::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{Display, WmRenderer};
@@ -52,7 +52,7 @@ pub struct PartTransform {
     pub scale_y: f32,
     pub scale_z: f32,
 }
-const DEG_TO_RAD:f32 = PI/180.0;
+const DEG_TO_RAD: f32 = PI / 180.0;
 impl PartTransform {
     pub fn describe(&self) -> Mat4 {
         Mat4::from_scale(vec3(self.scale_x, self.scale_y, self.scale_z))
@@ -130,18 +130,12 @@ impl Cuboid {
         let z = self.z / 16.0;
 
         let a = (matrix * vec4(x, y, z, 1.0)).truncate().into();
-        let b = (matrix * vec4(x + width, y, z, 1.0))
-            .truncate()
-            .into();
+        let b = (matrix * vec4(x + width, y, z, 1.0)).truncate().into();
         let c = (matrix * vec4(x + width, y + height, z, 1.0))
             .truncate()
             .into();
-        let d = (matrix * vec4(x, y + height, z, 1.0))
-            .truncate()
-            .into();
-        let e = (matrix * vec4(x, y, z + length, 1.0))
-            .truncate()
-            .into();
+        let d = (matrix * vec4(x, y + height, z, 1.0)).truncate().into();
+        let e = (matrix * vec4(x, y, z + length, 1.0)).truncate().into();
         let f = (matrix * vec4(x + width, y, z + length, 1.0))
             .truncate()
             .into();
@@ -155,26 +149,20 @@ impl Cuboid {
         [
             [
                 EntityVertex {
+                    position: h,
+                    tex_coords: [self.textures.south.1 .0, self.textures.south.0 .1],
+                    normal: [0.0, 0.0, 1.0],
+                    part_id,
+                },
+                EntityVertex {
                     position: e,
                     tex_coords: [self.textures.south.1 .0, self.textures.south.1 .1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
                 EntityVertex {
-                    position: h,
-                    tex_coords: [self.textures.south.1 .0, self.textures.south.0 .1],
-                    normal: [0.0, 0.0, 1.0],
-                    part_id,
-                },
-                EntityVertex {
                     position: f,
                     tex_coords: [self.textures.south.0 .0, self.textures.south.1 .1],
-                    normal: [0.0, 0.0, 1.0],
-                    part_id,
-                },
-                EntityVertex {
-                    position: h,
-                    tex_coords: [self.textures.south.1 .0, self.textures.south.0 .1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
@@ -185,6 +173,12 @@ impl Cuboid {
                     part_id,
                 },
                 EntityVertex {
+                    position: h,
+                    tex_coords: [self.textures.south.1 .0, self.textures.south.0 .1],
+                    normal: [0.0, 0.0, 1.0],
+                    part_id,
+                },
+                EntityVertex {
                     position: f,
                     tex_coords: [self.textures.south.0 .0, self.textures.south.1 .1],
                     normal: [0.0, 0.0, 1.0],
@@ -193,14 +187,14 @@ impl Cuboid {
             ],
             [
                 EntityVertex {
-                    position: g,
-                    tex_coords: [self.textures.west.1 .0, self.textures.west.0 .1],
+                    position: b,
+                    tex_coords: [self.textures.west.0 .0, self.textures.west.1 .1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
-                    position: b,
-                    tex_coords: [self.textures.west.0 .0, self.textures.west.1 .1],
+                    position: g,
+                    tex_coords: [self.textures.west.1 .0, self.textures.west.0 .1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
@@ -211,14 +205,14 @@ impl Cuboid {
                     part_id,
                 },
                 EntityVertex {
-                    position: c,
-                    tex_coords: [self.textures.west.0 .0, self.textures.west.0 .1],
+                    position: b,
+                    tex_coords: [self.textures.west.0 .0, self.textures.west.1 .1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
-                    position: b,
-                    tex_coords: [self.textures.west.0 .0, self.textures.west.1 .1],
+                    position: c,
+                    tex_coords: [self.textures.west.0 .0, self.textures.west.0 .1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
@@ -231,14 +225,14 @@ impl Cuboid {
             ],
             [
                 EntityVertex {
-                    position: c,
-                    tex_coords: [self.textures.north.1 .0, self.textures.north.0 .1],
+                    position: a,
+                    tex_coords: [self.textures.north.0 .0, self.textures.north.1 .1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
                 EntityVertex {
-                    position: a,
-                    tex_coords: [self.textures.north.0 .0, self.textures.north.1 .1],
+                    position: c,
+                    tex_coords: [self.textures.north.1 .0, self.textures.north.0 .1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
@@ -249,14 +243,14 @@ impl Cuboid {
                     part_id,
                 },
                 EntityVertex {
-                    position: d,
-                    tex_coords: [self.textures.north.0 .0, self.textures.north.0 .1],
+                    position: a,
+                    tex_coords: [self.textures.north.0 .0, self.textures.north.1 .1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
                 EntityVertex {
-                    position: a,
-                    tex_coords: [self.textures.north.0 .0, self.textures.north.1 .1],
+                    position: d,
+                    tex_coords: [self.textures.north.0 .0, self.textures.north.0 .1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
@@ -269,20 +263,14 @@ impl Cuboid {
             ],
             [
                 EntityVertex {
-                    position: e,
-                    tex_coords: [self.textures.east.0 .0, self.textures.east.1 .1],
-                    normal: [1.0, 0.0, 0.0],
-                    part_id,
-                },
-                EntityVertex {
                     position: a,
                     tex_coords: [self.textures.east.1 .0, self.textures.east.1 .1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
-                    position: d,
-                    tex_coords: [self.textures.east.1 .0, self.textures.east.0 .1],
+                    position: e,
+                    tex_coords: [self.textures.east.0 .0, self.textures.east.1 .1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
@@ -299,6 +287,12 @@ impl Cuboid {
                     part_id,
                 },
                 EntityVertex {
+                    position: d,
+                    tex_coords: [self.textures.east.1 .0, self.textures.east.0 .1],
+                    normal: [1.0, 0.0, 0.0],
+                    part_id,
+                },
+                EntityVertex {
                     position: e,
                     tex_coords: [self.textures.east.0 .0, self.textures.east.1 .1],
                     normal: [1.0, 0.0, 0.0],
@@ -307,20 +301,26 @@ impl Cuboid {
             ],
             [
                 EntityVertex {
-                    position: g,
-                    tex_coords: [self.textures.up.1 .0, self.textures.up.0 .1],
-                    normal: [0.0, 1.0, 0.0],
-                    part_id,
-                },
-                EntityVertex {
                     position: h,
                     tex_coords: [self.textures.up.0 .0, self.textures.up.0 .1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
+                    position: g,
+                    tex_coords: [self.textures.up.1 .0, self.textures.up.0 .1],
+                    normal: [0.0, 1.0, 0.0],
+                    part_id,
+                },
+                EntityVertex {
                     position: d,
                     tex_coords: [self.textures.up.0 .0, self.textures.up.1 .1],
+                    normal: [0.0, 1.0, 0.0],
+                    part_id,
+                },
+                EntityVertex {
+                    position: g,
+                    tex_coords: [self.textures.up.1 .0, self.textures.up.0 .1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
@@ -331,12 +331,6 @@ impl Cuboid {
                     part_id,
                 },
                 EntityVertex {
-                    position: g,
-                    tex_coords: [self.textures.up.1 .0, self.textures.up.0 .1],
-                    normal: [0.0, 1.0, 0.0],
-                    part_id,
-                },
-                EntityVertex {
                     position: d,
                     tex_coords: [self.textures.up.0 .0, self.textures.up.1 .1],
                     normal: [0.0, 1.0, 0.0],
@@ -345,24 +339,12 @@ impl Cuboid {
             ],
             [
                 EntityVertex {
-                    position: f,
-                    tex_coords: [self.textures.down.0 .0, self.textures.down.1 .1],
-                    normal: [0.0, -1.0, 0.0],
-                    part_id,
-                },
-                EntityVertex {
                     position: b,
                     tex_coords: [self.textures.down.0 .0, self.textures.down.0 .1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
-                    position: a,
-                    tex_coords: [self.textures.down.1 .0, self.textures.down.0 .1],
-                    normal: [0.0, -1.0, 0.0],
-                    part_id,
-                },
-                EntityVertex {
                     position: f,
                     tex_coords: [self.textures.down.0 .0, self.textures.down.1 .1],
                     normal: [0.0, -1.0, 0.0],
@@ -371,6 +353,18 @@ impl Cuboid {
                 EntityVertex {
                     position: a,
                     tex_coords: [self.textures.down.1 .0, self.textures.down.0 .1],
+                    normal: [0.0, -1.0, 0.0],
+                    part_id,
+                },
+                EntityVertex {
+                    position: a,
+                    tex_coords: [self.textures.down.1 .0, self.textures.down.0 .1],
+                    normal: [0.0, -1.0, 0.0],
+                    part_id,
+                },
+                EntityVertex {
+                    position: f,
+                    tex_coords: [self.textures.down.0 .0, self.textures.down.1 .1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
@@ -443,13 +437,16 @@ impl Entity {
 
         let mut part_id = 0;
         recurse_get_mesh(&root, &mut mesh, &mut part_id);
-        let buffer = wgpu_state.device.create_buffer(&BufferDescriptor {  //create buffer init get stuck idk why
-            label: None, 
-            size: (mesh.len()*size_of::<EntityVertex>()) as u64, 
-            usage: wgpu::BufferUsages::VERTEX|wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false }
-        );
-        wgpu_state.queue.write_buffer(&buffer, 0, bytemuck::cast_slice(&mesh));
+        let buffer = wgpu_state.device.create_buffer(&BufferDescriptor {
+            //create buffer init get stuck idk why
+            label: None,
+            size: (mesh.len() * std::mem::size_of::<EntityVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        wgpu_state
+            .queue
+            .write_buffer(&buffer, 0, bytemuck::cast_slice(&mesh));
         Self {
             name,
             model_root: root,
@@ -460,25 +457,25 @@ impl Entity {
     }
 }
 
+#[derive(Clone)]
 pub struct UploadedEntityInstances {
-    pub transform_ssbo: Arc<BindableBuffer>,
+    pub bind_group: Arc<wgpu::BindGroup>,
+    pub transforms_buffer: Arc<wgpu::Buffer>,
     pub instance_vbo: Arc<wgpu::Buffer>,
-    pub overlay_ssbo: Arc<BindableBuffer>,
-    pub count: u32,
+    pub len: u32,
 }
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
 pub struct InstanceVertex {
-    /// Index into the mat4[] contained by [UploadedEntityInstances].transform_ssbo
-    pub entity_index: u32,
     pub uv_offset: [u16; 2],
+    pub overlay: u32,
 }
 
 impl InstanceVertex {
     const VAA: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
-        4 => Uint32,
-        5 => Float32x2
+        4 => Float32x2,
+        5 => Uint32
     ];
 
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -491,108 +488,94 @@ impl InstanceVertex {
     }
 }
 
+#[derive(Clone)]
 pub struct BundledEntityInstances {
     pub entity: Arc<Entity>,
-    pub texture: Arc<BindableTexture>,
     pub uploaded: UploadedEntityInstances,
-    pub count: u32,
+    pub capacity: u32
 }
 
 impl BundledEntityInstances {
     pub fn new(
         wm: &WmRenderer,
         entity: Arc<Entity>,
-        count: u32,
-        texture: Arc<BindableTexture>,
+        texture_view: &wgpu::TextureView,
+        capacity: u32,
     ) -> Self {
+        let transforms_buffer = Arc::new(wm.display.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: capacity as wgpu::BufferAddress * (entity.parts.len() as wgpu::BufferAddress) * 64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        }));
+        
         Self {
             entity,
-            texture,
             uploaded: UploadedEntityInstances {
-                transform_ssbo: Arc::new(BindableBuffer::new_deferred(
-                    wm,
-                    100000,
-                    BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                    "ssbo",
-                )),
+                bind_group: Arc::new(wm.display.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: wm.bind_group_layouts.get("entity").unwrap(),
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: transforms_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(texture_view)
+                        },
+                    ],
+                })),
+                transforms_buffer,
                 instance_vbo: Arc::new(wm.display.device.create_buffer(&BufferDescriptor {
                     label: None,
                     usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
                     size: 100000,
                     mapped_at_creation: false,
                 })),
-                overlay_ssbo: Arc::new(BindableBuffer::new_deferred(
-                    wm,
-                    100000,
-                    BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                    "ssbo",
-                )),
-                count,
+                len: capacity,
             },
-            count,
+            capacity,
         }
     }
 
-    pub fn upload(&mut self, wm: &WmRenderer, instances: &[EntityInstance]) {
-        self.count = instances.len() as u32;
-
-        let matrices = instances
-            .iter()
-            .flat_map(|transforms| {
-                transforms
-                    .get_matrices(&self.entity)
-                    .into_iter()
-                    .flatten()
-                    .flatten()
-            })
-            .collect::<Vec<f32>>();
-
-        let overlays: Vec<u32> = instances
-            .iter()
-            .flat_map(|instance| &instance.overlays)
-            .cloned()
-            .collect();
-
-        let instances: Vec<InstanceVertex> = instances
-            .iter()
-            .enumerate()
-            .map(|(index, instance)| InstanceVertex {
-                entity_index: index as u32,
-                uv_offset: [instance.uv_offset[0], instance.uv_offset[1]],
-            })
-            .collect();
-
-        let instances_bytes = bytemuck::cast_slice(&instances[..]);
-
-        let instance_vbo = Arc::new(wm.display.device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: None,
-                contents: instances_bytes,
-                usage: BufferUsages::VERTEX,
-            },
-        ));
-
-        let transform_ssbo = Arc::new(BindableBuffer::new(
-            wm,
-            bytemuck::cast_slice(&matrices),
-            BufferUsages::STORAGE,
-            "ssbo",
-        ));
-
-        let overlay_ssbo = Arc::new(BindableBuffer::new(
-            wm,
-            bytemuck::cast_slice(&overlays),
-            BufferUsages::STORAGE,
-            "ssbo",
-        ));
-
-        self.uploaded = UploadedEntityInstances {
-            transform_ssbo,
-            instance_vbo,
-            overlay_ssbo,
-            count: self.count,
-        };
-    }
+    // pub fn upload(&mut self, wm: &WmRenderer, instances: &[EntityInstance]) {
+    //     self.count = instances.len() as u32;
+    // 
+    //     let matrices = instances
+    //         .iter()
+    //         .flat_map(|transforms| {
+    //             transforms
+    //                 .get_matrices(&self.entity)
+    //                 .into_iter()
+    //                 .flatten()
+    //                 .flatten()
+    //         })
+    //         .collect::<Vec<f32>>();
+    // 
+    //     let instances: Vec<InstanceVertex> = instances
+    //         .iter()
+    //         .map(|instance| InstanceVertex {
+    //             uv_offset: instance.uv_offset,
+    //             overlay: instance.overlay,
+    //         })
+    //         .collect();
+    // 
+    //     let instances_bytes = bytemuck::cast_slice(&instances[..]);
+    // 
+    //     let instance_vbo = Arc::new(wm.display.device.create_buffer_init(&BufferInitDescriptor {
+    //         label: None,
+    //         contents: instances_bytes,
+    //         usage: BufferUsages::VERTEX,
+    //     }));
+    // 
+    //     self.uploaded = UploadedEntityInstances {
+    //         bind_group: Arc::new(()),
+    //         transforms_buffer: Arc::new(()),
+    //         instance_vbo,
+    //         count: self.count,
+    //     };
+    // }
 }
 
 pub struct EntityInstance {
@@ -602,7 +585,7 @@ pub struct EntityInstance {
     pub looking_yaw: f32,
     pub uv_offset: [u16; 2],
     pub part_transforms: Vec<PartTransform>,
-    pub overlays: Vec<u32>,
+    pub overlay: u32,
 }
 
 impl EntityInstance {
@@ -620,11 +603,7 @@ impl EntityInstance {
             Mat4::from_translation(vec3(0.5, 0.5, 0.5))
                 * Mat4::from_rotation_y(self.looking_yaw * DEG_TO_RAD)
                 * Mat4::from_translation(vec3(-0.5, -0.5, -0.5))
-                * Mat4::from_translation(vec3(
-                    self.position.0,
-                    self.position.1,
-                    self.position.2,
-                )),
+                * Mat4::from_translation(vec3(self.position.0, self.position.1, self.position.2)),
             &entity.model_root,
             &mut vec,
             // &mut index,
