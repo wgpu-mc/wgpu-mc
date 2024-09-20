@@ -13,7 +13,7 @@ pub struct Vertex {
     pub color: u32,
     pub uv_offset: u32,
     pub lightmap_coords: u8,
-    pub dark: bool,
+    pub ao: u8,
 }
 
 impl Vertex {
@@ -76,7 +76,7 @@ impl Vertex {
         array[10] = self.uv_offset as u8;
         array[11] = (((self.uv_offset >> 8) as u8) & 0b11) | (normal_bits << 2) | (flag_byte << 5);
         array[12] = self.lightmap_coords;
-        array[13] = self.dark as u8;
+        array[13] = self.ao;
 
         array
     }

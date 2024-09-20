@@ -8,9 +8,10 @@
 //! rendering purposes.
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::ops::Range;
+use std::ops::{Not, Range};
 use std::sync::Arc;
-
+use arrayvec::ArrayVec;
+use get_size::GetSize;
 use glam::{ivec3, vec3, IVec2, IVec3, Vec3Swizzles};
 use range_alloc::RangeAllocator;
 
@@ -170,14 +171,12 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
         ChunkBlockState::Air => return None,
         ChunkBlockState::State(key) => key,
     };
-
-    Some(
-        block_manager
-            .blocks
-            .get_index(key.block as usize)?
-            .1
-            .get_model(key.augment, 0),
-    )
+    
+    block_manager
+        .blocks
+        .get_index(key.block as usize)?
+        .1
+        .get_model(key.augment, 0)
 }
 
 pub fn bake_section<Provider: BlockStateProvider>(pos: IVec3, wm: &WmRenderer, bsp: &Provider) {
@@ -214,14 +213,59 @@ fn bake_layers<Provider: BlockStateProvider>(
 
         if let Some(model_mesh) = get_block(block_manager, block_state) {
             const INDICES: [u32; 6] = [1, 3, 0, 2, 3, 1];
-            let mut add_quad = |face: &BlockModelFace, light_level: LightLevel| {
+            let mut add_quad = |face: &BlockModelFace, light_level: LightLevel, dir: Direction| {
                 let baked_layer = &mut layers[RenderLayer::Solid as usize];
                 let vec_index = baked_layer.vertices.len() / Vertex::VERTEX_LENGTH;
 
+                let dir_vec = dir.to_vec();
+                
                 baked_layer.vertices.extend(
                     (0..4)
                         .map(|vert_index| {
                             let model_vertex = face.vertices[vert_index as usize];
+                            let vertex_aligned = ivec3(model_vertex.position.x as i32, model_vertex.position.y as i32, model_vertex.position.z as i32);
+
+                            let vertex_biases = ivec3(
+                                if model_vertex.position.x as i32 == 0 {
+                                    -1
+                                } else {
+                                    1
+                                },
+                                if model_vertex.position.y as i32 == 0 {
+                                    -1
+                                } else {
+                                    1
+                                },
+                                if model_vertex.position.z as i32 == 0 {
+                                    -1
+                                } else {
+                                    1
+                                },
+                            );
+
+                            let axis = dir_vec - vertex_biases; //equivalent to -(vertex_biases - dir_vec)
+
+                            let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
+
+                            if axis.x != 0 {
+                                axes.push(ivec3(axis.x, 0 ,0));
+                            }
+
+                            if axis.y != 0 {
+                                axes.push(ivec3(0, axis.y,0));
+                            }
+
+                            if axis.z != 0 {
+                                axes.push(ivec3(0, 0 ,axis.z));
+                            }
+
+                            let p1 = vertex_biases + pos;
+                            let p2 = p1 + axes[0];
+                            let p3 = p1 + axes[1];
+
+                            let b1 = state_provider.get_state(p1).is_air().not() as u8;
+                            let b2 = state_provider.get_state(p2).is_air().not() as u8;
+                            let b3 = state_provider.get_state(p3).is_air().not() as u8;
 
                             Vertex {
                                 position: [
@@ -234,7 +278,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                                 color: u32::MAX,
                                 uv_offset: 0,
                                 lightmap_coords: light_level.byte,
-                                dark: false,
+                                ao: 3 - (b1 + b2 + b3),
                             }
                         })
                         .flat_map(Vertex::compressed),
@@ -254,10 +298,11 @@ fn bake_layers<Provider: BlockStateProvider>(
                 } else {
                     false
                 };
+
                 if !cull {
                     let light_level: LightLevel =
                         state_provider.get_light_level(pos + dir.to_vec());
-                    add_quad(face, light_level);
+                    add_quad(face, light_level, dir);
                 }
             };
 
@@ -281,7 +326,7 @@ fn bake_layers<Provider: BlockStateProvider>(
             });
             model_mesh.any.iter().for_each(|face| {
                 let light_level: LightLevel = state_provider.get_light_level(pos);
-                add_quad(face, light_level);
+                add_quad(face, light_level, Direction::Up);
             });
         }
     }

@@ -31,7 +31,8 @@ struct VertexResult {
     @location(3) normal: vec3<f32>,
     @location(4) world_pos: vec3<f32>,
     @location(5) @interpolate(flat) light_coords: vec2<f32>,
-    @location(6) section: u32
+    @location(6) section: u32,
+    @location(7) ao: f32
 };
 
 var<push_constant> section_pos: vec3i;
@@ -54,6 +55,7 @@ fn vert(
 
     var u: f32 = f32((v2 >> 16u) & 0xffffu) * 0.00048828125;
     var v: f32 = f32(v3 & 0xffffu) * 0.00048828125;
+    var ao: f32 = f32((v4 >> 8u) & 0xff) * 0.25;
 
     if(((v3 >> 29u) & 1u) == 1u) {
         x = 16.0;
@@ -79,6 +81,7 @@ fn vert(
     vr.light_coords = vec2(f32(light_coords.x) / 15.0, f32(light_coords.y) / 15.0);
 
     vr.blend = 0.0;
+    vr.ao = ao;
 
     return vr;
 }
@@ -91,7 +94,8 @@ fn minecraft_sample_lighting(uv: vec2<u32> ) -> f32 {
 fn frag(
     in: VertexResult
 ) -> @location(0) vec4<f32> {
-    let col = textureSample(t_texture, t_sampler, in.tex_coords);
+    var ao: f32 = (in.ao * 0.7) + 0.3;
+    let col = vec4(ao, ao, ao, 1.0) * textureSample(t_texture, t_sampler, in.tex_coords);
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
     let light = max(in.light_coords.x, in.light_coords.y);

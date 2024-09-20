@@ -3,7 +3,7 @@ pub extern crate wgpu_mc;
 use core::slice;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{Cursor, Write};
+use std::io::{stdout, Cursor, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant};
@@ -595,6 +595,8 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
     let block_manager = wm.mc.block_manager.write();
     let mut mappings = Vec::new();
 
+    let mut stdout = stdout().lock();
+    
     states
         .iter()
         .for_each(|(block_name, state_key, global_ref)| {
@@ -645,9 +647,15 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
                     augment: 0,
                 },
             };
+            
+            if key.block == fallback_key.0 as u16 {
+                write!(&mut stdout, "{} {}\n", block_name, state_key).unwrap();
+            }
 
             mappings.push((key, global_ref));
         });
+    
+    drop(stdout);
 
     mappings.iter().for_each(|(blockstate_key, global_ref)| {
         env.call_static_method(

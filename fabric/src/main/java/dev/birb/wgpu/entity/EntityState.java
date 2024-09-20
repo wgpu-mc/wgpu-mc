@@ -51,9 +51,13 @@ public class EntityState {
 
             if(!partIndices.containsKey(partName)) return;
 
-            int partIndex = partIndices.get(partName);
-            orderedMatrices[partIndex] = mat;
-            overlays[partIndex] = entry.getValue().overlay;
+            try {
+                int partIndex = partIndices.get(partName);
+                orderedMatrices[partIndex] = mat;
+                overlays[partIndex] = entry.getValue().overlay;
+            } catch(ArrayIndexOutOfBoundsException e) {
+                return;
+            }
         }
 
         EntityRenderState state;

@@ -8,6 +8,7 @@ use chunk::SectionStorage;
 use glam::{ivec2, IVec2};
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
+use minecraft_assets::schemas::blockstates::multipart::StateValue;
 use parking_lot::{Mutex, RwLock};
 
 use crate::mc::entity::{BundledEntityInstances, Entity};
@@ -38,33 +39,35 @@ pub struct BlockManager {
 #[derive(Debug)]
 pub enum Block {
     Multipart(Multipart),
-    Variants(IndexMap<String, Vec<Arc<ModelMesh>>>),
+    Variants(IndexMap<Vec<(String, StateValue)>, Vec<Arc<ModelMesh>>>),
 }
 
 impl Block {
-    pub fn get_model(&self, key: u16, _seed: u8) -> Arc<ModelMesh> {
-        match &self {
+    pub fn get_model(&self, key: u16, _seed: u8) -> Option<Arc<ModelMesh>> {
+        Some(match &self {
             Block::Multipart(multipart) => multipart
                 .keys
                 .read()
                 .get_index(key as usize)
-                .unwrap()
+                ?
                 .1
                 .clone(),
             //TODO, random variant selection through weight and seed
-            Block::Variants(variants) => variants.get_index(key as usize).unwrap().1[0].clone(),
-        }
+            Block::Variants(variants) => variants.get_index(key as usize)?.1[0].clone(),
+        })
     }
 
     pub fn get_model_by_key<'a>(
         &self,
-        key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)>
+        key: impl IntoIterator<Item = (&'a str, &'a StateValue)>
             + Clone,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
         //TODO use this
         _seed: u8,
     ) -> Option<(Arc<ModelMesh>, u16)> {
+        let key_map: HashMap<&str, &StateValue> = key.clone().into_iter().collect();
+        
         let key_string = key
             .clone()
             .into_iter()
@@ -73,13 +76,13 @@ impl Block {
                     "{}={}",
                     key,
                     match value {
-                        schemas::blockstates::multipart::StateValue::Bool(bool) =>
+                        StateValue::Bool(bool) =>
                             if *bool {
                                 "true"
                             } else {
                                 "false"
                             },
-                        schemas::blockstates::multipart::StateValue::String(string) => string,
+                        StateValue::String(string) => string,
                     }
                 )
             })
@@ -102,8 +105,13 @@ impl Block {
                 Some((mesh, multipart_write.len() as u16 - 1))
             }
             Block::Variants(variants) => {
-                let full = variants.get_full(&key_string)?;
-                Some((full.2[0].clone(), full.0 as u16))
+                let full = variants.iter().enumerate().find(|(_, (variant_key, model_mesh))| {
+                    variant_key.iter().all(|(variant_property_key, variant_property_value)| {
+                        key_map.get(&variant_property_key[..]).map_or(false, |v| v == &variant_property_value)
+                    })
+                })?;
+                
+                Some((full.1.1[0].clone(), full.0 as u16))
             }
         }
     }
@@ -300,11 +308,34 @@ impl MinecraftState {
 
                 let block = match &blockstates {
                     schemas::BlockStates::Variants { variants } => {
-                        let meshes: IndexMap<String, Vec<Arc<ModelMesh>>> = variants
+                        let meshes: IndexMap<Vec<(String, StateValue)>, Vec<Arc<ModelMesh>>> = variants
                             .iter()
                             .map(|(variant_id, variant)| {
+                                let key_iter = if !variant_id.is_empty() {
+                                    variant_id
+                                        .split(',')
+                                        .filter_map(|kv_pair| {
+                                            let mut split = kv_pair.split('=');
+                                            if kv_pair.is_empty() {
+                                                return None;
+                                            }
+
+                                            Some((
+                                                split.next().unwrap().to_string(),
+                                                match split.next().unwrap() {
+                                                    "true" => StateValue::Bool(true),
+                                                    "false" => StateValue::Bool(false),
+                                                    other => StateValue::String(other.into()),
+                                                },
+                                            ))
+                                        })
+                                        .collect::<Vec<_>>()
+                                } else {
+                                    vec![]
+                                };
+                                
                                 (
-                                    variant_id.clone(),
+                                    key_iter,
                                     variant
                                         .models()
                                         .iter()

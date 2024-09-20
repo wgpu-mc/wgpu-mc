@@ -1,5 +1,5 @@
 plugins {
-    id("fabric-loom") version "1.4-SNAPSHOT"
+    id("fabric-loom") version "1.7-SNAPSHOT"
 
     id("fr.stardustenterprises.rust.importer") version "2.1.0"
     id("io.freefair.lombok") version "8.4"
