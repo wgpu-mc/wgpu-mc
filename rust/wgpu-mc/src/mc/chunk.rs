@@ -223,50 +223,55 @@ fn bake_layers<Provider: BlockStateProvider>(
                     (0..4)
                         .map(|vert_index| {
                             let model_vertex = face.vertices[vert_index as usize];
-                            let vertex_aligned = ivec3(model_vertex.position.x as i32, model_vertex.position.y as i32, model_vertex.position.z as i32);
 
-                            let vertex_biases = ivec3(
-                                if model_vertex.position.x as i32 == 0 {
-                                    -1
-                                } else {
-                                    1
-                                },
-                                if model_vertex.position.y as i32 == 0 {
-                                    -1
-                                } else {
-                                    1
-                                },
-                                if model_vertex.position.z as i32 == 0 {
-                                    -1
-                                } else {
-                                    1
-                                },
-                            );
+                            let (b1, b2, b3) = if model_mesh.any.is_empty() {
+                                let vertex_biases = ivec3(
+                                    if model_vertex.position.x as i32 == 0 {
+                                        -1
+                                    } else {
+                                        1
+                                    },
+                                    if model_vertex.position.y as i32 == 0 {
+                                        -1
+                                    } else {
+                                        1
+                                    },
+                                    if model_vertex.position.z as i32 == 0 {
+                                        -1
+                                    } else {
+                                        1
+                                    },
+                                );
 
-                            let axis = dir_vec - vertex_biases; //equivalent to -(vertex_biases - dir_vec)
+                                let axis = dir_vec - vertex_biases; //equivalent to -(vertex_biases - dir_vec)
 
-                            let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
+                                let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
 
-                            if axis.x != 0 {
-                                axes.push(ivec3(axis.x, 0 ,0));
-                            }
+                                if axis.x != 0 {
+                                    axes.push(ivec3(axis.x, 0 ,0));
+                                }
 
-                            if axis.y != 0 {
-                                axes.push(ivec3(0, axis.y,0));
-                            }
+                                if axis.y != 0 {
+                                    axes.push(ivec3(0, axis.y,0));
+                                }
 
-                            if axis.z != 0 {
-                                axes.push(ivec3(0, 0 ,axis.z));
-                            }
+                                if axis.z != 0 {
+                                    axes.push(ivec3(0, 0 ,axis.z));
+                                }
 
-                            let p1 = vertex_biases + pos;
-                            let p2 = p1 + axes[0];
-                            let p3 = p1 + axes[1];
+                                let p1 = vertex_biases + pos;
+                                let p2 = p1 + axes[0];
+                                let p3 = p1 + axes[1];
 
-                            let b1 = state_provider.get_state(p1).is_air().not() as u8;
-                            let b2 = state_provider.get_state(p2).is_air().not() as u8;
-                            let b3 = state_provider.get_state(p3).is_air().not() as u8;
+                                let b1 = state_provider.get_state(p1).is_air().not() as u8;
+                                let b2 = state_provider.get_state(p2).is_air().not() as u8;
+                                let b3 = state_provider.get_state(p3).is_air().not() as u8;
 
+                                (b1, b2, b3)
+                            } else {
+                                (0, 0, 0)
+                            };
+                            
                             Vertex {
                                 position: [
                                     fpos.x + model_vertex.position[0],
