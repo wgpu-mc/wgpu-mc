@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::time::Instant;
 
-use glam::IVec3;
+use glam::{ivec3, IVec3};
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{bake_section, BlockStateProvider, LightLevel};
 use wgpu_mc::mc::{Scene};
@@ -11,7 +11,7 @@ struct SimpleBlockstateProvider(BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, pos: IVec3) -> ChunkBlockState {
-        if ((pos.x & 1 == 0) ^ (pos.z & 1 == 0) ^ (pos.y & 1 == 0) && (pos.y == 0 || pos.y == 1) && pos.y < 2) || pos.y == 5 {
+        if ((pos.x / 2 & 1 == 0) ^ (pos.z / 2 & 1 == 0) ^ (pos.y & 1 == 0) && (pos.y == 0 || pos.y == 1) && pos.y < 2) || pos.y == 5 {
         // if pos.x ^ pos.y ^ pos.z == 0 {
         // if pos.y == 0 {
             ChunkBlockState::State(self.0)
@@ -21,7 +21,12 @@ impl BlockStateProvider for SimpleBlockstateProvider {
     }
 
     fn get_light_level(&self, _pos: IVec3) -> LightLevel {
-        LightLevel::from_sky_and_block(15, 15)
+        // let dist = _pos.rem_euclid(ivec3(32, 32, 32)).distance_squared(ivec3(16, 16, 16)) / 2;
+        // let value = (16 - dist) as u8;
+        
+        let value = (_pos.x as f32 / 8.0).sin().abs() * 15.0;
+        
+        LightLevel::from_sky_and_block(value as u8, value as u8)
     }
 
     fn is_section_empty(&self, _relpos: IVec3) -> bool {

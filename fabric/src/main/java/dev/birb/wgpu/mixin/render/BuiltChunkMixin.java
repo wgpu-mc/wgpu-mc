@@ -64,7 +64,6 @@ public class BuiltChunkMixin {
         ChunkLightProvider<?, ?> skyLightProvider = world.getLightingProvider().skyLightProvider;
         ChunkLightProvider<?, ?> blockLightProvider = world.getLightingProvider().blockLightProvider;
 
-
         byte[][] skyIndices = new byte[27][2048];
         byte[][] blockIndices = new byte[27][2048];
         Vec3i sectionCoord = new Vec3i(origin.getX()>>4,origin.getY()>>4,origin.getZ()>>4);

@@ -1,10 +1,11 @@
-use glam::{ivec2, ivec3, Mat4};
+use glam::{ivec2, ivec3, IVec3, Mat4};
 use parking_lot::lock_api::RwLock;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+use arrayvec::ArrayVec;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 
@@ -450,7 +451,59 @@ impl ApplicationHandler for Application {
         }
     }
 }
+
 fn main() {
+    let a = 1;
+    let b = 1;
+    let c = 0;
+
+    let vertex_biases = ivec3(
+        if a as i32 == 0 {
+            -1
+        } else {
+            1
+        },
+        if b as i32 == 0 {
+            -1
+        } else {
+            1
+        },
+        if c as i32 == 0 {
+            -1
+        } else {
+            1
+        },
+    );
+
+    let dir_vec = Direction::Up.to_vec();
+
+    let axis = dir_vec - vertex_biases; //equivalent to -(vertex_biases - dir_vec)
+
+    let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
+
+    if axis.x != 0 {
+        axes.push(ivec3(axis.x, 0 ,0));
+    }
+
+    if axis.y != 0 {
+        axes.push(ivec3(0, axis.y,0));
+    }
+
+    if axis.z != 0 {
+        axes.push(ivec3(0, 0 ,axis.z));
+    }
+
+    let p1 = vertex_biases;
+    let p2 = p1 + axes[0];
+    let p3 = p1 + axes[1];
+    // let p4 = dir_vec;
+
+    dbg!(p1, p2, p3);
+    
+    _main();
+}
+
+fn _main() {
     let event_loop = EventLoop::new().unwrap();
     let mut application = Application::new();
     event_loop.run_app(&mut application).unwrap();

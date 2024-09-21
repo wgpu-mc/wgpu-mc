@@ -14,6 +14,7 @@ winit = "0.30"
 glam = "0.29"
 arc-swap = "1.4.0"
 fastanvil = "0.31"
+arrayvec = "0.7.6"
 fastnbt = "2.3.2"
 rayon = "1.5.1"
 bytemuck = { version = "1.13", features = ["derive"] }

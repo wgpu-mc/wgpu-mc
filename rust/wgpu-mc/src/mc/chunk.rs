@@ -194,16 +194,16 @@ pub struct BakedLayer {
 }
 
 fn bake_layers<Provider: BlockStateProvider>(
-    pos: IVec3,
+    section_pos: IVec3,
     block_manager: &BlockManager,
     state_provider: &Provider,
 ) -> Vec<BakedLayer> {
     let mut layers = vec![BakedLayer::default(); 3];
-
+    
     if state_provider.is_section_empty(ivec3(0, 0, 0)) {
         return layers;
     }
-
+    
     for block_index in 0..16 * 16 * 16 {
         let pos = ivec3(block_index & 15, block_index >> 8, (block_index & 255) >> 4);
 
@@ -224,7 +224,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                         .map(|vert_index| {
                             let model_vertex = face.vertices[vert_index as usize];
 
-                            let (b1, b2, b3) = if model_mesh.any.is_empty() {
+                            let (b1, b2, b3, light_level) = if model_mesh.any.is_empty() {
                                 let vertex_biases = ivec3(
                                     if model_vertex.position.x as i32 == 0 {
                                         -1
@@ -246,7 +246,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                                 let axis = dir_vec - vertex_biases; //equivalent to -(vertex_biases - dir_vec)
 
                                 let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
-
+                                
                                 if axis.x != 0 {
                                     axes.push(ivec3(axis.x, 0 ,0));
                                 }
@@ -258,7 +258,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                                 if axis.z != 0 {
                                     axes.push(ivec3(0, 0 ,axis.z));
                                 }
-
+                                
                                 let p1 = vertex_biases + pos;
                                 let p2 = p1 + axes[0];
                                 let p3 = p1 + axes[1];
@@ -266,10 +266,20 @@ fn bake_layers<Provider: BlockStateProvider>(
                                 let b1 = state_provider.get_state(p1).is_air().not() as u8;
                                 let b2 = state_provider.get_state(p2).is_air().not() as u8;
                                 let b3 = state_provider.get_state(p3).is_air().not() as u8;
+                                
+                                let l1 = state_provider.get_light_level(p1);
+                                let l2 = state_provider.get_light_level(p2);
+                                let l3 = state_provider.get_light_level(p3);
+                                let l4 = state_provider.get_light_level(pos + dir_vec);
+                                
+                                let average_sky = ((l1.get_sky_level() + l2.get_sky_level() + l3.get_sky_level() + l4.get_sky_level()) as f32 / 4.0) as u8;
+                                let average_block = ((l1.get_block_level() + l2.get_block_level() + l3.get_block_level() + l4.get_block_level()) as f32 / 4.0) as u8;
+                                
+                                let light_level = LightLevel::from_sky_and_block(average_sky, average_block);
 
-                                (b1, b2, b3)
+                                (b1, b2, b3, light_level)
                             } else {
-                                (0, 0, 0)
+                                (0, 0, 0, LightLevel::from_sky_and_block(15, 15))
                             };
                             
                             Vertex {

@@ -38,6 +38,7 @@
     "render.WorldRendererMixin",
     "render.ItemRendererMixin",
     "world.BlockStateMixin",
+    "world.PackedIntegerArrayMixin",
     "DebugHudMixin",
     "core.MainTestRenderdocMixin"
   ],
