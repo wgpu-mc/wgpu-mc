@@ -5,7 +5,12 @@ struct VO {
     @location(2) use_uv: u32
 }
 
-var<push_constant> projection: mat4x4<f32>;
+struct PushConstants {
+    projection: mat4x4<f32>,
+    color: vec4<f32>
+}
+
+var<push_constant> push_constants: PushConstants;
 
 @group(0) @binding(0)
 var t_texture: texture_2d<f32>;
@@ -21,9 +26,9 @@ fn vert(
     @location(3) use_uv: u32
 ) -> VO {
     var vo: VO;
-    vo.pos = projection * vec4<f32>(pos, 1.0);
+    vo.pos = push_constants.projection * vec4<f32>(pos, 1.0);
     vo.uv = uv;
-    vo.color = color;
+    vo.color = push_constants.color * color;
     vo.use_uv = use_uv;
     vo.pos.z = 0.1;
 

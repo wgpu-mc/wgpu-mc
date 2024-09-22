@@ -81,6 +81,7 @@ pipelines:
 #    blending: premultiplied_alpha_blending
     push_constants:
       0: "@pc_mat4_model"
+      64: "@pc_electrum_color"
     bind_groups:
       0: "@texture_electrum_gui"
       1:

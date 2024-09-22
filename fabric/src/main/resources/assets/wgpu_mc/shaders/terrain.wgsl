@@ -55,12 +55,19 @@ fn vert(
 ) -> VertexResult {
 //    var vert1_i = (vi >> 2) << 4;
 //    var vert1_i = (vi << 2) & 0xfffffffc;
-    var vert1_i = (vi / 4) * 16;
+//    var vert1_i = ((vi >> 2u) << 2u)+base_vertex;
 
-    var vert1_v4 = chunk_data[vert1_i + 3u];
-    var vert2_v4 = chunk_data[vert1_i + 7u];
-    var vert3_v4 = chunk_data[vert1_i + 11u];
-    var vert4_v4 = chunk_data[vert1_i + 15u];
+    var offset = vi & 3;
+    var vert1_i = vi & ~3u;
+
+    var id = ((vert1_i + offset) << 2u) + base_vertex;
+
+    var vert1_base = ((vert1_i) << 2u) + base_vertex;
+
+    var vert1_v4 = chunk_data[vert1_base + 3u];
+    var vert2_v4 = chunk_data[vert1_base + 7u];
+    var vert3_v4 = chunk_data[vert1_base + 11u];
+    var vert4_v4 = chunk_data[vert1_base + 15u];
 
     var v1_lc = 0.066666666666667 * vec2(f32(vert1_v4 & 15u), f32((vert1_v4 >> 4u) & 15u));
     var v2_lc = 0.066666666666667 * vec2(f32(vert2_v4 & 15u), f32((vert2_v4 >> 4u) & 15u));
@@ -92,7 +99,6 @@ fn vert(
 
     vr.light_uv = light_uv;
 
-    let id = (vi << 2u)+base_vertex;
     var v1 = chunk_data[id];
     var v2 = chunk_data[id + 1u];
     var v3 = chunk_data[id + 2u];
@@ -128,16 +134,16 @@ fn vert(
     vr.world_pos = world_pos;
     vr.ao = ao;
 
-//    var light_coords = vec2<u32>(v4 & 15u, (v4 >> 4u) & 15u);
-//    vr.light_coords = 0.066666666666666 * vec2(f32(light_coords.x), f32(light_coords.y));
+    var light_coords = vec2<u32>(v4 & 15u, (v4 >> 4u) & 15u);
+    vr.light_coords = 0.066666666666666 * vec2(f32(light_coords.x), f32(light_coords.y));
 
     vr.blend = 0.0;
 
     return vr;
 }
 
-fn minecraft_sample_lighting(uv: vec2<u32> ) -> f32 {
-    return f32(max(uv.x, uv.y)) / 15.0;
+fn minecraft_sample_lighting(uv: vec2<f32>) -> vec3<f32> {
+    return mix(uv.x * vec3(0.32156, 0.32156, 0.5) * 0.5 + uv.y * 0.5, vec3(1.0, 1.0, 1.0), uv.y);
 }
 
 @fragment
@@ -146,13 +152,13 @@ fn frag(
 ) -> @location(0) vec4<f32> {
 //    var ao: f32 = (in.ao * 0.7) + 0.3;
 
-    var lc = mix(mix(in.lc3, in.lc4, in.light_uv.y), mix(in.lc2, in.lc1, in.light_uv.y), in.light_uv.x);
-    var ao = mix(mix(in.ao3, in.ao4, in.light_uv.x), mix(in.ao2, in.ao1, in.light_uv.x), in.light_uv.y);
+    var lc = mix(mix(in.lc3, in.lc4, in.light_uv.x), mix(in.lc2, in.lc1, in.light_uv.x), in.light_uv.y);
+    var ao = 0.6 + 0.4 * mix(mix(in.ao3, in.ao4, in.light_uv.x), mix(in.ao2, in.ao1, in.light_uv.x), in.light_uv.y);
 //    var ao = mix(mix(0.0, 0.0, in.light_uv.x), mix(0.0, 1.0, in.light_uv.x), in.light_uv.y);
 
     var light = max(lc.x, lc.y);
 
-    let col = vec4(ao, ao, ao, 1.0) * vec4(light, light, light, 1.0) * textureSample(t_texture, t_sampler, in.tex_coords);
+    let col = vec4(light, light, light, 1.0) * vec4(ao, ao, ao, 1.0) * textureSample(t_texture, t_sampler, in.tex_coords);
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
 

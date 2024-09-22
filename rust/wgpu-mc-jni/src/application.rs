@@ -35,6 +35,62 @@ use wgpu_mc::render::{
 
 pub static SHOULD_STOP: OnceCell<()> = OnceCell::new();
 
+pub fn load_shaders(wm: &WmRenderer) {
+    let shader_pack: ShaderPackConfig =
+        serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
+
+    let mut render_resources = HashMap::new();
+
+    let mat4_projection = create_matrix_buffer(&wm);
+    let mat4_view = create_matrix_buffer(&wm);
+    let mat4_model = create_matrix_buffer(&wm);
+
+    render_resources.insert(
+        "@mat4_view".into(),
+        ResourceBacking::Buffer(mat4_view.clone(), BufferBindingType::Uniform),
+    );
+
+    render_resources.insert(
+        "@mat4_perspective".into(),
+        ResourceBacking::Buffer(mat4_projection.clone(), BufferBindingType::Uniform),
+    );
+
+    render_resources.insert(
+        "@mat4_model".into(),
+        ResourceBacking::Buffer(mat4_model.clone(), BufferBindingType::Uniform),
+    );
+
+    let mut custom_bind_groups = HashMap::new();
+    custom_bind_groups.insert(
+        "@texture_electrum_gui".into(),
+        wm.bind_group_layouts.get("texture").unwrap(),
+    );
+    custom_bind_groups.insert(
+        "@mat4_electrum_gui".into(),
+        wm.bind_group_layouts.get("matrix").unwrap(),
+    );
+
+    let mut custom_geometry = HashMap::new();
+    custom_geometry.insert(
+        "@geo_electrum_gui".into(),
+        vec![wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<ElectrumVertex>() as BufferAddress,
+            step_mode: Default::default(),
+            attributes: &ElectrumVertex::VAO,
+        }],
+    );
+
+    let render_graph = RenderGraph::new(
+        &wm,
+        shader_pack,
+        render_resources,
+        Some(custom_bind_groups),
+        Some(custom_geometry),
+    );
+    
+    RENDER_GRAPH.set(render_graph);
+}
+
 pub struct Application {
     title: String,
     current_modifiers: ModifiersState,
@@ -153,58 +209,8 @@ impl ApplicationHandler for Application {
 
         wm.init();
 
-        let shader_pack: ShaderPackConfig =
-            serde_yaml::from_str(include_str!("../graph.yaml")).unwrap();
-
-        let mut render_resources = HashMap::new();
-
-        let mat4_projection = create_matrix_buffer(&wm);
-        let mat4_view = create_matrix_buffer(&wm);
-        let mat4_model = create_matrix_buffer(&wm);
-
-        render_resources.insert(
-            "@mat4_view".into(),
-            ResourceBacking::Buffer(mat4_view.clone(), BufferBindingType::Uniform),
-        );
-
-        render_resources.insert(
-            "@mat4_perspective".into(),
-            ResourceBacking::Buffer(mat4_projection.clone(), BufferBindingType::Uniform),
-        );
-
-        render_resources.insert(
-            "@mat4_model".into(),
-            ResourceBacking::Buffer(mat4_model.clone(), BufferBindingType::Uniform),
-        );
-
-        let mut custom_bind_groups = HashMap::new();
-        custom_bind_groups.insert(
-            "@texture_electrum_gui".into(),
-            wm.bind_group_layouts.get("texture").unwrap(),
-        );
-        custom_bind_groups.insert(
-            "@mat4_electrum_gui".into(),
-            wm.bind_group_layouts.get("matrix").unwrap(),
-        );
-
-        let mut custom_geometry = HashMap::new();
-        custom_geometry.insert(
-            "@geo_electrum_gui".into(),
-            vec![wgpu::VertexBufferLayout {
-                array_stride: std::mem::size_of::<ElectrumVertex>() as BufferAddress,
-                step_mode: Default::default(),
-                attributes: &ElectrumVertex::VAO,
-            }],
-        );
-
-        let render_graph = RenderGraph::new(
-            &wm,
-            shader_pack,
-            render_resources,
-            Some(custom_bind_groups),
-            Some(custom_geometry),
-        );
-        RENDER_GRAPH.set(render_graph);
+        load_shaders(&wm);
+        
         let mut geometry = HashMap::new();
         geometry.insert(
             "@geo_electrum_gui".to_string(),

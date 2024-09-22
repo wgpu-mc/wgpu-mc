@@ -53,7 +53,9 @@ public class BufferRendererMixin {
         int count = parameters.vertexCount();
         byte[] bytes = new byte[count * vertexFormat.getVertexSizeByte()];
         buffer.get(bytes);
-
+        
+        float[] shaderColor = RenderSystem.getShaderColor();
+        WgpuNative.setShaderColor(shaderColor[0], shaderColor[1], shaderColor[2], shaderColor[3]);
         WgpuNative.setVertexBuffer(bytes);
 
         if (parameters.mode() == VertexFormat.DrawMode.QUADS) {

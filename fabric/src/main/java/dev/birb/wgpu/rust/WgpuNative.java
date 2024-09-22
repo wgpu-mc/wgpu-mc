@@ -172,10 +172,13 @@ public class WgpuNative {
 
     public static native void bindRenderEffectsData(float fogStart, float fogEnd, int fogShape, float[] fogColor, float[] colorModulator, float[] dimensionFogColor);
 
-    public static native void reload(int clampedViewDistance,int minSectionHeight);
+    public static native void reloadStorage(int clampedViewDistance,int minSectionHeight);
+
+    public static native void reloadShaders();
 
     public static native void setSectionPos(int x,int z);
 
     public static native void render(float tickDelta, long startTime, boolean tick);
 
+    public static native void setShaderColor(float r, float g, float b, float a);
 }

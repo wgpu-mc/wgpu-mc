@@ -247,6 +247,6 @@ public abstract class WorldRendererMixin {
 
     @Inject(method = "reload", cancellable = true, at = @At("HEAD"))
     public void reload(CallbackInfo ci) {
-        WgpuNative.reload(this.client.options.getClampedViewDistance(),this.world.getBottomSectionCoord());
+        WgpuNative.reloadStorage(this.client.options.getClampedViewDistance(),this.world.getBottomSectionCoord());
     }
 }

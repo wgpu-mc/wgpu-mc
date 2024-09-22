@@ -345,7 +345,7 @@ pub fn registerBlockState(
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn reload(_env: JNIEnv, _class: JClass, clampedViewDistance: jint) {
+pub fn reloadStorage(_env: JNIEnv, _class: JClass, clampedViewDistance: jint) {
     let mut section_storage = SCENE.section_storage.write();
     section_storage.clear();
     section_storage.set_width(clampedViewDistance);
@@ -1157,6 +1157,14 @@ pub fn drawIndexed(_env: JNIEnv, _class: JClass, count: jint) {
         .write()
         .0
         .push(GLCommand::DrawIndexed(count as u32));
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setShaderColor(env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat, a: jfloat) {
+    GL_COMMANDS
+        .write()
+        .0
+        .push(GLCommand::SetColor([r, g, b, a]));
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

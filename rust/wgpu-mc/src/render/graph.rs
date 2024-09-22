@@ -233,6 +233,10 @@ impl RenderGraph {
                             stages: wgpu::ShaderStages::VERTEX,
                             range: index..index + 4,
                         },
+                        "@pc_electrum_color" => wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::FRAGMENT,
+                            range: index..index + 16
+                        },
                         _ => unimplemented!(),
                     }
                 })

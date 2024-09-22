@@ -279,7 +279,7 @@ fn bake_layers<Provider: BlockStateProvider>(
 
                                 (b1, b2, b3, light_level)
                             } else {
-                                (0, 0, 0, LightLevel::from_sky_and_block(15, 15))
+                                (0, 0, 0, state_provider.get_light_level(pos))
                             };
                             
                             Vertex {

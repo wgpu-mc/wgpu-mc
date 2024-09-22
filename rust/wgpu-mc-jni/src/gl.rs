@@ -26,6 +26,7 @@ pub static GL_COMMANDS: Lazy<RwLock<(Vec<GLCommand>, Vec<GLCommand>)>> =
 #[derive(Clone, Debug)]
 pub enum GLCommand {
     SetMatrix(Mat4),
+    SetColor([f32; 4]),
     ClearColor([f32; 3]),
     UsePipeline(usize),
     SetVertexBuffer(Vec<u8>),
@@ -178,6 +179,7 @@ struct Draw {
     vertex_buffer: Vec<u8>,
     count: u32,
     matrix: [[f32; 4]; 4],
+    color: [f32; 4],
     texture: Option<u32>,
 }
 
@@ -187,6 +189,7 @@ struct IndexedDraw {
     index_buffer: Vec<u32>,
     count: u32,
     matrix: [[f32; 4]; 4],
+    color: [f32; 4],
     texture: Option<u32>,
     pipeline_state: PipelineState,
 }
@@ -250,6 +253,7 @@ impl Geometry for ElectrumGeometry {
 
         let mut vertex_buffer = vec![];
         let mut index_buffer = vec![];
+        let mut color = [1.0; 4];
         let mut matrix = Mat4::IDENTITY;
         let mut texture = None;
         let mut pipeline_state = None;
@@ -258,6 +262,9 @@ impl Geometry for ElectrumGeometry {
 
         for command in commands {
             match command {
+                GLCommand::SetColor(new_color) => {
+                    color = new_color;
+                }
                 GLCommand::SetMatrix(new_matrix) => {
                     matrix = new_matrix;
                 }
@@ -275,6 +282,7 @@ impl Geometry for ElectrumGeometry {
                         index_buffer: vec![0,1,2,0,3,2],
                         count: 6,
                         matrix: Mat4::IDENTITY.to_cols_array_2d(),
+                        color: [1.0; 4],
                         texture: None,
                         pipeline_state: PipelineState::PositionColorF32,
                     }));
@@ -302,6 +310,7 @@ impl Geometry for ElectrumGeometry {
                         count,
                         matrix: matrix.to_cols_array_2d(),
                         texture: texture.take(),
+                        color,
                         pipeline_state: pipeline_state.take().unwrap(),
                     }));
                 }
@@ -310,6 +319,7 @@ impl Geometry for ElectrumGeometry {
                         vertex_buffer: std::mem::take(&mut vertex_buffer),
                         count,
                         matrix: matrix.to_cols_array_2d(),
+                        color,
                         texture: texture.take(),
                     }));
                 }
@@ -364,6 +374,13 @@ impl Geometry for ElectrumGeometry {
                             wgpu::ShaderStages::VERTEX,
                         ),
                     );
+                    push_constants.insert(
+                        "@pc_electrum_color".into(),
+                        (
+                            Vec::from(bytemuck::cast_slice(&draw.color)),
+                            wgpu::ShaderStages::FRAGMENT,
+                        ),
+                    );
                     set_push_constants(&bound_pipeline.config, render_pass, Some(push_constants));
 
                     let buffer_slice = buffer_pool.allocate(&draw.vertex_buffer);
@@ -412,6 +429,13 @@ impl Geometry for ElectrumGeometry {
                         (
                             Vec::from(bytemuck::cast_slice(&draw.matrix)),
                             wgpu::ShaderStages::VERTEX,
+                        ),
+                    );
+                    push_constants.insert(
+                        "@pc_electrum_color".into(),
+                        (
+                            Vec::from(bytemuck::cast_slice(&draw.color)),
+                            wgpu::ShaderStages::FRAGMENT,
                         ),
                     );
                     set_push_constants(&bound_pipeline.config, render_pass, Some(push_constants));

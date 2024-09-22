@@ -17,7 +17,7 @@ use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex};
 use wgpu_mc::mc::{RenderEffectsData};
 use wgpu_mc::texture::{BindableTexture};
 
-use crate::application::SHOULD_STOP;
+use crate::application::{load_shaders, SHOULD_STOP};
 use crate::gl::{GlTexture, GL_ALLOC};
 use crate::RENDERER;
 
@@ -33,6 +33,11 @@ pub struct Matrices {
     pub projection: [[f32; 4]; 4],
     pub view: [[f32; 4]; 4],
     pub terrain_transformation: [[f32; 4]; 4],
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn reloadShaders(env: JNIEnv, _class: JClass) {
+    load_shaders(RENDERER.get().unwrap());
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
