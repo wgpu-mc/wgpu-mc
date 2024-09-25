@@ -22,7 +22,15 @@ Electrum is a fabric mod that integrates wgpu-mc with Minecraft.
 Both the engine and Electrum are both currently under active development.
 wgpu-mc is fairly mature, while Electrum is more WIP.
 
-#### WIP and Completed Features
+#### Screenshots
+
+8/25/23
+![AO + Smooth lighting shown off in a cave](.github/screenshots/cave.png)
+
+#### WIP Features
+
+The features listed below are not necessarily fully complete and
+may still be bugged
 
 Engine
 
@@ -32,6 +40,7 @@ Engine
 - [x] Terrain rendering
 - - [ ] Translucency sorting
 - - [x] Frustum culling
+- - [x] Lighting (AO + block/sky light)
 - [x] Instanced Entity Rendering
 - [x] Animated textures
 - [ ] Mipmaps  
@@ -41,9 +50,13 @@ Minecraft
 
 - [x] GUI rendering
 - [x] Terrain rendering
-    - [ ] Lighting integration
+    - [x] Lighting integration
     - [x] Chunk updates
-- [x] Integrate entities (Bugged but mostly works)
+- [ ] Entities
+- - [x] Instancing (one draw call per entity type)
+- - [x] Model upload (Models are correctly translated dynamically from Minecraft's format into the wgpu-mc entity struct format)
+- - [ ] Player atlas
+- - [ ] Textures (Somewhat working, UVs are bugged)
 - [ ] Item rendering
 - [ ] Implement FRAPI/FREX
 - [ ] Particles
