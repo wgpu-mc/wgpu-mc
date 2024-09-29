@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.crash.CrashReport;
+import net.minecraft.util.math.BlockPos;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
@@ -49,6 +50,8 @@ public class Wgpu {
     private static int windowWidth;
     @Getter
     private static int windowHeight;
+
+    private static volatile MinecraftClient client;
 
     static {
         try {
@@ -160,6 +163,35 @@ public class Wgpu {
         }
 
         EntityState.matrixIndices.get(entity).put(part, index);
+    }
+
+    public static int helperGetBlockColor(int x, int y, int z, int tintIndex) {
+        MinecraftClient client = MinecraftClient.getInstance();
+
+        BlockPos pos;
+        pos = new BlockPos(x, y, z);
+
+        int color = client.getBlockColors().getColor(
+                client.world.getBlockState(pos),
+                client.world,
+                pos,
+                tintIndex
+        );
+
+        int r = color >> 16 & 255;
+        int g = color >> 8 & 255;
+        int b = color & 255;
+
+        int fixedColor = r | (g << 8) | (b << 16);
+
+        return fixedColor;
+
+//         return 0x59f7ab;
+//        return 0xffffffff;
+    }
+    
+    public static void helperSetClassLoader(ClassLoader loader) {
+        Thread.currentThread().setContextClassLoader(loader);
     }
 
     @SuppressWarnings("unused") // called from rust

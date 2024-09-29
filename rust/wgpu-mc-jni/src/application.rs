@@ -144,7 +144,7 @@ impl ApplicationHandler for Application {
         }))
         .unwrap();
 
-        const VSYNC: bool = true;
+        const VSYNC: bool = false;
 
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_config = wgpu::SurfaceConfiguration {

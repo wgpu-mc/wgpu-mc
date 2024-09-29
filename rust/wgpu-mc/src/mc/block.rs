@@ -67,6 +67,7 @@ pub struct BlockMeshVertex {
 pub struct BlockModelFace {
     pub vertices: [BlockMeshVertex; 4],
     pub normal: Vec3,
+    pub tint_index: i32,
     pub animation_uv_offset: u32,
 }
 
@@ -276,6 +277,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
+                                        tex.tint_index
                                     )
                                 })
                             });
@@ -295,6 +297,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
+                                        tex.tint_index
                                     )
                                 })
                             });
@@ -314,6 +317,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
+                                        tex.tint_index
                                     )
                                 })
                             });
@@ -333,6 +337,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
+                                        tex.tint_index
                                     )
                                 })
                             });
@@ -352,6 +357,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
+                                        tex.tint_index
                                     )
                                 })
                             });
@@ -371,6 +377,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
+                                        tex.tint_index
                                     )
                                 })
                             });
@@ -469,6 +476,7 @@ impl ModelMesh {
                                 },
                             ],
                             normal: vec3(0.0, 0.0, 1.0),
+                            tint_index: south_face.2,
                             animation_uv_offset: south_face.1,
                         }));
                         faces.extend(west.map(|west_face| BlockModelFace {
@@ -491,6 +499,7 @@ impl ModelMesh {
                                 },
                             ],
                             normal: vec3(-1.0, 0.0, 0.0),
+                            tint_index: west_face.2,
                             animation_uv_offset: west_face.1,
                         }));
                         faces.extend(north.map(|north_face| BlockModelFace {
@@ -513,6 +522,7 @@ impl ModelMesh {
                                 },
                             ],
                             normal: vec3(0.0, 0.0, -1.0),
+                            tint_index: north_face.2,
                             animation_uv_offset: north_face.1,
                         }));
                         faces.extend(east.map(|east_face| BlockModelFace {
@@ -535,6 +545,7 @@ impl ModelMesh {
                                 },
                             ],
                             normal: vec3(1.0, 0.0, 0.0),
+                            tint_index: east_face.2,
                             animation_uv_offset: east_face.1,
                         }));
                         faces.extend(up.map(|up_face| BlockModelFace {
@@ -557,6 +568,7 @@ impl ModelMesh {
                                 },
                             ],
                             normal: vec3(0.0, 1.0, 0.0),
+                            tint_index: up_face.2,
                             animation_uv_offset: up_face.1,
                         }));
 
@@ -580,6 +592,7 @@ impl ModelMesh {
                                 },
                             ],
                             normal: vec3(0.0, -1.0, 0.0),
+                            tint_index: down_face.2,
                             animation_uv_offset: down_face.1,
                         }));
                         faces

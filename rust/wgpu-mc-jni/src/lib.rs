@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant};
 use std::{mem, thread};
-
+use std::cell::{RefCell, UnsafeCell};
 use application::Application;
 use arc_swap::{ArcSwap};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -95,6 +95,8 @@ pub static RENDER_GRAPH: OnceCell<RenderGraph> = OnceCell::new();
 pub static CUSTOM_GEOMETRY: OnceCell<Mutex<HashMap<String, Box<dyn Geometry>>>> = OnceCell::new();
 
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
+static JVM: OnceCell<RwLock<JavaVM>> = OnceCell::new();
+static YARN_CLASS_LOADER: OnceCell<GlobalRef> = OnceCell::new();
 
 type Task = Box<dyn FnOnce() + Send + Sync>;
 
@@ -108,7 +110,7 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 
 static CLEAR_COLOR: Lazy<ArcSwap<[f32; 3]>> = Lazy::new(|| ArcSwap::new(Arc::new([0.0; 3])));
 
-static THREAD_POOL: Lazy<ThreadPool> = Lazy::new(|| ThreadPoolBuilder::new().build().unwrap());
+static THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     block: RENDERER
@@ -180,7 +182,7 @@ pub struct SectionHolder {
 #[derive(Debug)]
 pub struct MinecraftBlockstateProvider {
     pub sections: [Option<SectionHolder>; 27],
-    pub air: BlockstateKey,
+    pub air: BlockstateKey
 }
 impl BlockStateProvider for MinecraftBlockstateProvider {
     fn get_state(&self, pos: IVec3) -> ChunkBlockState {
@@ -246,6 +248,10 @@ impl BlockStateProvider for MinecraftBlockstateProvider {
 
         self.sections[(rel_pos + 1).dot(ivec3(1, 3, 9)) as usize].is_none()
     }
+
+    fn get_block_color(&self, _pos: IVec3, _tint_index: i32) -> u32 {
+        0xffffffff
+    }
 }
 
 struct MinecraftResourceManagerAdapter {
@@ -280,6 +286,43 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
             slice::from_raw_parts(elements.as_ptr() as *const u8, size)
         }))
     }
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn initialize(env: JNIEnv, _class: JClass, class_loader: JObject, minecraft: JObject) {
+    JVM.set(RwLock::new(env.get_java_vm().unwrap())).unwrap();
+
+   let class_loader = env.new_global_ref(class_loader).unwrap();
+    YARN_CLASS_LOADER.set(class_loader).unwrap();
+    
+    let minecraft_global = env.new_global_ref(minecraft).unwrap();
+
+    static MINECRAFT: OnceCell<GlobalRef> = OnceCell::new();
+    
+    MINECRAFT.set(minecraft_global).unwrap();
+    
+    THREAD_POOL.set(ThreadPoolBuilder::new()
+        .start_handler(|_| {
+            let loader = YARN_CLASS_LOADER.get().unwrap();
+
+            let jvm = JVM.get().unwrap();
+            let jvm = jvm.read();
+            let mut env = jvm.attach_current_thread_as_daemon().unwrap();
+
+            let thread = env.call_static_method(
+                "java/lang/Thread",
+                "currentThread",
+                "()Ljava/lang/Thread;",
+                &[]
+            ).unwrap().l().unwrap();
+
+            env.call_method(thread, "setContextClassLoader", "(Ljava/lang/ClassLoader;)V", &[
+                JValue::Object(&loader)
+            ]).unwrap();
+        })
+        .num_threads(0)
+        .build()
+        .unwrap()).unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -355,6 +398,40 @@ pub fn reloadStorage(_env: JNIEnv, _class: JClass, clampedViewDistance: jint) {
 pub fn setSectionPos(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
     *SCENE.camera_section_pos.write() = ivec2(x, z);
 }
+
+struct MinecraftBlockStateProviderWrapper<'a> {
+    internal: MinecraftBlockstateProvider,
+    env: RefCell<JNIEnv<'a>>
+}
+
+impl<'a> BlockStateProvider for MinecraftBlockStateProviderWrapper<'a> {
+    fn get_state(&self, pos: IVec3) -> ChunkBlockState {
+        self.internal.get_state(pos)
+    }
+
+    fn get_light_level(&self, pos: IVec3) -> LightLevel {
+        self.internal.get_light_level(pos)
+    }
+
+    fn is_section_empty(&self, rel_pos: IVec3) -> bool {
+        self.internal.is_section_empty(rel_pos)
+    }
+
+    fn get_block_color(&self, pos: IVec3, tint_index: i32) -> u32 {
+        self.env.borrow_mut().call_static_method(
+            "dev/birb/wgpu/render/Wgpu",
+            "helperGetBlockColor",
+            "(IIII)I",
+            &[
+                JValue::Int(pos.x),
+                JValue::Int(pos.y),
+                JValue::Int(pos.z),
+                JValue::Int(tint_index)
+            ],
+        ).unwrap().i().unwrap() as u32
+    }
+}
+
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn bakeSection(
     mut env: JNIEnv,
@@ -378,7 +455,7 @@ pub fn bakeSection(
     const NONE: Option<SectionHolder> = None;
     let mut bsp = MinecraftBlockstateProvider {
         sections: [NONE; 27],
-        air: *AIR,
+        air: *AIR
     };
 
     for i in 0..27 {
@@ -431,10 +508,19 @@ pub fn bakeSection(
         });
     }
 
-    THREAD_POOL.spawn(move || {
+    let jvm = env.get_java_vm().unwrap();
+
+    // THREAD_POOL.get().unwrap().spawn(move || {
         let wm = RENDERER.get().unwrap();
-        bake_section(ivec3(x, y, z), wm, &bsp);
-    })
+        // let env = jvm.attach_current_thread_as_daemon().unwrap();
+
+        let wrapper = MinecraftBlockStateProviderWrapper {
+            internal: bsp,
+            env: RefCell::new(env),
+        };
+
+        bake_section(ivec3(x, y, z), wm, &wrapper);
+    // })
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1273,7 +1359,7 @@ pub fn bindStarData(
     }
 
     //spawn a thread bc renderer wouldn't be initialized quite yet
-    THREAD_POOL.spawn(move || loop {
+    THREAD_POOL.get().unwrap().spawn(move || loop {
         if RENDERER.get().is_none() {
             continue;
         }

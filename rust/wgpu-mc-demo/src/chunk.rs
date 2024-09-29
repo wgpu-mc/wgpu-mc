@@ -32,6 +32,10 @@ impl BlockStateProvider for SimpleBlockstateProvider {
     fn is_section_empty(&self, _relpos: IVec3) -> bool {
         false
     }
+
+    fn get_block_color(&self, _pos: IVec3, _tint_index: i32) -> u32 {
+        0xffffffff
+    }
 }
 
 impl Debug for SimpleBlockstateProvider {

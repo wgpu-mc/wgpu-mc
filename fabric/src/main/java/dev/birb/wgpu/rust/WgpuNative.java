@@ -1,5 +1,7 @@
 package dev.birb.wgpu.rust;
 
+import net.minecraft.client.MinecraftClient;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -21,6 +23,8 @@ public class WgpuNative {
     public static void loadWm() {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
+            WgpuNative.initialize(Thread.currentThread().getContextClassLoader(), MinecraftClient.getInstance());
+            
             CoreLib.init();
         } catch (Exception e) {
             throw new IllegalStateException(e);
@@ -51,6 +55,8 @@ public class WgpuNative {
         System.load(object.getAbsolutePath());
     }
 
+    public static native void initialize(Object object, Object client);
+    
     public static native String getSettingsStructure();
 
     public static native String getSettings();

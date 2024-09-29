@@ -54,3 +54,6 @@ accessible field net/minecraft/world/chunk/light/ChunkLightProvider lightStorage
 accessible field net/minecraft/world/chunk/light/LightStorage storage Lnet/minecraft/world/chunk/ChunkToNibbleArrayMap;
 accessible field net/minecraft/world/chunk/light/LightStorage uncachedStorage Lnet/minecraft/world/chunk/ChunkToNibbleArrayMap;
 accessible class net/minecraft/world/chunk/light/SkyLightStorage$Data
+accessible class net/minecraft/client/render/chunk/ChunkBuilder$Result
+accessible field net/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task cancelled Ljava/util/concurrent/atomic/AtomicBoolean;
+accessible class net/minecraft/client/render/chunk/ChunkBuilder$Result

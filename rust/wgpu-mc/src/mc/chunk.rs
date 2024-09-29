@@ -12,7 +12,7 @@ use std::ops::{Not, Range};
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use get_size::GetSize;
-use glam::{ivec3, vec3, IVec2, IVec3, Vec3Swizzles};
+use glam::{ivec3, vec3, BVec3, BVec4, IVec2, IVec3, Vec3Swizzles};
 use range_alloc::RangeAllocator;
 
 use crate::mc::block::{BlockModelFace, ChunkBlockState, ModelMesh};
@@ -49,12 +49,14 @@ impl LightLevel {
 }
 
 /// Return a [ChunkBlockState] within the provided world coordinates.
-pub trait BlockStateProvider: Send + Sync {
+pub trait BlockStateProvider {
     fn get_state(&self, pos: IVec3) -> ChunkBlockState;
 
     fn get_light_level(&self, pos: IVec3) -> LightLevel;
 
     fn is_section_empty(&self, rel_pos: IVec3) -> bool;
+    
+    fn get_block_color(&self, pos: IVec3, tint_index: i32) -> u32;
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
@@ -200,6 +202,8 @@ fn bake_layers<Provider: BlockStateProvider>(
 ) -> Vec<BakedLayer> {
     let mut layers = vec![BakedLayer::default(); 3];
     
+    let section_offset = 16 * section_pos;
+    
     if state_provider.is_section_empty(ivec3(0, 0, 0)) {
         return layers;
     }
@@ -213,7 +217,7 @@ fn bake_layers<Provider: BlockStateProvider>(
 
         if let Some(model_mesh) = get_block(block_manager, block_state) {
             const INDICES: [u32; 6] = [1, 3, 0, 2, 3, 1];
-            let mut add_quad = |face: &BlockModelFace, light_level: LightLevel, dir: Direction| {
+            let mut add_quad = |face: &BlockModelFace, light_level: LightLevel, dir: Direction, color: u32| {
                 let baked_layer = &mut layers[RenderLayer::Solid as usize];
                 let vec_index = baked_layer.vertices.len() / Vertex::VERTEX_LENGTH;
 
@@ -290,7 +294,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                                 ],
                                 uv: model_vertex.tex_coords,
                                 normal: face.normal.to_array(),
-                                color: u32::MAX,
+                                color,
                                 uv_offset: 0,
                                 lightmap_coords: light_level.byte,
                                 ao: 3 - (b1 + b2 + b3),
@@ -306,6 +310,12 @@ fn bake_layers<Provider: BlockStateProvider>(
             };
 
             let mut add_face = |face: &BlockModelFace, dir: Direction| {
+                let color = if face.tint_index != -1 {
+                    state_provider.get_block_color(pos + section_offset, face.tint_index)
+                } else {
+                    0xffffffff
+                };
+                
                 let cull = if let Some(mesh) =
                     get_block(block_manager, state_provider.get_state(pos + dir.to_vec()))
                 {
@@ -317,7 +327,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                 if !cull {
                     let light_level: LightLevel =
                         state_provider.get_light_level(pos + dir.to_vec());
-                    add_quad(face, light_level, dir);
+                    add_quad(face, light_level, dir, color);
                 }
             };
 
@@ -341,7 +351,14 @@ fn bake_layers<Provider: BlockStateProvider>(
             });
             model_mesh.any.iter().for_each(|face| {
                 let light_level: LightLevel = state_provider.get_light_level(pos);
-                add_quad(face, light_level, Direction::Up);
+
+                let color = if face.tint_index != -1 {
+                    state_provider.get_block_color(pos + section_offset, face.tint_index)
+                } else {
+                    0xffffffff
+                };
+                
+                add_quad(face, light_level, Direction::Up, color);
             });
         }
     }

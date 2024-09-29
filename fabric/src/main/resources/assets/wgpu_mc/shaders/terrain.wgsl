@@ -43,7 +43,8 @@ struct VertexResult {
     @interpolate(flat) @location(14) ao3: f32,
     @interpolate(flat) @location(15) ao4: f32,
     @location(16) light_uv: vec2<f32>,
-    @interpolate(flat) @location(17) int: u32
+    @interpolate(flat) @location(17) int: u32,
+    @location(18) color: vec4<f32>
 };
 
 var<push_constant> section_pos: vec3i;
@@ -108,6 +109,12 @@ fn vert(
     var y: f32 = f32((v1 >> 8u) & 0xffu) * 0.0625;
     var z: f32 = f32((v1 >> 16u) & 0xffu) * 0.0625;
 
+    var r: u32 = (v1 >> 24u) & 0xff;
+    var g: u32 = (v2 & 0xff);
+    var b: u32 = (v2 >> 8u) & 0xff;
+
+    vr.color = vec4(f32(r) * 0.003921568627451, f32(g) * 0.003921568627451, f32(b) * 0.003921568627451, 1.0);
+
     var ao: f32 = f32((v4 >> 8u) & 0xff) * 0.33333;
 
     var u: f32 = f32((v2 >> 16u) & 0xffffu) * 0.00048828125;
@@ -158,7 +165,7 @@ fn frag(
 
     var light = max(lc.x, lc.y);
 
-    let col = vec4(light, light, light, 1.0) * vec4(ao, ao, ao, 1.0) * textureSample(t_texture, t_sampler, in.tex_coords);
+    let col = in.color * vec4(light, light, light, 1.0) * vec4(ao, ao, ao, 1.0) * textureSample(t_texture, t_sampler, in.tex_coords);
 
 //    let light = textureSample(lightmap_texture, lightmap_sampler, vec2(max(in.light_coords.x, in.light_coords.y), 0.0));
 

@@ -51,9 +51,9 @@ impl Vertex {
         array[2] = z_byte;
 
         //color
-        array[3] = (self.color & 0xf) as u8;
-        array[4] = ((self.color >> 8) & 0xf) as u8;
-        array[5] = ((self.color >> 16) & 0xf) as u8;
+        array[3] = (self.color & 0xff) as u8;
+        array[4] = ((self.color >> 8) & 0xff) as u8;
+        array[5] = ((self.color >> 16) & 0xff) as u8;
 
         //U
         array[6] = self.uv[0].to_le_bytes()[0];
