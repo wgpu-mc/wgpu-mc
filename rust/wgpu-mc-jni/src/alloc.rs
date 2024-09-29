@@ -55,7 +55,7 @@ unsafe impl GlobalAlloc for GlobalLibcAllocator {
         (self.vtable().aligned_alloc)(layout.align(), layout.size())
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, l: Layout) {
+    unsafe fn dealloc(&self, ptr: *mut u8, _l: Layout) {
         (self.vtable().aligned_free)(ptr)
     }
 

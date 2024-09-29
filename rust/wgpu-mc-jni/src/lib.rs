@@ -1,26 +1,16 @@
 pub extern crate wgpu_mc;
 
-use core::slice;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::io::{stdout, Cursor, Write};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Instant};
-use std::{mem, thread};
-use std::cell::{RefCell, UnsafeCell};
 use application::Application;
-use arc_swap::{ArcSwap};
+use arc_swap::ArcSwap;
 use byteorder::{LittleEndian, ReadBytesExt};
+use core::slice;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use glam::{ivec2, ivec3, IVec3, Mat4};
 use jni::objects::{
     AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject,
     JObjectArray, JPrimitiveArray, JString, JValue, JValueOwned, ReleaseMode, WeakRef,
 };
-use jni::sys::{
-    jboolean, jbyte, jfloat, jint, jlong, jsize, jstring, JNI_FALSE, JNI_TRUE,
-};
+use jni::sys::{jboolean, jbyte, jfloat, jint, jlong, jsize, jstring, JNI_FALSE, JNI_TRUE};
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
@@ -29,6 +19,14 @@ use parking_lot::{Mutex, RwLock};
 use pia::PIA_STORAGE;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use renderer::MATRICES;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::io::{stdout, Cursor, Write};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Instant;
+use std::{mem, thread};
 use wgpu::Extent3d;
 use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
 use winit::dpi::PhysicalPosition;
@@ -182,7 +180,7 @@ pub struct SectionHolder {
 #[derive(Debug)]
 pub struct MinecraftBlockstateProvider {
     pub sections: [Option<SectionHolder>; 27],
-    pub air: BlockstateKey
+    pub air: BlockstateKey,
 }
 impl BlockStateProvider for MinecraftBlockstateProvider {
     fn get_state(&self, pos: IVec3) -> ChunkBlockState {
@@ -292,37 +290,49 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 pub fn initialize(env: JNIEnv, _class: JClass, class_loader: JObject, minecraft: JObject) {
     JVM.set(RwLock::new(env.get_java_vm().unwrap())).unwrap();
 
-   let class_loader = env.new_global_ref(class_loader).unwrap();
+    let class_loader = env.new_global_ref(class_loader).unwrap();
     YARN_CLASS_LOADER.set(class_loader).unwrap();
-    
+
     let minecraft_global = env.new_global_ref(minecraft).unwrap();
 
     static MINECRAFT: OnceCell<GlobalRef> = OnceCell::new();
-    
+
     MINECRAFT.set(minecraft_global).unwrap();
-    
-    THREAD_POOL.set(ThreadPoolBuilder::new()
-        .start_handler(|_| {
-            let loader = YARN_CLASS_LOADER.get().unwrap();
 
-            let jvm = JVM.get().unwrap();
-            let jvm = jvm.read();
-            let mut env = jvm.attach_current_thread_as_daemon().unwrap();
+    THREAD_POOL
+        .set(
+            ThreadPoolBuilder::new()
+                .start_handler(|_| {
+                    let loader = YARN_CLASS_LOADER.get().unwrap();
 
-            let thread = env.call_static_method(
-                "java/lang/Thread",
-                "currentThread",
-                "()Ljava/lang/Thread;",
-                &[]
-            ).unwrap().l().unwrap();
+                    let jvm = JVM.get().unwrap();
+                    let jvm = jvm.read();
+                    let mut env = jvm.attach_current_thread_as_daemon().unwrap();
 
-            env.call_method(thread, "setContextClassLoader", "(Ljava/lang/ClassLoader;)V", &[
-                JValue::Object(&loader)
-            ]).unwrap();
-        })
-        .num_threads(0)
-        .build()
-        .unwrap()).unwrap();
+                    let thread = env
+                        .call_static_method(
+                            "java/lang/Thread",
+                            "currentThread",
+                            "()Ljava/lang/Thread;",
+                            &[],
+                        )
+                        .unwrap()
+                        .l()
+                        .unwrap();
+
+                    env.call_method(
+                        thread,
+                        "setContextClassLoader",
+                        "(Ljava/lang/ClassLoader;)V",
+                        &[JValue::Object(loader)],
+                    )
+                    .unwrap();
+                })
+                .num_threads(0)
+                .build()
+                .unwrap(),
+        )
+        .unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -401,7 +411,7 @@ pub fn setSectionPos(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
 
 struct MinecraftBlockStateProviderWrapper<'a> {
     internal: MinecraftBlockstateProvider,
-    env: RefCell<JNIEnv<'a>>
+    env: RefCell<JNIEnv<'a>>,
 }
 
 impl<'a> BlockStateProvider for MinecraftBlockStateProviderWrapper<'a> {
@@ -418,17 +428,22 @@ impl<'a> BlockStateProvider for MinecraftBlockStateProviderWrapper<'a> {
     }
 
     fn get_block_color(&self, pos: IVec3, tint_index: i32) -> u32 {
-        self.env.borrow_mut().call_static_method(
-            "dev/birb/wgpu/render/Wgpu",
-            "helperGetBlockColor",
-            "(IIII)I",
-            &[
-                JValue::Int(pos.x),
-                JValue::Int(pos.y),
-                JValue::Int(pos.z),
-                JValue::Int(tint_index)
-            ],
-        ).unwrap().i().unwrap() as u32
+        self.env
+            .borrow_mut()
+            .call_static_method(
+                "dev/birb/wgpu/render/Wgpu",
+                "helperGetBlockColor",
+                "(IIII)I",
+                &[
+                    JValue::Int(pos.x),
+                    JValue::Int(pos.y),
+                    JValue::Int(pos.z),
+                    JValue::Int(tint_index),
+                ],
+            )
+            .unwrap()
+            .i()
+            .unwrap() as u32
     }
 }
 
@@ -455,7 +470,7 @@ pub fn bakeSection(
     const NONE: Option<SectionHolder> = None;
     let mut bsp = MinecraftBlockstateProvider {
         sections: [NONE; 27],
-        air: *AIR
+        air: *AIR,
     };
 
     for i in 0..27 {
@@ -508,18 +523,16 @@ pub fn bakeSection(
         });
     }
 
-    let jvm = env.get_java_vm().unwrap();
-
     // THREAD_POOL.get().unwrap().spawn(move || {
-        let wm = RENDERER.get().unwrap();
-        // let env = jvm.attach_current_thread_as_daemon().unwrap();
+    let wm = RENDERER.get().unwrap();
+    // let env = jvm.attach_current_thread_as_daemon().unwrap();
 
-        let wrapper = MinecraftBlockStateProviderWrapper {
-            internal: bsp,
-            env: RefCell::new(env),
-        };
+    let wrapper = MinecraftBlockStateProviderWrapper {
+        internal: bsp,
+        env: RefCell::new(env),
+    };
 
-        bake_section(ivec3(x, y, z), wm, &wrapper);
+    bake_section(ivec3(x, y, z), wm, &wrapper);
     // })
 }
 
@@ -570,7 +583,7 @@ pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn render(env: JNIEnv, _class: JClass, tick_delta: jfloat, start_time: jlong, tick: jlong) {
+pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jlong, _tick: jlong) {
     let wm = RENDERER.wait();
     let render_graph = RENDER_GRAPH.get().unwrap();
     let mut geometry = CUSTOM_GEOMETRY.get().unwrap().lock();
@@ -682,7 +695,7 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
     let mut mappings = Vec::new();
 
     let mut stdout = stdout().lock();
-    
+
     states
         .iter()
         .for_each(|(block_name, state_key, global_ref)| {
@@ -733,14 +746,14 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
                     augment: 0,
                 },
             };
-            
+
             if key.block == fallback_key.0 as u16 {
-                write!(&mut stdout, "{} {}\n", block_name, state_key).unwrap();
+                writeln!(&mut stdout, "{} {}", block_name, state_key).unwrap();
             }
 
             mappings.push((key, global_ref));
         });
-    
+
     drop(stdout);
 
     mappings.iter().for_each(|(blockstate_key, global_ref)| {
@@ -1246,7 +1259,7 @@ pub fn drawIndexed(_env: JNIEnv, _class: JClass, count: jint) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setShaderColor(env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat, a: jfloat) {
+pub fn setShaderColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat, a: jfloat) {
     GL_COMMANDS
         .write()
         .0
@@ -1336,7 +1349,7 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
 pub fn bindStarData(
     env: JNIEnv,
     _class: JClass,
-    length: jint,
+    _length: jint,
     int_array: JIntArray,
     byte_array: JByteArray,
 ) {

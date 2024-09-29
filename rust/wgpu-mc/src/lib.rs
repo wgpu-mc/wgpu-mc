@@ -49,10 +49,7 @@ use mc::Scene;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor,
-    Surface,
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor, Surface};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 

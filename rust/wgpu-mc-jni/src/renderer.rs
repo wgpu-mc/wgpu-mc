@@ -1,21 +1,18 @@
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::{slice};
+use std::slice;
 use std::{sync::Arc, time::Instant};
 
 use byteorder::LittleEndian;
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint, jlong};
-use jni::{
-    objects::{JString},
-    JNIEnv,
-};
+use jni::{objects::JString, JNIEnv};
 use jni_fn::jni_fn;
-use once_cell::sync::{Lazy};
-use parking_lot::{Mutex};
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex};
-use wgpu_mc::mc::{RenderEffectsData};
-use wgpu_mc::texture::{BindableTexture};
+use wgpu_mc::mc::RenderEffectsData;
+use wgpu_mc::texture::BindableTexture;
 
 use crate::application::{load_shaders, SHOULD_STOP};
 use crate::gl::{GlTexture, GL_ALLOC};
@@ -36,7 +33,7 @@ pub struct Matrices {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn reloadShaders(env: JNIEnv, _class: JClass) {
+pub fn reloadShaders(_env: JNIEnv, _class: JClass) {
     load_shaders(RENDERER.get().unwrap());
 }
 
@@ -144,8 +141,9 @@ pub fn setEntityInstanceBuffer(
         unsafe { slice::from_raw_parts(overlay_ptr as usize as *mut i32, overlay_len as usize) };
 
     let transforms: Vec<f32> = Vec::from(mat4s);
-    
-    let verts: Vec<InstanceVertex> = overlays.iter()
+
+    let verts: Vec<InstanceVertex> = overlays
+        .iter()
         .map(|overlay| InstanceVertex {
             uv_offset: [0, 0],
             overlay: *overlay as u32,
@@ -153,11 +151,11 @@ pub fn setEntityInstanceBuffer(
         .collect();
 
     let mut instances = ENTITY_INSTANCES.lock();
-    
+
     let to_upload = match instances.get_mut(&entity_name) {
         Some(bundled_entity_instances) if bundled_entity_instances.capacity <= instance_count => {
             bundled_entity_instances.capacity = instance_count;
-            
+
             bundled_entity_instances
         }
         _ => {
@@ -167,9 +165,9 @@ pub fn setEntityInstanceBuffer(
                 match gl_alloc.get(&(texture_id as u32)) {
                     None => return 0,
                     Some(GlTexture {
-                             bindable_texture: None,
-                             ..
-                         }) => return 0,
+                        bindable_texture: None,
+                        ..
+                    }) => return 0,
                     _ => {}
                 }
 
@@ -201,7 +199,7 @@ pub fn setEntityInstanceBuffer(
         0,
         bytemuck::cast_slice(&transforms),
     );
-    
+
     Instant::now().duration_since(now).as_nanos() as jlong
 }
 
@@ -209,13 +207,13 @@ pub fn setEntityInstanceBuffer(
 pub fn bindSkyData(
     _env: JNIEnv,
     _class: JClass,
-    r: jfloat,
-    g: jfloat,
-    b: jfloat,
-    angle: jfloat,
-    brightness: jfloat,
-    star_shimmer: jfloat,
-    moon_phase: jint,
+    _r: jfloat,
+    _g: jfloat,
+    _b: jfloat,
+    _angle: jfloat,
+    _brightness: jfloat,
+    _star_shimmer: jfloat,
+    _moon_phase: jint,
 ) {
     // let mut sky_data = (**RENDERER.get().unwrap().mc.sky_data.load()).clone();
     // sky_data.color_r = r;
@@ -240,7 +238,7 @@ pub fn bindRenderEffectsData(
     color_modulator: JFloatArray,
     dimension_fog_color: JFloatArray,
 ) {
-    let render_effects_data = RenderEffectsData {
+    let _render_effects_data = RenderEffectsData {
         fog_start,
         fog_end,
         fog_shape: fog_shape as f32,

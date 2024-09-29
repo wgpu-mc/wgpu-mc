@@ -6,7 +6,7 @@ use bytemuck::{Pod, Zeroable};
 use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
 use image::imageops::overlay;
-use image::{GenericImageView, ImageBuffer, Rgba};
+use image::{ImageBuffer, Rgba};
 use minecraft_assets::schemas;
 use parking_lot::RwLock;
 use wgpu::Extent3d;
@@ -77,7 +77,7 @@ impl Debug for Atlas {
 }
 
 impl Atlas {
-    pub fn new(display: &Display, resizes: bool) -> Self {
+    pub fn new(display: &Display, _resizes: bool) -> Self {
         let tv = TextureAndView::from_rgb_bytes(
             display,
             &vec![0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
@@ -244,6 +244,7 @@ impl TextureManager {
 
 #[repr(C)]
 #[derive(Copy, Clone, Zeroable, Pod)]
+#[allow(unused)]
 struct AnimatedUV {
     pub uv_1: [f32; 2],
     pub uv_2: [f32; 2],

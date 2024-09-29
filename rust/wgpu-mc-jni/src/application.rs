@@ -41,9 +41,9 @@ pub fn load_shaders(wm: &WmRenderer) {
 
     let mut render_resources = HashMap::new();
 
-    let mat4_projection = create_matrix_buffer(&wm);
-    let mat4_view = create_matrix_buffer(&wm);
-    let mat4_model = create_matrix_buffer(&wm);
+    let mat4_projection = create_matrix_buffer(wm);
+    let mat4_view = create_matrix_buffer(wm);
+    let mat4_model = create_matrix_buffer(wm);
 
     render_resources.insert(
         "@mat4_view".into(),
@@ -81,14 +81,14 @@ pub fn load_shaders(wm: &WmRenderer) {
     );
 
     let render_graph = RenderGraph::new(
-        &wm,
+        wm,
         shader_pack,
         render_resources,
         Some(custom_bind_groups),
         Some(custom_geometry),
     );
-    
-    RENDER_GRAPH.set(render_graph);
+
+    RENDER_GRAPH.set(render_graph).unwrap();
 }
 
 pub struct Application {
@@ -210,7 +210,7 @@ impl ApplicationHandler for Application {
         wm.init();
 
         load_shaders(&wm);
-        
+
         let mut geometry = HashMap::new();
         geometry.insert(
             "@geo_electrum_gui".to_string(),
@@ -225,7 +225,10 @@ impl ApplicationHandler for Application {
                 last_bytes: None,
             }) as Box<dyn Geometry>,
         );
-        CUSTOM_GEOMETRY.set(Mutex::new(geometry));
+
+        if CUSTOM_GEOMETRY.set(Mutex::new(geometry)).is_err() {
+            unreachable!("Unable to set geometry static")
+        };
 
         let _ = RENDERER.set(wm);
         env.set_static_field(
@@ -238,9 +241,9 @@ impl ApplicationHandler for Application {
 
     fn device_event(
         &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        device_id: winit::event::DeviceId,
-        event: winit::event::DeviceEvent,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
     ) {
         match event {
             DeviceEvent::MouseMotion { delta } => {

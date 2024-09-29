@@ -5,9 +5,8 @@ use std::sync::Arc;
 use treeculler::{BVol, Frustum, Vec3, AABB};
 
 use wgpu::{
-    Color, LoadOp, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, ShaderStages,
-    StoreOp,
+    Color, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment,
+    RenderPassDescriptor, SamplerBindingType, ShaderStages, StoreOp,
 };
 
 use crate::mc::chunk::RenderLayer;
@@ -37,6 +36,7 @@ pub trait Geometry: Send + Sync {
     );
 }
 
+#[derive(Debug)]
 pub enum ResourceBacking {
     Buffer(Arc<wgpu::Buffer>, wgpu::BufferBindingType),
     BufferArray(Vec<Arc<wgpu::Buffer>>),
@@ -50,7 +50,7 @@ impl ResourceBacking {
             ResourceBacking::Buffer(_, buffer_ty) => wgpu::BindGroupLayoutEntry {
                 binding,
                 //TODO
-                visibility: wgpu::ShaderStages::all(),
+                visibility: ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
                     ty: *buffer_ty,
                     has_dynamic_offset: false,
@@ -58,9 +58,9 @@ impl ResourceBacking {
                 },
                 count: None,
             },
-            ResourceBacking::BufferArray(buffers) => wgpu::BindGroupLayoutEntry {
+            ResourceBacking::BufferArray(_buffers) => wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStages::all(),
+                visibility: ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
@@ -89,7 +89,7 @@ impl ResourceBacking {
 
     pub fn get_bind_group_entries(&self, index: u32) -> Vec<wgpu::BindGroupEntry> {
         match self {
-            ResourceBacking::Buffer(buffer, buffer_ty) => vec![wgpu::BindGroupEntry {
+            ResourceBacking::Buffer(buffer, _buffer_ty) => vec![wgpu::BindGroupEntry {
                 binding: index,
                 resource: wgpu::BindingResource::Buffer(buffer.as_entire_buffer_binding()),
             }],
@@ -118,12 +118,14 @@ pub enum WmBindGroup {
     Custom(wgpu::BindGroup),
 }
 
+#[derive(Debug)]
 pub struct BoundPipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_groups: Vec<(u32, WmBindGroup)>,
     pub config: PipelineConfig,
 }
 
+#[derive(Debug)]
 pub struct RenderGraph {
     pub config: ShaderPackConfig,
     pub pipelines: LinkedHashMap<String, BoundPipeline>,
@@ -145,7 +147,7 @@ impl RenderGraph {
             let bind_group_layouts = pipeline_config
                 .bind_groups
                 .iter()
-                .map(|(slot, def)| match def {
+                .map(|(_slot, def)| match def {
                     BindGroupDef::Entries(entries) => {
                         let layout_entries = entries
                             .iter()
@@ -235,7 +237,7 @@ impl RenderGraph {
                         },
                         "@pc_electrum_color" => wgpu::PushConstantRange {
                             stages: wgpu::ShaderStages::FRAGMENT,
-                            range: index..index + 16
+                            range: index..index + 16,
                         },
                         _ => unimplemented!(),
                     }
@@ -464,8 +466,6 @@ impl RenderGraph {
                     .output
                     .iter()
                     .map(|texture_name| {
-                        let resource_definition = self.config.resources.resources.get(texture_name);
-
                         Some(RenderPassColorAttachment {
                             view: match &texture_name[..] {
                                 "@framebuffer_texture" => render_target,
@@ -592,7 +592,7 @@ impl RenderGraph {
                     render_pass.set_pipeline(&bound_pipeline.pipeline);
 
                     let instances = { scene.entity_instances.lock().clone() };
-                    
+
                     for (_, entity_instances) in &instances {
                         for (index, bind_group) in bound_pipeline.bind_groups.iter() {
                             match bind_group {
@@ -616,18 +616,22 @@ impl RenderGraph {
                         pc.insert(
                             "@pc_parts_per_entity".to_string(),
                             (
-                                bytemuck::cast_slice(&[entity_instances.entity.parts.len() as u32]).to_vec(),
+                                bytemuck::cast_slice(&[entity_instances.entity.parts.len() as u32])
+                                    .to_vec(),
                                 ShaderStages::VERTEX,
                             ),
                         );
                         set_push_constants(pipeline_config, &mut render_pass, Some(pc));
 
                         render_pass.set_vertex_buffer(0, entity_instances.entity.mesh.slice(..));
-                        render_pass.set_vertex_buffer(1, entity_instances.uploaded.instance_vbo.slice(..));
+                        render_pass
+                            .set_vertex_buffer(1, entity_instances.uploaded.instance_vbo.slice(..));
 
-                        render_pass.draw(0..entity_instances.entity.vertex_count, 0..entity_instances.capacity);
+                        render_pass.draw(
+                            0..entity_instances.entity.vertex_count,
+                            0..entity_instances.capacity,
+                        );
                     }
-
                 }
                 _ => match geometry.get_mut(&pipeline_config.geometry) {
                     None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),

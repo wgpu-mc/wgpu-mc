@@ -1,4 +1,4 @@
-use glam::{ivec3, IVec3, Mat3};
+use glam::{ivec3, IVec3};
 
 static VECTOR: [IVec3; 6] = [
     ivec3(-1, 0, 0),
@@ -31,7 +31,7 @@ impl Direction {
             Self::South => Self::North,
         }
     }
-    
+
     pub fn rotate(&self, vec: IVec3) -> IVec3 {
         let x = (match self {
             Direction::West => Direction::Down,
@@ -40,9 +40,10 @@ impl Direction {
             Direction::Up => Direction::West,
             Direction::North => Direction::West,
             Direction::South => Direction::West,
-        }).to_vec();
+        })
+        .to_vec();
         let z = self.to_vec().cross(x);
-        
+
         vec.x * x + vec.y * self.to_vec() + vec.z * z
     }
 }

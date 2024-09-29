@@ -45,13 +45,7 @@ pub enum Block {
 impl Block {
     pub fn get_model(&self, key: u16, _seed: u8) -> Option<Arc<ModelMesh>> {
         Some(match &self {
-            Block::Multipart(multipart) => multipart
-                .keys
-                .read()
-                .get_index(key as usize)
-                ?
-                .1
-                .clone(),
+            Block::Multipart(multipart) => multipart.keys.read().get_index(key as usize)?.1.clone(),
             //TODO, random variant selection through weight and seed
             Block::Variants(variants) => variants.get_index(key as usize)?.1[0].clone(),
         })
@@ -59,15 +53,14 @@ impl Block {
 
     pub fn get_model_by_key<'a>(
         &self,
-        key: impl IntoIterator<Item = (&'a str, &'a StateValue)>
-            + Clone,
+        key: impl IntoIterator<Item = (&'a str, &'a StateValue)> + Clone,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
         //TODO use this
         _seed: u8,
     ) -> Option<(Arc<ModelMesh>, u16)> {
         let key_map: HashMap<&str, &StateValue> = key.clone().into_iter().collect();
-        
+
         let key_string = key
             .clone()
             .into_iter()
@@ -105,13 +98,21 @@ impl Block {
                 Some((mesh, multipart_write.len() as u16 - 1))
             }
             Block::Variants(variants) => {
-                let full = variants.iter().enumerate().find(|(_, (variant_key, model_mesh))| {
-                    variant_key.iter().all(|(variant_property_key, variant_property_value)| {
-                        key_map.get(&variant_property_key[..]).map_or(false, |v| v == &variant_property_value)
-                    })
-                })?;
-                
-                Some((full.1.1[0].clone(), full.0 as u16))
+                let full =
+                    variants
+                        .iter()
+                        .enumerate()
+                        .find(|(_, (variant_key, _model_mesh))| {
+                            variant_key.iter().all(
+                                |(variant_property_key, variant_property_value)| {
+                                    key_map
+                                        .get(&variant_property_key[..])
+                                        .map_or(false, |v| v == &variant_property_value)
+                                },
+                            )
+                        })?;
+
+                Some((full.1 .1[0].clone(), full.0 as u16))
             }
         }
     }
@@ -308,51 +309,52 @@ impl MinecraftState {
 
                 let block = match &blockstates {
                     schemas::BlockStates::Variants { variants } => {
-                        let meshes: IndexMap<Vec<(String, StateValue)>, Vec<Arc<ModelMesh>>> = variants
-                            .iter()
-                            .map(|(variant_id, variant)| {
-                                let key_iter = if !variant_id.is_empty() {
-                                    variant_id
-                                        .split(',')
-                                        .filter_map(|kv_pair| {
-                                            let mut split = kv_pair.split('=');
-                                            if kv_pair.is_empty() {
-                                                return None;
-                                            }
+                        let meshes: IndexMap<Vec<(String, StateValue)>, Vec<Arc<ModelMesh>>> =
+                            variants
+                                .iter()
+                                .map(|(variant_id, variant)| {
+                                    let key_iter = if !variant_id.is_empty() {
+                                        variant_id
+                                            .split(',')
+                                            .filter_map(|kv_pair| {
+                                                let mut split = kv_pair.split('=');
+                                                if kv_pair.is_empty() {
+                                                    return None;
+                                                }
 
-                                            Some((
-                                                split.next().unwrap().to_string(),
-                                                match split.next().unwrap() {
-                                                    "true" => StateValue::Bool(true),
-                                                    "false" => StateValue::Bool(false),
-                                                    other => StateValue::String(other.into()),
-                                                },
-                                            ))
-                                        })
-                                        .collect::<Vec<_>>()
-                                } else {
-                                    vec![]
-                                };
-                                
-                                (
-                                    key_iter,
-                                    variant
-                                        .models()
-                                        .iter()
-                                        .map(|variation| {
-                                            Arc::new(
-                                                ModelMesh::bake(
-                                                    std::slice::from_ref(variation),
-                                                    &*self.resource_provider,
-                                                    block_atlas,
+                                                Some((
+                                                    split.next().unwrap().to_string(),
+                                                    match split.next().unwrap() {
+                                                        "true" => StateValue::Bool(true),
+                                                        "false" => StateValue::Bool(false),
+                                                        other => StateValue::String(other.into()),
+                                                    },
+                                                ))
+                                            })
+                                            .collect::<Vec<_>>()
+                                    } else {
+                                        vec![]
+                                    };
+
+                                    (
+                                        key_iter,
+                                        variant
+                                            .models()
+                                            .iter()
+                                            .map(|variation| {
+                                                Arc::new(
+                                                    ModelMesh::bake(
+                                                        std::slice::from_ref(variation),
+                                                        &*self.resource_provider,
+                                                        block_atlas,
+                                                    )
+                                                    .unwrap(),
                                                 )
-                                                .unwrap(),
-                                            )
-                                        })
-                                        .collect::<Vec<Arc<ModelMesh>>>(),
-                                )
-                            })
-                            .collect();
+                                            })
+                                            .collect::<Vec<Arc<ModelMesh>>>(),
+                                    )
+                                })
+                                .collect();
 
                         Block::Variants(meshes)
                     }

@@ -13,8 +13,8 @@ use parking_lot::RwLock;
 use wgpu_mc::render::graph::{
     set_push_constants, BoundPipeline, Geometry, RenderGraph, WmBindGroup,
 };
-use wgpu_mc::texture::{BindableTexture};
-use wgpu_mc::util::{WmArena};
+use wgpu_mc::texture::BindableTexture;
+use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::{vertex_attr_array, Buffer, IndexFormat};
 use wgpu_mc::{wgpu, WmRenderer};
 
@@ -27,6 +27,7 @@ pub static GL_COMMANDS: Lazy<RwLock<(Vec<GLCommand>, Vec<GLCommand>)>> =
 pub enum GLCommand {
     SetMatrix(Mat4),
     SetColor([f32; 4]),
+    #[allow(unused)]
     ClearColor([f32; 3]),
     UsePipeline(usize),
     SetVertexBuffer(Vec<u8>),
@@ -238,7 +239,7 @@ impl Geometry for ElectrumGeometry {
     fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(
         &mut self,
         wm: &WmRenderer,
-        render_graph: &'graph RenderGraph,
+        _render_graph: &'graph RenderGraph,
         bound_pipeline: &'graph BoundPipeline,
         render_pass: &mut wgpu::RenderPass<'pass>,
         arena: &WmArena<'arena>,

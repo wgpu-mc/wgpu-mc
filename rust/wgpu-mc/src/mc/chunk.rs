@@ -6,14 +6,13 @@
 //!
 //! Minecraft splits chunks into 16-block tall pieces called chunk sections, for
 //! rendering purposes.
+use arrayvec::ArrayVec;
+use glam::{ivec3, vec3, IVec2, IVec3, Vec3Swizzles};
+use range_alloc::RangeAllocator;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::{Not, Range};
 use std::sync::Arc;
-use arrayvec::ArrayVec;
-use get_size::GetSize;
-use glam::{ivec3, vec3, BVec3, BVec4, IVec2, IVec3, Vec3Swizzles};
-use range_alloc::RangeAllocator;
 
 use crate::mc::block::{BlockModelFace, ChunkBlockState, ModelMesh};
 use crate::mc::direction::Direction;
@@ -55,7 +54,7 @@ pub trait BlockStateProvider {
     fn get_light_level(&self, pos: IVec3) -> LightLevel;
 
     fn is_section_empty(&self, rel_pos: IVec3) -> bool;
-    
+
     fn get_block_color(&self, pos: IVec3, tint_index: i32) -> u32;
 }
 
@@ -173,7 +172,7 @@ fn get_block(block_manager: &BlockManager, state: ChunkBlockState) -> Option<Arc
         ChunkBlockState::Air => return None,
         ChunkBlockState::State(key) => key,
     };
-    
+
     block_manager
         .blocks
         .get_index(key.block as usize)?
@@ -201,13 +200,13 @@ fn bake_layers<Provider: BlockStateProvider>(
     state_provider: &Provider,
 ) -> Vec<BakedLayer> {
     let mut layers = vec![BakedLayer::default(); 3];
-    
+
     let section_offset = 16 * section_pos;
-    
+
     if state_provider.is_section_empty(ivec3(0, 0, 0)) {
         return layers;
     }
-    
+
     for block_index in 0..16 * 16 * 16 {
         let pos = ivec3(block_index & 15, block_index >> 8, (block_index & 255) >> 4);
 
@@ -217,97 +216,111 @@ fn bake_layers<Provider: BlockStateProvider>(
 
         if let Some(model_mesh) = get_block(block_manager, block_state) {
             const INDICES: [u32; 6] = [1, 3, 0, 2, 3, 1];
-            let mut add_quad = |face: &BlockModelFace, light_level: LightLevel, dir: Direction, color: u32| {
-                let baked_layer = &mut layers[RenderLayer::Solid as usize];
-                let vec_index = baked_layer.vertices.len() / Vertex::VERTEX_LENGTH;
+            let mut add_quad =
+                |face: &BlockModelFace, _light_level: LightLevel, dir: Direction, color: u32| {
+                    let baked_layer = &mut layers[RenderLayer::Solid as usize];
+                    let vec_index = baked_layer.vertices.len() / Vertex::VERTEX_LENGTH;
 
-                let dir_vec = dir.to_vec();
-                
-                baked_layer.vertices.extend(
-                    (0..4)
-                        .map(|vert_index| {
-                            let model_vertex = face.vertices[vert_index as usize];
+                    let dir_vec = dir.to_vec();
 
-                            let (b1, b2, b3, light_level) = if model_mesh.any.is_empty() {
-                                let vertex_biases = ivec3(
-                                    if model_vertex.position.x as i32 == 0 {
-                                        -1
-                                    } else {
-                                        1
-                                    },
-                                    if model_vertex.position.y as i32 == 0 {
-                                        -1
-                                    } else {
-                                        1
-                                    },
-                                    if model_vertex.position.z as i32 == 0 {
-                                        -1
-                                    } else {
-                                        1
-                                    },
-                                );
+                    baked_layer.vertices.extend(
+                        (0..4)
+                            .map(|vert_index| {
+                                let model_vertex = face.vertices[vert_index as usize];
 
-                                let axis = dir_vec - vertex_biases; //equivalent to -(vertex_biases - dir_vec)
+                                let (b1, b2, b3, light_level) = if model_mesh.any.is_empty() {
+                                    let vertex_biases = ivec3(
+                                        if model_vertex.position.x as i32 == 0 {
+                                            -1
+                                        } else {
+                                            1
+                                        },
+                                        if model_vertex.position.y as i32 == 0 {
+                                            -1
+                                        } else {
+                                            1
+                                        },
+                                        if model_vertex.position.z as i32 == 0 {
+                                            -1
+                                        } else {
+                                            1
+                                        },
+                                    );
 
-                                let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
-                                
-                                if axis.x != 0 {
-                                    axes.push(ivec3(axis.x, 0 ,0));
+                                    let axis = dir_vec - vertex_biases; //equivalent to -(vertex_biases - dir_vec)
+
+                                    let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
+
+                                    if axis.x != 0 {
+                                        axes.push(ivec3(axis.x, 0, 0));
+                                    }
+
+                                    if axis.y != 0 {
+                                        axes.push(ivec3(0, axis.y, 0));
+                                    }
+
+                                    if axis.z != 0 {
+                                        axes.push(ivec3(0, 0, axis.z));
+                                    }
+
+                                    let p1 = vertex_biases + pos;
+                                    let p2 = p1 + axes[0];
+                                    let p3 = p1 + axes[1];
+
+                                    let b1 = state_provider.get_state(p1).is_air().not() as u8;
+                                    let b2 = state_provider.get_state(p2).is_air().not() as u8;
+                                    let b3 = state_provider.get_state(p3).is_air().not() as u8;
+
+                                    let l1 = state_provider.get_light_level(p1);
+                                    let l2 = state_provider.get_light_level(p2);
+                                    let l3 = state_provider.get_light_level(p3);
+                                    let l4 = state_provider.get_light_level(pos + dir_vec);
+
+                                    let average_sky = ((l1.get_sky_level()
+                                        + l2.get_sky_level()
+                                        + l3.get_sky_level()
+                                        + l4.get_sky_level())
+                                        as f32
+                                        / 4.0)
+                                        as u8;
+                                    let average_block = ((l1.get_block_level()
+                                        + l2.get_block_level()
+                                        + l3.get_block_level()
+                                        + l4.get_block_level())
+                                        as f32
+                                        / 4.0)
+                                        as u8;
+
+                                    let light_level =
+                                        LightLevel::from_sky_and_block(average_sky, average_block);
+
+                                    (b1, b2, b3, light_level)
+                                } else {
+                                    (0, 0, 0, state_provider.get_light_level(pos))
+                                };
+
+                                Vertex {
+                                    position: [
+                                        fpos.x + model_vertex.position[0],
+                                        fpos.y + model_vertex.position[1],
+                                        fpos.z + model_vertex.position[2],
+                                    ],
+                                    uv: model_vertex.tex_coords,
+                                    normal: face.normal.to_array(),
+                                    color,
+                                    uv_offset: 0,
+                                    lightmap_coords: light_level.byte,
+                                    ao: 3 - (b1 + b2 + b3),
                                 }
-
-                                if axis.y != 0 {
-                                    axes.push(ivec3(0, axis.y,0));
-                                }
-
-                                if axis.z != 0 {
-                                    axes.push(ivec3(0, 0 ,axis.z));
-                                }
-                                
-                                let p1 = vertex_biases + pos;
-                                let p2 = p1 + axes[0];
-                                let p3 = p1 + axes[1];
-
-                                let b1 = state_provider.get_state(p1).is_air().not() as u8;
-                                let b2 = state_provider.get_state(p2).is_air().not() as u8;
-                                let b3 = state_provider.get_state(p3).is_air().not() as u8;
-                                
-                                let l1 = state_provider.get_light_level(p1);
-                                let l2 = state_provider.get_light_level(p2);
-                                let l3 = state_provider.get_light_level(p3);
-                                let l4 = state_provider.get_light_level(pos + dir_vec);
-                                
-                                let average_sky = ((l1.get_sky_level() + l2.get_sky_level() + l3.get_sky_level() + l4.get_sky_level()) as f32 / 4.0) as u8;
-                                let average_block = ((l1.get_block_level() + l2.get_block_level() + l3.get_block_level() + l4.get_block_level()) as f32 / 4.0) as u8;
-                                
-                                let light_level = LightLevel::from_sky_and_block(average_sky, average_block);
-
-                                (b1, b2, b3, light_level)
-                            } else {
-                                (0, 0, 0, state_provider.get_light_level(pos))
-                            };
-                            
-                            Vertex {
-                                position: [
-                                    fpos.x + model_vertex.position[0],
-                                    fpos.y + model_vertex.position[1],
-                                    fpos.z + model_vertex.position[2],
-                                ],
-                                uv: model_vertex.tex_coords,
-                                normal: face.normal.to_array(),
-                                color,
-                                uv_offset: 0,
-                                lightmap_coords: light_level.byte,
-                                ao: 3 - (b1 + b2 + b3),
-                            }
-                        })
-                        .flat_map(Vertex::compressed),
-                );
-                baked_layer.indices.extend(
-                    INDICES
-                        .iter()
-                        .flat_map(|index| (index + (vec_index as u32)).to_ne_bytes()),
-                );
-            };
+                            })
+                            .flat_map(Vertex::compressed),
+                    );
+                    baked_layer.indices.extend(
+                        INDICES
+                            .iter()
+                            .flat_map(|index| (index + (vec_index as u32)).to_ne_bytes()),
+                    );
+                };
 
             let mut add_face = |face: &BlockModelFace, dir: Direction| {
                 let color = if face.tint_index != -1 {
@@ -315,7 +328,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                 } else {
                     0xffffffff
                 };
-                
+
                 let cull = if let Some(mesh) =
                     get_block(block_manager, state_provider.get_state(pos + dir.to_vec()))
                 {
@@ -357,7 +370,7 @@ fn bake_layers<Provider: BlockStateProvider>(
                 } else {
                     0xffffffff
                 };
-                
+
                 add_quad(face, light_level, Direction::Up, color);
             });
         }

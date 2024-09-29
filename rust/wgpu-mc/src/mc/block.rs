@@ -277,7 +277,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
-                                        tex.tint_index
+                                        tex.tint_index,
                                     )
                                 })
                             });
@@ -297,7 +297,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
-                                        tex.tint_index
+                                        tex.tint_index,
                                     )
                                 })
                             });
@@ -317,7 +317,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
-                                        tex.tint_index
+                                        tex.tint_index,
                                     )
                                 })
                             });
@@ -337,7 +337,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
-                                        tex.tint_index
+                                        tex.tint_index,
                                     )
                                 })
                             });
@@ -357,7 +357,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
-                                        tex.tint_index
+                                        tex.tint_index,
                                     )
                                 })
                             });
@@ -377,7 +377,7 @@ impl ModelMesh {
                                             .read()
                                             .get(&(&tex.texture.0).into())
                                             .unwrap_or(&0),
-                                        tex.tint_index
+                                        tex.tint_index,
                                     )
                                 })
                             });
@@ -404,7 +404,7 @@ impl ModelMesh {
                                 _ => panic!("invalid rotation"),
                             };
                             let v = matrix * (v - vec_origin) + vec_origin;
-                            
+
                             match model_properties.y {
                                 0 => v,
                                 90 => vec3(1.0 - v.z, v.y, v.x),

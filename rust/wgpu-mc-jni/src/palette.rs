@@ -97,10 +97,10 @@ pub fn destroyPalette(_env: JNIEnv, _class: JClass, _palette_long: jlong) {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn paletteIndex(
-    env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
     palette_long: jlong,
-    object: JObject,
+    _object: JObject,
     blockstate_index: jint,
 ) -> jint {
     let mut storage_access = PALETTE_STORAGE.write();
@@ -149,7 +149,7 @@ pub fn paletteReadPacket(
     let packet_len: i32 = cursor.read_var_int().unwrap().into();
 
     for blockstate_offset in blockstate_offsets.iter().take(packet_len as usize) {
-        let var_int: i32 = cursor.read_var_int().unwrap().into();
+        let _var_int: i32 = cursor.read_var_int().unwrap().into();
 
         palette.add(BlockstateKey {
             block: (blockstate_offset >> 16) as u16,

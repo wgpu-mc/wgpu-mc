@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use glam::{ivec2, ivec3, IVec3, Mat4};
 use parking_lot::lock_api::RwLock;
 use std::collections::HashMap;
@@ -5,7 +6,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use arrayvec::ArrayVec;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 
@@ -13,18 +13,17 @@ use futures::executor::block_on;
 use winit::event::{DeviceEvent, ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::{Window};
 
+use crate::camera::Camera;
+use crate::chunk::make_chunks;
+use wgpu_mc::mc::direction::Direction;
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::mc::Scene;
 use wgpu_mc::render::graph::{RenderGraph, ResourceBacking};
 use wgpu_mc::render::shaderpack::ShaderPackConfig;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferBindingType, Extent3d, PresentMode};
-use wgpu_mc::{wgpu, Display, Frustum, HasWindowSize, WindowSize, WmRenderer};
-use wgpu_mc::mc::direction::Direction;
-use crate::camera::Camera;
-use crate::chunk::make_chunks;
+use wgpu_mc::{wgpu, Display, Frustum, WmRenderer};
 
 mod camera;
 mod chunk;
@@ -42,18 +41,6 @@ impl ResourceProvider for FsResourceProvider {
     }
 }
 
-struct WinitWindowWrapper {
-    window: Window,
-}
-
-impl HasWindowSize for WinitWindowWrapper {
-    fn get_window_size(&self) -> WindowSize {
-        WindowSize {
-            width: self.window.inner_size().width,
-            height: self.window.inner_size().height,
-        }
-    }
-}
 struct Application {
     wm: Option<WmRenderer>,
     forward: f32,
@@ -246,8 +233,6 @@ impl ApplicationHandler for Application {
         ));
 
         {
-            let sections = self.scene.as_ref().unwrap().section_storage.write();
-
             for x in 0..5 {
                 for y in 0..2 {
                     for z in 0..5 {
@@ -267,8 +252,8 @@ impl ApplicationHandler for Application {
 
     fn device_event(
         &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        device_id: winit::event::DeviceId,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
         event: DeviceEvent,
     ) {
         match event {
@@ -281,7 +266,7 @@ impl ApplicationHandler for Application {
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
         let wm = self.wm.as_ref().unwrap();
         wm.display.window.request_redraw()
     }
@@ -458,21 +443,9 @@ fn main() {
     let c = 0;
 
     let vertex_biases = ivec3(
-        if a as i32 == 0 {
-            -1
-        } else {
-            1
-        },
-        if b as i32 == 0 {
-            -1
-        } else {
-            1
-        },
-        if c as i32 == 0 {
-            -1
-        } else {
-            1
-        },
+        if a == 0 { -1 } else { 1 },
+        if b == 0 { -1 } else { 1 },
+        if c == 0 { -1 } else { 1 },
     );
 
     let dir_vec = Direction::Up.to_vec();
@@ -482,15 +455,15 @@ fn main() {
     let mut axes: ArrayVec<IVec3, 2> = ArrayVec::new_const();
 
     if axis.x != 0 {
-        axes.push(ivec3(axis.x, 0 ,0));
+        axes.push(ivec3(axis.x, 0, 0));
     }
 
     if axis.y != 0 {
-        axes.push(ivec3(0, axis.y,0));
+        axes.push(ivec3(0, axis.y, 0));
     }
 
     if axis.z != 0 {
-        axes.push(ivec3(0, 0 ,axis.z));
+        axes.push(ivec3(0, 0, axis.z));
     }
 
     let p1 = vertex_biases;
@@ -499,7 +472,7 @@ fn main() {
     // let p4 = dir_vec;
 
     dbg!(p1, p2, p3);
-    
+
     _main();
 }
 

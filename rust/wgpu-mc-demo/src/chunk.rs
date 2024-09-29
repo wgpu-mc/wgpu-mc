@@ -1,19 +1,23 @@
 use std::fmt::Debug;
 use std::time::Instant;
 
-use glam::{ivec3, IVec3};
+use glam::IVec3;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{bake_section, BlockStateProvider, LightLevel};
-use wgpu_mc::mc::{Scene};
+use wgpu_mc::mc::Scene;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::WmRenderer;
 struct SimpleBlockstateProvider(BlockstateKey);
 
 impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_state(&self, pos: IVec3) -> ChunkBlockState {
-        if ((pos.x / 2 & 1 == 0) ^ (pos.z / 2 & 1 == 0) ^ (pos.y & 1 == 0) && (pos.y == 0 || pos.y == 1) && pos.y < 2) || pos.y == 5 {
-        // if pos.x ^ pos.y ^ pos.z == 0 {
-        // if pos.y == 0 {
+        if (((pos.x / 2) & 1 == 0) ^ ((pos.z / 2) & 1 == 0) ^ (pos.y & 1 == 0)
+            && (pos.y == 0 || pos.y == 1)
+            && pos.y < 2)
+            || pos.y == 5
+        {
+            // if pos.x ^ pos.y ^ pos.z == 0 {
+            // if pos.y == 0 {
             ChunkBlockState::State(self.0)
         } else {
             ChunkBlockState::Air
@@ -23,9 +27,9 @@ impl BlockStateProvider for SimpleBlockstateProvider {
     fn get_light_level(&self, _pos: IVec3) -> LightLevel {
         // let dist = _pos.rem_euclid(ivec3(32, 32, 32)).distance_squared(ivec3(16, 16, 16)) / 2;
         // let value = (16 - dist) as u8;
-        
+
         let value = (_pos.x as f32 / 8.0).sin().abs() * 15.0;
-        
+
         LightLevel::from_sky_and_block(value as u8, value as u8)
     }
 
@@ -44,7 +48,7 @@ impl Debug for SimpleBlockstateProvider {
     }
 }
 
-pub fn make_chunks(wm: &WmRenderer, pos: IVec3, scene: &Scene) {
+pub fn make_chunks(wm: &WmRenderer, pos: IVec3, _scene: &Scene) {
     let bm = wm.mc.block_manager.read();
     let atlases = wm.mc.texture_manager.atlases.read();
     let atlas = atlases.get(BLOCK_ATLAS).unwrap();
@@ -65,6 +69,6 @@ pub fn make_chunks(wm: &WmRenderer, pos: IVec3, scene: &Scene) {
         block: index as u16,
         augment,
     });
-    let time = Instant::now();
+    let _time = Instant::now();
     bake_section(pos, wm, &provider);
 }
