@@ -87,8 +87,15 @@ pub fn load_shaders(wm: &WmRenderer) {
         Some(custom_bind_groups),
         Some(custom_geometry),
     );
-
-    RENDER_GRAPH.set(render_graph).unwrap();
+    
+    match RENDER_GRAPH.get() {
+        None => {
+            RENDER_GRAPH.set(Mutex::new(render_graph)).unwrap();
+        }
+        Some(mutex) => {
+            *mutex.lock() = render_graph;
+        }
+    }
 }
 
 pub struct Application {

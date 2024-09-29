@@ -89,7 +89,7 @@ struct MouseState {
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
 
-pub static RENDER_GRAPH: OnceCell<RenderGraph> = OnceCell::new();
+pub static RENDER_GRAPH: OnceCell<Mutex<RenderGraph>> = OnceCell::new();
 pub static CUSTOM_GEOMETRY: OnceCell<Mutex<HashMap<String, Box<dyn Geometry>>>> = OnceCell::new();
 
 static RUN_DIRECTORY: OnceCell<PathBuf> = OnceCell::new();
@@ -585,7 +585,7 @@ pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jlong, _tick: jlong) {
     let wm = RENDERER.wait();
-    let render_graph = RENDER_GRAPH.get().unwrap();
+    let render_graph = RENDER_GRAPH.get().unwrap().lock();
     let mut geometry = CUSTOM_GEOMETRY.get().unwrap().lock();
     wm.display.window.request_redraw();
     wm.submit_chunk_updates(&SCENE);
