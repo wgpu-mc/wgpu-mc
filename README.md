@@ -1,62 +1,26 @@
-# wgpu-mc
+# wgpu-mc — Minecraft Rendering Engine Built in Rust
+<img align="right" src="media/logo.png" width="280" alt="">
+<p>
+<img alt="Static Badge" src="https://img.shields.io/badge/Discord_-5865F2?style=flat-square&logo=discord&logoColor=fff&link=https%3A%2F%2Fdiscord.gg%2FNTuK8bQ2hn">
+<img alt="Static Badge" src="https://img.shields.io/badge/Matrix_-000?style=flat-square&logo=matrix&logoColor=fff&link=%20https%3A%2F%2Fmatrix.to%2F%23%2F%23wgpu-mc%3Amatrix.org">
+</p>
 
-![img](media/logo.png)
+> [!WARNING]  
+> wgpu-mc is in **Beta**. [Contributions appreciated](https://github.com/wgpu-mc/wgpu-mc/labels/engine).<br>
 
-## 🚀 A blazing fast alternative renderer for Minecraft
-### Discord
-https://discord.gg/NTuK8bQ2hn
-### Matrix
-https://matrix.to/#/#wgpu-mc:matrix.org
+**wgpu-mc** is a standalone [WebGPU](https://www.w3.org/TR/webgpu/) rendering engine written in Rust using the [`wgpu`](https://gpuweb.github.io/gpuweb/) crate. The project was started in late 2021 as a pet project to create a new rendering engine for Minecraft to replace the existing OpenGL renderer.
 
-#### Intro
+## Electrum — Rust-based Rendering Engine Mod for Minecraft
+> [!CAUTION]
+> Electrum is currently **Unstable**. Use in a production environment is highly discouraged. [Contributions are welcome](https://github.com/wgpu-mc/wgpu-mc/labels/electrum).
 
-`wgpu` is a crate implementing the WebGPU specification in Rust. It's primary backends are Vulkan, DirectX 12, and Metal.
+**Electrum** is a fabric mod that integrates the wgpu-mc rendering engine, replacing the existing Blaze3D rendering engine.
 
-#### Goals
+### Screenshots
+<p>
+  <img alt="" src="https://github.com/user-attachments/assets/031437b4-9001-404f-84a1-996660fa49b2" width="280">
+  <img alt="" src="https://github.com/user-attachments/assets/16686221-a49a-4761-b4e1-fe81865b0449" width="280">
+  <img alt="" src="https://github.com/user-attachments/assets/466264f5-3b05-4a5b-89b3-7cc379aacbae" width="280">
+</p>
 
-wgpu-mc is a standalone, mostly-batteries-included rendering engine written in Rust.
-Electrum is a fabric mod that integrates wgpu-mc with Minecraft.
-
-#### Current status
-
-Both the engine and Electrum are both currently under active development.
-wgpu-mc is fairly mature, while Electrum is more WIP.
-
-#### Screenshots
-
-8/25/23
-![AO + Smooth lighting shown off in a cave](.github/screenshots/cave.png)
-
-#### WIP Features
-
-The features listed below are not necessarily fully complete and
-may still be bugged
-
-Engine
-
-- [x] Block models from standard datapacks
-  - [x] Multipart
-  - [x] Variants
-- [x] Terrain rendering
-- - [ ] Translucency sorting
-- - [x] Frustum culling
-- - [x] Lighting (AO + block/sky light)
-- [x] Instanced Entity Rendering
-- [x] Animated textures
-- [ ] Mipmaps  
-- [x] Data-driven shader graph
-
-Minecraft
-
-- [x] GUI rendering
-- [x] Terrain rendering
-    - [x] Lighting integration
-    - [x] Chunk updates
-- [ ] Entities
-- - [x] Instancing (one draw call per entity type)
-- - [x] Model upload (Models are correctly translated dynamically from Minecraft's format into the wgpu-mc entity struct format)
-- - [ ] Player atlas
-- - [ ] Textures (Somewhat working, UVs are bugged)
-- [ ] Item rendering
-- [ ] Implement FRAPI/FREX
-- [ ] Particles
+## Contribution Guide
