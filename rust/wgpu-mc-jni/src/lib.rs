@@ -623,7 +623,7 @@ pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jl
             let size = wm.display.size.read();
             surface_config.width = size.width;
             surface_config.height = size.height;
-
+            SCENE.resize_depth_texture(wm, size.width, size.height);
             wm.display
                 .surface
                 .configure(&wm.display.device, &surface_config);

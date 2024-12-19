@@ -494,7 +494,7 @@ impl RenderGraph {
 
                     let depth_view =
                         if depth_texture == "@texture_depth" {
-                            arena.alloc(scene.depth_texture.create_view(
+                            arena.alloc(scene.depth_texture.read().create_view(
                                 &wgpu::TextureViewDescriptor {
                                     label: None,
                                     format: Some(wgpu::TextureFormat::Depth32Float),

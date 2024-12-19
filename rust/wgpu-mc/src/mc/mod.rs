@@ -196,7 +196,7 @@ pub struct Scene {
     pub stars_length: u32,
     pub render_effects: RenderEffectsData,
 
-    pub depth_texture: wgpu::Texture,
+    pub depth_texture: RwLock<wgpu::Texture>,
 }
 
 impl Scene {
@@ -228,17 +228,39 @@ impl Scene {
             stars_vertex_buffer: None,
             stars_length: 0,
             render_effects: Default::default(),
-            depth_texture: wm.display.device.create_texture(&wgpu::TextureDescriptor {
-                label: None,
-                size: framebuffer_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            }),
+            depth_texture: wm
+                .display
+                .device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size: framebuffer_size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Depth32Float,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+                .into(),
         }
+    }
+
+    pub fn resize_depth_texture(&self, wm: &WmRenderer, width: u32, height: u32) {
+        self.depth_texture.read().destroy();
+        *self.depth_texture.write() = wm.display.device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
     }
 }
 
