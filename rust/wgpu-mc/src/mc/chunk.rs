@@ -111,7 +111,7 @@ impl SectionStorage {
             self.storage.remove(pos);
         });
     }
-    pub fn replace(&mut self, pos: IVec3, baked_layers: &Vec<BakedLayer>) -> Section {
+    pub fn replace(&mut self, pos: IVec3, baked_layers: &[BakedLayer]) -> Section {
         if let Some(previous_section) = self.storage.get(&pos) {
             for layer in &previous_section.layers {
                 if let Some(l) = layer.as_ref() {

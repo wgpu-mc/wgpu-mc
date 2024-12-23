@@ -592,7 +592,7 @@ impl RenderGraph {
 
                     let instances = { scene.entity_instances.lock().clone() };
 
-                    for (_, entity_instances) in &instances {
+                    for entity_instances in instances.values() {
                         for (index, bind_group) in bound_pipeline.bind_groups.iter() {
                             match bind_group {
                                 WmBindGroup::Resource(name) => match &name[..] {

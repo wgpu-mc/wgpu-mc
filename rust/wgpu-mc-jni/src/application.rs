@@ -252,14 +252,11 @@ impl ApplicationHandler for Application {
         _device_id: winit::event::DeviceId,
         event: DeviceEvent,
     ) {
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                CHANNELS
-                    .0
-                    .send(RenderMessage::MouseMove(delta.0, delta.1))
-                    .unwrap();
-            }
-            _ => {}
+        if let DeviceEvent::MouseMotion { delta } = event {
+            CHANNELS
+                .0
+                .send(RenderMessage::MouseMove(delta.0, delta.1))
+                .unwrap();
         }
     }
 

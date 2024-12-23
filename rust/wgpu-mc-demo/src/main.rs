@@ -256,13 +256,10 @@ impl ApplicationHandler for Application {
         _device_id: winit::event::DeviceId,
         event: DeviceEvent,
     ) {
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                let camera = self.camera.as_mut().unwrap();
-                camera.yaw += (delta.0 / 100.0) as f32;
-                camera.pitch -= (delta.1 / 100.0) as f32;
-            }
-            _ => {}
+        if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
+            let camera = self.camera.as_mut().unwrap();
+            camera.yaw += (dx / 100.0) as f32;
+            camera.pitch -= (dy / 100.0) as f32;
         }
     }
 

@@ -78,6 +78,10 @@ pub struct Display {
     pub queue: wgpu::Queue,
     pub config: RwLock<wgpu::SurfaceConfiguration>,
 }
+
+/// Tuple of chunk positions and baked layers
+pub type ChunkUpdateData = (IVec3, Vec<BakedLayer>);
+
 /// The main wgpu-mc renderer struct
 /// Resources pertaining to Minecraft go in `MinecraftState`.
 ///
@@ -86,10 +90,7 @@ pub struct WmRenderer {
     pub display: Display,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: MinecraftState,
-    pub chunk_update_queue: (
-        Sender<(IVec3, Vec<BakedLayer>)>,
-        Mutex<Receiver<(IVec3, Vec<BakedLayer>)>>,
-    ),
+    pub chunk_update_queue: (Sender<ChunkUpdateData>, Mutex<Receiver<ChunkUpdateData>>),
 }
 
 #[derive(Copy, Clone)]

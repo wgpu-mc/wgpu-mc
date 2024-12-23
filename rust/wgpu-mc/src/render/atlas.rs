@@ -65,7 +65,6 @@ pub struct Atlas {
     pub texture: Arc<TextureAndView>,
     /// Not every [Atlas] is used for block textures, but the ones that are store the information for each animated texture here
     pub animated_textures: RwLock<Vec<schemas::texture::TextureAnimation>>,
-    ///
     pub animated_texture_offsets: RwLock<HashMap<ResourcePath, u32>>,
     size: u32,
 }

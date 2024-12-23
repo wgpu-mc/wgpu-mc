@@ -76,24 +76,21 @@ fn recurse_model_parents(
     resource_provider: &dyn ResourceProvider,
     models: &mut Vec<ResourcePath>,
 ) {
-    match &model.parent {
-        Some(parent_path_string) => {
-            let parent_path: ResourcePath = ResourcePath::from(parent_path_string)
-                .prepend("models/")
-                .append(".json");
-            recurse_model_parents(
-                &serde_json::from_str(
-                    &resource_provider
-                        .get_string(&parent_path)
-                        .expect(&parent_path.0),
-                )
-                .unwrap(),
-                resource_provider,
-                models,
-            );
-            models.push(parent_path);
-        }
-        None => {}
+    if let Some(parent_path_string) = &model.parent {
+        let parent_path: ResourcePath = ResourcePath::from(parent_path_string)
+            .prepend("models/")
+            .append(".json");
+        recurse_model_parents(
+            &serde_json::from_str(
+                &resource_provider
+                    .get_string(&parent_path)
+                    .expect(&parent_path.0),
+            )
+            .unwrap(),
+            resource_provider,
+            models,
+        );
+        models.push(parent_path);
     }
 }
 
