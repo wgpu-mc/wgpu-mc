@@ -492,26 +492,25 @@ impl RenderGraph {
                     let will_clear_depth = should_clear_depth;
                     should_clear_depth = false;
 
-                    let depth_view =
-                        if depth_texture == "@texture_depth" {
-                            arena.alloc(scene.depth_texture.read().create_view(
-                                &wgpu::TextureViewDescriptor {
-                                    label: None,
-                                    format: Some(wgpu::TextureFormat::Depth32Float),
-                                    dimension: Some(wgpu::TextureViewDimension::D2),
-                                    aspect: Default::default(),
-                                    base_mip_level: 0,
-                                    mip_level_count: None,
-                                    base_array_layer: 0,
-                                    array_layer_count: None,
-                                },
-                            ))
-                        } else {
-                            match self.resources.get(depth_texture) {
-                                Some(ResourceBacking::Texture2D(view)) => &view.view,
-                                _ => unimplemented!("Unknown depth target {}", depth_texture),
-                            }
-                        };
+                    let depth_view = if depth_texture == "@texture_depth" {
+                        arena.alloc(scene.depth_texture.read().create_view(
+                            &wgpu::TextureViewDescriptor {
+                                label: None,
+                                format: Some(wgpu::TextureFormat::Depth32Float),
+                                dimension: Some(wgpu::TextureViewDimension::D2),
+                                aspect: Default::default(),
+                                base_mip_level: 0,
+                                mip_level_count: None,
+                                base_array_layer: 0,
+                                array_layer_count: None,
+                            },
+                        ))
+                    } else {
+                        match self.resources.get(depth_texture) {
+                            Some(ResourceBacking::Texture2D(view)) => &view.view,
+                            _ => unimplemented!("Unknown depth target {}", depth_texture),
+                        }
+                    };
 
                     RenderPassDepthStencilAttachment {
                         view: depth_view,
