@@ -14,17 +14,26 @@ pkgs.mkShell rec {
     nixfmt-rfc-style
   ];
 
-  # rust deps
   buildInputs = with pkgs; [
+    # rust deps
     libxkbcommon
     openssl
     pkg-config
+    renderdoc
     vulkan-loader
     wayland
     xorg.libX11
     xorg.libXcursor
     xorg.libXi
     xorg.libXrandr
+
+    # minecraft deps
+    alsa-lib
+    libjack2
+    libpulseaudio
+    openal
+    pipewire
+    udev
   ];
 
   RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
