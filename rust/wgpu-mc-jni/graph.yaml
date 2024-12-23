@@ -1,52 +1,59 @@
 version: "0.0.1"
 support: wgsl
 resources:
-#  texture_sun:
-#    type: texture_2d
-#    path: "minecraft:textures/environment/sun.png"
+  texture_sky_sun:
+    type: texture_2d
+    src: "minecraft:textures/environment/sun.png"
+  texture_sky_moon:
+    type: texture_2d
+    src: "minecraft:textures/environment/moon_phases.png"
 pipelines:
-#  sky_scatter:
-#    geometry: @geo_sky_scatter
-#    output: [@framebuffer_texture]
-#    clear: true
-#    push_constants:
-#      0: @pc_environment_data
-#    bind_groups:
-#      0:
-#        0: @mat4_mvp
-#  sky_fog:
-#    geometry: @geo_sky_fog
-#    output: [@framebuffer_texture]
-#    push_constants:
-#      0: @pc_environment_data
-#    bind_groups:
-#      0:
-#        0: @mat4_projection
-#        1: @mat4_view
-#        2: @mat4_model
-#  stars:
-#    geometry: @geo_sky_stars
-#    output: [@framebuffer_texture]
-#    blending: color_add_alpha_blending
-#    push_constants:
-#      0: @pc_environment_data
-#    bind_groups:
-#      0: @mat4_projection
-#      1: @mat4_view
-#      2: @mat4_model
-#  sun_moon_cycle:
-#    geometry: @geo_sun_moon
-#    output: [@framebuffer_texture]
-#    blending: color_add_alpha_blending
-#    push_constants:
-#      0: @pc_environment_data
-#    bind_groups:
-#      0:
-#        0: @mat4_projection
-#        1: @mat4_view
-#        2: @mat4_model
-#        3: texture_sky_sun
-#        4: @texture_sky_moon
+  sky_scatter:
+    geometry: "@geo_sky_scatter"
+    output: ["@framebuffer_texture"]
+    clear: true
+    push_constants:
+      0: "@pc_environment_data"
+    bind_groups:
+      0:
+        0: "@mat4_perspective"
+        1: "@mat4_view"
+        2: "@mat4_model"
+  sky_fog:
+    geometry: "@geo_sky_fog"
+    output: ["@framebuffer_texture"]
+    push_constants:
+      0: "@pc_environment_data"
+    bind_groups:
+      0:
+        0: "@mat4_perspective"
+        1: "@mat4_view"
+        2: "@mat4_model"
+  stars:
+    geometry: "@geo_sky_stars"
+    output: ["@framebuffer_texture"]
+    blending: color_add_alpha_blending
+    push_constants:
+      0: "@pc_environment_data"
+    bind_groups:
+      0:
+        0: "@mat4_perspective"
+        1: "@mat4_view"
+        2: "@mat4_model"
+  sun_moon_cycle:
+    geometry: "@geo_sun_moon"
+    output: ["@framebuffer_texture"]
+    blending: color_add_alpha_blending
+    push_constants:
+      0: "@pc_environment_data"
+    bind_groups:
+      0:
+        0: "@mat4_perspective"
+        1: "@mat4_view"
+        2: "@mat4_model"
+        3: texture_sky_sun
+        4: texture_sky_moon
+        5: "@sampler"
   terrain:
     geometry: "@geo_terrain"
     depth: "@texture_depth"

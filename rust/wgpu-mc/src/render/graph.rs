@@ -3,10 +3,12 @@ use linked_hash_map::LinkedHashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use treeculler::{BVol, Frustum, Vec3, AABB};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use wgpu::{
-    Color, LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment,
-    RenderPassDescriptor, SamplerBindingType, ShaderStages, StoreOp,
+    BufferUsages, Color, IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, ShaderStages,
+    StoreOp,
 };
 
 use crate::mc::chunk::RenderLayer;
@@ -239,6 +241,10 @@ impl RenderGraph {
                             stages: wgpu::ShaderStages::FRAGMENT,
                             range: index..index + 16,
                         },
+                        "@pc_environment_data" => wgpu::PushConstantRange {
+                            stages: ShaderStages::VERTEX_FRAGMENT,
+                            range: index..index + 68,
+                        },
                         _ => unimplemented!(),
                     }
                 })
@@ -447,7 +453,7 @@ impl RenderGraph {
         encoder: &mut wgpu::CommandEncoder,
         scene: &Scene,
         render_target: &wgpu::TextureView,
-        clear_color: [u8; 3],
+        clear_color: [f32; 3],
         geometry: &mut HashMap<String, Box<dyn Geometry>>,
         frustum: &Frustum<f32>,
     ) {
@@ -632,6 +638,144 @@ impl RenderGraph {
                         );
                     }
                 }
+                "@geo_sun_moon" => {
+                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                        match bind_group {
+                            WmBindGroup::Custom(bind_group) => {
+                                render_pass.set_bind_group(*index, bind_group, &[]);
+                            }
+                            WmBindGroup::Resource(_) => {}
+                        }
+                    }
+                    let sun_buffer = wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        label: None,
+                        contents: bytemuck::cast_slice(&SunMoonVertex::load_vertex_sun()),
+                        usage: BufferUsages::VERTEX,
+                    });
+                    let moon_buffer = wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        label: None,
+                        contents: bytemuck::cast_slice(&SunMoonVertex::load_vertex_moon(
+                            scene.sky_state.load().moon_phase,
+                        )),
+                        usage: BufferUsages::VERTEX,
+                    });
+
+                    render_pass.set_pipeline(&bound_pipeline.pipeline);
+                    let pc = get_environmental_push_constants(scene);
+                    set_push_constants(pipeline_config, &mut render_pass, Some(pc));
+
+                    render_pass.set_vertex_buffer(0, sun_buffer.slice(..));
+                    render_pass.draw(0..6, 0..1);
+
+                    render_pass.set_vertex_buffer(0, moon_buffer.slice(..));
+                    render_pass.draw(0..6, 0..1);
+                }
+                "@geo_sky_scatter" => {
+                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                        match bind_group {
+                            WmBindGroup::Custom(bind_group) => {
+                                render_pass.set_bind_group(*index, bind_group, &[]);
+                            }
+                            WmBindGroup::Resource(_) => {}
+                        }
+                    }
+
+                    let (light_sky_vertices, light_sky_indices) =
+                        SkyVertex::load_vertex_light_sky();
+                    let light_sky_buffer = (
+                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: bytemuck::cast_slice(&light_sky_vertices),
+                            usage: BufferUsages::VERTEX,
+                        }),
+                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: bytemuck::cast_slice(&light_sky_indices),
+                            usage: BufferUsages::INDEX,
+                        }),
+                    );
+
+                    let (dark_sky_vertices, dark_sky_indices) = SkyVertex::load_vertex_dark_sky();
+                    let dark_sky_buffer = (
+                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: bytemuck::cast_slice(&dark_sky_vertices),
+                            usage: BufferUsages::VERTEX,
+                        }),
+                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: bytemuck::cast_slice(&dark_sky_indices),
+                            usage: BufferUsages::INDEX,
+                        }),
+                    );
+
+                    render_pass.set_pipeline(&bound_pipeline.pipeline);
+                    let pc = get_environmental_push_constants(scene);
+                    set_push_constants(pipeline_config, &mut render_pass, Some(pc));
+
+                    render_pass.set_vertex_buffer(0, light_sky_buffer.0.slice(..));
+                    render_pass.set_index_buffer(light_sky_buffer.1.slice(..), IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..24, 0, 0..1);
+
+                    render_pass.set_vertex_buffer(0, dark_sky_buffer.0.slice(..));
+                    render_pass.set_index_buffer(dark_sky_buffer.1.slice(..), IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..24, 0, 0..1);
+                }
+                "@geo_sky_fog" => {
+                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                        match bind_group {
+                            WmBindGroup::Custom(bind_group) => {
+                                render_pass.set_bind_group(*index, bind_group, &[]);
+                            }
+                            WmBindGroup::Resource(_) => {}
+                        }
+                    }
+
+                    let (fog_sphere_vertices, fog_sphere_indices) = SkyVertex::load_fog_sphere();
+                    let fog_sphere = (
+                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: bytemuck::cast_slice(&fog_sphere_vertices),
+                            usage: BufferUsages::VERTEX,
+                        }),
+                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                            label: None,
+                            contents: bytemuck::cast_slice(&fog_sphere_indices),
+                            usage: BufferUsages::INDEX,
+                        }),
+                    );
+
+                    render_pass.set_pipeline(&bound_pipeline.pipeline);
+                    let pc = get_environmental_push_constants(scene);
+                    set_push_constants(pipeline_config, &mut render_pass, Some(pc));
+
+                    render_pass.set_vertex_buffer(0, fog_sphere.0.slice(..));
+                    render_pass.set_index_buffer(fog_sphere.1.slice(..), IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..51, 0, 0..1);
+                }
+                "@geo_sky_stars" => {
+                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                        match bind_group {
+                            WmBindGroup::Custom(bind_group) => {
+                                render_pass.set_bind_group(*index, bind_group, &[]);
+                            }
+                            WmBindGroup::Resource(_) => {}
+                        }
+                    }
+                    let stars_vertex_buffer = scene.stars_vertex_buffer.read();
+                    let stars_vertex = stars_vertex_buffer.as_ref().unwrap().slice(..);
+
+                    let stars_index_buffer = scene.stars_index_buffer.read();
+                    let stars_index = stars_index_buffer.as_ref().unwrap().slice(..);
+
+                    render_pass.set_pipeline(&bound_pipeline.pipeline);
+                    let pc = get_environmental_push_constants(scene);
+                    set_push_constants(pipeline_config, &mut render_pass, Some(pc));
+
+                    render_pass.set_vertex_buffer(0, stars_vertex);
+                    render_pass.set_index_buffer(stars_index, IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..*scene.stars_length.read(), 0, 0..1);
+                }
                 _ => match geometry.get_mut(&pipeline_config.geometry) {
                     None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),
                     Some(geometry) => {
@@ -641,6 +785,40 @@ impl RenderGraph {
             }
         }
     }
+}
+
+fn get_environmental_push_constants(scene: &Scene) -> HashMap<String, (Vec<u8>, ShaderStages)> {
+    let sky = &scene.sky_state.load();
+    let render_effects = &scene.render_effects.load();
+
+    let mut pc: HashMap<String, (Vec<u8>, ShaderStages)> = HashMap::new();
+    pc.insert(
+        "@pc_environment_data".to_string(),
+        (
+            bytemuck::cast_slice(&[
+                sky.angle,
+                sky.brightness,
+                sky.star_shimmer,
+                render_effects.fog_start,
+                render_effects.fog_end,
+                render_effects.fog_shape,
+                render_effects.fog_color[0],
+                render_effects.fog_color[1],
+                render_effects.fog_color[2],
+                render_effects.fog_color[3],
+                sky.color[0],
+                sky.color[1],
+                sky.color[2],
+                render_effects.dimension_fog_color[0],
+                render_effects.dimension_fog_color[1],
+                render_effects.dimension_fog_color[2],
+                render_effects.dimension_fog_color[3],
+            ])
+            .to_vec(),
+            ShaderStages::VERTEX_FRAGMENT,
+        ),
+    );
+    pc
 }
 
 pub fn set_push_constants(

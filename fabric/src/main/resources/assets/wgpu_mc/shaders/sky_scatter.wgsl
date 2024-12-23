@@ -7,10 +7,10 @@ struct VO {
 @group(0) @binding(0)
 var<uniform> projection: mat4x4<f32>;
 
-@group(1) @binding(0)
+@group(0) @binding(1)
 var<uniform> view: mat4x4<f32>;
 
-@group(2) @binding(0)
+@group(0) @binding(2)
 var<uniform> model: mat4x4<f32>;
 
 struct PushConstants {
@@ -41,13 +41,13 @@ fn vert(
 ) -> VO {
     var vo: VO;
     vo.og_pos = pos;
-    vo.pos = projection * view * model * vec4<f32>(pos, 1.0);
+    vo.pos = projection * view * vec4<f32>(pos, 1.0);
     vo.vertex_distance = fog_distance(pos);
     return vo;
 }
 
 fn fog_distance(pos: vec3<f32>) -> f32 {
-    var model_view = model * view;
+    var model_view = view;
     if data.fog_shape == 0.0 {
         return length((model_view * vec4(pos, 1.0)).xyz);
     }

@@ -8,10 +8,10 @@ const PI = 3.14159265;
 @group(0) @binding(0)
 var<uniform> projection: mat4x4<f32>;
 
-@group(1) @binding(0)
+@group(0) @binding(1)
 var<uniform> view: mat4x4<f32>;
 
-@group(2) @binding(0)
+@group(0) @binding(2)
 var<uniform> model: mat4x4<f32>;
 
 struct PushConstants {
@@ -82,7 +82,7 @@ fn vert(
         f1 = 180.0;
     }
 
-    var transformation_matrix = model * rotateX(90.0) * rotateZ(f1) * rotateZ(90.0);
+    var transformation_matrix = rotateX(90.0) * rotateZ(f1) * rotateZ(90.0);
 
     vo.pos = projection * view * transformation_matrix * vec4<f32>(pos.xy, pos.z * pos_z_modify, 1.0);
     return vo;

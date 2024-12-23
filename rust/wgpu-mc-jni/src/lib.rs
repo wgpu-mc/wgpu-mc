@@ -1,7 +1,8 @@
 pub extern crate wgpu_mc;
 
 use application::Application;
-use arc_swap::ArcSwap;
+use arc_swap::access::Access;
+use arc_swap::{ArcSwap, ArcSwapAny};
 use byteorder::{LittleEndian, ReadBytesExt};
 use core::slice;
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -29,6 +30,7 @@ use std::time::Instant;
 use std::{mem, thread};
 use wgpu::Extent3d;
 use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
+use wgpu_mc::wgpu::util::DeviceExt;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton};
 use winit::window::CursorGrabMode;
@@ -36,7 +38,7 @@ use winit::window::CursorGrabMode;
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{bake_section, BlockStateProvider, LightLevel};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
-use wgpu_mc::mc::Scene;
+use wgpu_mc::mc::{RenderEffectsData, Scene, SkyState};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
@@ -647,12 +649,14 @@ pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jl
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
+        let clear_color =
+            *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
         render_graph.render(
             wm,
             &mut encoder,
             &SCENE,
             &view,
-            [0; 3],
+            clear_color,
             &mut geometry,
             &Frustum::from_modelview_projection([[0.0; 4]; 4]),
         );
@@ -1349,7 +1353,7 @@ pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
 pub fn bindStarData(
     env: JNIEnv,
     _class: JClass,
-    _length: jint,
+    length: jint,
     int_array: JIntArray,
     byte_array: JByteArray,
 ) {
@@ -1377,38 +1381,106 @@ pub fn bindStarData(
             continue;
         }
 
-        // *RENDERER.get().unwrap().mc.stars_length.write() = length as u32;
+        *SCENE.stars_length.write() = length as u32;
 
-        // let mut index_buffer = RENDERER.get().unwrap().mc.stars_index_buffer.write();
+        let mut index_buffer = SCENE.stars_index_buffer.write();
+        *index_buffer = Some(RENDERER.get().unwrap().display.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&indices),
+                usage: wgpu::BufferUsages::INDEX,
+            },
+        ));
 
-        // *index_buffer = Some(
-        //     RENDERER
-        //         .get()
-        //         .unwrap()
-        //         .wgpu_state
-        //         .device
-        //         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //             label: None,
-        //             contents: bytemuck::cast_slice(&indices),
-        //             usage: wgpu::BufferUsages::INDEX,
-        //         }),
-        // );
-
-        // let mut vertex_buffer = RENDERER.get().unwrap().mc.stars_vertex_buffer.write();
-
-        // *vertex_buffer = Some(
-        //     RENDERER
-        //         .get()
-        //         .unwrap()
-        //         .wgpu_state
-        //         .device
-        //         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //             label: None,
-        //             contents: bytemuck::cast_slice(&converted),
-        //             usage: wgpu::BufferUsages::VERTEX,
-        //         }),
-        // );
+        let mut vertex_buffer = SCENE.stars_vertex_buffer.write();
+        *vertex_buffer = Some(RENDERER.get().unwrap().display.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&converted),
+                usage: wgpu::BufferUsages::VERTEX,
+            },
+        ));
 
         break;
     });
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bindSkyData(
+    _env: JNIEnv,
+    _class: JClass,
+    r: jfloat,
+    g: jfloat,
+    b: jfloat,
+    angle: jfloat,
+    brightness: jfloat,
+    star_shimmer: jfloat,
+    moon_phase: jint,
+) {
+    let mut sky_data = (**SCENE.sky_state.load()).clone();
+    sky_data.color[0] = r;
+    sky_data.color[1] = g;
+    sky_data.color[2] = b;
+    sky_data.angle = angle;
+    sky_data.brightness = brightness;
+    sky_data.star_shimmer = star_shimmer;
+    sky_data.moon_phase = moon_phase;
+
+    SCENE.sky_state.swap(sky_data.into());
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn bindRenderEffectsData(
+    env: JNIEnv,
+    _class: JClass,
+    fog_start: jfloat,
+    fog_end: jfloat,
+    fog_shape: jint,
+    fog_color: JFloatArray,
+    color_modulator: JFloatArray,
+    dimension_fog_color: JFloatArray,
+) {
+    let mut render_effects_data = RenderEffectsData {
+        fog_start,
+        fog_end,
+        fog_shape: fog_shape as f32,
+        ..Default::default()
+    };
+
+    let mut fog_color_vec = vec![0f32; env.get_array_length(&fog_color).unwrap() as usize];
+    env.get_float_array_region(&fog_color, 0, &mut fog_color_vec[..])
+        .unwrap();
+
+    let mut color_modulator_vec =
+        vec![0f32; env.get_array_length(&color_modulator).unwrap() as usize];
+    env.get_float_array_region(&color_modulator, 0, &mut color_modulator_vec[..])
+        .unwrap();
+
+    let mut dimension_fog_color_vec =
+        vec![0f32; env.get_array_length(&dimension_fog_color).unwrap() as usize];
+    env.get_float_array_region(&dimension_fog_color, 0, &mut dimension_fog_color_vec[..])
+        .unwrap();
+
+    render_effects_data.fog_color = [
+        fog_color_vec[0],
+        fog_color_vec[1],
+        fog_color_vec[2],
+        fog_color_vec[3],
+    ];
+    render_effects_data.color_modulator = [
+        color_modulator_vec[0],
+        color_modulator_vec[1],
+        color_modulator_vec[2],
+        color_modulator_vec[3],
+    ];
+    render_effects_data.dimension_fog_color = [
+        dimension_fog_color_vec[0],
+        dimension_fog_color_vec[1],
+        dimension_fog_color_vec[2],
+        dimension_fog_color_vec[3],
+    ];
+
+    CLEAR_COLOR.swap([fog_color_vec[0], fog_color_vec[1], fog_color_vec[2]].into());
+
+    SCENE.render_effects.swap(render_effects_data.into());
 }

@@ -164,7 +164,7 @@ pub struct BlockInstance {
 
 #[derive(Default, Clone)]
 pub struct SkyState {
-    pub color: [u8; 3],
+    pub color: [f32; 3],
     pub angle: f32,
     pub brightness: f32,
     pub star_shimmer: f32,
@@ -189,12 +189,12 @@ pub struct Scene {
     pub indirect_buffer: Arc<wgpu::Buffer>,
 
     pub entity_instances: Mutex<HashMap<String, BundledEntityInstances>>,
-    pub sky_state: SkyState,
+    pub sky_state: ArcSwap<SkyState>,
 
-    pub stars_index_buffer: Option<wgpu::Buffer>,
-    pub stars_vertex_buffer: Option<wgpu::Buffer>,
-    pub stars_length: u32,
-    pub render_effects: RenderEffectsData,
+    pub stars_index_buffer: RwLock<Option<wgpu::Buffer>>,
+    pub stars_vertex_buffer: RwLock<Option<wgpu::Buffer>>,
+    pub stars_length: RwLock<u32>,
+    pub render_effects: ArcSwap<RenderEffectsData>,
 
     pub depth_texture: RwLock<wgpu::Texture>,
 }
@@ -224,9 +224,9 @@ impl Scene {
 
             entity_instances: Default::default(),
             sky_state: Default::default(),
-            stars_index_buffer: None,
-            stars_vertex_buffer: None,
-            stars_length: 0,
+            stars_index_buffer: None.into(),
+            stars_vertex_buffer: None.into(),
+            stars_length: 0.into(),
             render_effects: Default::default(),
             depth_texture: wm
                 .display

@@ -83,10 +83,10 @@ impl SkyVertex {
         // sky fan to triangle list
         let mut cursor = 1u32;
         for i in (0..indices.len()).step_by(3) {
-            indices[i] = 0;
+            indices[i + 2] = 0;
             indices[i + 1] = cursor;
             cursor += 1u32;
-            indices[i + 2] = cursor;
+            indices[i] = cursor;
         }
 
         (vertices, indices)
@@ -101,25 +101,18 @@ pub struct SunMoonVertex {
 }
 
 impl SunMoonVertex {
+    const VAA: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x2,
+    ];
+
     #[must_use]
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<SunMoonVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                //Position
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
+            attributes: &Self::VAA,
         }
     }
 
@@ -129,19 +122,7 @@ impl SunMoonVertex {
     pub fn load_vertex_sun() -> [SunMoonVertex; 6] {
         [
             SunMoonVertex {
-                position: [-30.0f32, 100.0, -30.0],
-                tex_coords: [0.0, 0.0],
-            },
-            SunMoonVertex {
-                position: [-30.0, 100.0, 30.0],
-                tex_coords: [0.0, 1.0],
-            },
-            SunMoonVertex {
-                position: [30.0, 100.0, 30.0],
-                tex_coords: [1.0, 1.0],
-            },
-            SunMoonVertex {
-                position: [-30.0f32, 100.0, -30.0],
+                position: [-30.0, 100.0, -30.0],
                 tex_coords: [0.0, 0.0],
             },
             SunMoonVertex {
@@ -151,6 +132,18 @@ impl SunMoonVertex {
             SunMoonVertex {
                 position: [30.0, 100.0, 30.0],
                 tex_coords: [1.0, 1.0],
+            },
+            SunMoonVertex {
+                position: [30.0, 100.0, 30.0],
+                tex_coords: [1.0, 1.0],
+            },
+            SunMoonVertex {
+                position: [-30.0, 100.0, 30.0],
+                tex_coords: [0.0, 1.0],
+            },
+            SunMoonVertex {
+                position: [-30.0, 100.0, -30.0],
+                tex_coords: [0.0, 0.0],
             },
         ]
     }
@@ -164,8 +157,16 @@ impl SunMoonVertex {
         let c2r2 = (bottom_row as f32 + 1.0) / 2.0;
         [
             SunMoonVertex {
-                position: [-30.0f32, -100.0, 30.0],
+                position: [-30.0, -100.0, -30.0],
+                tex_coords: [c1r2, c2r1],
+            },
+            SunMoonVertex {
+                position: [-30.0, -100.0, 30.0],
                 tex_coords: [c1r2, c2r2],
+            },
+            SunMoonVertex {
+                position: [30.0, -100.0, 30.0],
+                tex_coords: [c1r1, c2r2],
             },
             SunMoonVertex {
                 position: [30.0, -100.0, 30.0],
@@ -176,16 +177,8 @@ impl SunMoonVertex {
                 tex_coords: [c1r1, c2r1],
             },
             SunMoonVertex {
-                position: [-30.0f32, -100.0, 30.0],
-                tex_coords: [c1r2, c2r2],
-            },
-            SunMoonVertex {
                 position: [-30.0, -100.0, -30.0],
                 tex_coords: [c1r2, c2r1],
-            },
-            SunMoonVertex {
-                position: [30.0, -100.0, -30.0],
-                tex_coords: [c1r1, c2r1],
             },
         ]
     }

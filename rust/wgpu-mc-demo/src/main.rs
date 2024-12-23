@@ -419,7 +419,7 @@ impl ApplicationHandler for Application {
                         &mut command_encoder,
                         self.scene.as_ref().unwrap(),
                         &view,
-                        [0; 3],
+                        [0.0; 3],
                         &mut geometry,
                         &Frustum::from_modelview_projection(mvp),
                     );
