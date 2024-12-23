@@ -19,7 +19,6 @@ bin/
 
 # Project
 run/
-rust/Cargo.lock
 rust/wgpu-mc-demo/tmp
 rust/wgpu-mc-demo/res/assets
 
