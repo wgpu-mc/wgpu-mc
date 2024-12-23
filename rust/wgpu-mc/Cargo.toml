@@ -42,3 +42,6 @@ arrayvec = "0.7.6"
 itertools = "0.13"
 intrusive-collections = "0.9"
 encase = "0.9.0"
+
+[build-dependencies]
+cargo-lock = "10.0.1"

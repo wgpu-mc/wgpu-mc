@@ -187,6 +187,10 @@ impl WmRenderer {
     }
 
     pub fn get_backend_description(&self) -> String {
-        format!("wgpu 0.20 ({:?})", self.display.adapter.get_info().backend)
+        format!(
+            "wgpu {} ({})",
+            env!("WGPUMC_WGPU_VER"),
+            self.display.adapter.get_info().backend.to_str()
+        )
     }
 }
