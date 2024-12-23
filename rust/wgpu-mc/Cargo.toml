@@ -10,7 +10,7 @@ tracing = []
 
 [dependencies]
 # if you upgrade this, also change WmRenderer::get_backend_description in wgpu-mc/src/lib.rs
-wgpu = { version = "22", features = ["glsl"] }
+wgpu = { version = "23.0.1", features = ["glsl"] }
 image = "0.25"
 glam = "0.29"
 bytemuck = { version = "1.13", features = ["derive"] }
@@ -40,7 +40,7 @@ array-init = "2.1.0"
 arrayvec = "0.7.6"
 itertools = "0.13"
 intrusive-collections = "0.9"
-encase = "0.9.0"
+encase = "0.10.0"
 
 [dev-dependencies]
 serde_norway = "0.9.42"

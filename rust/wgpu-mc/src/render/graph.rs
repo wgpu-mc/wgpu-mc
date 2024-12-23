@@ -291,7 +291,7 @@ impl RenderGraph {
                         layout: Some(&layout),
                         vertex: wgpu::VertexState {
                             module: &shader.module,
-                            entry_point: "vert",
+                            entry_point: Some("vert"),
                             compilation_options: Default::default(),
                             buffers: match &vertex_buffer {
                                 None => &[],
@@ -319,7 +319,7 @@ impl RenderGraph {
                         multisample: Default::default(),
                         fragment: Some(wgpu::FragmentState {
                             module: &shader.module,
-                            entry_point: "frag",
+                            entry_point: Some("frag"),
                             compilation_options: Default::default(),
                             targets: &pipeline_config
                                 .output
@@ -599,7 +599,7 @@ impl RenderGraph {
                                     "@bg_entity" => {
                                         render_pass.set_bind_group(
                                             *index,
-                                            &entity_instances.uploaded.bind_group,
+                                            Some(&*entity_instances.uploaded.bind_group),
                                             &[],
                                         );
                                     }
