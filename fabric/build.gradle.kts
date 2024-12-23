@@ -1,8 +1,8 @@
 plugins {
-    id("fabric-loom") version "1.7-SNAPSHOT"
+    id("fabric-loom") version "1.9-SNAPSHOT"
 
     id("fr.stardustenterprises.rust.importer") version "2.1.0"
-    id("io.freefair.lombok") version "8.4"
+    id("io.freefair.lombok") version "8.11"
 }
 base {
     val archivesBaseName: String by project
