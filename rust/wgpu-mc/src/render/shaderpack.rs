@@ -194,7 +194,7 @@ mod tests {
     use super::ShaderPackConfig;
 
     fn deserialize_and_print_error<'a, T: Debug + Deserialize<'a>>(input: &'a str) {
-        let config: Result<T, _> = serde_yaml::from_str(input);
+        let config: Result<T, _> = serde_norway::from_str(input);
         println!("{config:?}");
         if let Err(err) = config {
             if let Some(loc) = err.location() {
