@@ -31,7 +31,7 @@ public class RenderSystemMixin {
      */
     @Overwrite(remap = false)
     public static void flipFrame(long window) {
-        Tessellator.getInstance().getBuffer().clear();
+        Tessellator.getInstance().clear();
         //TODO: events
     }
 

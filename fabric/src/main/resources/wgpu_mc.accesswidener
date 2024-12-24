@@ -45,7 +45,6 @@ extendable class net/minecraft/world/chunk/PalettedContainer$PaletteProvider
 #accessible field net/minecraft/client/render/LightMapTextureManager texture Lnet/minecraft/client/texture/NativeImageBackedTexture;
 accessible field net/minecraft/client/render/LightmapTextureManager texture Lnet/minecraft/client/texture/NativeImageBackedTexture;
 
-mutable field com/mojang/blaze3d/systems/RenderSystem gameThread Ljava/lang/Thread;
 mutable field com/mojang/blaze3d/systems/RenderSystem renderThread Ljava/lang/Thread;
 
 accessible field net/minecraft/world/chunk/light/LightingProvider blockLightProvider Lnet/minecraft/world/chunk/light/ChunkLightProvider;

@@ -9,7 +9,7 @@ import net.minecraft.util.Identifier;
 public class ShaderReloadListener implements SimpleSynchronousResourceReloadListener {
     @Override
     public Identifier getFabricId() {
-        return new Identifier("electrum", "listener");
+        return Identifier.of("electrum", "listener");
     }
 
     @Override

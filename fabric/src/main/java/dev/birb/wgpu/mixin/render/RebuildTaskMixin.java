@@ -6,7 +6,7 @@ import dev.birb.wgpu.rust.WgpuNative;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.chunk.BlockBufferBuilderStorage;
+import net.minecraft.client.render.chunk.BlockBufferAllocatorStorage;
 import net.minecraft.client.render.chunk.ChunkBuilder;
 import net.minecraft.client.render.chunk.ChunkRendererRegion;
 import net.minecraft.client.world.ClientWorld;
@@ -20,8 +20,6 @@ import net.minecraft.world.chunk.*;
 import net.minecraft.world.chunk.light.ChunkLightProvider;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.*;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
@@ -41,7 +39,7 @@ public class RebuildTaskMixin implements RebuildTaskAccessor {
      * @reason Build chunks in Rust
      */
     @Overwrite
-    public CompletableFuture<ChunkBuilder.Result> run(BlockBufferBuilderStorage buffers) {
+    public CompletableFuture<ChunkBuilder.Result> run(BlockBufferAllocatorStorage buffers) {
         ChunkBuilder.BuiltChunk chunk = this.builtChunk;
 
         if (((ChunkBuilder.BuiltChunk.Task) (Object) this).cancelled.get()) {

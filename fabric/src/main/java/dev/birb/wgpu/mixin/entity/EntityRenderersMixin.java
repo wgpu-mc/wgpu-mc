@@ -13,10 +13,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(EntityRenderers.class)
 public class EntityRenderersMixin {
 
-    @Inject(method = "method_32174", at = @At(value = "INVOKE", target = "Lcom/google/common/collect/ImmutableMap$Builder;put(Ljava/lang/Object;Ljava/lang/Object;)Lcom/google/common/collect/ImmutableMap$Builder;", shift = At.Shift.BEFORE))
+    @Inject(method = "method_32174", at = @At(value = "INVOKE", target = "Lcom/google/common/collect/ImmutableMap$Builder;put(Ljava/lang/Object;Ljava/lang/Object;)Lcom/google/common/collect/ImmutableMap$Builder;"))
+    // FIXME before
     private static void reloadEntityRenderers(ImmutableMap.Builder builder, EntityRendererFactory.Context context, EntityType entityType, EntityRendererFactory factory, CallbackInfo ci) {
         EntityState.builderType = entityType;
-        EntityState.registeringRoot = true;
     }
 
 }

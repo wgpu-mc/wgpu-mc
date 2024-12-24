@@ -3,11 +3,12 @@ package dev.birb.wgpu.mixin.render;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.resource.ResourceFactory;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.resource.ResourceReloader;
 import net.minecraft.resource.SinglePreparationResourceReloader;
+import net.minecraft.util.Util;
 import net.minecraft.util.profiler.Profiler;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
@@ -34,8 +35,8 @@ public abstract class GameRendererMixin {
     }
 
     @Inject(at = @At("RETURN"), method = "render")
-    public void render(float tickDelta, long startTime, boolean tick, CallbackInfo ci) {
-        WgpuNative.render(tickDelta, startTime, tick);
+    public void render(RenderTickCounter tickCounter, boolean tick, CallbackInfo ci) {
+        WgpuNative.render(tickCounter.getTickDelta(false), Util.getMeasuringTimeNano(), tick);
     }
 
 

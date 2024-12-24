@@ -17,7 +17,8 @@ import java.util.Optional;
 public class WindowMixin {
 
 
-    @Shadow private double scaleFactor;
+    @Shadow
+    private double scaleFactor;
 
     /**
      * @author wgpu-mc
@@ -25,7 +26,7 @@ public class WindowMixin {
      */
     @Overwrite
     public void setVsync(boolean vsync) {
-        
+
     }
 
     /**
@@ -81,7 +82,7 @@ public class WindowMixin {
      */
     @Overwrite
     public void swapBuffers() {
-        Tessellator.getInstance().getBuffer().clear();
+        Tessellator.getInstance().clear();
     }
 
     /**
@@ -155,7 +156,8 @@ public class WindowMixin {
     @Overwrite
     public int calculateScaleFactor(int guiScale, boolean forceUnicodeFont) {
         int i;
-        for(i = 1; i != guiScale && i < getWidth() && i < getHeight() && getWidth() / (i + 1) >= 320 && getHeight() / (i + 1) >= 240; ++i) {}
+        for (i = 1; i != guiScale && i < getWidth() && i < getHeight() && getWidth() / (i + 1) >= 320 && getHeight() / (i + 1) >= 240; ++i) {
+        }
 
         if (forceUnicodeFont && i % 2 != 0) {
             ++i;
@@ -169,7 +171,7 @@ public class WindowMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite
-    public Optional<VideoMode> getVideoMode() {
+    public Optional<VideoMode> getFullscreenVideoMode() {
         if (Wgpu.isInitialized()) {
             return VideoMode.fromString(WgpuNative.getVideoMode());
         } else {

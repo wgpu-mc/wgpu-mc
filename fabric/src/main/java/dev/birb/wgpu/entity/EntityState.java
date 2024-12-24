@@ -18,7 +18,6 @@ public class EntityState {
 
     public static EntityType<?> builderType;
     public static final HashMap<EntityType<?>, EntityModelInfo> layers = new HashMap<>();
-    public static boolean registeringRoot = false;
 
     static class MatrixIndexTuple {
 
@@ -44,25 +43,25 @@ public class EntityState {
         Matrix4f[] orderedMatrices = new Matrix4f[partIndices.size()];
         int[] overlays = new int[partIndices.size()];
 
-        for(Map.Entry<String, ModelPartState> entry : entityModelPartStates.entrySet()) {
+        for (Map.Entry<String, ModelPartState> entry : entityModelPartStates.entrySet()) {
 //        for(Matrix4f mat : entityModelMatrices) {
             String partName = entry.getKey();
             Matrix4f mat = entry.getValue().mat;
 
-            if(!partIndices.containsKey(partName)) return;
+            if (!partIndices.containsKey(partName)) return;
 
             try {
                 int partIndex = partIndices.get(partName);
                 orderedMatrices[partIndex] = mat;
                 overlays[partIndex] = entry.getValue().overlay;
-            } catch(ArrayIndexOutOfBoundsException e) {
+            } catch (ArrayIndexOutOfBoundsException e) {
                 return;
             }
         }
 
         EntityRenderState state;
 
-        if(renderStates.containsKey(entityName)) {
+        if (renderStates.containsKey(entityName)) {
             state = renderStates.get(entityName);
         } else {
             state = new EntityRenderState();
@@ -83,7 +82,7 @@ public class EntityState {
             try {
                 mat.get(state.buffer);
                 state.buffer.position(state.buffer.position() + 16);
-            } catch(BufferOverflowException e) {
+            } catch (BufferOverflowException e) {
                 FloatBuffer oldBuffer = state.buffer;
                 state.buffer = MemoryUtil.memAllocFloat(state.buffer.capacity() + 1000);
                 state.buffer.put(oldBuffer);

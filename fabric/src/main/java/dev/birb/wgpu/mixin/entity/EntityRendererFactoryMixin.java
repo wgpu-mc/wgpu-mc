@@ -14,15 +14,15 @@ public class EntityRendererFactoryMixin {
 
     @Inject(method = "getPart", at = @At("HEAD"))
     public void getPart(EntityModelLayer layer, CallbackInfoReturnable<ModelPart> cir) {
-        if(EntityState.registeringRoot) {
-            EntityState.EntityModelInfo info = new EntityState.EntityModelInfo();
-            info.root = layer;
-            EntityState.layers.put(EntityState.builderType, info);
-            EntityState.registeringRoot = false;
-        } else {
-            EntityState.EntityModelInfo info = EntityState.layers.get((EntityState.builderType));
-            info.features.add(layer);
-        }
-    }
+        EntityState.EntityModelInfo info = EntityState.layers.get(EntityState.builderType);
 
+        if (info != null) {
+            info.features.add(layer);
+        } else {
+            info = new EntityState.EntityModelInfo();
+            info.root = layer;
+        }
+
+        EntityState.layers.put(EntityState.builderType, info);
+    }
 }

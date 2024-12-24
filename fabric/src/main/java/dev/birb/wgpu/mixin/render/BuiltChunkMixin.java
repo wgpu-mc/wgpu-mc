@@ -14,14 +14,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ChunkBuilder.BuiltChunk.class)
 public class BuiltChunkMixin {
-    @Shadow @Final BlockPos.Mutable origin;
+    @Shadow
+    @Final
+    BlockPos.Mutable origin;
 
-    @Inject(method = "rebuild", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task;run(Lnet/minecraft/client/render/chunk/BlockBufferBuilderStorage;)Ljava/util/concurrent/CompletableFuture;", shift = At.Shift.BEFORE))
+    @Inject(method = "rebuild", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task;run(Lnet/minecraft/client/render/chunk/BlockBufferAllocatorStorage;)Ljava/util/concurrent/CompletableFuture;"))
+    // FIXME check if the shift actually did soemthing
     public void specifyBuiltChunkSync(ChunkRendererRegionBuilder builder, CallbackInfo ci, @Local ChunkBuilder.BuiltChunk.Task task) {
         ((RebuildTaskAccessor) task).wgpu_mc$setBuiltChunk((ChunkBuilder.BuiltChunk) (Object) this);
     }
 
-    @Inject(method = "scheduleRebuild(Lnet/minecraft/client/render/chunk/ChunkBuilder;Lnet/minecraft/client/render/chunk/ChunkRendererRegionBuilder;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/chunk/ChunkBuilder;send(Lnet/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task;)V", shift = At.Shift.BEFORE))
+    @Inject(method = "scheduleRebuild(Lnet/minecraft/client/render/chunk/ChunkBuilder;Lnet/minecraft/client/render/chunk/ChunkRendererRegionBuilder;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/chunk/ChunkBuilder;send(Lnet/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task;)V"))
+    // FIXME same here
     public void specifyBuiltChunk(ChunkBuilder chunkRenderer, ChunkRendererRegionBuilder builder, CallbackInfo ci, @Local ChunkBuilder.BuiltChunk.Task task) {
         ((RebuildTaskAccessor) task).wgpu_mc$setBuiltChunk((ChunkBuilder.BuiltChunk) (Object) this);
     }

@@ -8,8 +8,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.concurrent.CompletableFuture;
 
 @Mixin(Main.class)
 public class MainMixin {
@@ -21,10 +22,10 @@ public class MainMixin {
         WgpuNative.setPanicHook();
     }
 
-    @Redirect(method = "main", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/MinecraftClient;isRunning()Z"))
-    private static boolean redirectIsRunning(MinecraftClient instance) {
+    @Inject(method = "main", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/MinecraftClient;run()V"))
+    private static void redirectIsRunning(String[] args, CallbackInfo ci) {
         if (!directorySent) {
-            WgpuNative.sendRunDirectory(instance.runDirectory.getAbsolutePath());
+            WgpuNative.sendRunDirectory(MinecraftClient.getInstance().runDirectory.getAbsolutePath());
             directorySent = true;
         }
 
@@ -42,10 +43,8 @@ public class MainMixin {
         helperThread.setContextClassLoader(Thread.currentThread().getContextClassLoader());
         helperThread.start();
 
-        Wgpu.startRendering();
-
-        // Reached when the winit event loop returns
-        return false;
+        // FIXME LOL
+        CompletableFuture.runAsync(Wgpu::startRendering).thenRun(() -> MinecraftClient.getInstance().scheduleStop());
     }
 
 }

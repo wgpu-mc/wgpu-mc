@@ -6,11 +6,9 @@ import dev.birb.wgpu.entity.ModelPartNameAccessor;
 import net.minecraft.client.model.ModelPart;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.util.math.MatrixStack;
-import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.*;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -30,9 +28,6 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
 
     @Shadow
     public abstract void rotate(MatrixStack matrices);
-
-    @Shadow
-    protected abstract void renderCuboids(MatrixStack.Entry entry, VertexConsumer vertexConsumer, int light, int overlay, float red, float green, float blue, float alpha);
 
     @Unique
     private String name;
@@ -54,7 +49,7 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
      * @reason Render entities in Rust
      */
     @Overwrite
-    public void render(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, float red, float green, float blue, float alpha) {
+    public void render(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
         if (!this.cuboids.isEmpty() || !this.children.isEmpty()) {
             int actualOverlay = EntityState.instanceOverlay;
 
@@ -78,13 +73,8 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
 
             EntityState.entityModelPartStates.put(thisPartName, state);
 
-            Matrix3f normalMat3 = matrices.peek().getNormalMatrix();
-
-            Iterator var9 = this.children.values().iterator();
-
-            while (var9.hasNext()) {
-                ModelPart modelPart = (ModelPart) var9.next();
-                modelPart.render(matrices, vertices, light, overlay, red, green, blue, alpha);
+            for (ModelPart modelPart : this.children.values()) {
+                modelPart.render(matrices, vertices, light, overlay, color);
             }
 
             matrices.pop();

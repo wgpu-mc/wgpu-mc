@@ -16,15 +16,15 @@ public class BufferRendererMixin {
      * @reason replaced with wgpu equivalent
      */
     @Overwrite
-    private static void drawWithGlobalProgramInternal(BufferBuilder.BuiltBuffer builtBuffer) {
-        ByteBuffer buffer = builtBuffer.getVertexBuffer();
-        BufferBuilder.DrawParameters parameters = builtBuffer.getParameters();
+    private static void drawWithGlobalProgramInternal(BuiltBuffer builtBuffer) {
+        ByteBuffer buffer = builtBuffer.getBuffer();
+        BuiltBuffer.DrawParameters parameters = builtBuffer.getDrawParameters();
 
         VertexFormat vertexFormat = parameters.format();
         if (vertexFormat == VertexFormats.POSITION_COLOR) {
-            if (vertexFormat.getElements().get(1).getComponentType() == VertexFormatElement.ComponentType.UBYTE)
+            if (vertexFormat.getElements().get(1).type() == VertexFormatElement.ComponentType.UBYTE)
                 WgpuNative.wmUsePipeline(0);
-            else if (vertexFormat.getElements().get(1).getComponentType() == VertexFormatElement.ComponentType.FLOAT)
+            else if (vertexFormat.getElements().get(1).type() == VertexFormatElement.ComponentType.FLOAT)
                 WgpuNative.wmUsePipeline(2);
             else return;
         } else if (vertexFormat == VertexFormats.POSITION_TEXTURE) {
@@ -53,7 +53,7 @@ public class BufferRendererMixin {
         int count = parameters.vertexCount();
         byte[] bytes = new byte[count * vertexFormat.getVertexSizeByte()];
         buffer.get(bytes);
-        
+
         float[] shaderColor = RenderSystem.getShaderColor();
         WgpuNative.setShaderColor(shaderColor[0], shaderColor[1], shaderColor[2], shaderColor[3]);
         WgpuNative.setVertexBuffer(bytes);
@@ -76,7 +76,7 @@ public class BufferRendererMixin {
             WgpuNative.draw(parameters.vertexCount());
         }
 
-        builtBuffer.release();
+        builtBuffer.close();
     }
 
 }

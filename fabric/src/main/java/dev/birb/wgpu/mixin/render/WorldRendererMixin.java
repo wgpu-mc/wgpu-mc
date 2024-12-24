@@ -82,7 +82,7 @@ public abstract class WorldRendererMixin {
     protected abstract void captureFrustum(Matrix4f positionMatrix, Matrix4f projectionMatrix, double x, double y, double z, Frustum frustum);
 
     @Shadow
-    protected abstract BufferBuilder.BuiltBuffer renderStars(BufferBuilder buffer);
+    protected abstract BuiltBuffer buildStarsBuffer(Tessellator tessellator);
 
     /**
      * @author wgpu-mc
@@ -108,25 +108,26 @@ public abstract class WorldRendererMixin {
      */
     @Overwrite
     private void renderStars() {
-        BufferBuilder.BuiltBuffer stars = renderStars(Tessellator.getInstance().getBuffer());
-        ByteBuffer vertexBuffer = stars.getVertexBuffer();
-        int count = stars.getParameters().vertexCount();
+        try (BuiltBuffer stars = buildStarsBuffer(Tessellator.getInstance())) {
+            ByteBuffer vertexBuffer = stars.getBuffer();
+            int count = stars.getDrawParameters().vertexCount();
 
-        byte[] bytes = new byte[count * VertexFormats.POSITION.getVertexSizeByte()];
-        vertexBuffer.get(bytes);
+            byte[] bytes = new byte[count * VertexFormats.POSITION.getVertexSizeByte()];
+            vertexBuffer.get(bytes);
 
-        int[] quadIndices = new int[count * 6];
+            int[] quadIndices = new int[count * 6];
 
-        for (int i = 0; i < count; i++) {
-            quadIndices[(i * 6)] = i * 4;
-            quadIndices[(i * 6) + 1] = (i * 4) + 1;
-            quadIndices[(i * 6) + 2] = (i * 4) + 3;
-            quadIndices[(i * 6) + 3] = (i * 4) + 1;
-            quadIndices[(i * 6) + 4] = (i * 4) + 2;
-            quadIndices[(i * 6) + 5] = (i * 4) + 3;
+            for (int i = 0; i < count; i++) {
+                quadIndices[(i * 6)] = i * 4;
+                quadIndices[(i * 6) + 1] = (i * 4) + 1;
+                quadIndices[(i * 6) + 2] = (i * 4) + 3;
+                quadIndices[(i * 6) + 3] = (i * 4) + 1;
+                quadIndices[(i * 6) + 4] = (i * 4) + 2;
+                quadIndices[(i * 6) + 5] = (i * 4) + 3;
+            }
+
+            WgpuNative.bindStarData(count + (count / 2), quadIndices, bytes);
         }
-
-        WgpuNative.bindStarData(count + (count / 2), quadIndices, bytes);
     }
 
     /**
@@ -151,8 +152,9 @@ public abstract class WorldRendererMixin {
     }
 
     @Inject(method = "render", cancellable = true, at = @At("HEAD"))
-    public void render(float tickDelta, long limitTime, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f positionMatrix, Matrix4f projectionMatrix, CallbackInfo ci) {
+    public void render(RenderTickCounter tickCounter, boolean renderBlockOutline, Camera camera, GameRenderer gameRenderer, LightmapTextureManager lightmapTextureManager, Matrix4f positionMatrix, Matrix4f projectionMatrix, CallbackInfo ci) {
         Vec3d translate = camera.getPos();
+        float tickDelta = tickCounter.getTickDelta(false);
 
         TickManager manager = this.client.world.getTickManager();
         float tickChange = manager.shouldTick() ? tickDelta : 1.0F;
