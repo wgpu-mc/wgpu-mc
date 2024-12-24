@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -24,7 +25,11 @@ import java.util.Map;
 
 @Mixin(MinecraftClient.class)
 public abstract class MinecraftClientRenderMixin {
-    @Shadow @Nullable public ClientWorld world;
+    @Shadow
+    @Nullable
+    public ClientWorld world;
+
+    @Unique
     private static boolean INITIALIZED = false;
 
     @Redirect(method = "<init>", at = @At(value = "NEW", target = "(Lnet/minecraft/client/MinecraftClient;)Lnet/minecraft/client/util/WindowProvider;"))
@@ -34,7 +39,7 @@ public abstract class MinecraftClientRenderMixin {
 
     @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/WindowProvider;createWindow(Lnet/minecraft/client/WindowSettings;Ljava/lang/String;Ljava/lang/String;)Lnet/minecraft/client/util/Window;"))
     private Window redirectWindow(WindowProvider windowProvider, WindowSettings settings, String videoMode, String title) throws InstantiationException {
-        
+
         //Warning, zero-initialized!
         Window window = (Window) Wgpu.getUnsafe().allocateInstance(Window.class);
         window.width = 1280;
@@ -50,18 +55,18 @@ public abstract class MinecraftClientRenderMixin {
     public void uploadDrawCalls(boolean tick, CallbackInfo ci) {
         RenderSystem.replayQueue();
 
-        if(WgpuMcMod.MAY_INJECT_PART_IDS) {
+        if (WgpuMcMod.MAY_INJECT_PART_IDS) {
             ArrayList<Runnable> list = (ArrayList<Runnable>) Wgpu.injectPartIds.clone();
             Wgpu.injectPartIds = new ArrayList<>();
 
             list.forEach(Runnable::run);
         }
 
-        if(this.world == null) {
+        if (this.world == null) {
             WgpuNative.clearEntities();
         }
 
-        for(Map.Entry<String, EntityState.EntityRenderState> entry : EntityState.renderStates.entrySet()) {
+        for (Map.Entry<String, EntityState.EntityRenderState> entry : EntityState.renderStates.entrySet()) {
             String entity = entry.getKey();
             EntityState.EntityRenderState state = entry.getValue();
 

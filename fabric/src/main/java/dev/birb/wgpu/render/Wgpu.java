@@ -30,9 +30,6 @@ public class Wgpu {
     private static volatile boolean mayInitialize = false;
 
     public static HashMap<String, Integer> blocks;
-    public static WgpuTextureManager getTextureManager() {
-        return textureManager;
-    }
     public static HashMap<Integer, Integer> keyStates = new HashMap<>();
     public static ArrayList<Runnable> injectPartIds = new ArrayList<>();
 
@@ -83,18 +80,20 @@ public class Wgpu {
     @SuppressWarnings("unused") // called from rust
     public static void cursorMove(double x, double y) {
         MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
-        if(!client.mouse.isCursorLocked()) {
+        if (!client.mouse.isCursorLocked()) {
             lastX = x;
             lastY = y;
             client.execute(() -> client.mouse.onCursorPos(0, x, y));
         }
     }
+
     private static double lastX;
     private static double lastY;
+
     @SuppressWarnings("unused") // called from rust
     public static void mouseMove(double x, double y) {
         MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
-        if(client.mouse.isCursorLocked()) {
+        if (client.mouse.isCursorLocked()) {
             lastX += x;
             lastY += y;
             client.execute(() -> client.mouse.onCursorPos(0, lastX, lastY));
@@ -158,7 +157,7 @@ public class Wgpu {
     public static void helperSetPartIndex(String entity, String part, int index) {
 
 
-        if(!EntityState.matrixIndices.containsKey(entity)) {
+        if (!EntityState.matrixIndices.containsKey(entity)) {
             EntityState.matrixIndices.put(entity, new HashMap<>());
         }
 
@@ -189,7 +188,7 @@ public class Wgpu {
 //         return 0x59f7ab;
 //        return 0xffffffff;
     }
-    
+
     public static void helperSetClassLoader(ClassLoader loader) {
         Thread.currentThread().setContextClassLoader(loader);
     }

@@ -8,10 +8,7 @@ import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.util.math.MatrixStack;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
-import org.spongepowered.asm.mixin.Final;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
-import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.*;
 
 import java.util.Iterator;
 import java.util.List;
@@ -20,26 +17,35 @@ import java.util.Map;
 @Mixin(ModelPart.class)
 public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPartAccessor {
 
-    @Shadow public boolean visible;
+    @Shadow
+    public boolean visible;
 
-    @Shadow @Final private List<ModelPart.Cuboid> cuboids;
+    @Shadow
+    @Final
+    private List<ModelPart.Cuboid> cuboids;
 
-    @Shadow @Final private Map<String, ModelPart> children;
+    @Shadow
+    @Final
+    public Map<String, ModelPart> children;
 
-    @Shadow public abstract void rotate(MatrixStack matrices);
+    @Shadow
+    public abstract void rotate(MatrixStack matrices);
 
-    @Shadow protected abstract void renderCuboids(MatrixStack.Entry entry, VertexConsumer vertexConsumer, int light, int overlay, float red, float green, float blue, float alpha);
+    @Shadow
+    protected abstract void renderCuboids(MatrixStack.Entry entry, VertexConsumer vertexConsumer, int light, int overlay, float red, float green, float blue, float alpha);
 
+    @Unique
     private String name;
+    @Unique
     private int partIndex;
 
     @Override
-    public String getName() {
+    public String wgpu_mc$getName() {
         return name;
     }
 
     @Override
-    public void setName(String name) {
+    public void wgpu_mc$setName(String name) {
         this.name = name;
     }
 
@@ -53,16 +59,16 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
             int actualOverlay = EntityState.instanceOverlay;
 
             //sets the alpha to 0
-            if(!this.visible) actualOverlay = 0;
+            if (!this.visible) actualOverlay = 0;
 
             matrices.push();
 
             this.rotate(matrices);
             Matrix4f mat4 = matrices.peek().getPositionMatrix();
 
-            String thisPartName = ((ModelPartNameAccessor) (Object) this).getName();
+            String thisPartName = this.wgpu_mc$getName();
 
-            if(thisPartName == null) {
+            if (thisPartName == null) {
                 thisPartName = "root";
             }
 
@@ -76,8 +82,8 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
 
             Iterator var9 = this.children.values().iterator();
 
-            while(var9.hasNext()) {
-                ModelPart modelPart = (ModelPart)var9.next();
+            while (var9.hasNext()) {
+                ModelPart modelPart = (ModelPart) var9.next();
                 modelPart.render(matrices, vertices, light, overlay, red, green, blue, alpha);
             }
 
@@ -86,7 +92,7 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
     }
 
     @Override
-    public void setModelPartIndex(int partIndex) {
+    public void wgpu_mc$setModelPartIndex(int partIndex) {
         this.partIndex = partIndex;
     }
 

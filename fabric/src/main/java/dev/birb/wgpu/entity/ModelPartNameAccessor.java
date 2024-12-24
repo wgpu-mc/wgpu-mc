@@ -2,8 +2,8 @@ package dev.birb.wgpu.entity;
 
 public interface ModelPartNameAccessor {
 
-    String getName();
+    String wgpu_mc$getName();
 
-    void setName(String name);
+    void wgpu_mc$setName(String name);
 
 }

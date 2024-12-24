@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.Unique;
 @Mixin(BlockState.class)
 public class BlockStateMixin implements RustBlockStateAccessor {
 
+    @Unique
     private int rustBlockStateIndex = 0;
 
     @Override

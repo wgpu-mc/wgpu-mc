@@ -9,6 +9,7 @@ import net.minecraft.resource.ResourceManager;
 import net.minecraft.resource.ResourceReloader;
 import net.minecraft.resource.SinglePreparationResourceReloader;
 import net.minecraft.util.profiler.Profiler;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
@@ -28,13 +29,13 @@ public abstract class GameRendererMixin {
     }
 
     @Inject(at = @At("HEAD"), method = "renderHand", cancellable = true)
-    public void renderHand(MatrixStack matrices, Camera camera, float tickDelta, CallbackInfo ci) {
+    public void renderHand(Camera camera, float tickDelta, Matrix4f matrix4f, CallbackInfo ci) {
         ci.cancel();
     }
 
     @Inject(at = @At("RETURN"), method = "render")
     public void render(float tickDelta, long startTime, boolean tick, CallbackInfo ci) {
-        WgpuNative.render(tickDelta,startTime,tick);
+        WgpuNative.render(tickDelta, startTime, tick);
     }
 
 

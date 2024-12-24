@@ -2,7 +2,6 @@
   "schemaVersion": 1,
   "id": "wgpu_mc",
   "version": "0.1",
-
   "name": "wgpu-mc",
   "description": "A renderer made to replace Blaze3D, written in Rust, using wgpu for cross-platform support.\nSupported backends: Vulkan, D3D12, and Metal",
   "authors": [
@@ -13,10 +12,8 @@
     "homepage": "https://github.com/wgpu-mc/wgpu-mc",
     "sources": "https://github.com/wgpu-mc/wgpu-mc"
   },
-
   "license": "GPL3",
   "icon": "assets/wgpu_mc/icon.png",
-
   "environment": "*",
   "entrypoints": {
     "client": [
@@ -26,11 +23,10 @@
   "mixins": [
     "wgpu.mixins.json"
   ],
-
   "depends": {
     "fabricloader": ">=0.15",
     "fabric": "*",
-    "minecraft": "1.20.4"
+    "minecraft": "1.20.6"
   },
   "custom": {
     "fabric-renderer-api-v1:contains_renderer": "true"

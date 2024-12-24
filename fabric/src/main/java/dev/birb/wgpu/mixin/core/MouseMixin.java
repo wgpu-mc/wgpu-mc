@@ -11,7 +11,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(Mouse.class)
 public abstract class MouseMixin {
-    @Shadow private boolean cursorLocked;
+    @Shadow
+    private boolean cursorLocked;
 
     /**
      * @author wgpu-mc
@@ -22,7 +23,7 @@ public abstract class MouseMixin {
     }
 
     @Redirect(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/GlfwUtil;getTime()D"))
-    public double getTime() {
+    public double replaceTimeMouse() {
         return System.currentTimeMillis() / 1000.0;
     }
 

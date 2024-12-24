@@ -4,18 +4,30 @@ import net.minecraft.util.collection.PackedIntegerArray;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import java.nio.LongBuffer;
 
 @Mixin(PackedIntegerArray.class)
 public abstract class PackedIntegerArrayMixin {
 
-    @Shadow protected abstract int getStorageIndex(int index);
+    @Shadow
+    protected abstract int getStorageIndex(int index);
 
-    @Shadow @Final public int elementsPerLong;
-    @Shadow @Final private int elementBits;
-    @Shadow @Final public long maxValue;
-    @Shadow @Final private int size;
+    @Shadow
+    @Final
+    public int elementsPerLong;
+    @Shadow
+    @Final
+    private int elementBits;
+    @Shadow
+    @Final
+    public long maxValue;
+    @Shadow
+    @Final
+    private int size;
+
+    @Unique
     private LongBuffer data;
 
 //    @Inject(method = "<init>(II)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/collection/PackedIntegerArray;<init>(II[J)V", shift = At.Shift.AFTER))
