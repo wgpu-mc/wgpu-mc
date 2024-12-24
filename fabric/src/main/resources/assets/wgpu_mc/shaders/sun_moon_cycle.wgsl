@@ -9,17 +9,16 @@ const PI = 3.14159265;
 @group(0) @binding(0)
 var<uniform> projection: mat4x4<f32>;
 
-@group(1) @binding(0)
+@group(0) @binding(1)
 var<uniform> view: mat4x4<f32>;
 
-@group(2) @binding(0)
+@group(0) @binding(2)
 var<uniform> model: mat4x4<f32>;
 
-@group(3) @binding(0) var sun_texture: texture_2d<f32>;
-@group(3) @binding(1) var sun_sampler: sampler;
+@group(0) @binding(3) var sun_texture: texture_2d<f32>;
+@group(0) @binding(4) var moon_texture: texture_2d<f32>;
 
-@group(4) @binding(0) var moon_texture: texture_2d<f32>;
-@group(4) @binding(1) var moon_sampler: sampler;
+@group(0) @binding(5) var sample: sampler;
 
 struct PushConstants {
     angle: f32,
@@ -88,7 +87,7 @@ fn vert(
     var vo: VO;
     vo.og_pos = pos;
 
-    var transformation_matrix = model * rotateY(-90.0) * rotateX(data.angle * 360.0);
+    var transformation_matrix = rotateY(-90.0) * rotateX(data.angle * 360.0);
     var dir = transformation_matrix * vec4<f32>(pos, 1.0);
 
     vo.pos = projection * view * vec4<f32>(dir.xyz, 1.0);
@@ -99,8 +98,8 @@ fn vert(
 @fragment
 fn frag(in: VO) -> @location(0) vec4<f32> {
     if(in.og_pos.y > 0.0) {
-        return textureSample(sun_texture, sun_sampler, in.tex_coords);
+        return textureSample(sun_texture, sample, in.tex_coords);
     } else {
-        return textureSample(moon_texture, moon_sampler, in.tex_coords);
+        return textureSample(moon_texture, sample, in.tex_coords);
     }
 }
