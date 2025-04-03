@@ -12,7 +12,7 @@
 
 ## Electrum — Rust-based Rendering Engine Mod for Minecraft
 > [!CAUTION]
-> Electrum is currently **Unstable**. Use in a production environment is highly discouraged. [Contributions are welcome](https://github.com/wgpu-mc/wgpu-mc/labels/electrum).
+> Electrum is currently wip. [Feel free to contribute!](https://github.com/wgpu-mc/wgpu-mc/labels/electrum).
 
 **Electrum** is a fabric mod that integrates the wgpu-mc rendering engine, replacing the existing Blaze3D rendering engine.
 
