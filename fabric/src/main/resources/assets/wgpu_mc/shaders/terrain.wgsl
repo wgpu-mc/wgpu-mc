@@ -163,7 +163,7 @@ fn frag(
     var ao = 0.6 + 0.4 * mix(mix(in.ao3, in.ao4, in.light_uv.x), mix(in.ao2, in.ao1, in.light_uv.x), in.light_uv.y);
 //    var ao = mix(mix(0.0, 0.0, in.light_uv.x), mix(0.0, 1.0, in.light_uv.x), in.light_uv.y);
 
-    var light = max(lc.x, lc.y);
+    var light = max(lc.x, lc.y) * 0.7 + 0.3;
 
     let col = in.color * vec4(light, light, light, 1.0) * vec4(ao, ao, ao, 1.0) * textureSample(t_texture, t_sampler, in.tex_coords);
 
