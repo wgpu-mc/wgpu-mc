@@ -1,5 +1,5 @@
 plugins {
-    id("fabric-loom") version "1.7-SNAPSHOT"
+    id("fabric-loom") version "1.10-SNAPSHOT"
 
     id("fr.stardustenterprises.rust.importer") version "2.1.0"
     id("io.freefair.lombok") version "8.4"
@@ -58,7 +58,7 @@ tasks {
         enabled = false
     }
 
-    val javaVersion = JavaVersion.VERSION_17
+    val javaVersion = JavaVersion.VERSION_21
     withType<JavaCompile> {
         options.encoding = "UTF-8"
         sourceCompatibility = javaVersion.toString()
