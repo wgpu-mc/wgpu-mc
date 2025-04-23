@@ -65,14 +65,10 @@ pub mod util;
 
 pub use treeculler::Frustum;
 
-/// Provides access to most of the wgpu structs relating directly to communicating/getting
-/// information about the gpu.
-
+/// Provides access to wgpu
 pub struct Display {
-    pub window: Arc<Window>,
     pub instance: wgpu::Instance,
     pub adapter: wgpu::Adapter,
-    pub size: RwLock<PhysicalSize<u32>>,
     pub surface: Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -87,7 +83,7 @@ pub type ChunkUpdateData = (IVec3, Vec<BakedLayer>);
 ///
 /// `RenderGraph` is used in tandem with `World` to render scenes.
 pub struct WmRenderer {
-    pub display: Display,
+    pub gpu: Display,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: MinecraftState,
     pub chunk_update_queue: (Sender<ChunkUpdateData>, Mutex<Receiver<ChunkUpdateData>>),
@@ -109,7 +105,7 @@ impl WmRenderer {
         let (sender, receiver) = channel();
         Self {
             bind_group_layouts: Arc::new(create_bind_group_layouts(&display.device)),
-            display,
+            gpu: display,
             mc,
             chunk_update_queue: (sender, Mutex::new(receiver)),
         }
@@ -118,7 +114,7 @@ impl WmRenderer {
     pub fn init(&self) {
         let atlases = [BLOCK_ATLAS, ENTITY_ATLAS]
             .iter()
-            .map(|&name| (name.into(), Atlas::new(&self.display, false)))
+            .map(|&name| (name.into(), Atlas::new(&self.gpu, false)))
             .collect();
 
         *self.mc.texture_manager.atlases.write() = atlases;
@@ -130,14 +126,14 @@ impl WmRenderer {
         let buf = self.mc.animated_block_buffer.borrow().load_full();
 
         if buf.is_none() {
-            let animated_block_buffer = self.display.device.create_buffer(&BufferDescriptor {
+            let animated_block_buffer = self.gpu.device.create_buffer(&BufferDescriptor {
                 label: None,
                 size: (d.len() * 8) as wgpu::BufferAddress,
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
             let animated_block_bind_group =
-                self.display.device.create_bind_group(&BindGroupDescriptor {
+                self.gpu.device.create_bind_group(&BindGroupDescriptor {
                     label: None,
                     layout: self.bind_group_layouts.get("ssbo").unwrap(),
                     entries: &[BindGroupEntry {
@@ -156,7 +152,7 @@ impl WmRenderer {
                 .store(Arc::new(Some(animated_block_bind_group)));
         }
 
-        self.display.queue.write_buffer(
+        self.gpu.queue.write_buffer(
             (**self.mc.animated_block_buffer.load()).as_ref().unwrap(),
             0,
             bytemuck::cast_slice(d),
@@ -172,12 +168,12 @@ impl WmRenderer {
             let section = storage.replace(pos, &layers);
             for (i, ranges) in section.layers.iter().enumerate() {
                 if let Some(ranges) = ranges {
-                    self.display.queue.write_buffer(
+                    self.gpu.queue.write_buffer(
                         &scene.chunk_buffer.buffer,
                         ranges.vertex_range.start as u64 * 4,
                         &layers[i].vertices,
                     );
-                    self.display.queue.write_buffer(
+                    self.gpu.queue.write_buffer(
                         &scene.chunk_buffer.buffer,
                         ranges.index_range.start as u64 * 4,
                         &layers[i].indices,
@@ -191,7 +187,7 @@ impl WmRenderer {
         format!(
             "wgpu {} ({})",
             env!("WGPUMC_WGPU_VER"),
-            self.display.adapter.get_info().backend.to_str()
+            self.gpu.adapter.get_info().backend.to_str()
         )
     }
 }

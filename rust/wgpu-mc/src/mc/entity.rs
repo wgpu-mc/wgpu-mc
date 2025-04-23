@@ -501,7 +501,7 @@ impl BundledEntityInstances {
         capacity: u32,
     ) -> Self {
         let transforms_buffer =
-            Arc::new(wm.display.device.create_buffer(&wgpu::BufferDescriptor {
+            Arc::new(wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
                 size: capacity as wgpu::BufferAddress
                     * (entity.parts.len() as wgpu::BufferAddress)
@@ -513,7 +513,7 @@ impl BundledEntityInstances {
         Self {
             entity,
             uploaded: UploadedEntityInstances {
-                bind_group: Arc::new(wm.display.device.create_bind_group(
+                bind_group: Arc::new(wm.gpu.device.create_bind_group(
                     &wgpu::BindGroupDescriptor {
                         label: None,
                         layout: wm.bind_group_layouts.get("entity").unwrap(),
@@ -530,7 +530,7 @@ impl BundledEntityInstances {
                     },
                 )),
                 transforms_buffer,
-                instance_vbo: Arc::new(wm.display.device.create_buffer(&BufferDescriptor {
+                instance_vbo: Arc::new(wm.gpu.device.create_buffer(&BufferDescriptor {
                     label: None,
                     usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
                     size: 100000,

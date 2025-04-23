@@ -190,10 +190,7 @@ pub struct Scene {
 
     pub entity_instances: Mutex<HashMap<String, BundledEntityInstances>>,
     pub sky_state: ArcSwap<SkyState>,
-
-    pub stars_index_buffer: RwLock<Option<wgpu::Buffer>>,
-    pub stars_vertex_buffer: RwLock<Option<wgpu::Buffer>>,
-    pub stars_length: RwLock<u32>,
+    
     pub render_effects: ArcSwap<RenderEffectsData>,
 
     pub depth_texture: RwLock<wgpu::Texture>,
@@ -201,7 +198,7 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(wm: &WmRenderer, framebuffer_size: wgpu::Extent3d) -> Self {
-        let indirect_buffer = wm.display.device.create_buffer(&wgpu::BufferDescriptor {
+        let indirect_buffer = wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: 4 * 5 * 10000,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
@@ -224,12 +221,9 @@ impl Scene {
 
             entity_instances: Default::default(),
             sky_state: Default::default(),
-            stars_index_buffer: None.into(),
-            stars_vertex_buffer: None.into(),
-            stars_length: 0.into(),
             render_effects: Default::default(),
             depth_texture: wm
-                .display
+                .gpu
                 .device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: None,
@@ -247,7 +241,7 @@ impl Scene {
 
     pub fn resize_depth_texture(&self, wm: &WmRenderer, width: u32, height: u32) {
         self.depth_texture.read().destroy();
-        *self.depth_texture.write() = wm.display.device.create_texture(&wgpu::TextureDescriptor {
+        *self.depth_texture.write() = wm.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
                 width,

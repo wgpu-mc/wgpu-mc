@@ -109,7 +109,7 @@ impl BindableTexture {
     #[must_use]
     pub fn from_tv(wm: &WmRenderer, tv: Arc<TextureAndView>, depth: bool) -> Self {
         let bind_group = wm
-            .display
+            .gpu
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,

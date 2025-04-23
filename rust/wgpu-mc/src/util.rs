@@ -24,13 +24,13 @@ impl BindableBuffer {
     pub fn new(wm: &WmRenderer, data: &[u8], usage: wgpu::BufferUsages, layout_name: &str) -> Self {
         let layout = wm.bind_group_layouts.get(layout_name).unwrap();
 
-        let buffer = Arc::new(wm.display.device.create_buffer_init(&BufferInitDescriptor {
+        let buffer = Arc::new(wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: data,
             usage,
         }));
 
-        let bind_group = wm.display.device.create_bind_group(&BindGroupDescriptor {
+        let bind_group = wm.gpu.device.create_bind_group(&BindGroupDescriptor {
             label: None,
             layout,
             entries: &[BindGroupEntry {
@@ -57,14 +57,14 @@ impl BindableBuffer {
 
         let layout = wm.bind_group_layouts.get(layout_name).unwrap();
 
-        let buffer = Arc::new(wm.display.device.create_buffer(&BufferDescriptor {
+        let buffer = Arc::new(wm.gpu.device.create_buffer(&BufferDescriptor {
             label: None,
             size,
             usage,
             mapped_at_creation: false,
         }));
 
-        let bind_group = wm.display.device.create_bind_group(&BindGroupDescriptor {
+        let bind_group = wm.gpu.device.create_bind_group(&BindGroupDescriptor {
             label: None,
             layout,
             entries: &[BindGroupEntry {

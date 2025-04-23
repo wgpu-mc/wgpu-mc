@@ -187,7 +187,7 @@ impl Atlas {
     /// become obsolete if you .load() the BindableTexture before calling upload(), so you should get the BindableTexture after calling this function and not before-hand.
     /// Returns true if the atlas was resized.
     pub fn upload(&self, wm: &WmRenderer) -> bool {
-        wm.display.queue.write_texture(
+        wm.gpu.queue.write_texture(
             self.texture.texture.as_image_copy(),
             self.image.read().as_raw(),
             wgpu::ImageDataLayout {

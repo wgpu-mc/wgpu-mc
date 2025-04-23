@@ -159,7 +159,7 @@ impl RenderGraph {
                             })
                             .collect::<Vec<wgpu::BindGroupLayoutEntry>>();
 
-                        &*arena.alloc(wm.display.device.create_bind_group_layout(
+                        &*arena.alloc(wm.gpu.device.create_bind_group_layout(
                             &wgpu::BindGroupLayoutDescriptor {
                                 label: None,
                                 entries: &layout_entries,
@@ -198,7 +198,7 @@ impl RenderGraph {
                             .collect::<Vec<wgpu::BindGroupEntry>>();
 
                         let bind_group =
-                            wm.display
+                            wm.gpu
                                 .device
                                 .create_bind_group(&wgpu::BindGroupDescriptor {
                                     label: None,
@@ -251,7 +251,7 @@ impl RenderGraph {
                 .collect::<Vec<wgpu::PushConstantRange>>();
 
             let layout =
-                wm.display
+                wm.gpu
                     .device
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: None,
@@ -262,7 +262,7 @@ impl RenderGraph {
             let shader = WgslShader::init(
                 &ResourcePath(format!("wgpu_mc:shaders/{}.wgsl", pipeline_name)),
                 &*wm.mc.resource_provider,
-                &wm.display.device,
+                &wm.gpu.device,
                 "frag".into(),
                 "vert".into(),
             )
@@ -290,7 +290,7 @@ impl RenderGraph {
             let label = pipeline_name.to_string();
 
             let render_pipeline =
-                wm.display
+                wm.gpu
                     .device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                         label: Some(&label),
@@ -398,7 +398,7 @@ impl RenderGraph {
                                 .unwrap();
 
                             let tav = TextureAndView::from_image_file_bytes(
-                                &wm.display,
+                                &wm.gpu,
                                 &bytes,
                                 resource_id,
                             )
@@ -647,12 +647,12 @@ impl RenderGraph {
                             WmBindGroup::Resource(_) => {}
                         }
                     }
-                    let sun_buffer = wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                    let sun_buffer = wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                         label: None,
                         contents: bytemuck::cast_slice(&SunMoonVertex::load_vertex_sun()),
                         usage: BufferUsages::VERTEX,
                     });
-                    let moon_buffer = wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                    let moon_buffer = wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                         label: None,
                         contents: bytemuck::cast_slice(&SunMoonVertex::load_vertex_moon(
                             scene.sky_state.load().moon_phase,
@@ -683,12 +683,12 @@ impl RenderGraph {
                     let (light_sky_vertices, light_sky_indices) =
                         SkyVertex::load_vertex_light_sky();
                     let light_sky_buffer = (
-                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
                             contents: bytemuck::cast_slice(&light_sky_vertices),
                             usage: BufferUsages::VERTEX,
                         }),
-                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
                             contents: bytemuck::cast_slice(&light_sky_indices),
                             usage: BufferUsages::INDEX,
@@ -697,12 +697,12 @@ impl RenderGraph {
 
                     let (dark_sky_vertices, dark_sky_indices) = SkyVertex::load_vertex_dark_sky();
                     let dark_sky_buffer = (
-                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
                             contents: bytemuck::cast_slice(&dark_sky_vertices),
                             usage: BufferUsages::VERTEX,
                         }),
-                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
                             contents: bytemuck::cast_slice(&dark_sky_indices),
                             usage: BufferUsages::INDEX,
@@ -733,12 +733,12 @@ impl RenderGraph {
 
                     let (fog_sphere_vertices, fog_sphere_indices) = SkyVertex::load_fog_sphere();
                     let fog_sphere = (
-                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
                             contents: bytemuck::cast_slice(&fog_sphere_vertices),
                             usage: BufferUsages::VERTEX,
                         }),
-                        wm.display.device.create_buffer_init(&BufferInitDescriptor {
+                        wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
                             label: None,
                             contents: bytemuck::cast_slice(&fog_sphere_indices),
                             usage: BufferUsages::INDEX,
@@ -753,29 +753,29 @@ impl RenderGraph {
                     render_pass.set_index_buffer(fog_sphere.1.slice(..), IndexFormat::Uint32);
                     render_pass.draw_indexed(0..51, 0, 0..1);
                 }
-                "@geo_sky_stars" => {
-                    for (index, bind_group) in bound_pipeline.bind_groups.iter() {
-                        match bind_group {
-                            WmBindGroup::Custom(bind_group) => {
-                                render_pass.set_bind_group(*index, bind_group, &[]);
-                            }
-                            WmBindGroup::Resource(_) => {}
-                        }
-                    }
-                    let stars_vertex_buffer = scene.stars_vertex_buffer.read();
-                    let stars_vertex = stars_vertex_buffer.as_ref().unwrap().slice(..);
-
-                    let stars_index_buffer = scene.stars_index_buffer.read();
-                    let stars_index = stars_index_buffer.as_ref().unwrap().slice(..);
-
-                    render_pass.set_pipeline(&bound_pipeline.pipeline);
-                    let pc = get_environmental_push_constants(scene);
-                    set_push_constants(pipeline_config, &mut render_pass, Some(pc));
-
-                    render_pass.set_vertex_buffer(0, stars_vertex);
-                    render_pass.set_index_buffer(stars_index, IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..*scene.stars_length.read(), 0, 0..1);
-                }
+                // "@geo_sky_stars" => {
+                //     for (index, bind_group) in bound_pipeline.bind_groups.iter() {
+                //         match bind_group {
+                //             WmBindGroup::Custom(bind_group) => {
+                //                 render_pass.set_bind_group(*index, bind_group, &[]);
+                //             }
+                //             WmBindGroup::Resource(_) => {}
+                //         }
+                //     }
+                //     let stars_vertex_buffer = scene.stars_vertex_buffer.read();
+                //     let stars_vertex = stars_vertex_buffer.as_ref().unwrap().slice(..);
+                // 
+                //     let stars_index_buffer = scene.stars_index_buffer.read();
+                //     let stars_index = stars_index_buffer.as_ref().unwrap().slice(..);
+                // 
+                //     render_pass.set_pipeline(&bound_pipeline.pipeline);
+                //     let pc = get_environmental_push_constants(scene);
+                //     set_push_constants(pipeline_config, &mut render_pass, Some(pc));
+                // 
+                //     render_pass.set_vertex_buffer(0, stars_vertex);
+                //     render_pass.set_index_buffer(stars_index, IndexFormat::Uint32);
+                //     render_pass.draw_indexed(0..*scene.stars_length.read(), 0, 0..1);
+                // }
                 _ => match geometry.get_mut(&pipeline_config.geometry) {
                     None => unimplemented!("Unknown geometry {}", &pipeline_config.geometry),
                     Some(geometry) => {
