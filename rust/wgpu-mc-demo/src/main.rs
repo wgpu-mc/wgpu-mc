@@ -1,3 +1,4 @@
+use std::cell::{OnceCell, RefCell};
 use arrayvec::ArrayVec;
 use glam::{ivec2, ivec3, IVec3, Mat4};
 use parking_lot::lock_api::RwLock;
@@ -13,7 +14,7 @@ use futures::executor::block_on;
 use winit::event::{DeviceEvent, ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
-
+use winit::window::Window;
 use crate::camera::Camera;
 use crate::chunk::make_chunks;
 use wgpu_mc::mc::direction::Direction;
@@ -48,6 +49,7 @@ struct Application {
     render_graph: Option<RenderGraph>,
     camera: Option<Camera>,
     last_frame: Instant,
+    window: OnceCell<Arc<Window>>
 }
 impl Application {
     pub fn new() -> Self {
@@ -58,6 +60,7 @@ impl Application {
             render_graph: None,
             camera: None,
             last_frame: Instant::now(),
+            window: OnceCell::new(),
         }
     }
 }
@@ -72,7 +75,9 @@ impl ApplicationHandler for Application {
                 height: 720,
             }));
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
-
+        
+        self.window.set(window.clone()).unwrap();
+        
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
@@ -135,8 +140,6 @@ impl ApplicationHandler for Application {
             adapter,
             device,
             queue,
-            size: RwLock::new(window.inner_size()),
-            window,
             instance,
             config: RwLock::new(surface_config),
         };
@@ -226,8 +229,8 @@ impl ApplicationHandler for Application {
         self.scene = Some(Scene::new(
             &wm,
             Extent3d {
-                width: wm.display.window.inner_size().width,
-                height: wm.display.window.inner_size().height,
+                width: window.inner_size().width,
+                height: window.inner_size().height,
                 depth_or_array_layers: 1,
             },
         ));
@@ -243,8 +246,8 @@ impl ApplicationHandler for Application {
         }
 
         self.camera = Some(Camera::new(
-            wm.display.window.inner_size().width as f32
-                / wm.display.window.inner_size().height as f32,
+            window.inner_size().width as f32
+                / window.inner_size().height as f32,
         ));
 
         self.wm = Some(wm);
@@ -265,7 +268,7 @@ impl ApplicationHandler for Application {
 
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
         let wm = self.wm.as_ref().unwrap();
-        wm.display.window.request_redraw()
+        self.window.get().unwrap().request_redraw()
     }
 
     fn window_event(
@@ -275,7 +278,7 @@ impl ApplicationHandler for Application {
         event: WindowEvent,
     ) {
         let wm = self.wm.as_ref().unwrap();
-        if window_id == wm.display.window.id() {
+        if window_id == self.window.get().unwrap().id() {
             match event {
                 WindowEvent::CloseRequested => event_loop.exit(),
                 WindowEvent::KeyboardInput { event, .. } => match event {
@@ -323,9 +326,6 @@ impl ApplicationHandler for Application {
                     }
                     _ => {}
                 },
-                WindowEvent::Resized(physical_size) => {
-                    *wm.display.size.write() = physical_size;
-                }
                 WindowEvent::RedrawRequested => {
                     let camera = self.camera.as_mut().unwrap();
                     let wm = self.wm.as_ref().unwrap();
@@ -341,7 +341,7 @@ impl ApplicationHandler for Application {
                     if let ResourceBacking::Buffer(buffer, _) =
                         &self.render_graph.as_ref().unwrap().resources["@mat4_model"]
                     {
-                        wm.display.queue.write_buffer(
+                        wm.gpu.queue.write_buffer(
                             buffer,
                             0,
                             bytemuck::cast_slice(&Mat4::IDENTITY.to_cols_array()),
@@ -355,7 +355,7 @@ impl ApplicationHandler for Application {
                     if let ResourceBacking::Buffer(buffer, _) =
                         &self.render_graph.as_ref().unwrap().resources["@mat4_perspective"]
                     {
-                        wm.display.queue.write_buffer(
+                        wm.gpu.queue.write_buffer(
                             buffer,
                             0,
                             bytemuck::cast_slice(&perspective),
@@ -365,28 +365,28 @@ impl ApplicationHandler for Application {
                     if let ResourceBacking::Buffer(buffer, _) =
                         &self.render_graph.as_ref().unwrap().resources["@mat4_view"]
                     {
-                        wm.display
+                        wm.gpu
                             .queue
                             .write_buffer(buffer, 0, bytemuck::cast_slice(&view));
                     }
 
-                    let mut config_guard = wm.display.config.write();
+                    let mut config_guard = wm.gpu.config.write();
 
                     let surface_texture =
-                        wm.display
+                        wm.gpu
                             .surface
                             .get_current_texture()
                             .unwrap_or_else(|_| {
                                 //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-                                let size = wm.display.size.read();
+                                let size = self.window.get().unwrap().inner_size();
 
                                 config_guard.width = size.width;
                                 config_guard.height = size.height;
 
-                                wm.display
+                                wm.gpu
                                     .surface
-                                    .configure(&wm.display.device, &config_guard);
-                                wm.display.surface.get_current_texture().unwrap()
+                                    .configure(&wm.gpu.device, &config_guard);
+                                wm.gpu.surface.get_current_texture().unwrap()
                             });
 
                     let view = surface_texture
@@ -405,7 +405,7 @@ impl ApplicationHandler for Application {
                     wm.submit_chunk_updates(self.scene.as_ref().unwrap());
 
                     let mut command_encoder = wm
-                        .display
+                        .gpu
                         .device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
@@ -424,7 +424,7 @@ impl ApplicationHandler for Application {
                         &Frustum::from_modelview_projection(mvp),
                     );
 
-                    wm.display.queue.submit([command_encoder.finish()]);
+                    wm.gpu.queue.submit([command_encoder.finish()]);
 
                     surface_texture.present();
                 }
@@ -482,7 +482,7 @@ fn _main() {
 pub struct TerrainLayer;
 
 fn create_buffer(wm: &WmRenderer, contents: &[u8]) -> wgpu::Buffer {
-    wm.display.device.create_buffer_init(&BufferInitDescriptor {
+    wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents,
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
