@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::slice;
 use std::{sync::Arc, time::Instant};
-
+use std::cell::OnceCell;
 use byteorder::LittleEndian;
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint, jlong};
@@ -15,7 +15,6 @@ use wgpu_mc::mc::RenderEffectsData;
 use wgpu_mc::texture::BindableTexture;
 
 use crate::application::{load_shaders, SHOULD_STOP};
-use crate::gl::{GlTexture, GL_ALLOC};
 use crate::RENDERER;
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
@@ -25,6 +24,7 @@ pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
         terrain_transformation: [[0.0; 4]; 4],
     })
 });
+
 
 pub struct Matrices {
     pub projection: [[f32; 4]; 4],
@@ -94,22 +94,6 @@ pub fn clearEntities(_env: JNIEnv, _class: JClass) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn identifyGlTexture(_env: JNIEnv, _class: JClass, texture: jint, gl_id: jint) {
-    let alloc_read = GL_ALLOC.read();
-    let gl_texture = alloc_read.get(&(gl_id as u32)).unwrap();
-
-    let mut mc_textures = MC_TEXTURES.lock();
-    mc_textures.insert(
-        match texture {
-            0 => MCTextureId::BlockAtlas,
-            1 => MCTextureId::Lightmap,
-            _ => unreachable!(),
-        },
-        gl_texture.bindable_texture.as_ref().unwrap().clone(),
-    );
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setEntityInstanceBuffer(
     mut env: JNIEnv,
     _class: JClass,
@@ -152,53 +136,36 @@ pub fn setEntityInstanceBuffer(
 
     let mut instances = ENTITY_INSTANCES.lock();
 
-    let to_upload = match instances.get_mut(&entity_name) {
-        Some(bundled_entity_instances) if bundled_entity_instances.capacity <= instance_count => {
-            bundled_entity_instances.capacity = instance_count;
-
-            bundled_entity_instances
-        }
-        _ => {
-            let texture = {
-                let gl_alloc = GL_ALLOC.read();
-
-                match gl_alloc.get(&(texture_id as u32)) {
-                    None => return 0,
-                    Some(GlTexture {
-                        bindable_texture: None,
-                        ..
-                    }) => return 0,
-                    _ => {}
-                }
-
-                gl_alloc
-                    .get(&(texture_id as u32))
-                    .unwrap()
-                    .bindable_texture
-                    .as_ref()
-                    .unwrap()
-                    .clone()
-            };
-            let models = wm.mc.entity_models.read();
-            let entity = models.get(&entity_name).unwrap();
-            instances.insert(
-                entity_name.clone(),
-                BundledEntityInstances::new(wm, entity.clone(), &texture.tv.view, 4096),
-            );
-            instances.get(&entity_name).unwrap()
-        }
-    };
-
-    wm.display.queue.write_buffer(
-        &to_upload.uploaded.instance_vbo,
-        0,
-        bytemuck::cast_slice(&verts),
-    );
-    wm.display.queue.write_buffer(
-        &to_upload.uploaded.transforms_buffer,
-        0,
-        bytemuck::cast_slice(&transforms),
-    );
+    // let to_upload = match instances.get_mut(&entity_name) {
+    //     Some(bundled_entity_instances) if bundled_entity_instances.capacity <= instance_count => {
+    //         bundled_entity_instances.capacity = instance_count;
+    // 
+    //         bundled_entity_instances
+    //     }
+    //     _ => {
+    //         
+    //         // TODO
+    //         // let texture = todo!();
+    //         // let models = wm.mc.entity_models.read();
+    //         // let entity = models.get(&entity_name).unwrap();
+    //         // instances.insert(
+    //         //     entity_name.clone(),
+    //         //     BundledEntityInstances::new(wm, entity.clone(), &texture.tv.view, 4096),
+    //         // );
+    //         // instances.get(&entity_name).unwrap()
+    //     }
+    // };
+    // 
+    // wm.display.queue.write_buffer(
+    //     &to_upload.uploaded.instance_vbo,
+    //     0,
+    //     bytemuck::cast_slice(&verts),
+    // );
+    // wm.display.queue.write_buffer(
+    //     &to_upload.uploaded.transforms_buffer,
+    //     0,
+    //     bytemuck::cast_slice(&transforms),
+    // );
 
     Instant::now().duration_since(now).as_nanos() as jlong
 }

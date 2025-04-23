@@ -1,6 +1,5 @@
 pub extern crate wgpu_mc;
 
-use application::Application;
 use arc_swap::access::Access;
 use arc_swap::{ArcSwap, ArcSwapAny};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -31,9 +30,6 @@ use std::{mem, thread};
 use wgpu::Extent3d;
 use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
 use wgpu_mc::wgpu::util::DeviceExt;
-use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseButton};
-use winit::window::CursorGrabMode;
 
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{bake_section, BlockStateProvider, LightLevel};
@@ -46,7 +42,6 @@ use wgpu_mc::wgpu::ImageDataLayout;
 use wgpu_mc::wgpu::{self, TextureFormat};
 use wgpu_mc::{Frustum, WmRenderer};
 
-use crate::gl::{GLCommand, GlTexture, GL_ALLOC, GL_COMMANDS};
 use crate::lighting::DeserializedLightData;
 use crate::palette::JavaPalette;
 use crate::pia::PackedIntegerArray;
@@ -62,19 +57,7 @@ mod palette;
 mod pia;
 mod renderer;
 mod settings;
-
-#[allow(dead_code)]
-enum RenderMessage {
-    SetTitle(String),
-    KeyPressed(u32),
-    MouseState(ElementState, MouseButton),
-    KeyState(u32, u32, u32, u32),
-    CharTyped(char, u32),
-    MouseMove(f64, f64),
-    CursorMove(f64, f64),
-    Resized(u32, u32),
-    Focused(bool),
-}
+mod device;
 
 #[derive(Debug)]
 struct MinecraftRenderState {
@@ -100,7 +83,6 @@ static YARN_CLASS_LOADER: OnceCell<GlobalRef> = OnceCell::new();
 
 type Task = Box<dyn FnOnce() + Send + Sync>;
 
-static CHANNELS: Lazy<(Sender<RenderMessage>, Receiver<RenderMessage>)> = Lazy::new(unbounded);
 static TASK_CHANNELS: Lazy<(Sender<Task>, Receiver<Task>)> = Lazy::new(unbounded);
 static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
     ArcSwap::new(Arc::new(MinecraftRenderState {
@@ -109,8 +91,6 @@ static MC_STATE: Lazy<ArcSwap<MinecraftRenderState>> = Lazy::new(|| {
 });
 
 static CLEAR_COLOR: Lazy<ArcSwap<[f32; 3]>> = Lazy::new(|| ArcSwap::new(Arc::new([0.0; 3])));
-
-static THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
 static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
     block: RENDERER
@@ -124,19 +104,6 @@ static AIR: Lazy<BlockstateKey> = Lazy::new(|| BlockstateKey {
         .unwrap()
         .0 as u16,
     augment: 0,
-});
-
-static SCENE: Lazy<Scene> = Lazy::new(|| {
-    let wm = RENDERER.get().unwrap();
-
-    Scene::new(
-        wm,
-        wgpu::Extent3d {
-            width: wm.display.window.inner_size().width,
-            height: wm.display.window.inner_size().height,
-            depth_or_array_layers: 1,
-        },
-    )
 });
 
 static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -289,55 +256,6 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn initialize(env: JNIEnv, _class: JClass, class_loader: JObject, minecraft: JObject) {
-    JVM.set(RwLock::new(env.get_java_vm().unwrap())).unwrap();
-
-    let class_loader = env.new_global_ref(class_loader).unwrap();
-    YARN_CLASS_LOADER.set(class_loader).unwrap();
-
-    let minecraft_global = env.new_global_ref(minecraft).unwrap();
-
-    static MINECRAFT: OnceCell<GlobalRef> = OnceCell::new();
-
-    MINECRAFT.set(minecraft_global).unwrap();
-
-    THREAD_POOL
-        .set(
-            ThreadPoolBuilder::new()
-                .start_handler(|_| {
-                    let loader = YARN_CLASS_LOADER.get().unwrap();
-
-                    let jvm = JVM.get().unwrap();
-                    let jvm = jvm.read();
-                    let mut env = jvm.attach_current_thread_as_daemon().unwrap();
-
-                    let thread = env
-                        .call_static_method(
-                            "java/lang/Thread",
-                            "currentThread",
-                            "()Ljava/lang/Thread;",
-                            &[],
-                        )
-                        .unwrap()
-                        .l()
-                        .unwrap();
-
-                    env.call_method(
-                        thread,
-                        "setContextClassLoader",
-                        "(Ljava/lang/ClassLoader;)V",
-                        &[JValue::Object(loader)],
-                    )
-                    .unwrap();
-                })
-                .num_threads(0)
-                .build()
-                .unwrap(),
-        )
-        .unwrap();
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn getSettingsStructure(env: JNIEnv, _class: JClass) -> jstring {
     env.new_string(crate::settings::SETTINGS_INFO_JSON.clone())
         .unwrap()
@@ -400,15 +318,18 @@ pub fn registerBlockState(
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn reloadStorage(_env: JNIEnv, _class: JClass, clampedViewDistance: jint) {
-    let mut section_storage = SCENE.section_storage.write();
+pub fn reloadStorage(_env: JNIEnv, _class: JClass, clampedViewDistance: jint, scene: jlong) {
+    let scene = unsafe { &mut *(scene as *mut Scene) };
+    
+    let mut section_storage = scene.section_storage.write();
     section_storage.clear();
     section_storage.set_width(clampedViewDistance);
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setSectionPos(_env: JNIEnv, _class: JClass, x: jint, z: jint) {
-    *SCENE.camera_section_pos.write() = ivec2(x, z);
+pub fn setSectionPos(_env: JNIEnv, _class: JClass, x: jint, z: jint, scene: jlong) {
+    let scene = unsafe { &mut *(scene as *mut Scene) };
+    *scene.camera_section_pos.write() = ivec2(x, z);
 }
 
 struct MinecraftBlockStateProviderWrapper<'a> {
@@ -546,68 +467,33 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn startRendering(mut env: JNIEnv, _class: JClass, title: JString) {
-    let title: String = env.get_string(&title).unwrap().into();
-    let jvm = env.get_java_vm().unwrap();
+pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jlong, _tick: jlong, scene: jlong, width: jint, height: jint) {
+    let width = width as u32;
+    let height = height as u32;
 
-    let class_loader = env
-        .call_static_method(
-            "dev/birb/wgpu/rust/WgpuNative",
-            "getClassLoader",
-            "()Ljava/lang/ClassLoader;",
-            &[],
-        )
-        .unwrap();
-    let Ok(_) = CLASSLOADER.set(
-        env.new_weak_ref::<JObject>(class_loader.try_into().unwrap())
-            .unwrap()
-            .unwrap(),
-    ) else {
-        panic!("Failed to set classloader")
-    };
-
-    let mut application = Application::new(jvm, title);
-    let mut event_loop = winit::event_loop::EventLoop::builder();
-
-    #[cfg(target_os = "linux")]
-    {
-        // double hacky fix B)
-        if std::env::var("WAYLAND_DISPLAY").is_ok() {
-            use winit::platform::wayland::EventLoopBuilderExtWayland;
-            event_loop.with_any_thread(true);
-        } else {
-            use winit::platform::x11::EventLoopBuilderExtX11;
-            event_loop.with_any_thread(true);
-        }
-    }
-    let event_loop = event_loop.build().unwrap();
-    event_loop.run_app(&mut application).unwrap();
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jlong, _tick: jlong) {
-    let wm = RENDERER.wait();
+    let wm = RENDERER.get().unwrap();
     let render_graph = RENDER_GRAPH.get().unwrap().lock();
     let mut geometry = CUSTOM_GEOMETRY.get().unwrap().lock();
-    wm.display.window.request_redraw();
-    wm.submit_chunk_updates(&SCENE);
-    let pos = *SCENE.camera_section_pos.read();
-    SCENE.section_storage.write().trim(pos);
-    *SCENE.entity_instances.lock() = ENTITY_INSTANCES.lock().clone();
+    let scene = unsafe { &mut *(scene as *mut Scene) };
+
+    wm.submit_chunk_updates(scene);
+    let pos = *scene.camera_section_pos.read();
+    scene.section_storage.write().trim(pos);
+    *scene.entity_instances.lock() = ENTITY_INSTANCES.lock().clone();
 
     let matrices = MATRICES.lock();
     if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_perspective"] {
-        wm.display
+        wm.gpu
             .queue
             .write_buffer(buffer, 0, bytemuck::cast_slice(&matrices.projection));
     }
     if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_view"] {
-        wm.display
+        wm.gpu
             .queue
             .write_buffer(buffer, 0, bytemuck::cast_slice(&matrices.view));
     }
     if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_model"] {
-        wm.display.queue.write_buffer(
+        wm.gpu.queue.write_buffer(
             buffer,
             0,
             bytemuck::cast_slice(&matrices.terrain_transformation),
@@ -615,21 +501,20 @@ pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jl
     }
 
     let texture = wm
-        .display
+        .gpu
         .surface
         .get_current_texture()
         .unwrap_or_else(|_| {
             //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
 
-            let mut surface_config = wm.display.config.write();
-            let size = wm.display.size.read();
-            surface_config.width = size.width;
-            surface_config.height = size.height;
-            SCENE.resize_depth_texture(wm, size.width, size.height);
-            wm.display
+            let mut surface_config = wm.gpu.config.write();
+            surface_config.width = width;
+            surface_config.height = height;
+            scene.resize_depth_texture(wm, width, height);
+            wm.gpu
                 .surface
-                .configure(&wm.display.device, &surface_config);
-            wm.display.surface.get_current_texture().unwrap()
+                .configure(&wm.gpu.device, &surface_config);
+            wm.gpu.surface.get_current_texture().unwrap()
         });
 
     let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
@@ -645,7 +530,7 @@ pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jl
 
     {
         let mut encoder = wm
-            .display
+            .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
@@ -654,14 +539,14 @@ pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jl
         render_graph.render(
             wm,
             &mut encoder,
-            &SCENE,
+            scene,
             &view,
             clear_color,
             &mut geometry,
             &Frustum::from_modelview_projection([[0.0; 4]; 4]),
         );
 
-        wm.display.queue.submit([encoder.finish()]);
+        wm.gpu.queue.submit([encoder.finish()]);
     }
 
     texture.present();
@@ -798,142 +683,6 @@ pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
     .unwrap();
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn runHelperThread(mut env: JNIEnv, _class: JClass) {
-    //Wait until wgpu-mc is initialized
-    while RENDERER.get().is_none() {}
-    let wm = RENDERER.get().unwrap();
-    thread::spawn(|| {
-        let rx = &TASK_CHANNELS.1;
-        for task in rx.iter() {
-            task()
-        }
-    });
-
-    let rx = &CHANNELS.1;
-
-    for render_message in rx.iter() {
-        match render_message {
-            RenderMessage::SetTitle(title) => wm.display.window.set_title(&title),
-            RenderMessage::KeyPressed(_) => {}
-            RenderMessage::MouseMove(x, y) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "mouseMove",
-                    "(DD)V",
-                    &[JValue::Double(x), JValue::Double(y)],
-                )
-                .unwrap();
-            }
-            RenderMessage::CursorMove(x, y) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "cursorMove",
-                    "(DD)V",
-                    &[JValue::Double(x), JValue::Double(y)],
-                )
-                .unwrap();
-            }
-            RenderMessage::MouseState(element_state, mouse_button) => {
-                let button = match mouse_button {
-                    MouseButton::Left => 0,
-                    MouseButton::Right => 1,
-                    MouseButton::Middle => 2,
-                    _ => 0,
-                };
-
-                let action = match element_state {
-                    ElementState::Pressed => 1,
-                    ElementState::Released => 0,
-                };
-
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "mouseAction",
-                    "(II)V",
-                    &[JValue::Int(button), JValue::Int(action)],
-                )
-                .unwrap();
-            }
-            RenderMessage::Resized(width, height) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "onResize",
-                    "(II)V",
-                    &[JValue::Int(width as i32), JValue::Int(height as i32)],
-                )
-                .unwrap();
-            }
-            RenderMessage::KeyState(key, scancode, action, modifiers) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "keyState",
-                    "(IIII)V",
-                    &[
-                        JValue::Int(key as i32),
-                        JValue::Int(scancode as i32),
-                        JValue::Int(action as i32),
-                        JValue::Int(modifiers as i32),
-                    ],
-                )
-                .unwrap();
-            }
-            RenderMessage::CharTyped(ch, modifiers) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "onChar",
-                    "(II)V",
-                    &[JValue::Int(ch as i32), JValue::Int(modifiers as i32)],
-                )
-                .unwrap();
-            }
-            RenderMessage::Focused(focused) => {
-                env.call_static_method(
-                    "dev/birb/wgpu/render/Wgpu",
-                    "windowFocused",
-                    "(Z)V",
-                    &[JValue::Bool(if focused { JNI_TRUE } else { JNI_FALSE })],
-                )
-                .unwrap();
-            }
-        };
-    }
-}
-
-#[allow(unused_must_use)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn centerCursor(_env: JNIEnv, _class: JClass, _locked: jboolean) {
-    if let Some(wm) = RENDERER.get() {
-        let window = &wm.display.window;
-        let inner = window.inner_position().unwrap();
-        let size = window.inner_size();
-        window
-            .set_cursor_position(PhysicalPosition::new(
-                inner.x + (size.width as i32 / 2),
-                inner.y + (size.height as i32 / 2),
-            ))
-            .unwrap();
-    }
-}
-
-#[allow(unused_must_use)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCursorLocked(_env: JNIEnv, _class: JClass, locked: jboolean) {
-    if let Some(wm) = RENDERER.get() {
-        let window = &wm.display.window;
-        if locked == JNI_TRUE {
-            window.set_cursor_visible(false);
-            window
-                .set_cursor_grab(CursorGrabMode::Confined)
-                .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked))
-                .unwrap();
-        } else {
-            window.set_cursor_visible(true);
-            window.set_cursor_grab(CursorGrabMode::None).unwrap();
-        }
-    }
-}
-
 #[allow(unused_must_use)]
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setPanicHook(env: JNIEnv, _class: JClass) {
@@ -961,472 +710,11 @@ pub fn setPanicHook(env: JNIEnv, _class: JClass) {
     }))
 }
 
-#[allow(unused_must_use)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn updateWindowTitle(mut env: JNIEnv, _class: JClass, jtitle: JString) {
-    let tx = &CHANNELS.0;
-
-    let title: String = env.get_string(&jtitle).unwrap().into();
-
-    tx.send(RenderMessage::SetTitle(title));
-}
-
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setWorldRenderState(_env: JNIEnv, _class: JClass, boolean: jboolean) {
     MC_STATE.store(Arc::new(MinecraftRenderState {
         _render_world: boolean != 0,
     }));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn submitCommands(_env: JNIEnv, _class: JClass) {
-    let mut guard = GL_COMMANDS.write();
-    let (command_stack, submitted) = &mut *guard;
-
-    mem::swap(command_stack, submitted);
-
-    command_stack.clear();
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn texImage2D(
-    _env: JNIEnv,
-    _class: JClass,
-    texture_id: jint,
-    _target: jint,
-    _level: jint,
-    _internal_format: jint,
-    width: jint,
-    height: jint,
-    _border: jint,
-    format: jint,
-    _type: jint,
-    pixels_ptr: jlong,
-) {
-    let _pixel_size = match format {
-        0x1908 | 0x80E1 => 4,
-        _ => panic!("Unknown format {format:x}"),
-    };
-
-    //For when the renderer is initialized
-    let task = move || {
-        let area = width * height;
-        //In bytes
-        assert_eq!(_type, 0x1401);
-        let size = area as usize * 4;
-
-        let data = if pixels_ptr != 0 {
-            Vec::from(unsafe { slice::from_raw_parts(pixels_ptr as *const u8, size) })
-        } else {
-            vec![0; size]
-        };
-
-        let wm = RENDERER.get().unwrap();
-
-        let tsv = TextureAndView::from_rgb_bytes(
-            &wm.display,
-            &data[..],
-            Extent3d {
-                width: width as u32,
-                height: height as u32,
-                depth_or_array_layers: 1,
-            },
-            None,
-            match format {
-                0x1908 => wgpu::TextureFormat::Rgba8Unorm,
-                0x80E1 => wgpu::TextureFormat::Bgra8Unorm,
-                _ => unimplemented!(),
-            },
-        )
-        .unwrap();
-
-        let bindable = BindableTexture::from_tv(wm, Arc::new(tsv), false);
-
-        {
-            GL_ALLOC.write().insert(
-                texture_id as u32,
-                GlTexture {
-                    width: width as u16,
-                    height: height as u16,
-                    bindable_texture: Some(Arc::new(bindable)),
-                    pixels: data,
-                },
-            );
-        }
-    };
-
-    let tx = &TASK_CHANNELS.0;
-
-    tx.send(Box::new(task)).unwrap();
-}
-
-#[allow(non_snake_case)]
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn subImage2D(
-    mut env: JNIEnv,
-    _class: JClass,
-    texture_id: jint,
-    _target: jint,
-    _level: jint,
-    offsetX: jint,
-    offsetY: jint,
-    width: jint,
-    height: jint,
-    format: jint,
-    _type: jint,
-    pixels: JIntArray,
-    unpack_row_length: jint,
-    unpack_skip_pixels: jint,
-    unpack_skip_rows: jint,
-    unpack_alignment: jint,
-) {
-    let pixel_array_pointer: AutoElements<jint> =
-        unsafe { env.get_array_elements(&pixels, ReleaseMode::NoCopyBack) }.unwrap();
-    let pixels = unsafe {
-        Vec::from(slice::from_raw_parts(
-            pixel_array_pointer.as_ptr() as *mut u32,
-            pixel_array_pointer.len(),
-        ))
-    };
-    let unpack_row_length = unpack_row_length as usize;
-    let _unpack_skip_pixels = unpack_skip_pixels as usize;
-    let _unpack_skip_rows = unpack_skip_rows as usize;
-    let _unpack_alignment = unpack_alignment as usize;
-    let width = width as usize;
-    let height = height as usize;
-
-    let pixel_size = match format {
-        0x1908 | 0x80E1 => 4,
-        _ => panic!("Unknown format {format:x}"),
-    };
-
-    //https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
-    let _row_width = if unpack_row_length > 0 {
-        unpack_row_length
-    } else {
-        width
-    };
-
-    //In bytes
-    assert_eq!(_type, 0x1401);
-
-    //For when the renderer is initialized
-    let task = move || {
-        let wm = RENDERER.get().unwrap();
-
-        let mut alloc_write = GL_ALLOC.write();
-
-        let gl_texture = alloc_write.get_mut(&(texture_id as u32)).unwrap();
-
-        let dest_row_size = gl_texture.width as usize * pixel_size;
-        for y in 0..height {
-            for x in 0..width {
-                let pixel = pixels[x + y * width];
-
-                //Convert rgba to slice format. There's only support for rgba at the moment.
-                let rgba_array: [u8; 4] = [
-                    (pixel & 0xFF) as u8,
-                    (pixel >> 8 & 0xFF) as u8,
-                    (pixel >> 16 & 0xFF) as u8,
-                    (pixel >> 24 & 0xFF) as u8,
-                ];
-
-                //Find where the pixel data should go.
-                let dest_begin = (dest_row_size * (y + offsetY as usize))
-                    + ((x + offsetX as usize) * pixel_size);
-
-                let dest_end = dest_begin + pixel_size;
-                //Copy/paste pixel data to target image.
-                let dest_row_slice = &mut gl_texture.pixels[dest_begin..dest_end];
-                dest_row_slice.copy_from_slice(&rgba_array[0..pixel_size]);
-            }
-        }
-
-        wm.display.queue.write_texture(
-            gl_texture
-                .bindable_texture
-                .as_ref()
-                .unwrap()
-                .tv
-                .texture
-                .as_image_copy(),
-            &gl_texture.pixels,
-            ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(gl_texture.width as u32 * 4),
-                rows_per_image: Some(gl_texture.height as u32),
-            },
-            Extent3d {
-                width: gl_texture.width as u32,
-                height: gl_texture.height as u32,
-                depth_or_array_layers: 1,
-            },
-        );
-    };
-
-    let tx = &TASK_CHANNELS.0;
-
-    tx.send(Box::new(task)).unwrap();
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn getMaxTextureSize(_env: JNIEnv, _class: JClass) -> jint {
-    let wm = RENDERER.get().unwrap();
-    wm.display.adapter.limits().max_texture_dimension_2d as i32
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn getWindowWidth(_env: JNIEnv, _class: JClass) -> jint {
-    RENDERER
-        .get()
-        .map_or(1280, |wm| wm.display.config.read().width as i32)
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn getWindowHeight(_env: JNIEnv, _class: JClass) -> jint {
-    RENDERER
-        .get()
-        .map_or(720, |wm| wm.display.config.read().height as i32)
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn clearColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat) {
-    CLEAR_COLOR.store(Arc::new([r, g, b]));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn attachTextureBindGroup(_env: JNIEnv, _class: JClass, slot: jint, id: jint) {
-    GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::AttachTexture(slot as u32, id));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn wmUsePipeline(_env: JNIEnv, _class: JClass, pipeline: jint) {
-    GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::UsePipeline(pipeline as usize));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn getVideoMode(env: JNIEnv, _class: JClass) -> jstring {
-    let video_mode = RENDERER
-        .get()
-        .unwrap()
-        .display
-        .window
-        .current_monitor()
-        .unwrap()
-        .video_modes()
-        .find(|_| true)
-        .unwrap();
-    env.new_string(format!(
-        "{}x{}@{}:{}",
-        video_mode.size().width,
-        video_mode.size().height,
-        video_mode.refresh_rate_millihertz() / 1000,
-        video_mode.bit_depth()
-    ))
-    .unwrap()
-    .into_raw()
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setProjectionMatrix(mut env: JNIEnv, _class: JClass, float_array: JFloatArray) {
-    let elements: AutoElements<jfloat> =
-        unsafe { env.get_array_elements(&float_array, ReleaseMode::NoCopyBack) }.unwrap();
-
-    let slice = unsafe { slice::from_raw_parts(elements.as_ptr(), elements.len()) };
-
-    let mut cursor = Cursor::new(bytemuck::cast_slice::<f32, u8>(slice));
-    let mut converted = Vec::with_capacity(slice.len());
-
-    for _ in 0..slice.len() {
-        converted.push(cursor.read_f32::<LittleEndian>().unwrap());
-    }
-
-    let slice_4x4: [[f32; 4]; 4] = *bytemuck::from_bytes(bytemuck::cast_slice(&converted));
-
-    let matrix = Mat4::from_cols_array_2d(&slice_4x4);
-
-    GL_COMMANDS.write().0.push(GLCommand::SetMatrix(matrix));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn drawIndexed(_env: JNIEnv, _class: JClass, count: jint) {
-    GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::DrawIndexed(count as u32));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setShaderColor(_env: JNIEnv, _class: JClass, r: jfloat, g: jfloat, b: jfloat, a: jfloat) {
-    GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::SetColor([r, g, b, a]));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setVertexBuffer(env: JNIEnv, _class: JClass, byte_array: JByteArray) {
-    let mut bytes = vec![0; env.get_array_length(&byte_array).unwrap() as usize];
-    env.get_byte_array_region(&byte_array, 0, &mut bytes[..])
-        .unwrap();
-
-    let byte_slice = bytemuck::cast_slice(&bytes);
-    let mut cursor = Cursor::new(byte_slice);
-    let mut converted = Vec::with_capacity(bytes.len() / 4);
-
-    assert_eq!(bytes.len() % 4, 0);
-
-    for _ in 0..bytes.len() / 4 {
-        converted.push(cursor.read_f32::<LittleEndian>().unwrap());
-    }
-
-    GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::SetVertexBuffer(Vec::from(bytemuck::cast_slice(
-            &converted,
-        ))));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setIndexBuffer(env: JNIEnv, _class: JClass, int_array: JIntArray) {
-    let mut indices = vec![0; env.get_array_length(&int_array).unwrap() as usize];
-    env.get_int_array_region(&int_array, 0, &mut indices[..])
-        .unwrap();
-
-    let slice = unsafe { slice::from_raw_parts(indices.as_ptr() as *mut u32, indices.len()) };
-
-    GL_COMMANDS
-        .write()
-        .0
-        .push(GLCommand::SetIndexBuffer(Vec::from(slice)));
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCursorPosition(_env: JNIEnv, _class: JClass, x: f64, y: f64) {
-    RENDERER
-        .get()
-        .unwrap()
-        .display
-        .window
-        .set_cursor_position(PhysicalPosition { x, y })
-        .unwrap();
-}
-
-const GLFW_CURSOR_NORMAL: i32 = 212993;
-const GLFW_CURSOR_HIDDEN: i32 = 212994;
-const GLFW_CURSOR_DISABLED: i32 = 212995;
-
-/// See https://www.glfw.org/docs/3.3/input_guide.html#cursor_mode
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn setCursorMode(_env: JNIEnv, _class: JClass, mode: i32) {
-    let window = &RENDERER.get().unwrap().display.window;
-    match mode {
-        GLFW_CURSOR_NORMAL => {
-            window.set_cursor_grab(CursorGrabMode::None).unwrap();
-            window.set_cursor_visible(true);
-        }
-        GLFW_CURSOR_HIDDEN => {
-            window.set_cursor_grab(CursorGrabMode::None).unwrap();
-            window.set_cursor_visible(false);
-        }
-        GLFW_CURSOR_DISABLED => {
-            window
-                .set_cursor_grab(CursorGrabMode::Confined)
-                .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked))
-                .unwrap();
-            window.set_cursor_visible(false);
-        }
-        _ => {
-            log::warn!("Set cursor mode had an invalid mode.")
-        }
-    }
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bindStarData(
-    env: JNIEnv,
-    _class: JClass,
-    length: jint,
-    int_array: JIntArray,
-    byte_array: JByteArray,
-) {
-    let mut indices = vec![0; env.get_array_length(&int_array).unwrap() as usize];
-    env.get_int_array_region(&int_array, 0, &mut indices[..])
-        .unwrap();
-
-    let mut bytes = vec![0; env.get_array_length(&byte_array).unwrap() as usize];
-    env.get_byte_array_region(&byte_array, 0, &mut bytes[..])
-        .unwrap();
-
-    let byte_slice = bytemuck::cast_slice(&bytes);
-    let mut cursor = Cursor::new(byte_slice);
-    let mut converted = Vec::with_capacity(bytes.len() / 4);
-
-    assert_eq!(bytes.len() % 4, 0);
-
-    for _ in 0..bytes.len() / 4 {
-        converted.push(cursor.read_f32::<LittleEndian>().unwrap());
-    }
-
-    //spawn a thread bc renderer wouldn't be initialized quite yet
-    THREAD_POOL.get().unwrap().spawn(move || loop {
-        if RENDERER.get().is_none() {
-            continue;
-        }
-
-        *SCENE.stars_length.write() = length as u32;
-
-        let mut index_buffer = SCENE.stars_index_buffer.write();
-        *index_buffer = Some(RENDERER.get().unwrap().display.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            },
-        ));
-
-        let mut vertex_buffer = SCENE.stars_vertex_buffer.write();
-        *vertex_buffer = Some(RENDERER.get().unwrap().display.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&converted),
-                usage: wgpu::BufferUsages::VERTEX,
-            },
-        ));
-
-        break;
-    });
-}
-
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn bindSkyData(
-    _env: JNIEnv,
-    _class: JClass,
-    r: jfloat,
-    g: jfloat,
-    b: jfloat,
-    angle: jfloat,
-    brightness: jfloat,
-    star_shimmer: jfloat,
-    moon_phase: jint,
-) {
-    let mut sky_data = (**SCENE.sky_state.load()).clone();
-    sky_data.color[0] = r;
-    sky_data.color[1] = g;
-    sky_data.color[2] = b;
-    sky_data.angle = angle;
-    sky_data.brightness = brightness;
-    sky_data.star_shimmer = star_shimmer;
-    sky_data.moon_phase = moon_phase;
-
-    SCENE.sky_state.swap(sky_data.into());
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -1439,7 +727,10 @@ pub fn bindRenderEffectsData(
     fog_color: JFloatArray,
     color_modulator: JFloatArray,
     dimension_fog_color: JFloatArray,
+    scene: jlong
 ) {
+    let scene = unsafe { &mut *(scene as *mut Scene) };
+
     let mut render_effects_data = RenderEffectsData {
         fog_start,
         fog_end,
@@ -1482,5 +773,5 @@ pub fn bindRenderEffectsData(
 
     CLEAR_COLOR.swap([fog_color_vec[0], fog_color_vec[1], fog_color_vec[2]].into());
 
-    SCENE.render_effects.swap(render_effects_data.into());
+    scene.render_effects.swap(render_effects_data.into());
 }

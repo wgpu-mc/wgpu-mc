@@ -200,7 +200,7 @@ pub fn registerEntities(mut env: JNIEnv, _class: JClass, string: JString) {
 
             (
                 name.clone(),
-                Arc::new(Entity::new(name.clone(), entity_part, &wm.display)),
+                Arc::new(Entity::new(name.clone(), entity_part, &wm.gpu)),
             )
         })
         .collect();
