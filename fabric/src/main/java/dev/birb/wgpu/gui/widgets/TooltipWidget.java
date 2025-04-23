@@ -48,7 +48,7 @@ public class TooltipWidget extends Widget {
         if (option.requiresRestart) height += renderer.textHeight() + 4;
 
         // Background
-        renderer.rect(x + 1, y + 1, x + width - 2, y + height - 2, ColorHelper.Argb.getArgb(225, 0, 0, 0));
+        renderer.rect(x + 1, y + 1, x + width - 2, y + height - 2, ColorHelper.getArgb(225, 0, 0, 0));
 
         // Outline
         renderer.rect(x, y, x + width, y + 1, ACCENT);

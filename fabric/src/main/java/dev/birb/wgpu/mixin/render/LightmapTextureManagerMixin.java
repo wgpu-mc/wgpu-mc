@@ -1,6 +1,5 @@
 package dev.birb.wgpu.mixin.render;
 
-import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.LightmapTextureManager;
@@ -16,7 +15,7 @@ public class LightmapTextureManagerMixin {
         LightmapTextureManager thiz = (LightmapTextureManager) (Object) this;
 
 //        thiz.texture.getGlId();
-        WgpuNative.setLightmapID(thiz.texture.getGlId());
+//        WgpuNative.setLightmapID(thiz.texture.getGlId());
     }
 
 }

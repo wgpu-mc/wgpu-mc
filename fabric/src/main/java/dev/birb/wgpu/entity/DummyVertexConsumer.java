@@ -4,7 +4,7 @@ import net.minecraft.client.render.VertexConsumer;
 
 public class DummyVertexConsumer implements VertexConsumer {
     @Override
-    public VertexConsumer vertex(double x, double y, double z) {
+    public VertexConsumer vertex(float x, float y, float z) {
         return this;
     }
 
@@ -33,18 +33,4 @@ public class DummyVertexConsumer implements VertexConsumer {
         return this;
     }
 
-    @Override
-    public void next() {
-
-    }
-
-    @Override
-    public void fixedColor(int red, int green, int blue, int alpha) {
-
-    }
-
-    @Override
-    public void unfixColor() {
-
-    }
 }

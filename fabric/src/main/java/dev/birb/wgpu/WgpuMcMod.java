@@ -2,9 +2,7 @@ package dev.birb.wgpu;
 
 
 import dev.birb.wgpu.render.ShaderReloadListener;
-import dev.birb.wgpu.render.electrum.ElectrumRenderer;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.renderer.v1.RendererAccess;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.minecraft.resource.ResourceType;
 import org.slf4j.Logger;
@@ -22,11 +20,6 @@ public class WgpuMcMod implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		LOGGER.info("Registering FRAPI renderer");
-
-		ElectrumRenderer electrumRenderer = new ElectrumRenderer();
-		RendererAccess.INSTANCE.registerRenderer(electrumRenderer);
-
 		ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new ShaderReloadListener());
 	}
 }

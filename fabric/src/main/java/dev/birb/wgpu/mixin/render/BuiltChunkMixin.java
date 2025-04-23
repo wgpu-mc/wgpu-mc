@@ -1,30 +1,15 @@
 package dev.birb.wgpu.mixin.render;
 
-import com.llamalad7.mixinextras.sugar.Local;
-import dev.birb.wgpu.render.RebuildTaskAccessor;
 import net.minecraft.client.render.chunk.ChunkBuilder;
-import net.minecraft.client.render.chunk.ChunkRendererRegionBuilder;
 import net.minecraft.util.math.BlockPos;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ChunkBuilder.BuiltChunk.class)
 public class BuiltChunkMixin {
     @Shadow @Final BlockPos.Mutable origin;
 
-    @Inject(method = "rebuild", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task;run(Lnet/minecraft/client/render/chunk/BlockBufferBuilderStorage;)Ljava/util/concurrent/CompletableFuture;", shift = At.Shift.BEFORE))
-    public void specifyBuiltChunkSync(ChunkRendererRegionBuilder builder, CallbackInfo ci, @Local ChunkBuilder.BuiltChunk.Task task) {
-        ((RebuildTaskAccessor) task).wgpu_mc$setBuiltChunk((ChunkBuilder.BuiltChunk) (Object) this);
-    }
-
-    @Inject(method = "scheduleRebuild(Lnet/minecraft/client/render/chunk/ChunkBuilder;Lnet/minecraft/client/render/chunk/ChunkRendererRegionBuilder;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/chunk/ChunkBuilder;send(Lnet/minecraft/client/render/chunk/ChunkBuilder$BuiltChunk$Task;)V", shift = At.Shift.BEFORE))
-    public void specifyBuiltChunk(ChunkBuilder chunkRenderer, ChunkRendererRegionBuilder builder, CallbackInfo ci, @Local ChunkBuilder.BuiltChunk.Task task) {
-        ((RebuildTaskAccessor) task).wgpu_mc$setBuiltChunk((ChunkBuilder.BuiltChunk) (Object) this);
-    }
 //
 //    /**
 //     * @author wgpu-mc

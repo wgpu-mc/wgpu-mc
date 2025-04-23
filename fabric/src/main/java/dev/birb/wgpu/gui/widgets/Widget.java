@@ -75,6 +75,6 @@ public abstract class Widget implements Element, Selectable {
     }
 
     protected static int getColor(int r, int g, int b, int a) {
-        return ColorHelper.Argb.getArgb(a, r, g, b);
+        return ColorHelper.getArgb(a, r, g, b);
     }
 }

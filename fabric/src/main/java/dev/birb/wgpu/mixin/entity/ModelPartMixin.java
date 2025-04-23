@@ -8,12 +8,12 @@ import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.util.math.MatrixStack;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -22,13 +22,14 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
 
     @Shadow public boolean visible;
 
+    @Shadow protected abstract void renderCuboids(MatrixStack.Entry entry, VertexConsumer vertexConsumer, int light, int overlay, int color);
+
     @Shadow @Final private List<ModelPart.Cuboid> cuboids;
+    @Shadow @Final public Map<String, ModelPart> children;
 
-    @Shadow @Final private Map<String, ModelPart> children;
+    @Shadow public abstract void rotate(Vector3f vec3f);
 
-    @Shadow public abstract void rotate(MatrixStack matrices);
-
-    @Shadow protected abstract void renderCuboids(MatrixStack.Entry entry, VertexConsumer vertexConsumer, int light, int overlay, float red, float green, float blue, float alpha);
+    @Shadow public abstract void applyTransform(MatrixStack matrices);
 
     private String name;
     private int partIndex;
@@ -48,7 +49,7 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
      * @reason Render entities in Rust
      */
     @Overwrite
-    public void render(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, float red, float green, float blue, float alpha) {
+    public void render(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
         if (!this.cuboids.isEmpty() || !this.children.isEmpty()) {
             int actualOverlay = EntityState.instanceOverlay;
 
@@ -57,7 +58,7 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
 
             matrices.push();
 
-            this.rotate(matrices);
+            this.applyTransform(matrices);
             Matrix4f mat4 = matrices.peek().getPositionMatrix();
 
             String thisPartName = ((ModelPartNameAccessor) (Object) this).getName();
@@ -74,11 +75,8 @@ public abstract class ModelPartMixin implements ModelPartNameAccessor, ModelPart
 
             Matrix3f normalMat3 = matrices.peek().getNormalMatrix();
 
-            Iterator var9 = this.children.values().iterator();
-
-            while(var9.hasNext()) {
-                ModelPart modelPart = (ModelPart)var9.next();
-                modelPart.render(matrices, vertices, light, overlay, red, green, blue, alpha);
+            for (ModelPart modelPart : this.children.values()) {
+                modelPart.render(matrices, vertices, light, overlay, color);
             }
 
             matrices.pop();

@@ -1,11 +1,10 @@
 package dev.birb.wgpu.rust;
 
-import net.minecraft.client.MinecraftClient;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
@@ -23,7 +22,6 @@ public class WgpuNative {
     public static void loadWm() {
         try {
             WgpuNative.load("wgpu_mc_jni", true);
-            WgpuNative.initialize(Thread.currentThread().getContextClassLoader(), MinecraftClient.getInstance());
             
             CoreLib.init();
         } catch (Exception e) {
@@ -54,8 +52,6 @@ public class WgpuNative {
         }
         System.load(object.getAbsolutePath());
     }
-
-    public static native void initialize(Object object, Object client);
     
     public static native String getSettingsStructure();
 
@@ -70,53 +66,19 @@ public class WgpuNative {
 
     public static native int getTextureId(String identifier);
 
-    public static native void startRendering(String title);
-
     public static native void setPanicHook();
 
     public static native void updateWindowTitle(String title);
 
     public static native void registerBlockState(Object state, String blockId, String stateKey);
 
-    public static native void doEventLoop();
-
     public static native String getBackend();
 
     public static native void setWorldRenderState(boolean render);
 
-    public static native void texImage2D(int textureId, int target, int level, int internalFormat, int width, int height, int border, int format, int type, long pixelsPtr);
-
-    public static native void subImage2D(int texId, int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, int[] pixels, int unpackPixelSkipRows, int unpackSkipPixels, int unpackSkipRows, int unpackAlignment);
-
-    public static native void submitCommands();
-
-    public static native int getWindowWidth();
-
-    public static native int getWindowHeight();
-
-    public static native void wmUsePipeline(int i);
-
-    public static native void clearColor(float red, float green, float blue);
-
-    public static native void setIndexBuffer(int[] buffer);
-
-    public static native void setVertexBuffer(byte[] buffer);
-
-    public static native void setProjectionMatrix(float[] mat);
-
-    public static native void drawIndexed(int count);
-
-    public static native void draw(int count);
-
-    public static native void attachTextureBindGroup(int slot, int texture);
-
     public static native double getMouseX();
 
     public static native double getMouseY();
-
-    public static native void runHelperThread();
-
-    public static native String getVideoMode();
 
     public static native long createPalette();
 
@@ -187,4 +149,25 @@ public class WgpuNative {
     public static native void render(float tickDelta, long startTime, boolean tick);
 
     public static native void setShaderColor(float r, float g, float b, float a);
+
+    public static native void createDevice(long window, long getWindow, int w, int h);
+
+    public static native long createCommandEncoder();
+
+    public static native long createWindow(long glfwCreateWindow, int width, int height, String title, long monitor, long share);
+
+    public static native long createTexture(int formatId, int width, int height, int usage);
+
+    public static native void dropTexture(long texture);
+
+    public static native long createBuffer(String s, int usage, int size);
+
+    public static native long createBufferInit(String s, int usage, ByteBuffer data);
+
+    public static native void dropBuffer(long buffer);
+
+    public static native int getMinUniformAlignment();
+
+    public static native int getMaxTextureSize();
+
 }

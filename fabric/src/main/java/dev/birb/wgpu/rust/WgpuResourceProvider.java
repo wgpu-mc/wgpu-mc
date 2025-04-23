@@ -11,14 +11,14 @@ public class WgpuResourceProvider {
     public static byte[] getResource(String path) {
         if(manager != null) {
             try {
-                return manager.getResourceOrThrow(new Identifier(path)).getInputStream().readAllBytes();
+                return manager.getResourceOrThrow(Identifier.of(path)).getInputStream().readAllBytes();
             } catch (Exception e) {
                 return new byte[0];
             }
         }
 
         try {
-            return MinecraftClient.getInstance().getResourceManager().getResourceOrThrow(new Identifier(path)).getInputStream().readAllBytes();
+            return MinecraftClient.getInstance().getResourceManager().getResourceOrThrow(Identifier.of(path)).getInputStream().readAllBytes();
         } catch (Exception e) {
             return new byte[0];
         }

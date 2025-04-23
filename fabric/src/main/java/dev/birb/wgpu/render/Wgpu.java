@@ -2,7 +2,6 @@ package dev.birb.wgpu.render;
 
 import dev.birb.wgpu.entity.EntityState;
 import dev.birb.wgpu.palette.RustBlockStateAccessor;
-import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wgpu.rust.WgpuTextureManager;
 import lombok.Getter;
 import lombok.Setter;
@@ -68,15 +67,6 @@ public class Wgpu {
             System.loadLibrary("renderdoc");
         } catch (UnsatisfiedLinkError e) {
             LOGGER.warn("Error while loading RenderDoc", e);
-        }
-    }
-
-    public static void startRendering() {
-        if (!initialized) {
-            //linkRenderDoc();
-            WgpuNative.startRendering("Minecraft");
-        } else {
-            throw new IllegalStateException("wgpu-mc has already been initialized");
         }
     }
 

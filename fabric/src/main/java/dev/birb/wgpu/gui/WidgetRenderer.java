@@ -70,11 +70,11 @@ public class WidgetRenderer {
     }
 
     private int applyAlpha(int color) {
-        return ColorHelper.Argb.getArgb(
-                (int) (ColorHelper.Argb.getAlpha(color) * alphaStack.peekFloat(0)),
-                ColorHelper.Argb.getRed(color),
-                ColorHelper.Argb.getGreen(color),
-                ColorHelper.Argb.getBlue(color)
+        return ColorHelper.getArgb(
+                (int) (ColorHelper.getAlpha(color) * alphaStack.peekFloat(0)),
+                ColorHelper.getRed(color),
+                ColorHelper.getGreen(color),
+                ColorHelper.getBlue(color)
         );
     }
 

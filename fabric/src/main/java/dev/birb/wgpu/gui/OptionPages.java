@@ -6,7 +6,11 @@ import com.google.gson.reflect.TypeToken;
 import dev.birb.wgpu.gui.options.*;
 import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.*;
+import net.minecraft.client.option.AttackIndicator;
+import net.minecraft.client.option.CloudRenderMode;
+import net.minecraft.client.option.GameOptions;
+import net.minecraft.client.option.GraphicsMode;
+import net.minecraft.particle.ParticlesMode;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
 

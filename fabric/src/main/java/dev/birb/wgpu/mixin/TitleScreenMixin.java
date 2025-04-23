@@ -11,7 +11,6 @@ import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.model.TexturedModelData;
 import net.minecraft.client.render.entity.model.EntityModelLayer;
 import net.minecraft.client.render.entity.model.EntityModels;
-import net.minecraft.client.texture.TextureManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,8 +18,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Map;
-
-import static net.minecraft.screen.PlayerScreenHandler.BLOCK_ATLAS_TEXTURE;
 
 @Mixin(TitleScreen.class)
 public class TitleScreenMixin {
@@ -52,11 +49,6 @@ public class TitleScreenMixin {
             WgpuMcMod.MAY_INJECT_PART_IDS = true;
 
             WgpuMcMod.LOGGER.info("Uploaded " + models.size() + " TMDs to wgpu-mc and processed them in " + (System.currentTimeMillis() - millis) + "ms");
-
-            TextureManager textureManager = MinecraftClient.getInstance().getTextureManager();
-            int blockTexAtlasId = textureManager.getTexture(BLOCK_ATLAS_TEXTURE).getGlId();
-
-            WgpuNative.identifyGlTexture(0, blockTexAtlasId);
 
             WgpuMcMod.ENTITIES_UPLOADED = true;
         }

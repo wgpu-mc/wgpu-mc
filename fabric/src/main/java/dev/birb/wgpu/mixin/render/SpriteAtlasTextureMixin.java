@@ -11,6 +11,7 @@ public class SpriteAtlasTextureMixin {
 
     @Inject(method = "tickAnimatedSprites", cancellable = true, at = @At("HEAD"))
     public void dontTickAnimatedSprites(CallbackInfo ci) {
+        //TODO WgpuNative.tickAnimatedSprites();
         ci.cancel();
     }
 
