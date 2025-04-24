@@ -4775,6 +4775,7 @@ dependencies = [
  "strum_macros",
  "wgpu-mc",
  "winapi",
+ "x11-dl",
 ]
 
 [[package]]

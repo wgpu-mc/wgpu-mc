@@ -1,20 +1,17 @@
-use std::ffi::c_void;
-use objc2::msg_send;
-use objc2::rc::Retained;
-use raw_window_handle::{DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle};
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+    RawWindowHandle, WindowHandle,
+};
+use std::{ffi::c_void, ptr::NonNull};
 
 pub struct LWJGLGLFWWindow {
-    native_window: *mut c_void
+    native_window: *mut c_void,
 }
 
 impl LWJGLGLFWWindow {
-    
     pub unsafe fn new(native_window: *mut c_void) -> Self {
-        Self {
-            native_window,
-        }
+        Self { native_window }
     }
-    
 }
 
 unsafe impl Send for LWJGLGLFWWindow {}
@@ -39,7 +36,10 @@ fn raw_window_handle(native_window: *mut c_void) -> RawWindowHandle {
     {
         use raw_window_handle::Win32WindowHandle;
         let (hwnd, hinstance) = unsafe {
-            let hinstance: isize = winapi::um::winuser::GetWindowLongPtrA(native_window as _, winapi::um::winuser::GWLP_HINSTANCE);
+            let hinstance: isize = winapi::um::winuser::GetWindowLongPtrA(
+                native_window as _,
+                winapi::um::winuser::GWLP_HINSTANCE,
+            );
 
             (native_window, hinstance)
         };
@@ -47,33 +47,18 @@ fn raw_window_handle(native_window: *mut c_void) -> RawWindowHandle {
         handle.hinstance = NonZeroIsize::new(hinstance);
         RawWindowHandle::Win32(handle)
     }
-    #[cfg(all(
-        any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"),
-        not(feature = "wayland")
-    ))]
+    #[cfg(target_os = "linux")]
     {
+        // TODO: minecraft's glfw doesn't create wayland windows, but using a native patched glfw
+        // does not work either as it segfaults everywhere for some goddamn reason, so we are x11
+        // only for now #sad
         use raw_window_handle::XlibWindowHandle;
-
-        RawWindowHandle::Xlib(XlibWindowHandle::new(native_window))
-    }
-    #[cfg(all(
-        any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"),
-        feature = "wayland"
-    ))]
-    {
-        use std::ptr::NonNull;
-
-        use raw_window_handle::WaylandWindowHandle;
-
-        let handle = WaylandWindowHandle::new(
-            NonNull::new(native_window).expect("wayland window surface is null"),
-        );
-        RawWindowHandle::Wayland(handle)
+        RawWindowHandle::Xlib(XlibWindowHandle::new(native_window as u64))
     }
     #[cfg(target_os = "macos")]
     {
-        use std::ptr::NonNull;
-        
+        use objc2::msg_send;
+        use objc2::rc::Retained;
         use objc2::runtime::NSObject;
         use raw_window_handle::AppKitWindowHandle;
         let ns_window = native_window as *mut NSObject;
@@ -91,30 +76,15 @@ fn raw_display_handle() -> RawDisplayHandle {
         use raw_window_handle::WindowsDisplayHandle;
         RawDisplayHandle::Windows(WindowsDisplayHandle::new())
     }
-    #[cfg(all(
-        any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"),
-        not(feature = "wayland")
-    ))]
+    #[cfg(target_os = "linux")]
     {
-        use std::ptr::NonNull;
-
         use raw_window_handle::XlibDisplayHandle;
-        let display = NonNull::new(unsafe { ffi::glfwGetX11Display() });
+        use x11_dl::xlib;
+
+        let xlib = xlib::Xlib::open().expect("Could not open Xlib");
+        let display = NonNull::new(unsafe { (xlib.XOpenDisplay)(std::ptr::null()) as *mut c_void });
         let handle = XlibDisplayHandle::new(display, 0);
         RawDisplayHandle::Xlib(handle)
-    }
-    #[cfg(all(
-        any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"),
-        feature = "wayland"
-    ))]
-    {
-        use std::ptr::NonNull;
-
-        use raw_window_handle::WaylandDisplayHandle;
-        let display =
-            NonNull::new(unsafe { ffi::glfwGetWaylandDisplay() }).expect("wayland display is null");
-        let handle = WaylandDisplayHandle::new(display);
-        RawDisplayHandle::Wayland(handle)
     }
     #[cfg(target_os = "macos")]
     {
