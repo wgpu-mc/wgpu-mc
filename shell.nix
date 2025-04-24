@@ -9,7 +9,7 @@ pkgs.mkShell rec {
     rustfmt
     rust-analyzer
 
-    jdk17
+    jdk21
 
     nixfmt-rfc-style
   ];
