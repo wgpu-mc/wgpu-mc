@@ -85,7 +85,7 @@ public class EntityState {
                 state.buffer.position(state.buffer.position() + 16);
             } catch(BufferOverflowException e) {
                 FloatBuffer oldBuffer = state.buffer;
-                state.buffer = MemoryUtil.memAllocFloat(state.buffer.capacity() + 1000);
+                state.buffer = MemoryUtil.memCallocFloat(state.buffer.capacity() + 1000);
                 state.buffer.put(oldBuffer);
                 mat.get(state.buffer);
                 state.buffer.position(state.buffer.position() + 16);
@@ -100,8 +100,8 @@ public class EntityState {
 
     public static class EntityRenderState {
 
-        public FloatBuffer buffer = MemoryUtil.memAllocFloat(100000);
-        public final IntBuffer overlays = MemoryUtil.memAllocInt(100000);
+        public FloatBuffer buffer = MemoryUtil.memCallocFloat(100000);
+        public final IntBuffer overlays = MemoryUtil.memCallocInt(100000);
         public int count = 0;
         public int textureId;
 

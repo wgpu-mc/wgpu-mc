@@ -24,14 +24,14 @@ public class WgpuBuffer extends GpuBuffer {
 //            this.mapShadow = WgpuNative.createBuffer(label, usage, size);
 //        }
 
-        this.map = MemoryUtil.memAlloc(size);
+        this.map = MemoryUtil.memCalloc(size);
         this.buffer = WgpuNative.createBuffer(label, usage & ~(GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_MAP_READ), size);
     }
 
     public WgpuBuffer(String label, int usage, ByteBuffer data) {
         super(usage, data.capacity());
 
-        this.map = MemoryUtil.memAlloc(size);
+        this.map = MemoryUtil.memCalloc(size);
         MemoryUtil.memCopy(data, this.map);
         this.buffer = WgpuNative.createBufferInit(label, usage & ~(GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_MAP_READ), data);
     }
@@ -53,7 +53,7 @@ public class WgpuBuffer extends GpuBuffer {
 
     public static class WgpuMappedView implements MappedView {
 
-        private ByteBuffer buffer;
+        private final ByteBuffer buffer;
 
         public WgpuMappedView(ByteBuffer buffer) {
             this.buffer = buffer;

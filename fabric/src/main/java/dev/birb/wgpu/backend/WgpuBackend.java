@@ -12,6 +12,7 @@ import dev.birb.wgpu.rust.WgpuNative;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.*;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -23,10 +24,20 @@ public class WgpuBackend implements GpuDevice {
     private final int minUniformOffsetAlignment;
     private final int maxTextureSize;
 
-    public WgpuBackend(long window, long getWindow) {
+    public WgpuBackend(long window) {
         int w = MinecraftClient.getInstance().getWindow().getWidth();
         int h = MinecraftClient.getInstance().getWindow().getHeight();
-        WgpuNative.createDevice(window, getWindow, w, h);
+
+        long nativeWindow = switch(GLFW.glfwGetPlatform()) {
+            case GLFW.GLFW_PLATFORM_X11 -> GLFWNativeX11.glfwGetX11Window(window);
+            case GLFW.GLFW_PLATFORM_WIN32 -> GLFWNativeWin32.glfwGetWin32Window(window);
+            case GLFW.GLFW_PLATFORM_COCOA -> GLFWNativeCocoa.glfwGetCocoaWindow(window);
+            case GLFW.GLFW_PLATFORM_WAYLAND -> GLFWNativeWayland.glfwGetWaylandWindow(window);
+
+            default -> throw new IllegalStateException("Unexpected value: " + GLFW.glfwGetPlatform());
+        };
+
+        WgpuNative.createDevice(window, nativeWindow, w, h);
 
         this.minUniformOffsetAlignment = WgpuNative.getMinUniformAlignment();
         this.maxTextureSize = WgpuNative.getMaxTextureSize();
@@ -106,7 +117,7 @@ public class WgpuBackend implements GpuDevice {
 
     @Override
     public CompiledRenderPipeline precompilePipeline(RenderPipeline pipeline, @Nullable BiFunction<Identifier, ShaderType, String> sourceRetriever) {
-        return null;
+        return new WgpuCompiledRenderPipeline();
     }
 
     @Override

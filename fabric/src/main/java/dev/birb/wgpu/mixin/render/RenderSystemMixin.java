@@ -13,6 +13,8 @@ import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWNativeCocoa;
 import org.lwjgl.glfw.GLFWNativeWin32;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -42,7 +44,8 @@ public abstract class RenderSystemMixin {
 
     @Inject(method = "initRenderer", at = @At(value = "NEW", target = "net/minecraft/client/gl/GlBackend"), cancellable = true)
     private static void newWgpuBackend(long windowHandle, int debugVerbosity, boolean sync, BiFunction<Identifier, ShaderType, String> shaderSourceGetter, boolean renderDebugLabels, CallbackInfo ci) {
-        DEVICE = new WgpuBackend(windowHandle, GLFWNativeWin32.Functions.GetWin32Window);
+        DEVICE = new WgpuBackend(windowHandle);
+
         dynamicUniforms = new DynamicUniforms();
         apiDescription = getDevice().getImplementationInformation();
 

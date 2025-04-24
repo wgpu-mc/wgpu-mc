@@ -58,6 +58,7 @@ mod pia;
 mod renderer;
 mod settings;
 mod device;
+mod glfw;
 
 #[derive(Debug)]
 struct MinecraftRenderState {
@@ -110,8 +111,6 @@ static BLOCKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static BLOCK_STATES: Mutex<Vec<(String, String, GlobalRef)>> = Mutex::new(Vec::new());
 pub static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 
-pub static CLASSLOADER: OnceCell<WeakRef> = OnceCell::new();
-
 pub fn call_static_from_class_loader<'env>(
     env: &mut JNIEnv<'env>,
     class: &str,
@@ -119,12 +118,11 @@ pub fn call_static_from_class_loader<'env>(
     sig: &str,
     args: &[JValue],
 ) -> jni::errors::Result<JValueOwned<'env>> {
-    let class_loader = CLASSLOADER
+    let class_loader = YARN_CLASS_LOADER
         .get()
         .unwrap()
-        .upgrade_local(&*env)
-        .unwrap()
-        .unwrap();
+        .as_obj();
+
     let arg = env.new_string(class).unwrap();
     let class_obj: JClass = env
         .call_method(
@@ -253,6 +251,11 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
             slice::from_raw_parts(elements.as_ptr() as *const u8, size)
         }))
     }
+}
+
+#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
+pub fn setClassLoader(env: JNIEnv, _class: JClass, yarn_loader: JObject) {
+    YARN_CLASS_LOADER.set(env.new_global_ref(yarn_loader).unwrap()).unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

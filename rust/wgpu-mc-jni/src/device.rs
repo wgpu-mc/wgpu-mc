@@ -3,7 +3,6 @@ use std::ffi::{c_char, c_int, CString};
 use std::num::NonZeroIsize;
 use std::sync::Arc;
 use futures::executor::block_on;
-use glfw::ffi::{GLFWmonitor, GLFWwindow};
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JClass, JString};
 use jni::sys::{jint, jlong};
@@ -14,23 +13,19 @@ use wgpu_mc::{wgpu, Display, WindowSize, WmRenderer};
 use wgpu_mc::wgpu::{BufferUsages, CommandEncoderDescriptor, TextureUsages};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{MinecraftResourceManagerAdapter, RENDERER};
+use crate::glfw::LWJGLGLFWWindow;
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, get_window: jlong, width: jint, height: jint) {
-    glfw::init_no_callbacks().unwrap();
-
-    let window = window as *mut GLFWwindow;
-    let get_window = unsafe { std::mem::transmute(get_window) };
-
+pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, native_window: jlong, width: jint, height: jint) {
     let width = width as u32;
     let height = height as u32;
 
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::VULKAN,
+        backends: wgpu::Backends::PRIMARY,
         ..Default::default()
     });
 
-    let handle = unsafe { glfw::ThinHandle::new(window, get_window) };
+    let handle = unsafe { LWJGLGLFWWindow::new(native_window as _) };
 
     let surface = instance.create_surface(Arc::new(handle)).unwrap();
 
@@ -63,7 +58,6 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, get_window: 
     let required_limits = wgpu::Limits {
         max_push_constant_size: 128,
         max_bind_groups: 8,
-        max_storage_buffers_per_shader_stage: 1000,
         ..Default::default()
     };
 
@@ -73,10 +67,10 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, get_window: 
             required_features: wgpu::Features::default()
                 | wgpu::Features::DEPTH_CLIP_CONTROL
                 | wgpu::Features::PUSH_CONSTANTS
-                | wgpu::Features::BUFFER_BINDING_ARRAY
+                // | wgpu::Features::BUFFER_BINDING_ARRAY
                 | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY
                 | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
-                | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY
+                // | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY
                 | wgpu::Features::MULTI_DRAW_INDIRECT,
             required_limits,
             memory_hints: wgpu::MemoryHints::Performance,

@@ -24,10 +24,14 @@ public class WgpuNative {
             WgpuNative.load("wgpu_mc_jni", true);
             
             CoreLib.init();
+
+            WgpuNative.setClassLoader(Thread.currentThread().getContextClassLoader());
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
     }
+
+    private static native void setClassLoader(ClassLoader contextClassLoader);
 
     private static final HashMap<Object, Long> idLists = new HashMap<>();
 

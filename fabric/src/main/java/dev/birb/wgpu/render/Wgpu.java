@@ -180,17 +180,9 @@ public class Wgpu {
 //        return 0xffffffff;
     }
     
-    public static void helperSetClassLoader(ClassLoader loader) {
-        Thread.currentThread().setContextClassLoader(loader);
-    }
-
     @SuppressWarnings("unused") // called from rust
     public static void windowFocused(boolean focused) {
         MinecraftClient.getInstance().onWindowFocusChanged(focused);
     }
-
-    public static void incrementTexSubImageCount() {
-        timesTexSubImageCalled++;
-    }
-
+    
 }

@@ -61,7 +61,8 @@ public class WgpuCommandEncoder implements CommandEncoder {
 
     @Override
     public GpuBuffer.MappedView mapBuffer(GpuBuffer buffer, boolean read, boolean write) {
-        return new WgpuBuffer.WgpuMappedView(((WgpuBuffer) buffer).getMap());
+        ByteBuffer buf = ((WgpuBuffer) buffer).getMap();
+        return new WgpuBuffer.WgpuMappedView(buf.slice(0, buf.capacity()));
     }
 
     @Override
