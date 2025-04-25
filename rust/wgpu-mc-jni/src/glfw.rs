@@ -35,6 +35,7 @@ impl HasDisplayHandle for LWJGLGLFWWindow {
 fn raw_window_handle(native_window: *mut c_void) -> RawWindowHandle {
     #[cfg(target_family = "windows")]
     {
+        use std::num::NonZeroIsize;
         use raw_window_handle::Win32WindowHandle;
         let (hwnd, hinstance) = unsafe {
             let hinstance: isize = winapi::um::winuser::GetWindowLongPtrA(
