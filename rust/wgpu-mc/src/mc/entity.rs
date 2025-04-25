@@ -500,35 +500,32 @@ impl BundledEntityInstances {
         texture_view: &wgpu::TextureView,
         capacity: u32,
     ) -> Self {
-        let transforms_buffer =
-            Arc::new(wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: capacity as wgpu::BufferAddress
-                    * (entity.parts.len() as wgpu::BufferAddress)
-                    * 64,
-                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
+        let transforms_buffer = Arc::new(wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: capacity as wgpu::BufferAddress
+                * (entity.parts.len() as wgpu::BufferAddress)
+                * 64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        }));
 
         Self {
             entity,
             uploaded: UploadedEntityInstances {
-                bind_group: Arc::new(wm.gpu.device.create_bind_group(
-                    &wgpu::BindGroupDescriptor {
-                        label: None,
-                        layout: wm.bind_group_layouts.get("entity").unwrap(),
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: transforms_buffer.as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::TextureView(texture_view),
-                            },
-                        ],
-                    },
-                )),
+                bind_group: Arc::new(wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: wm.bind_group_layouts.get("entity").unwrap(),
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: transforms_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(texture_view),
+                        },
+                    ],
+                })),
                 transforms_buffer,
                 instance_vbo: Arc::new(wm.gpu.device.create_buffer(&BufferDescriptor {
                     label: None,

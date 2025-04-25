@@ -198,13 +198,11 @@ impl RenderGraph {
                             .collect::<Vec<wgpu::BindGroupEntry>>();
 
                         let bind_group =
-                            wm.gpu
-                                .device
-                                .create_bind_group(&wgpu::BindGroupDescriptor {
-                                    label: None,
-                                    layout: bind_group_layouts[vec_index],
-                                    entries: &entries,
-                                });
+                            wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                                label: None,
+                                layout: bind_group_layouts[vec_index],
+                                entries: &entries,
+                            });
 
                         (*slot as u32, WmBindGroup::Custom(bind_group))
                     }
@@ -250,14 +248,14 @@ impl RenderGraph {
                 })
                 .collect::<Vec<wgpu::PushConstantRange>>();
 
-            let layout =
-                wm.gpu
-                    .device
-                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: None,
-                        bind_group_layouts: &bind_group_layouts,
-                        push_constant_ranges: &push_constants,
-                    });
+            let layout = wm
+                .gpu
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: None,
+                    bind_group_layouts: &bind_group_layouts,
+                    push_constant_ranges: &push_constants,
+                });
 
             let shader = WgslShader::init(
                 &ResourcePath(format!("wgpu_mc:shaders/{}.wgsl", pipeline_name)),
@@ -397,12 +395,9 @@ impl RenderGraph {
                                 .get_bytes(&ResourcePath::from(&src[..]))
                                 .unwrap();
 
-                            let tav = TextureAndView::from_image_file_bytes(
-                                &wm.gpu,
-                                &bytes,
-                                resource_id,
-                            )
-                            .unwrap();
+                            let tav =
+                                TextureAndView::from_image_file_bytes(&wm.gpu, &bytes, resource_id)
+                                    .unwrap();
 
                             resources.insert(
                                 resource_id.clone(),
@@ -764,14 +759,14 @@ impl RenderGraph {
                 //     }
                 //     let stars_vertex_buffer = scene.stars_vertex_buffer.read();
                 //     let stars_vertex = stars_vertex_buffer.as_ref().unwrap().slice(..);
-                // 
+                //
                 //     let stars_index_buffer = scene.stars_index_buffer.read();
                 //     let stars_index = stars_index_buffer.as_ref().unwrap().slice(..);
-                // 
+                //
                 //     render_pass.set_pipeline(&bound_pipeline.pipeline);
                 //     let pc = get_environmental_push_constants(scene);
                 //     set_push_constants(pipeline_config, &mut render_pass, Some(pc));
-                // 
+                //
                 //     render_pass.set_vertex_buffer(0, stars_vertex);
                 //     render_pass.set_index_buffer(stars_index, IndexFormat::Uint32);
                 //     render_pass.draw_indexed(0..*scene.stars_length.read(), 0, 0..1);

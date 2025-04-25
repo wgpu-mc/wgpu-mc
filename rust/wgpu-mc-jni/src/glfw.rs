@@ -1,20 +1,19 @@
-use std::ffi::c_void;
 use objc2::msg_send;
 use objc2::rc::Retained;
-use raw_window_handle::{DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle};
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+    RawWindowHandle, WindowHandle,
+};
+use std::ffi::c_void;
 
 pub struct LWJGLGLFWWindow {
-    native_window: *mut c_void
+    native_window: *mut c_void,
 }
 
 impl LWJGLGLFWWindow {
-    
     pub unsafe fn new(native_window: *mut c_void) -> Self {
-        Self {
-            native_window,
-        }
+        Self { native_window }
     }
-    
 }
 
 unsafe impl Send for LWJGLGLFWWindow {}
@@ -39,7 +38,10 @@ fn raw_window_handle(native_window: *mut c_void) -> RawWindowHandle {
     {
         use raw_window_handle::Win32WindowHandle;
         let (hwnd, hinstance) = unsafe {
-            let hinstance: isize = winapi::um::winuser::GetWindowLongPtrA(native_window as _, winapi::um::winuser::GWLP_HINSTANCE);
+            let hinstance: isize = winapi::um::winuser::GetWindowLongPtrA(
+                native_window as _,
+                winapi::um::winuser::GWLP_HINSTANCE,
+            );
 
             (native_window, hinstance)
         };
@@ -73,7 +75,7 @@ fn raw_window_handle(native_window: *mut c_void) -> RawWindowHandle {
     #[cfg(target_os = "macos")]
     {
         use std::ptr::NonNull;
-        
+
         use objc2::runtime::NSObject;
         use raw_window_handle::AppKitWindowHandle;
         let ns_window = native_window as *mut NSObject;
