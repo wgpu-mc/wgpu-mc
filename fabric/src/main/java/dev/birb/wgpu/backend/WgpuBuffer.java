@@ -36,6 +36,10 @@ public class WgpuBuffer extends GpuBuffer {
         this.buffer = WgpuNative.createBufferInit(label, usage & ~(GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_MAP_READ), data);
     }
 
+    public long getWgpuBuffer() {
+        return this.buffer;
+    }
+
     @Override
     public boolean isClosed() {
         return !alive.getAcquire();

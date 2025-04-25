@@ -114,51 +114,19 @@ public class WgpuNative {
 
     public static native void setMatrix(int type, float[] mat);
 
-    public static native void setCursorLocked(boolean locked);
-
-    public static native void centerCursor();
-
     public static native void registerEntities(String toString);
-
-    public static native long setEntityInstanceBuffer(String entity, long mat4Ptr, int position, long overlayPtr, int overlayArrayPosition, int instanceCount, int textureId);
-
-    public static native void clearEntities();
-
-    public static native void identifyGlTexture(int texture, int glId);
 
     public static native void scheduleStop();
 
-    public static native long createAndDeserializeLightData(byte[] array, int index);
-
-    public static native void bindLightData(long lightData, int x, int z);
-
-    public static native void setLightmapID(int id);
-
-    public static native void debugLight(int x, int y, int z);
-
     public static native void setAllocator(long ptr);
-
-    public static native void bindSkyData(float colorR, float colorG, float colorB, float skyPosition, float skyBrightness, float starShimmer, int moonPhase);
-
-    public static native void bindStarData(int length, int[] indices, byte[] vertices);
-
-    public static native void bindRenderEffectsData(float fogStart, float fogEnd, int fogShape, float[] fogColor, float[] colorModulator, float[] dimensionFogColor);
-
-    public static native void reloadStorage(int clampedViewDistance,int minSectionHeight);
 
     public static native void reloadShaders();
 
-    public static native void setSectionPos(int x,int z);
-
     public static native void render(float tickDelta, long startTime, boolean tick);
-
-    public static native void setShaderColor(float r, float g, float b, float a);
 
     public static native void createDevice(long window, long getWindow, int w, int h);
 
     public static native long createCommandEncoder();
-
-    public static native long createWindow(long glfwCreateWindow, int width, int height, String title, long monitor, long share);
 
     public static native long createTexture(int formatId, int width, int height, int usage);
 
@@ -173,5 +141,11 @@ public class WgpuNative {
     public static native int getMinUniformAlignment();
 
     public static native int getMaxTextureSize();
+
+    public static native void submitEncoders(long encodersPtr, int encodersCount);
+
+    public static native void presentTexture(long texturePtr);
+
+    public static native long getRenderPassCommandSize();
 
 }

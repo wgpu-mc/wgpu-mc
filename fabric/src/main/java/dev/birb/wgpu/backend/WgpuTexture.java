@@ -3,11 +3,14 @@ package dev.birb.wgpu.backend;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.TextureFormat;
 import dev.birb.wgpu.rust.WgpuNative;
+import lombok.Getter;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+//Corresponds one-to-one with a wgpu-mc TextureAndView
 public class WgpuTexture extends GpuTexture {
 
+    @Getter
     public long texture;
     public AtomicBoolean alive = new AtomicBoolean(true);
 
