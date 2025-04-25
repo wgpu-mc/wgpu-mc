@@ -190,7 +190,7 @@ pub struct Scene {
 
     pub entity_instances: Mutex<HashMap<String, BundledEntityInstances>>,
     pub sky_state: ArcSwap<SkyState>,
-    
+
     pub render_effects: ArcSwap<RenderEffectsData>,
 
     pub depth_texture: RwLock<wgpu::Texture>,

@@ -1,7 +1,7 @@
-use std::cell::{OnceCell, RefCell};
 use arrayvec::ArrayVec;
 use glam::{ivec2, ivec3, IVec3, Mat4};
 use parking_lot::lock_api::RwLock;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -10,13 +10,9 @@ use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 
-use futures::executor::block_on;
-use winit::event::{DeviceEvent, ElementState, KeyEvent, WindowEvent};
-use winit::event_loop::EventLoop;
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::Window;
 use crate::camera::Camera;
 use crate::chunk::make_chunks;
+use futures::executor::block_on;
 use wgpu_mc::mc::direction::Direction;
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::mc::Scene;
@@ -25,6 +21,10 @@ use wgpu_mc::render::shaderpack::ShaderPackConfig;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu_mc::wgpu::{BufferBindingType, Extent3d, PresentMode};
 use wgpu_mc::{wgpu, Display, Frustum, WmRenderer};
+use winit::event::{DeviceEvent, ElementState, KeyEvent, WindowEvent};
+use winit::event_loop::EventLoop;
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::Window;
 
 mod camera;
 mod chunk;
@@ -49,7 +49,7 @@ struct Application {
     render_graph: Option<RenderGraph>,
     camera: Option<Camera>,
     last_frame: Instant,
-    window: OnceCell<Arc<Window>>
+    window: OnceCell<Arc<Window>>,
 }
 impl Application {
     pub fn new() -> Self {
@@ -75,9 +75,9 @@ impl ApplicationHandler for Application {
                 height: 720,
             }));
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
-        
+
         self.window.set(window.clone()).unwrap();
-        
+
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
@@ -246,8 +246,7 @@ impl ApplicationHandler for Application {
         }
 
         self.camera = Some(Camera::new(
-            window.inner_size().width as f32
-                / window.inner_size().height as f32,
+            window.inner_size().width as f32 / window.inner_size().height as f32,
         ));
 
         self.wm = Some(wm);
@@ -355,11 +354,9 @@ impl ApplicationHandler for Application {
                     if let ResourceBacking::Buffer(buffer, _) =
                         &self.render_graph.as_ref().unwrap().resources["@mat4_perspective"]
                     {
-                        wm.gpu.queue.write_buffer(
-                            buffer,
-                            0,
-                            bytemuck::cast_slice(&perspective),
-                        );
+                        wm.gpu
+                            .queue
+                            .write_buffer(buffer, 0, bytemuck::cast_slice(&perspective));
                     }
 
                     if let ResourceBacking::Buffer(buffer, _) =
@@ -373,21 +370,16 @@ impl ApplicationHandler for Application {
                     let mut config_guard = wm.gpu.config.write();
 
                     let surface_texture =
-                        wm.gpu
-                            .surface
-                            .get_current_texture()
-                            .unwrap_or_else(|_| {
-                                //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-                                let size = self.window.get().unwrap().inner_size();
+                        wm.gpu.surface.get_current_texture().unwrap_or_else(|_| {
+                            //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+                            let size = self.window.get().unwrap().inner_size();
 
-                                config_guard.width = size.width;
-                                config_guard.height = size.height;
+                            config_guard.width = size.width;
+                            config_guard.height = size.height;
 
-                                wm.gpu
-                                    .surface
-                                    .configure(&wm.gpu.device, &config_guard);
-                                wm.gpu.surface.get_current_texture().unwrap()
-                            });
+                            wm.gpu.surface.configure(&wm.gpu.device, &config_guard);
+                            wm.gpu.surface.get_current_texture().unwrap()
+                        });
 
                     let view = surface_texture
                         .texture

@@ -44,7 +44,7 @@ public abstract class RenderSystemMixin {
 
     @Inject(method = "initRenderer", at = @At(value = "NEW", target = "net/minecraft/client/gl/GlBackend"), cancellable = true)
     private static void newWgpuBackend(long windowHandle, int debugVerbosity, boolean sync, BiFunction<Identifier, ShaderType, String> shaderSourceGetter, boolean renderDebugLabels, CallbackInfo ci) {
-        DEVICE = new WgpuBackend(windowHandle);
+        DEVICE = new WgpuBackend(windowHandle, shaderSourceGetter);
 
         dynamicUniforms = new DynamicUniforms();
         apiDescription = getDevice().getImplementationInformation();

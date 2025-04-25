@@ -50,15 +50,15 @@ use crate::settings::Settings;
 
 mod alloc;
 mod application;
+mod device;
 pub mod entity;
 mod gl;
+mod glfw;
 mod lighting;
 mod palette;
 mod pia;
 mod renderer;
 mod settings;
-mod device;
-mod glfw;
 
 #[derive(Debug)]
 struct MinecraftRenderState {
@@ -118,10 +118,7 @@ pub fn call_static_from_class_loader<'env>(
     sig: &str,
     args: &[JValue],
 ) -> jni::errors::Result<JValueOwned<'env>> {
-    let class_loader = YARN_CLASS_LOADER
-        .get()
-        .unwrap()
-        .as_obj();
+    let class_loader = YARN_CLASS_LOADER.get().unwrap().as_obj();
 
     let arg = env.new_string(class).unwrap();
     let class_obj: JClass = env
@@ -255,7 +252,9 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn setClassLoader(env: JNIEnv, _class: JClass, yarn_loader: JObject) {
-    YARN_CLASS_LOADER.set(env.new_global_ref(yarn_loader).unwrap()).unwrap();
+    YARN_CLASS_LOADER
+        .set(env.new_global_ref(yarn_loader).unwrap())
+        .unwrap();
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
@@ -323,7 +322,7 @@ pub fn registerBlockState(
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn reloadStorage(_env: JNIEnv, _class: JClass, clampedViewDistance: jint, scene: jlong) {
     let scene = unsafe { &mut *(scene as *mut Scene) };
-    
+
     let mut section_storage = scene.section_storage.write();
     section_storage.clear();
     section_storage.set_width(clampedViewDistance);
@@ -470,7 +469,16 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jlong, _tick: jlong, scene: jlong, width: jint, height: jint) {
+pub fn render(
+    _env: JNIEnv,
+    _class: JClass,
+    _tick_delta: jfloat,
+    _start_time: jlong,
+    _tick: jlong,
+    scene: jlong,
+    width: jint,
+    height: jint,
+) {
     let width = width as u32;
     let height = height as u32;
 
@@ -503,22 +511,16 @@ pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jl
         );
     }
 
-    let texture = wm
-        .gpu
-        .surface
-        .get_current_texture()
-        .unwrap_or_else(|_| {
-            //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
+    let texture = wm.gpu.surface.get_current_texture().unwrap_or_else(|_| {
+        //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
 
-            let mut surface_config = wm.gpu.config.write();
-            surface_config.width = width;
-            surface_config.height = height;
-            scene.resize_depth_texture(wm, width, height);
-            wm.gpu
-                .surface
-                .configure(&wm.gpu.device, &surface_config);
-            wm.gpu.surface.get_current_texture().unwrap()
-        });
+        let mut surface_config = wm.gpu.config.write();
+        surface_config.width = width;
+        surface_config.height = height;
+        scene.resize_depth_texture(wm, width, height);
+        wm.gpu.surface.configure(&wm.gpu.device, &surface_config);
+        wm.gpu.surface.get_current_texture().unwrap()
+    });
 
     let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
@@ -730,7 +732,7 @@ pub fn bindRenderEffectsData(
     fog_color: JFloatArray,
     color_modulator: JFloatArray,
     dimension_fog_color: JFloatArray,
-    scene: jlong
+    scene: jlong,
 ) {
     let scene = unsafe { &mut *(scene as *mut Scene) };
 

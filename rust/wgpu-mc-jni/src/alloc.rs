@@ -12,12 +12,12 @@ use std::ptr;
    https://github.com/CaffeineMC/sodium-fabric/blob/1.20/graph-rework-rust-wip-morton/native/core/src/mem.rs
 */
 
-#[cfg(feature = "libc_alloc")]
+// #[cfg(feature = "libc_alloc")]
 #[global_allocator]
 static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
 
-#[cfg(not(feature = "libc_alloc"))]
-static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
+// #[cfg(not(feature = "libc_alloc"))]
+// static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
 
 #[repr(C)]
 #[derive(Clone, Copy)]

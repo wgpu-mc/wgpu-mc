@@ -1,8 +1,3 @@
-use std::collections::HashMap;
-use std::io::Cursor;
-use std::slice;
-use std::{sync::Arc, time::Instant};
-use std::cell::OnceCell;
 use byteorder::LittleEndian;
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint, jlong};
@@ -10,6 +5,11 @@ use jni::{objects::JString, JNIEnv};
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use std::cell::OnceCell;
+use std::collections::HashMap;
+use std::io::Cursor;
+use std::slice;
+use std::{sync::Arc, time::Instant};
 use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex};
 use wgpu_mc::mc::RenderEffectsData;
 use wgpu_mc::texture::BindableTexture;
@@ -24,7 +24,6 @@ pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
         terrain_transformation: [[0.0; 4]; 4],
     })
 });
-
 
 pub struct Matrices {
     pub projection: [[f32; 4]; 4],
@@ -139,11 +138,11 @@ pub fn setEntityInstanceBuffer(
     // let to_upload = match instances.get_mut(&entity_name) {
     //     Some(bundled_entity_instances) if bundled_entity_instances.capacity <= instance_count => {
     //         bundled_entity_instances.capacity = instance_count;
-    // 
+    //
     //         bundled_entity_instances
     //     }
     //     _ => {
-    //         
+    //
     //         // TODO
     //         // let texture = todo!();
     //         // let models = wm.mc.entity_models.read();
@@ -155,7 +154,7 @@ pub fn setEntityInstanceBuffer(
     //         // instances.get(&entity_name).unwrap()
     //     }
     // };
-    // 
+    //
     // wm.display.queue.write_buffer(
     //     &to_upload.uploaded.instance_vbo,
     //     0,

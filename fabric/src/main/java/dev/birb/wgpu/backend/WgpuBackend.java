@@ -24,9 +24,13 @@ public class WgpuBackend implements GpuDevice {
     private final int minUniformOffsetAlignment;
     private final int maxTextureSize;
 
-    public WgpuBackend(long window) {
+    private final BiFunction<Identifier, ShaderType, String> defaultShaderSourceGetter;
+
+    public WgpuBackend(long window, BiFunction<Identifier, ShaderType, String> shaderSourceGetter) {
         int w = MinecraftClient.getInstance().getWindow().getWidth();
         int h = MinecraftClient.getInstance().getWindow().getHeight();
+
+        this.defaultShaderSourceGetter = shaderSourceGetter;
 
         long nativeWindow = switch(GLFW.glfwGetPlatform()) {
             case GLFW.GLFW_PLATFORM_X11 -> GLFWNativeX11.glfwGetX11Window(window);

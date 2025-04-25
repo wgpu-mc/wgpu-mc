@@ -14,10 +14,7 @@ use wgpu_mc::{
     Display, WmRenderer,
 };
 
-use crate::{
-    gl::ElectrumVertex,
-    RENDER_GRAPH,
-};
+use crate::{gl::ElectrumVertex, RENDER_GRAPH};
 use std::collections::HashMap;
 use wgpu_mc::render::{
     graph::{RenderGraph, ResourceBacking},

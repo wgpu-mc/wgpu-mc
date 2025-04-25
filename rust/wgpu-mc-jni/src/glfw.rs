@@ -1,7 +1,8 @@
-use raw_window_handle::{
-    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+
+use raw_window_handle::{DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
     RawWindowHandle, WindowHandle,
 };
+
 use std::{ffi::c_void, ptr::NonNull};
 
 pub struct LWJGLGLFWWindow {
@@ -59,6 +60,7 @@ fn raw_window_handle(native_window: *mut c_void) -> RawWindowHandle {
     {
         use objc2::msg_send;
         use objc2::rc::Retained;
+
         use objc2::runtime::NSObject;
         use raw_window_handle::AppKitWindowHandle;
         let ns_window = native_window as *mut NSObject;
