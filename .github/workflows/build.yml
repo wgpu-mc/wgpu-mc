@@ -55,6 +55,6 @@ jobs:
       - name: capture build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Artifacts
+          name: ${{ matrix.os }}
           path: fabric/build/libs/
           if-no-files-found: error
