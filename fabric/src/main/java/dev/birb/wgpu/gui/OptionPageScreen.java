@@ -2,12 +2,8 @@ package dev.birb.wgpu.gui;
 
 import dev.birb.wgpu.gui.options.Option;
 import dev.birb.wgpu.gui.widgets.*;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.Element;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +27,7 @@ public class OptionPageScreen extends Screen {
     private int previousHeight;
 
     public OptionPageScreen(Screen parent) {
-        super(Text.of("Options"));
+        super(Component.literal("Options"));
 
         this.parent = parent;
         this.pages = new OptionPages();
@@ -54,7 +50,7 @@ public class OptionPageScreen extends Screen {
 
     @Override
     protected void init() {
-        clearChildren();
+        clearWidgets();
         optionWidgets.clear();
 
         if (width != previousWidth || height != previousHeight) {
@@ -62,7 +58,7 @@ public class OptionPageScreen extends Screen {
             initOtherThanOptions();
         }
         else {
-            for (Widget widget : widgets) addSelectableChild(widget);
+            for (Widget widget : widgets) addWidget(widget);
         }
 
         // Options
@@ -74,7 +70,7 @@ public class OptionPageScreen extends Screen {
         for (List<Option<?>> group : currentPage) {
             for (Option<?> option : group) {
                 add(option.createWidget(alignX(x), y, width - x - 8));
-                y += Widget.DEFAULT_HEIGHT;
+//                y += Widget.DEFAULT_HEIGHT;
             }
 
             y += 4;

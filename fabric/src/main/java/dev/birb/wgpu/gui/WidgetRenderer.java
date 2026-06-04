@@ -1,17 +1,7 @@
 package dev.birb.wgpu.gui;
 
-import it.unimi.dsi.fastutil.floats.FloatArrayList;
-import it.unimi.dsi.fastutil.floats.FloatStack;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.StringVisitable;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.ColorHelper;
-
 public class WidgetRenderer {
-    private final DrawContext context;
+    private final Text context;
     private final FloatStack alphaStack = new FloatArrayList();
 
     public WidgetRenderer(DrawContext context) {
@@ -34,14 +24,14 @@ public class WidgetRenderer {
     public void text(String text, int x, int y, int color) {
         drawText(text, x, y, applyAlpha(color));
     }
-    public void text(Text text, int x, int y, int color) {
-        drawText(text.asOrderedText(), x, y, applyAlpha(color));
+    public void text(Component text, int x, int y, int color) {
+        drawText(text.getVisualOrderText(), x, y, applyAlpha(color));
     }
-    public void text(OrderedText text, int x, int y, int color) {
+    public void text(FormattedCharSequence text, int x, int y, int color) {
         drawText(text, x, y, applyAlpha(color));
     }
 
-    public void wrappedText(Text text, int x, int y, int color, int maxWidth) {
+    public void wrappedText(Component text, int x, int y, int color, int maxWidth) {
         color = applyAlpha(color);
 
         for (OrderedText orderedText : textRenderer().wrapLines(text, maxWidth)) {
@@ -82,7 +72,7 @@ public class WidgetRenderer {
         context.drawText(textRenderer(), text, x, y, color, false);
     }
 
-    private void drawText(OrderedText text, int x, int y, int color) {
+    private void drawText(FormattedCharSequence text, int x, int y, int color) {
         context.drawText(textRenderer(), text, x, y, color, false);
     }
 

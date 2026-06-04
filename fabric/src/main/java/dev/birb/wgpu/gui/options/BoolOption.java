@@ -2,13 +2,13 @@ package dev.birb.wgpu.gui.options;
 
 import dev.birb.wgpu.gui.widgets.BoolWidget;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
 
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class BoolOption extends Option<Boolean> {
-    public BoolOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Boolean> getter, Consumer<Boolean> setter) {
+    public BoolOption(Component name, Component tooltip, boolean requiresRestart, Supplier<Boolean> getter, Consumer<Boolean> setter) {
 		super(name, tooltip, requiresRestart, getter, setter);
 	}
 

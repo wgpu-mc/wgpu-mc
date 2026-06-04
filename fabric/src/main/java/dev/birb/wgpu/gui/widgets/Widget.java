@@ -3,15 +3,10 @@ package dev.birb.wgpu.gui.widgets;
 import dev.birb.wgpu.gui.WidgetRenderer;
 import lombok.Getter;
 import lombok.Setter;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.Element;
-import net.minecraft.client.gui.Selectable;
-import net.minecraft.client.gui.screen.narration.NarrationMessageBuilder;
-import net.minecraft.client.sound.PositionedSoundInstance;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.math.ColorHelper;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.network.chat.Component;
 
-public abstract class Widget implements Element, Selectable {
+public abstract class Widget extends AbstractWidget {
     public static final int OPTION_WIDTH = 200;
     public static final int DEFAULT_HEIGHT = 21;
 
@@ -30,6 +25,7 @@ public abstract class Widget implements Element, Selectable {
     private boolean focused;
 
     protected Widget(int x, int y, int width, int height) {
+        super(x, y, width, height, Component.literal(""));
         this.x = x;
         this.y = y;
         this.width = width;
@@ -44,15 +40,10 @@ public abstract class Widget implements Element, Selectable {
     public abstract void render(WidgetRenderer renderer, int mouseX, int mouseY, double delta);
 
     @Override
-    public SelectionType getType() {
-        return SelectionType.NONE;
-    }
-
-    @Override
     public void appendNarrations(NarrationMessageBuilder builder) {}
 
     protected void playClickSound() {
-        MinecraftClient.getInstance().getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+//        Minecraft.getInstance().getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK, 1.0f));
     }
 
     protected int centerY(int height) {
@@ -75,6 +66,7 @@ public abstract class Widget implements Element, Selectable {
     }
 
     protected static int getColor(int r, int g, int b, int a) {
-        return ColorHelper.getArgb(a, r, g, b);
+        return 0;
+//        return ColorHelper.getArgb(a, r, g, b);
     }
 }

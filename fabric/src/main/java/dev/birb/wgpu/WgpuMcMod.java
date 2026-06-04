@@ -4,7 +4,7 @@ package dev.birb.wgpu;
 import dev.birb.wgpu.render.ShaderReloadListener;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
-import net.minecraft.resource.ResourceType;
+import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +20,6 @@ public class WgpuMcMod implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new ShaderReloadListener());
+		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ShaderReloadListener());
 	}
 }

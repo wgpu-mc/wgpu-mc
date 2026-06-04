@@ -5,13 +5,11 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import dev.birb.wgpu.gui.options.*;
 import dev.birb.wgpu.rust.WgpuNative;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.AttackIndicator;
-import net.minecraft.client.option.CloudRenderMode;
-import net.minecraft.client.option.GameOptions;
-import net.minecraft.client.option.GraphicsMode;
-import net.minecraft.particle.ParticlesMode;
-import net.minecraft.text.Text;
+import net.minecraft.client.AttackIndicatorStatus;
+import net.minecraft.client.GraphicsPreset;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -62,35 +60,35 @@ public class OptionPages implements Iterable<OptionPages.Page> {
     }
 
     private Page createGeneral() {
-        Page page = new Page(Text.of("General"));
+        Page page = new Page(Component.of("General"));
 
-        MinecraftClient mc = MinecraftClient.getInstance();
-        GameOptions options = mc.options;
+        Minecraft mc = Minecraft.getInstance();
+        Options options = mc.options;
 
         // 1
         page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.renderDistance"))
-                .setOption(options.getViewDistance())
-                .setFormatter(integer -> Text.translatable("options.chunks", integer))
+                .setName(Component.translatable("options.renderDistance"))
+                .setOption(options.renderDistance())
+                .setFormatter(integer -> Component.translatable("options.chunks", integer))
                 .setRange(2, 32)
                 .build()
         );
         page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.simulationDistance"))
-                .setOption(options.getSimulationDistance())
-                .setFormatter(integer -> Text.translatable("options.chunks", integer))
+                .setName(Component.translatable("options.simulationDistance"))
+                .setOption(options.simulationDistance())
+                .setFormatter(integer -> Component.translatable("options.chunks", integer))
                 .setRange(5, 16)
                 .build()
         );
         page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.gamma"))
-                .setAccessors(() -> (int) (options.getGamma().getValue() * 100), integer -> options.getGamma().setValue(integer / 100.0))
+                .setName(Component.translatable("options.gamma"))
+                .setAccessors(() -> (int) (options.gamma().get() * 100), integer -> options.gamma().set(integer / 100.0))
                 .setFormatter(integer -> {
-                    if (integer == 0) return Text.translatable("options.gamma.min");
-                    else if (integer == 50) return Text.translatable("options.gamma.default");
-                    else if (integer == 100) return Text.translatable("options.gamma.max");
+                    if (integer == 0) return Component.translatable("options.gamma.min");
+                    else if (integer == 50) return Component.translatable("options.gamma.default");
+                    else if (integer == 100) return Component.translatable("options.gamma.max");
 
-                    return Text.of(integer + "%");
+                    return Component.literal(integer + "%");
                 })
                 .setRange(0, 100)
                 .build()
@@ -100,26 +98,26 @@ public class OptionPages implements Iterable<OptionPages.Page> {
         // 2
         page.space();
         page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.guiScale"))
-                .setOption(options.getGuiScale(), i -> mc.onResolutionChanged())
-                .setFormatter(integer -> Text.of(integer == 0 ? "Auto" : integer + "x"))
+                .setName(Component.translatable("options.guiScale"))
+                .setOption(options.guiScale(), _ -> {})
+                .setFormatter(integer -> Component.literal(integer == 0 ? "Auto" : integer + "x"))
                 .setRange(0, 4)
                 .build()
         );
         page.add(new BoolOption.Builder()
-                .setName(Text.translatable("options.fullscreen"))
-                .setOption(options.getFullscreen())
+                .setName(Component.translatable("options.fullscreen"))
+                .setOption(options.fullscreen())
                 .build()
         );
         page.add(new BoolOption.Builder()
-                .setName(Text.translatable("options.vsync"))
-                .setOption(options.getEnableVsync())
+                .setName(Component.translatable("options.vsync"))
+                .setOption(options.enableVsync())
                 .build()
         );
         page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.framerateLimit"))
-                .setOption(options.getMaxFps())
-                .setFormatter(integer -> integer == 260 ? Text.translatable("options.framerateLimit.max") : Text.of(String.valueOf(integer)))
+                .setName(Component.translatable("options.framerateLimit"))
+                .setOption(options.framerateLimit())
+                .setFormatter(integer -> integer == 260 ? Component.translatable("options.framerateLimit.max") : Component.literal(String.valueOf(integer)))
                 .setRange(5, 260)
                 .setStep(5)
                 .build()
@@ -128,19 +126,19 @@ public class OptionPages implements Iterable<OptionPages.Page> {
         // 3
         page.space();
         page.add(new BoolOption.Builder()
-                .setName(Text.translatable("options.viewBobbing"))
-                .setOption(options.getBobView())
+                .setName(Component.translatable("options.viewBobbing"))
+                .setOption(options.bobView())
                 .build()
         );
-        page.add(new EnumOption.Builder<>(AttackIndicator.class)
-                .setName(Text.translatable("options.attackIndicator"))
-                .setOption(options.getAttackIndicator())
-                .setFormatter(attackIndicator -> Text.translatable(attackIndicator.getTranslationKey()))
+        page.add(new EnumOption.Builder<>(AttackIndicatorStatus.class)
+                .setName(Component.translatable("options.attackIndicator"))
+                .setOption(options.attackIndicator())
+                .setFormatter(attackIndicator -> Component.translatable(attackIndicator.name()))
                 .build()
         );
         page.add(new BoolOption.Builder()
-                .setName(Text.translatable("options.autosaveIndicator"))
-                .setOption(options.getShowAutosaveIndicator())
+                .setName(Component.translatable("options.autosaveIndicator"))
+                .setOption(options.showAutosaveIndicator())
                 .build()
         );
 
@@ -148,7 +146,7 @@ public class OptionPages implements Iterable<OptionPages.Page> {
     }
 
     private Page createElectrum() {
-        Page page = new Page(Text.of("Electrum"));
+        Page page = new Page(Component.literal("Electrum"));
 
         String rustSettings = WgpuNative.getSettings();
 
@@ -162,83 +160,83 @@ public class OptionPages implements Iterable<OptionPages.Page> {
     }
 
     private Page createQuality() {
-        Page page = new Page(Text.of("Quality"));
+        Page page = new Page(Component.literal("Quality"));
 
-        MinecraftClient mc = MinecraftClient.getInstance();
-        GameOptions options = mc.options;
+        Minecraft mc = Minecraft.getInstance();
+        Options options = mc.options;
 
         // 1
-        page.add(new EnumOption.Builder<>(GraphicsMode.class)
-                .setName(Text.translatable("options.graphics"))
-                .setOption(options.getGraphicsMode())
-                .setFormatter(graphicsMode -> Text.translatable(graphicsMode.getTranslationKey()))
+        page.add(new EnumOption.Builder<>(GraphicsPreset.class)
+                .setName(Component.translatable("options.graphics"))
+                .setOption(options.graphicsPreset())
+                .setFormatter(graphicsMode -> Component.translatable(graphicsMode.getKey()))
                 .build()
         );
 
         // 2
-        page.space();
-        page.add(new EnumOption.Builder<>(CloudRenderMode.class)
-                .setName(Text.translatable("options.renderClouds"))
-                .setOption(options.getCloudRenderMode())
-                .setFormatter(cloudRenderMode -> Text.translatable(cloudRenderMode.getTranslationKey()))
-                .build()
-        );
-        page.add(new EnumOption.Builder<>(ParticlesMode.class)
-                .setName(Text.translatable("options.particles"))
-                .setOption(options.getParticles())
-                .setFormatter(particlesMode -> Text.translatable(particlesMode.getTranslationKey()))
-                .build()
-        );
-        page.add(new BoolOption.Builder()
-                .setName(Text.translatable("options.ao"))
-                .setOption(options.getAo())
-                .build()
-        );
-        page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.biomeBlendRadius"))
-                .setOption(options.getBiomeBlendRadius())
-                .setFormatter(integer -> {
-                    int i = integer * 2 + 1;
-                    return Text.translatable("options.biomeBlendRadius." + i);
-                })
-                .setRange(0, 7)
-                .build()
-        );
+//        page.space();
+//        page.add(new EnumOption.Builder<>(CloudRenderMode.class)
+//                .setName(Component.translatable("options.renderClouds"))
+//                .setOption(options.getCloudRenderMode())
+//                .setFormatter(cloudRenderMode -> Component.translatable(cloudRenderMode.name()))
+//                .build()
+//        );
+//        page.add(new EnumOption.Builder<>(ParticlesMode.class)
+//                .setName(Component.translatable("options.particles"))
+//                .setOption(options.getParticles())
+//                .setFormatter(particlesMode -> Component.translatable(particlesMode.getTranslationKey()))
+//                .build()
+//        );
+//        page.add(new BoolOption.Builder()
+//                .setName(Component.translatable("options.ao"))
+//                .setOption(options.getAo())
+//                .build()
+//        );
+//        page.add(new IntOption.Builder()
+//                .setName(Component.translatable("options.biomeBlendRadius"))
+//                .setOption(options.getBiomeBlendRadius())
+//                .setFormatter(integer -> {
+//                    int i = integer * 2 + 1;
+//                    return Component.translatable("options.biomeBlendRadius." + i);
+//                })
+//                .setRange(0, 7)
+//                .build()
+//        );
 
         // 3
-        page.space();
-        page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.entityDistanceScaling"))
-                .setAccessors(() -> (int) (options.getEntityDistanceScaling().getValue() * 100), integer -> options.getEntityDistanceScaling().setValue(integer / 100.0))
-                .setFormatter(integer -> Text.of(integer + "%"))
-                .setRange(50, 500)
-                .setStep(25)
-                .build()
-        );
-        page.add(new BoolOption.Builder()
-                .setName(Text.translatable("options.entityShadows"))
-                .setOption(options.getEntityShadows())
-                .build()
-        );
-
-        // 4
-        page.space();
-        page.add(new IntOption.Builder()
-                .setName(Text.translatable("options.mipmapLevels"))
-                .setOption(options.getMipmapLevels())
-                .setFormatter(integer -> Text.of(integer + "x"))
-                .setRange(0, 4)
-                .build()
-        );
+//        page.space();
+//        page.add(new IntOption.Builder()
+//                .setName(Component.translatable("options.entityDistanceScaling"))
+//                .setAccessors(() -> (int) (options.getEntityDistanceScaling().getValue() * 100), integer -> options.getEntityDistanceScaling().setValue(integer / 100.0))
+//                .setFormatter(integer -> Component.of(integer + "%"))
+//                .setRange(50, 500)
+//                .setStep(25)
+//                .build()
+//        );
+//        page.add(new BoolOption.Builder()
+//                .setName(Component.translatable("options.entityShadows"))
+//                .setOption(options.getEntityShadows())
+//                .build()
+//        );
+//
+//        // 4
+//        page.space();
+//        page.add(new IntOption.Builder()
+//                .setName(Component.translatable("options.mipmapLevels"))
+//                .setOption(options.getMipmapLevels())
+//                .setFormatter(integer -> Component.of(integer + "x"))
+//                .setRange(0, 4)
+//                .build()
+//        );
 
         return page;
     }
 
     public static class Page implements Iterable<List<Option<?>>> {
-        public final Text name;
+        public final Component name;
         private final List<List<Option<?>>> groups = new ArrayList<>();
 
-        public Page(Text name) {
+        public Page(Component name) {
             this.name = name;
 
             space();

@@ -1,19 +1,19 @@
 package dev.birb.wgpu.gui.options;
 
-import dev.birb.wgpu.gui.widgets.TextEnumWidget;
+import dev.birb.wgpu.gui.widgets.ComponentEnumWidget;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
 
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-public class TextEnumOption extends Option<Integer> {
+public class ComponentEnumOption extends Option<Integer> {
 
-	public static final Function<TextEnumOption, Text> FORMATTER = option -> Text.of(option.values[option.get()]);
+	public static final Function<ComponentEnumOption, Component> FORMATTER = option -> Component.literal(option.values[option.get()]);
 	private final String[] values;
 
-	TextEnumOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Integer> getter, Consumer<Integer> setter, String[] values) {
+	ComponentEnumOption(Component name, Component tooltip, boolean requiresRestart, Supplier<Integer> getter, Consumer<Integer> setter, String[] values) {
 		super(name, tooltip, requiresRestart, getter, setter);
 		this.values = values;
 	}
@@ -31,6 +31,6 @@ public class TextEnumOption extends Option<Integer> {
 
 	@Override
 	public Widget createWidget(int x, int y, int width) {
-		return new TextEnumWidget(x, y, width, this);
+		return new ComponentEnumWidget(x, y, width, this);
 	}
 }

@@ -3,54 +3,75 @@ package dev.birb.wgpu.backend;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.textures.GpuTexture;
-import com.mojang.blaze3d.textures.TextureFormat;
+import com.mojang.blaze3d.systems.CommandEncoderBackend;
+import com.mojang.blaze3d.systems.GpuDeviceBackend;
+import com.mojang.blaze3d.textures.*;
 import dev.birb.wgpu.rust.WgpuNative;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
-public class WgpuBackend implements GpuDevice {
+public class WgpuBackend implements GpuDeviceBackend {
 
     private final int minUniformOffsetAlignment;
     private final int maxTextureSize;
 
-    public WgpuBackend(long window, long getWindow) {
-        int w = MinecraftClient.getInstance().getWindow().getWidth();
-        int h = MinecraftClient.getInstance().getWindow().getHeight();
+    private final BiFunction<Identifier, ShaderType, String> shaderSourceGetter;
+
+    public WgpuBackend(long window, long getWindow, BiFunction<Identifier, ShaderType, String> shaderSourceGetter) {
+        var mc = Minecraft.getInstance();
+        int w = mc.getWindow().getWidth();
+        int h = mc.getWindow().getHeight();
         WgpuNative.createDevice(window, getWindow, w, h);
+        this.shaderSourceGetter = shaderSourceGetter;
 
         this.minUniformOffsetAlignment = WgpuNative.getMinUniformAlignment();
         this.maxTextureSize = WgpuNative.getMaxTextureSize();
     }
 
     @Override
-    public CommandEncoder createCommandEncoder() {
+    public CommandEncoderBackend createCommandEncoder() {
         return new WgpuCommandEncoder();
     }
 
     @Override
-    public GpuTexture createTexture(@Nullable Supplier<String> labelGetter, int i, TextureFormat textureFormat, int height, int mipLevels, int j) {
-        return this.createTexture(labelGetter.get(), i, textureFormat, height, mipLevels, j);
+    public GpuSampler createSampler(AddressMode addressModeU, AddressMode addressModeV, FilterMode minFilter, FilterMode magFilter, int maxAnisotropy, OptionalDouble maxLod) {
+        return null;
     }
 
     @Override
-    public GpuTexture createTexture(@Nullable String label, int usage, TextureFormat textureFormat, int width, int height, int mipLevels) {
-        return new WgpuTexture(usage, label,  textureFormat, width, height, mipLevels);
+    public GpuTexture createTexture(@org.jspecify.annotations.Nullable Supplier<String> label, @GpuTexture.Usage int usage, TextureFormat format, int width, int height, int depthOrLayers, int mipLevels) {
+//        return this.createTexture(label.get(), usage, format, height, mipLevels, );
+        return null;
     }
 
     @Override
-    public GpuBuffer createBuffer(@Nullable Supplier<String> labelGetter, int usage, int size) {
-        String label = labelGetter.get();
-        return new WgpuBuffer(label != null ? label : "<mc buffer>", usage, size);
+    public GpuTexture createTexture(@org.jspecify.annotations.Nullable String label, @GpuTexture.Usage int usage, TextureFormat format, int width, int height, int depthOrLayers, int mipLevels) {
+//        return new WgpuTexture(usage, label,  textureFormat, width, height, mipLevels);
+        return null;
+    }
+
+    @Override
+    public GpuTextureView createTextureView(GpuTexture texture) {
+        return null;
+    }
+
+    @Override
+    public GpuTextureView createTextureView(GpuTexture texture, int baseMipLevel, int mipLevels) {
+        return null;
+    }
+
+    @Override
+    public GpuBuffer createBuffer(@org.jspecify.annotations.Nullable Supplier<String> label, @GpuBuffer.Usage int usage, long size) {
+        return null;
     }
 
     @Override
@@ -105,7 +126,7 @@ public class WgpuBackend implements GpuDevice {
     }
 
     @Override
-    public CompiledRenderPipeline precompilePipeline(RenderPipeline pipeline, @Nullable BiFunction<Identifier, ShaderType, String> sourceRetriever) {
+    public CompiledRenderPipeline precompilePipeline(RenderPipeline pipeline, @org.jspecify.annotations.Nullable ShaderSource shaderSource) {
         return null;
     }
 
@@ -120,7 +141,27 @@ public class WgpuBackend implements GpuDevice {
     }
 
     @Override
+    public int getMaxSupportedAnisotropy() {
+        return 0;
+    }
+
+    @Override
     public void close() {
 
+    }
+
+    @Override
+    public void setVsync(boolean enabled) {
+
+    }
+
+    @Override
+    public void presentFrame() {
+
+    }
+
+    @Override
+    public boolean isZZeroToOne() {
+        return false;
     }
 }

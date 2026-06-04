@@ -2,7 +2,7 @@ package dev.birb.wgpu.gui.options;
 
 import dev.birb.wgpu.gui.widgets.IntWidget;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
 
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -10,13 +10,13 @@ import java.util.function.Supplier;
 
 public class IntOption extends Option<Integer> {
 
-    public static final Function<Integer, Text> STANDARD_FORMATTER = integer -> Text.of(String.valueOf(integer));
-	public final Function<Integer, Text> formatter;
+    public static final Function<Integer, Component> STANDARD_FORMATTER = integer -> Component.literal(String.valueOf(integer));
+	public final Function<Integer, Component> formatter;
     public final int min;
     public final int max;
 	public final int step;
 
-	public IntOption(Text name, Text tooltip, boolean requiresRestart, Supplier<Integer> getter, Consumer<Integer> setter, int min, int max, int step, Function<Integer, Text> formatter) {
+	public IntOption(Component name, Component tooltip, boolean requiresRestart, Supplier<Integer> getter, Consumer<Integer> setter, int min, int max, int step, Function<Integer, Component> formatter) {
 		super(name, tooltip, requiresRestart, getter, setter);
 
 		this.formatter = formatter;
@@ -31,12 +31,12 @@ public class IntOption extends Option<Integer> {
     }
 
     public static class Builder extends Option.Builder<Builder, Integer> {
-		private Function<Integer, Text> formatter = STANDARD_FORMATTER;
+		private Function<Integer, Component> formatter = STANDARD_FORMATTER;
         private int min;
         private int max;
         private int step = 1;
 
-        public Builder setFormatter(Function<Integer, Text> formatter) {
+        public Builder setFormatter(Function<Integer, Component> formatter) {
             this.formatter = formatter;
             return this;
         }

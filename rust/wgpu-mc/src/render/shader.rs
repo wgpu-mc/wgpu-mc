@@ -3,6 +3,14 @@ use std::borrow::Cow;
 use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::wgpu::{ShaderModule, ShaderModuleDescriptor};
 
+#[cfg(target_arch = "wasm32")]
+pub trait WmShader {
+    fn get_frag(&self) -> (&ShaderModule, &str);
+
+    fn get_vert(&self) -> (&ShaderModule, &str);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub trait WmShader: Send + Sync {
     fn get_frag(&self) -> (&ShaderModule, &str);
 

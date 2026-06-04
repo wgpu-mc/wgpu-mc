@@ -1,10 +1,9 @@
 package dev.birb.wgpu.entity;
 
-import net.minecraft.client.render.entity.model.EntityModelLayer;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.EntityType;
+import com.mojang.math.Transformation;
+import net.minecraft.client.model.geom.EntityModelSet;
+import net.minecraft.world.entity.EntityType;
 import org.joml.Matrix4f;
-import org.lwjgl.system.MemoryUtil;
 
 import java.nio.BufferOverflowException;
 import java.nio.FloatBuffer;
@@ -71,31 +70,30 @@ public class EntityState {
 
         state.overlays.put(overlays);
 
-        MatrixStack stack = new MatrixStack();
-        stack.loadIdentity();
+        Transformation stack = Transformation.IDENTITY;
 
         for (Matrix4f orderedMatrix : orderedMatrices) {
-            Matrix4f mat = orderedMatrix;
-            if (mat == null) {
-                mat = stack.peek().getPositionMatrix();
-            }
-
-            try {
-                mat.get(state.buffer);
-                state.buffer.position(state.buffer.position() + 16);
-            } catch(BufferOverflowException e) {
-                FloatBuffer oldBuffer = state.buffer;
-                state.buffer = MemoryUtil.memAllocFloat(state.buffer.capacity() + 1000);
-                state.buffer.put(oldBuffer);
-                mat.get(state.buffer);
-                state.buffer.position(state.buffer.position() + 16);
-            }
+//            Matrix4f mat = orderedMatrix;
+//            if (mat == null) {
+//                mat = stack.getMatrixCopy().getTa();
+//            }
+//
+//            try {
+//                mat.get(state.buffer);
+//                state.buffer.position(state.buffer.position() + 16);
+//            } catch(BufferOverflowException e) {
+//                FloatBuffer oldBuffer = state.buffer;
+//                state.buffer = MemoryUtil.memAllocFloat(state.buffer.capacity() + 1000);
+//                state.buffer.put(oldBuffer);
+//                mat.get(state.buffer);
+//                state.buffer.position(state.buffer.position() + 16);
+//            }
         }
 
-        state.textureId = textureId;
-        state.count++;
+//        state.textureId = textureId;
+//        state.count++;
 
-        renderStates.put(entityName, state);
+//        renderStates.put(entityName, state);
     }
 
     public static class EntityRenderState {
@@ -109,8 +107,8 @@ public class EntityState {
 
     public static class EntityModelInfo {
 
-        public EntityModelLayer root;
-        public final List<EntityModelLayer> features = new ArrayList<>();
+        public EntityModelSet root;
+        public final List<EntityModelSet> features = new ArrayList<>();
 
     }
 

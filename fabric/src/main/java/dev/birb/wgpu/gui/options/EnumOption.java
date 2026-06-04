@@ -2,7 +2,7 @@ package dev.birb.wgpu.gui.options;
 
 import dev.birb.wgpu.gui.widgets.EnumWidget;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -12,11 +12,11 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class EnumOption<T extends Enum<T>> extends Option<T> {
-    public final Function<T, Text> formatter;
+    public final Function<T, Component> formatter;
 
     private final List<T> values;
 
-    private EnumOption(Text name, Class<T> enumClass, Text tooltip, boolean requiresRestart, Supplier<T> getter, Consumer<T> setter, Function<T, Text> formatter) {
+    private EnumOption(Component name, Class<T> enumClass, Component tooltip, boolean requiresRestart, Supplier<T> getter, Consumer<T> setter, Function<T, Component> formatter) {
         super(name, tooltip, requiresRestart, getter, setter);
 
         this.formatter = formatter;
@@ -44,14 +44,14 @@ public class EnumOption<T extends Enum<T>> extends Option<T> {
     }
 
     public static class Builder<T extends Enum<T>> extends Option.Builder<Builder<T>, T> {
-        private Function<T, Text> formatter = t -> Text.of(t.toString());
+        private Function<T, Component> formatter = t -> Component.literal(t.toString());
         private final Class<T> enumClass;
 
         public Builder(Class<T> enumClass) {
             this.enumClass = enumClass;
         }
 
-        public Builder<T> setFormatter(Function<T, Text> formatter) {
+        public Builder<T> setFormatter(Function<T, Component> formatter) {
             this.formatter = formatter;
             return this;
         }

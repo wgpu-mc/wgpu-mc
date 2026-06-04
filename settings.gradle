@@ -1,5 +1,3 @@
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
-
 pluginManagement {
     repositories {
         maven {
@@ -13,16 +11,16 @@ pluginManagement {
 
 rootProject.name = "wgpu-mc"
 
-subProject("rust");
-subProject("fabric");
-
-fun subProject(name: String) {
+def subProject(String name) {
     setupSubproject("wgpu-mc-$name") {
         projectDir = file(name)
     }
 }
 
-inline fun setupSubproject(name: String, block: ProjectDescriptor.() -> Unit) {
+def setupSubproject(String name, Closure block) {
     include(name)
-    project(":$name").apply(block)
+    project(":$name").with(block)
 }
+
+subProject("rust")
+subProject("fabric")

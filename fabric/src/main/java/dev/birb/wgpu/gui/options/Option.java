@@ -3,10 +3,10 @@ package dev.birb.wgpu.gui.options;
 import com.google.gson.*;
 import dev.birb.wgpu.gui.OptionPages;
 import dev.birb.wgpu.gui.widgets.Widget;
-import net.minecraft.client.option.SimpleOption;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.OptionInstance;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -15,8 +15,8 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public abstract class Option<T> {
-    public final Text name;
-    public final Text tooltip;
+    public final Component name;
+    public final Component tooltip;
     public final boolean requiresRestart;
 
     private final Supplier<T> getter;
@@ -24,7 +24,7 @@ public abstract class Option<T> {
 
     private T value;
 
-    Option(Text name, Text tooltip, boolean requiresRestart, Supplier<T> getter, Consumer<T> setter) {
+    Option(Component name, Component tooltip, boolean requiresRestart, Supplier<T> getter, Consumer<T> setter) {
         this.name = name;
         this.tooltip = tooltip;
         this.requiresRestart = requiresRestart;
@@ -56,9 +56,9 @@ public abstract class Option<T> {
 
     public abstract Widget createWidget(int x, int y, int width);
 
-    public Text getName() {
+    public Component getName() {
         if (isChanged()) {
-            return name.copy().append(" *").formatted(Formatting.ITALIC);
+            return name.copy().append(" *").withStyle(ChatFormatting.ITALIC);
         }
 
         return name;
@@ -66,24 +66,24 @@ public abstract class Option<T> {
 
     @SuppressWarnings("unchecked")
     public abstract static class Builder<B extends Builder<B, T>, T> {
-        protected Text name;
-        protected Text tooltip;
+        protected Component name;
+        protected Component tooltip;
         protected boolean requiresRestart;
         protected Supplier<T> getter;
         protected Consumer<T> setter;
 
-        public B setName(MutableText name) {
+        public B setName(MutableComponent name) {
             this.name = name;
             return (B) this;
         }
 
-        public B setTooltip(Text tooltip, boolean requiresRestart) {
+        public B setTooltip(Component tooltip, boolean requiresRestart) {
             this.tooltip = tooltip;
             this.requiresRestart = requiresRestart;
             return (B) this;
         }
 
-        public B setTooltip(Text tooltip) {
+        public B setTooltip(Component tooltip) {
             return setTooltip(tooltip, false);
         }
 
@@ -94,19 +94,19 @@ public abstract class Option<T> {
         }
 
         // Simple wrapper around minecraft 1.19's SimpleOption, to be reflected on how to handle for wgpu-mc's config
-        public B setOption(SimpleOption<T> option, Consumer<T> callback) {
-            this.getter = option::getValue;
+        public B setOption(OptionInstance<T> option, Consumer<T> callback) {
+            this.getter = option::get;
             this.setter = v -> {
-                option.setValue(v);
+                option.set(v);
                 callback.accept(v);
             };
 
             return (B) this;
         }
 
-        public B setOption(SimpleOption<T> option) {
-            this.getter = option::getValue;
-            this.setter = option::setValue;
+        public B setOption(OptionInstance<T> option) {
+            this.getter = option::get;
+            this.setter = option::set;
             return (B) this;
         }
 
@@ -123,7 +123,7 @@ public abstract class Option<T> {
             switch (typeString) {
                 case "bool" -> {
                     boolean value = jsonObject.get("value").getAsJsonPrimitive().getAsBoolean();
-                    return new BoolOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> value, bool -> {
+                    return new BoolOption(Component.literal(name), Component.literal(structure.getDesc()), structure.isNeedsRestart(), () -> value, bool -> {
                     });
                 }
                 case "float" -> {
@@ -132,7 +132,7 @@ public abstract class Option<T> {
                     double max = jsonObject.get("max").getAsJsonPrimitive().getAsDouble();
                     double step = jsonObject.get("step").getAsJsonPrimitive().getAsDouble();
 
-                    return new FloatOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> value, i -> {
+                    return new FloatOption(Component.literal(name), Component.literal(structure.getDesc()), structure.isNeedsRestart(), () -> value, i -> {
                     }, min, max, step, FloatOption.STANDARD_FORMATTER);
                 }
                 case "int" -> {
@@ -141,12 +141,12 @@ public abstract class Option<T> {
                     int max = jsonObject.get("max").getAsJsonPrimitive().getAsInt();
                     int step = jsonObject.get("step").getAsJsonPrimitive().getAsInt();
 
-                    return new IntOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> value, i -> {
+                    return new IntOption(Component.literal(name), Component.literal(structure.getDesc()), structure.isNeedsRestart(), () -> value, i -> {
                     }, min, max, step, IntOption.STANDARD_FORMATTER);
                 }
                 case "enum" -> {
                     int selected = jsonObject.get("selected").getAsJsonPrimitive().getAsInt();
-                    return new TextEnumOption(Text.of(name), Text.of(structure.getDesc()), structure.isNeedsRestart(), () -> selected, i -> {
+                    return new ComponentEnumOption(Component.literal(name), Component.literal(structure.getDesc()), structure.isNeedsRestart(), () -> selected, i -> {
                     }, structure.getVariants());
                 }
                 default -> throw new JsonParseException("Unexpected value: " + typeString);
@@ -154,8 +154,8 @@ public abstract class Option<T> {
         }
 
         @Override
-        public List<Option<?>> deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
-            if (json instanceof JsonObject jsonObject) {
+        public List<Option<?>> deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext jsonDeserializationContext) throws JsonParseException {
+            if (jsonElement instanceof JsonObject jsonObject) {
                 var options = new ArrayList<Option<?>>();
                 for (var entry : jsonObject.entrySet()) {
                     try {
@@ -170,8 +170,8 @@ public abstract class Option<T> {
             }
         }
 
-        @Override
-        public JsonElement serialize(List<Option<?>> src, Type typeOfSrc, JsonSerializationContext context) {
+//        @Override
+        public JsonElement serialize(List<Option<?>> src, Type typeOfSrc, JsonSerializationConComponent conComponent) {
             JsonObject root = new JsonObject();
 
             for (Option<?> option : src) {
@@ -192,8 +192,8 @@ public abstract class Option<T> {
                 root.addProperty("min", intOption.min);
                 root.addProperty("max", intOption.max);
                 root.addProperty("step", intOption.step);
-            } else if (option instanceof TextEnumOption textEnumOption) {
-                root.addProperty("selected", textEnumOption.get());
+            } else if (option instanceof ComponentEnumOption ComponentEnumOption) {
+                root.addProperty("selected", ComponentEnumOption.get());
             } else if (option instanceof FloatOption floatOption) {
                 root.addProperty("type", "float");
                 root.addProperty("value", floatOption.get());
@@ -204,6 +204,11 @@ public abstract class Option<T> {
                 throw new IllegalStateException("There should be no EnumOption here!");
             }
             return root;
+        }
+
+        @Override
+        public JsonElement serialize(List<Option<?>> options, Type type, JsonSerializationContext jsonSerializationContext) {
+            return null;
         }
     }
 }
