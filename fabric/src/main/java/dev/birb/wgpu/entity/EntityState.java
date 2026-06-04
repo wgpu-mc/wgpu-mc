@@ -5,9 +5,6 @@ import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.world.entity.EntityType;
 import org.joml.Matrix4f;
 
-import java.nio.BufferOverflowException;
-import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -68,7 +65,7 @@ public class EntityState {
             renderStates.put(entityName, state);
         }
 
-        state.overlays.put(overlays);
+//        state.overlays.put(overlays);
 
         Transformation stack = Transformation.IDENTITY;
 
@@ -98,8 +95,8 @@ public class EntityState {
 
     public static class EntityRenderState {
 
-        public FloatBuffer buffer = MemoryUtil.memAllocFloat(100000);
-        public final IntBuffer overlays = MemoryUtil.memAllocInt(100000);
+//        public FloatBuffer buffer = MemoryUtil.memAllocFloat(100000);
+//        public final IntBuffer overlays = MemoryUtil.memAllocInt(100000);
         public int count = 0;
         public int textureId;
 

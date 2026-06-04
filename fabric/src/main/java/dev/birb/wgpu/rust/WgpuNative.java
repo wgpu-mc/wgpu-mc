@@ -11,10 +11,6 @@ import java.util.HashMap;
 
 public class WgpuNative {
 
-    static {
-        loadWm();
-    }
-
     public static ClassLoader getClassLoader() {
         return WgpuNative.class.getClassLoader();
     }
@@ -45,7 +41,7 @@ public class WgpuNative {
         if (!libDir.exists()) libDir.mkdirs();
         File object = new File("lib", name);
         if (forceOverwrite || !object.exists()) {
-            InputStream is = WgpuNative.class.getClassLoader().getResourceAsStream("META-INF/natives/" + name);
+            InputStream is = WgpuNative.class.getClassLoader().getResourceAsStream("assets/wgpu_mc/natives/" + name);
             if (is == null) throw new FileNotFoundException("Could not find lib " + name + " in jar");
 
             Files.copy(is, object.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -150,7 +146,7 @@ public class WgpuNative {
 
     public static native void setShaderColor(float r, float g, float b, float a);
 
-    public static native void createDevice(long window, long getWindow, int w, int h);
+    public static native void createDevice(long window, long instance);
 
     public static native long createCommandEncoder();
 

@@ -12,8 +12,9 @@ public class WgpuTexture extends GpuTexture {
     public AtomicBoolean alive = new AtomicBoolean(true);
 
     public WgpuTexture(int usage, String string, TextureFormat textureFormat, int width, int height, int mips) {
-        super(usage, string, textureFormat, width, height, mips);
-        
+        super(usage, string, textureFormat, width, height, 1, 1);
+
+
         int formatId = switch(textureFormat) {
             case RGBA8 -> 0;
             case RED8 -> 1;

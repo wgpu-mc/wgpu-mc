@@ -31,7 +31,7 @@ public class WgpuBuffer extends GpuBuffer {
     public WgpuBuffer(String label, int usage, ByteBuffer data) {
         super(usage, data.capacity());
 
-        this.map = MemoryUtil.memAlloc(size);
+//        this.map = MemoryUtil.memAlloc(size);
         MemoryUtil.memCopy(data, this.map);
         this.buffer = WgpuNative.createBufferInit(label, usage & ~(GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_MAP_READ), data);
     }

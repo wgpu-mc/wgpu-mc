@@ -1,9 +1,8 @@
 package dev.birb.wgpu.mixin.world;
 
-import dev.birb.wgpu.palette.RustBlockStateAccessor;
-import net.minecraft.block.BlockState;
+import dev.birb.wgpu.helper.RustBlockStateAccessor;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(BlockState.class)
 public class BlockStateMixin implements RustBlockStateAccessor {

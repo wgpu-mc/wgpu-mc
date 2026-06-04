@@ -1,38 +1,56 @@
 use std::borrow::Cow;
 use std::ffi::{c_char, c_int, CString};
 use std::num::NonZeroIsize;
+use std::ptr::{null, null_mut};
 use std::sync::Arc;
 use futures::executor::block_on;
-use glfw::ffi::{GLFWmonitor, GLFWwindow};
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JClass, JString};
 use jni::sys::{jint, jlong};
 use jni_fn::jni_fn;
 use parking_lot::{Mutex, RwLock};
-use raw_window_handle::{HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowHandle};
+use raw_window_handle::{HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowHandle, WindowsDisplayHandle};
+use winapi::shared::windef::HWND;
+use winapi::um::libloaderapi::GetModuleHandleW;
+use winapi::um::winuser::{GetWindowLongPtrW, IsWindow, GWLP_HINSTANCE};
 use wgpu_mc::{wgpu, Display, WindowSize, WmRenderer};
-use wgpu_mc::wgpu::{BufferUsages, CommandEncoderDescriptor, TextureUsages};
+use wgpu_mc::wgpu::{BufferUsages, CommandEncoderDescriptor, SurfaceTargetUnsafe, TextureUsages};
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::{MinecraftResourceManagerAdapter, RENDERER};
 
+unsafe extern "C" {
+    static __ImageBase: winapi::um::winnt::IMAGE_DOS_HEADER;
+}
+
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, get_window: jlong, width: jint, height: jint) {
-    glfw::init_no_callbacks().unwrap();
-
-    let window = window as *mut GLFWwindow;
-    let get_window = unsafe { std::mem::transmute(get_window) };
-
-    let width = width as u32;
-    let height = height as u32;
-
+pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, instance: jlong) {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::VULKAN,
+        backends: wgpu::Backends::DX12,
         ..Default::default()
     });
 
-    let handle = unsafe { glfw::ThinHandle::new(window, get_window) };
+    #[cfg(windows)]
+    let surface = {
+        println!("window {window:?}");
 
-    let surface = instance.create_surface(Arc::new(handle)).unwrap();
+        let hwnd: HWND = window as HWND;
+
+        let mut win_handle = Win32WindowHandle::new(NonZeroIsize::new(hwnd as isize).unwrap());
+        // let dll_base = &unsafe { __ImageBase } as *const _ as *const usize;
+        win_handle.hinstance = NonZeroIsize::new(unsafe { GetWindowLongPtrW(hwnd as _, GWLP_HINSTANCE) } as isize);
+
+        let handle = SurfaceTargetUnsafe::RawHandle {
+            raw_display_handle: RawDisplayHandle::Windows(WindowsDisplayHandle::new()),
+            raw_window_handle: RawWindowHandle::Win32(win_handle),
+        };
+
+        unsafe { instance.create_surface_unsafe(handle).unwrap() }
+    };
+
+    #[cfg(not(windows))]
+    {
+        todo!()
+    }
 
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
@@ -47,8 +65,8 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, get_window: 
     let surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: wgpu::TextureFormat::Bgra8Unorm,
-        width,
-        height,
+        width: 1920,
+        height: 1080,
         present_mode: if VSYNC {
             wgpu::PresentMode::AutoVsync
         } else {
@@ -70,14 +88,14 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, get_window: 
     let (device, queue) = block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
             label: None,
-            required_features: wgpu::Features::default()
-                | wgpu::Features::DEPTH_CLIP_CONTROL
-                | wgpu::Features::PUSH_CONSTANTS
-                | wgpu::Features::BUFFER_BINDING_ARRAY
-                | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY
-                | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
-                | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY
-                | wgpu::Features::MULTI_DRAW_INDIRECT,
+            required_features: wgpu::Features::default(),
+                // | wgpu::Features::DEPTH_CLIP_CONTROL
+                // | wgpu::Features::PUSH_CONSTANTS
+                // | wgpu::Features::BUFFER_BINDING_ARRAY
+                // | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY
+                // | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
+                // | wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY
+                // | wgpu::Features::MULTI_DRAW_INDIRECT,
             required_limits,
             memory_hints: wgpu::MemoryHints::Performance,
         },
@@ -105,6 +123,11 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, get_window: 
     wm.init();
 
     drop(RENDERER.set(wm));
+}
+
+#[no_mangle]
+pub extern "C" fn test() {
+    println!("this func does stuff");
 }
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]

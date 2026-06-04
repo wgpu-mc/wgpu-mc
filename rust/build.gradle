@@ -17,10 +17,18 @@
 //
 //
 tasks.register('copyToResources', Copy) {
-    dependsOn 'build'
+    dependsOn 'copyBindings'
 
     from ('target/release/' + System.mapLibraryName("wgpu_mc_jni"))
-    into '../fabric/build/resources/assets/wgpu_mc/natives/'
+    into '../fabric/build/resources/main/assets/wgpu_mc/natives/'
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.register('copyBindings', Copy) {
+    dependsOn 'build'
+
+    from 'wgpu-mc-jni/bindings.h' into '../fabric/src/main/'
+    rename 'bindings.h', 'wgpu-mc.h'
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 

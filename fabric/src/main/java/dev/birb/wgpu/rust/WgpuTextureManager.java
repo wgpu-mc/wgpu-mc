@@ -1,6 +1,6 @@
 package dev.birb.wgpu.rust;
 
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.Identifier;
 
 import java.util.HashMap;
 

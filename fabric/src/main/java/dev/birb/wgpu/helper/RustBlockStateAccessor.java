@@ -1,4 +1,4 @@
-package dev.birb.wgpu.palette;
+package dev.birb.wgpu.helper;
 
 public interface RustBlockStateAccessor {
 
