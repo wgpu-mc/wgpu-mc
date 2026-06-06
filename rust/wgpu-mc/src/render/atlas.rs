@@ -188,18 +188,23 @@ impl Atlas {
     /// Returns true if the atlas was resized.
     pub fn upload(&self, wm: &WmRenderer) -> bool {
         wm.gpu.queue.write_texture(
-            self.texture.texture.as_image_copy(),
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture.texture,
+                mip_level: 0,
+                origin: Default::default(),
+                aspect: Default::default(),
+            },
             self.image.read().as_raw(),
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * self.size),
-                rows_per_image: Some(self.size),
+                bytes_per_row: Some(self.size as _),
+                rows_per_image: Some(self.size as _),
             },
             Extent3d {
                 width: self.size,
                 height: self.size,
                 depth_or_array_layers: 1,
-            },
+            }
         );
 
         false
@@ -230,7 +235,7 @@ impl TextureManager {
             address_mode_w: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
 

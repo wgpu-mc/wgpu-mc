@@ -1,7 +1,6 @@
 package dev.birb.wgpu;
 
 import dev.birb.wgpu.rust.WgpuNative;
-import dev.birb.wm.WgpuMc;
 import net.fabricmc.api.ClientModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +18,6 @@ public class WgpuMcMod implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		WgpuNative.loadWm();
-		WgpuMc.test();
 //		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ShaderReloadListener());
 	}
 }

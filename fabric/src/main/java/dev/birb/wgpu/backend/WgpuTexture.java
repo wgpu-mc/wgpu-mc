@@ -2,17 +2,18 @@ package dev.birb.wgpu.backend;
 
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.TextureFormat;
-import dev.birb.wgpu.rust.WgpuNative;
+import dev.birb.wm.WM;
 
+import java.lang.foreign.MemorySegment;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WgpuTexture extends GpuTexture {
 
-    public long texture;
-    public AtomicBoolean alive = new AtomicBoolean(true);
+    final MemorySegment texture;
+    private AtomicBoolean closed = new AtomicBoolean();
 
-    public WgpuTexture(int usage, String string, TextureFormat textureFormat, int width, int height, int mips) {
-        super(usage, string, textureFormat, width, height, 1, 1);
+    public WgpuTexture(int usage, String string, TextureFormat textureFormat, int width, int height, int depthOrLayers, int mips) {
+        super(usage, string, textureFormat, width, height, depthOrLayers, mips);
 
 
         int formatId = switch(textureFormat) {
@@ -21,22 +22,17 @@ public class WgpuTexture extends GpuTexture {
             case RED8I -> 2;
             case DEPTH32 -> 3;
         };
-        
-        this.texture = WgpuNative.createTexture(formatId, width, height, usage);
+
+        texture = WM.create_texture(formatId, width, height, depthOrLayers, usage);
     }
 
     @Override
     public void close() {
-        boolean wasAlive = alive.compareAndExchange(true, false);
-        if(wasAlive) {
-            WgpuNative.dropTexture(this.texture);
-        } else {
-            throw new IllegalStateException("wgpu texture was already dropped");
-        }
+        if(!closed.compareAndExchange(false, true)) WM.drop_texture(texture);
     }
 
     @Override
     public boolean isClosed() {
-        return !alive.getAcquire();
+        return closed.get();
     }
 }

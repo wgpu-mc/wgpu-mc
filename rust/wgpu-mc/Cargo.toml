@@ -10,7 +10,8 @@ tracing = []
 
 [dependencies]
 # if you upgrade this, also change WmRenderer::get_backend_description in wgpu-mc/src/lib.rs
-wgpu = { version = "22", features = ["glsl"] }
+#wgpu = { version = "29.0.3", features = ["glsl", "wgsl"] }
+wgpu = { git = "https://github.com/robertream-m42/wgpu.git", features = ["glsl", "wgsl"], branch = "fix/glsl-combined-sampler" }
 image = "0.25"
 glam = "0.29"
 bytemuck = { version = "1.13", features = ["derive"] }

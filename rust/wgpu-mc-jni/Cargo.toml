@@ -40,7 +40,10 @@ serde-binary = "0.5.0"
 cbindgen = "0.29"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3.9", features = ["winnt"] }
+winapi = { version = "0.3.9", features = ["windef", "libloaderapi", "winuser"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+debug = true

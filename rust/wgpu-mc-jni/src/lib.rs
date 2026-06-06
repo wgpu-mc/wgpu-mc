@@ -29,7 +29,7 @@ use std::time::Instant;
 use std::{mem, thread};
 use wgpu::Extent3d;
 use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
-use wgpu_mc::wgpu::util::DeviceExt;
+use wgpu_mc::wgpu::util::{DeviceExt, TextureBlitter};
 
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
 use wgpu_mc::mc::chunk::{bake_section, BlockStateProvider, LightLevel};
@@ -38,8 +38,7 @@ use wgpu_mc::mc::{RenderEffectsData, Scene, SkyState};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
 use wgpu_mc::render::pipeline::BLOCK_ATLAS;
 use wgpu_mc::texture::{BindableTexture, TextureAndView};
-use wgpu_mc::wgpu::ImageDataLayout;
-use wgpu_mc::wgpu::{self, TextureFormat};
+use wgpu_mc::wgpu::{self, CurrentSurfaceTexture, TextureFormat};
 use wgpu_mc::{Frustum, WmRenderer};
 
 use crate::lighting::DeserializedLightData;
@@ -73,6 +72,7 @@ struct MouseState {
 
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
+static BLITTER: OnceCell<TextureBlitter> = OnceCell::new();
 
 pub static RENDER_GRAPH: OnceCell<Mutex<RenderGraph>> = OnceCell::new();
 pub static CUSTOM_GEOMETRY: OnceCell<Mutex<HashMap<String, Box<dyn Geometry>>>> = OnceCell::new();
@@ -242,6 +242,8 @@ impl ResourceProvider for MinecraftResourceManagerAdapter {
         .l()
         .expect(&id.0)
         .into();
+
+        println!("we good?");
 
         let elements: AutoElements<jbyte> =
             unsafe { env.get_array_elements(&bytes, ReleaseMode::NoCopyBack) }.unwrap();
@@ -466,91 +468,6 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
     BLOCKS.lock().push(name);
 }
 
-#[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
-pub fn render(_env: JNIEnv, _class: JClass, _tick_delta: jfloat, _start_time: jlong, _tick: jlong, scene: jlong, width: jint, height: jint) {
-    let width = width as u32;
-    let height = height as u32;
-
-    let wm = RENDERER.get().unwrap();
-    let render_graph = RENDER_GRAPH.get().unwrap().lock();
-    let mut geometry = CUSTOM_GEOMETRY.get().unwrap().lock();
-    let scene = unsafe { &mut *(scene as *mut Scene) };
-
-    wm.submit_chunk_updates(scene);
-    let pos = *scene.camera_section_pos.read();
-    scene.section_storage.write().trim(pos);
-    *scene.entity_instances.lock() = ENTITY_INSTANCES.lock().clone();
-
-    let matrices = MATRICES.lock();
-    if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_perspective"] {
-        wm.gpu
-            .queue
-            .write_buffer(buffer, 0, bytemuck::cast_slice(&matrices.projection));
-    }
-    if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_view"] {
-        wm.gpu
-            .queue
-            .write_buffer(buffer, 0, bytemuck::cast_slice(&matrices.view));
-    }
-    if let ResourceBacking::Buffer(buffer, _) = &render_graph.resources["@mat4_model"] {
-        wm.gpu.queue.write_buffer(
-            buffer,
-            0,
-            bytemuck::cast_slice(&matrices.terrain_transformation),
-        );
-    }
-
-    let texture = wm
-        .gpu
-        .surface
-        .get_current_texture()
-        .unwrap_or_else(|_| {
-            //The surface is outdated, so we force an update. This can't be done on the window resize event for synchronization reasons.
-
-            let mut surface_config = wm.gpu.config.write();
-            surface_config.width = width;
-            surface_config.height = height;
-            scene.resize_depth_texture(wm, width, height);
-            wm.gpu
-                .surface
-                .configure(&wm.gpu.device, &surface_config);
-            wm.gpu.surface.get_current_texture().unwrap()
-        });
-
-    let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
-        label: None,
-        format: Some(TextureFormat::Bgra8Unorm),
-        dimension: Some(wgpu::TextureViewDimension::D2),
-        aspect: Default::default(),
-        base_mip_level: 0,
-        mip_level_count: None,
-        base_array_layer: 0,
-        array_layer_count: None,
-    });
-
-    {
-        let mut encoder = wm
-            .gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-        let clear_color =
-            *<Lazy<ArcSwapAny<Arc<[f32; 3]>>> as Access<[f32; 3]>>::load(&CLEAR_COLOR);
-        render_graph.render(
-            wm,
-            &mut encoder,
-            scene,
-            &view,
-            clear_color,
-            &mut geometry,
-            &Frustum::from_modelview_projection([[0.0; 4]; 4]),
-        );
-
-        wm.gpu.queue.submit([encoder.finish()]);
-    }
-
-    texture.present();
-}
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {

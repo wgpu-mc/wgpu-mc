@@ -166,7 +166,7 @@ pub struct PipelineConfig {
     pub bind_groups: LinkedHashMap<u64, BindGroupDef>,
 
     #[serde(default)]
-    pub push_constants: LinkedHashMap<u64, String>,
+    pub immediates: LinkedHashMap<u64, String>,
 
     #[serde(default = "blend_default")]
     pub blending: String,

@@ -1,0 +1,6 @@
+[export.rename]
+"Buffer" = "uint8_t"
+"CommandEncoder" = "uint8_t"
+"TextureView" = "uint8_t"
+"Texture" = "uint8_t"
+"RenderPass" = "uint8_t"

@@ -30,6 +30,7 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
     implementation files().builtBy(":wgpu-mc-rust:copyToResources")
+    implementation "io.github.douira:glsl-transformer:3.0.0-pre3"
 }
 
 processResources {
@@ -50,12 +51,16 @@ tasks.withType(JavaCompile).configureEach {
 jextract.libraries {
     def greeting = register('wgpu_mc_jni') {
         header = layout.projectDirectory.file("src/main/wgpu-mc.h")
-        headerClassName = "WgpuMc"
+        headerClassName = "WM"
         targetPackage = "dev.birb.wm"
     }
     sourceSets.main {
         jextract.libraries.addLater(greeting)
     }
+}
+
+generateWgpu_mc_jniBindings {
+    dependsOn(":wgpu-mc-rust:copyToResources")
 }
 
 java {

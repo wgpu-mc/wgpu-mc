@@ -123,6 +123,30 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
             }),
         ),
         (
+            "texture_and_sampler".into(),
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    }
+                ],
+            })
+        ),
+        (
             "texture_depth".into(),
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Depth Texture Descriptor"),
@@ -136,13 +160,7 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
                             multisampled: false,
                         },
                         count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
-                        count: None,
-                    },
+                    }
                 ],
             }),
         ),

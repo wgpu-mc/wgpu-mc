@@ -27,7 +27,7 @@ public class WgpuBackend implements GpuBackend {
 
     @Override
     public @NonNull GpuDevice createDevice(long window, ShaderSource defaultShaderSource, GpuDebugOptions debugOptions) {
-        return new GpuDevice(new WgpuDeviceBackend(window, defaultShaderSource));
+        return new GpuDevice(new WgpuDevice(window, defaultShaderSource));
     }
 
 }
