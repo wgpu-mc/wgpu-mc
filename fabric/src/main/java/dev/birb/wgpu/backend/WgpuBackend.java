@@ -7,17 +7,18 @@ import com.mojang.blaze3d.systems.BackendCreationException;
 import com.mojang.blaze3d.systems.GpuBackend;
 import com.mojang.blaze3d.systems.GpuDevice;
 import org.jspecify.annotations.NonNull;
+import org.lwjgl.glfw.GLFW;
 
 public class WgpuBackend implements GpuBackend {
 
     @Override
-    public String getName() {
+    public @NonNull String getName() {
         return "wgpu";
     }
 
     @Override
     public void setWindowHints() {
-
+        GLFW.glfwWindowHint(GLFW.GLFW_CLIENT_API, GLFW.GLFW_NO_API);
     }
 
     @Override

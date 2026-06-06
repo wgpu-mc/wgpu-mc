@@ -26,7 +26,7 @@ use crate::preprocessing::shim_samplers;
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, width: u32, height: u32) {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::DX12,
+        backends: wgpu::Backends::PRIMARY,
         flags: wgpu::InstanceFlags::VALIDATION | wgpu::InstanceFlags::DEBUG | wgpu::InstanceFlags::GPU_BASED_VALIDATION,
         memory_budget_thresholds: Default::default(),
         backend_options: Default::default(),
