@@ -127,7 +127,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     public void presentTexture(@NonNull GpuTextureView texture) {
         if(!closed.compareAndExchange(false, true)) {
             //SAFETY: This function consumes the command encoder, but this can only happen once due to the AtomicBoolean
-            WM.present_texture(nativeCommandEncoder, ((WgpuTextureView) texture).nativeView);
+//            WM.present_texture(nativeCommandEncoder, ((WgpuTextureView) texture).nativeView);
         } else {
             throw new IllegalStateException();
         }
