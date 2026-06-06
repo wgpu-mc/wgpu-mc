@@ -341,9 +341,9 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
-version = "0.10.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
+checksum = "34ddef2995421ab6a5c779542c81ee77c115206f4ad9d5a8e05f4ff49716a3dd"
 dependencies = [
  "bit-vec",
 ]
@@ -1155,6 +1155,12 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
+name = "foldhash"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
@@ -1422,6 +1428,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "glsl"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "577ac945ce66a4b7004c6e2807f517f94ef027dda89df578abe1fbb979d22f49"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "glutin_wgl_sys"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1442,6 +1457,26 @@ dependencies = [
  "presser",
  "thiserror 2.0.18",
  "windows",
+]
+
+[[package]]
+name = "gpu-descriptor"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b89c83349105e3732062a895becfc71a8f921bb71ecbbdd8ff99263e3b53a0ca"
+dependencies = [
+ "bitflags 2.9.0",
+ "gpu-descriptor-types",
+ "hashbrown 0.15.5",
+]
+
+[[package]]
+name = "gpu-descriptor-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
+dependencies = [
+ "bitflags 2.9.0",
 ]
 
 [[package]]
@@ -1498,13 +1533,22 @@ checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
 name = "hashbrown"
+version = "0.15.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+dependencies = [
+ "foldhash 0.1.5",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 dependencies = [
  "allocator-api2",
  "equivalent",
- "foldhash",
+ "foldhash 0.2.0",
 ]
 
 [[package]]
@@ -1530,6 +1574,12 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hexf-parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "hmac"
@@ -2340,8 +2390,9 @@ source = "git+https://github.com/rust-embedded-community/multi-map.git#9f686b494
 
 [[package]]
 name = "naga"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0dd91265cc2454558f659b3b4b9640f0ddb8cc6521277f166b8a8c181c898079"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -2351,6 +2402,7 @@ dependencies = [
  "codespan-reporting",
  "half",
  "hashbrown 0.16.1",
+ "hexf-parse",
  "indexmap 2.14.0",
  "libm",
  "log",
@@ -4675,8 +4727,9 @@ checksum = "53a85b86a771b1c87058196170769dd264f66c0782acf1ae6cc51bfd64b39082"
 
 [[package]]
 name = "wgpu"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb3feacc458f7bee8bc1737149b42b6c731aa461039a4264a67bb6681646b250"
 dependencies = [
  "arrayvec",
  "bitflags 2.9.0",
@@ -4704,8 +4757,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02da3ad1b568337f25513b317870960ef87073ea0945502e44b864b67a8c77b7"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -4736,32 +4790,36 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core-deps-apple"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62e51b5447e144b3dbba4feb01f80f4fa21696fa0cd99afb2c3df1affd6fdb28"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-emscripten"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3487cd6293a963bc5c0c0396f6a2192043c50003c07f4efdccbad3d90ec9d819"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bfb01076d0aa08b0ba9bd741e178b5cc440f5abe99d9581323a4c8b5d1a1916"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-hal"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f8e1a9e7a8512f276f7c62e018c7fa8d60954303fed2e5750114332049193f"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -4775,6 +4833,7 @@ dependencies = [
  "glow",
  "glutin_wgl_sys",
  "gpu-allocator",
+ "gpu-descriptor",
  "hashbrown 0.16.1",
  "js-sys",
  "khronos-egl",
@@ -4873,6 +4932,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "wgpu-mc",
+ "wgpu-mc-jni",
  "winit",
  "zip",
 ]
@@ -4889,6 +4949,7 @@ dependencies = [
  "env_logger",
  "futures",
  "glam",
+ "glsl",
  "jni",
  "jni_fn",
  "lazy_static",
@@ -4911,8 +4972,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-naga-bridge"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59c654c483f058800972c3645e95388a7eca31bf9fe1933bc20e036588a0be02"
 dependencies = [
  "naga",
  "wgpu-types",
@@ -4920,15 +4982,15 @@ dependencies = [
 
 [[package]]
 name = "wgpu-types"
-version = "29.0.0"
-source = "git+https://github.com/robertream-m42/wgpu.git?branch=fix%2Fglsl-combined-sampler#5213a2885325ac17b0c57484db447932c7057c89"
+version = "29.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9bcc31518a0e9735aefebedb5f7a9ef3ed1c42549c9f4c882fa9060ceaac639"
 dependencies = [
  "bitflags 2.9.0",
  "bytemuck",
  "js-sys",
  "log",
  "raw-window-handle",
- "static_assertions",
  "web-sys",
 ]
 

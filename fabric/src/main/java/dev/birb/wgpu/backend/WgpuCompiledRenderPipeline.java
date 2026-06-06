@@ -88,8 +88,8 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
         this.shaderSource = shaderSource;
 
         try(Arena arena = Arena.ofConfined()) {
-            var fragShader = MemorySegment.NULL;
-            var vertShader = MemorySegment.NULL;
+            var processedFragBuffer = MemorySegment.NULL;
+            var processedVertBuffer = MemorySegment.NULL;
 
             var vertexFormat = pipeline.getVertexFormat();
             var elements = vertexFormat.getElements();
@@ -104,6 +104,9 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
 
             var fragSource = getOrSourceShader(pipeline.getFragmentShader(), ShaderType.FRAGMENT, pipeline.getShaderDefines(), shaderSource);
             var vertSource = getOrSourceShader(pipeline.getVertexShader(), ShaderType.VERTEX, pipeline.getShaderDefines(), shaderSource);
+
+            var fragDirectives = WM.extract_directives(arena.allocateFrom(fragSource));
+            var vertDirectives = WM.extract_directives(arena.allocateFrom(vertSource));
 
             TranslationUnit fragTU;
             TranslationUnit vertTU;
@@ -145,8 +148,11 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             var processedVert = ASTPrinter.print(PrintType.INDENTED, vertTU);
             var processedFrag = ASTPrinter.print(PrintType.INDENTED, fragTU);
 
-            fragShader = arena.allocateFrom(processedFrag);
-            vertShader = arena.allocateFrom(processedVert);
+            processedFragBuffer = arena.allocateFrom(processedFrag);
+            processedVertBuffer = arena.allocateFrom(processedVert);
+
+            var finalFragShader = WM.prepare_shader_for_naga(processedFragBuffer, fragDirectives, false);
+            var finalVertShader = WM.prepare_shader_for_naga(processedVertBuffer, vertDirectives, true);
 
             var vertexFormatElements = arena.allocate(vertexFormatElementLayout, elements.size());
 
@@ -230,8 +236,8 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             renderPipelineStruct.set(ValueLayout.ADDRESS, 0, uniformDescriptions);
             renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8, pipeline.getUniforms().size() + pipeline.getSamplers().size());
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 2, vertexFormatBuffer);
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 3, vertShader);
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 4, fragShader);
+            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 3, finalVertShader);
+            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 4, finalFragShader);
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 5, definesBuffer);
             renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8 * 6, defines.values().size());
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 7, fragStateBuffer);

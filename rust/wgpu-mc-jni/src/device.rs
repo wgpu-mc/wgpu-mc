@@ -21,6 +21,7 @@ use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::winuser::{GetWindowLongPtrW, IsWindow, GWLP_HINSTANCE};
 use wgpu_mc::wgpu::{naga, BlendState, ShaderLocation, ShaderSource, TextureFormat};
 use crate::device::blaze3d::{NormalizedType, RenderPipeline, UniformType};
+use crate::preprocessing::shim_samplers;
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, width: u32, height: u32) {
@@ -58,8 +59,7 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, width: u32, 
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
         force_fallback_adapter: false,
-        compatible_surface: Some(&surface),
-        apply_limit_buckets: false,
+        compatible_surface: Some(&surface)
     }))
         .unwrap();
 
@@ -83,7 +83,7 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, width: u32, 
     };
 
     let required_limits = wgpu::Limits {
-        // max_bind_groups: 8,
+        max_bind_groups: adapter.limits().max_bind_groups,
         // max_storage_buffers_per_shader_stage: 50,
         ..Default::default()
     };
@@ -141,7 +141,7 @@ pub fn createDevice(mut env: JNIEnv, _class: JClass, window: jlong, width: u32, 
     drop(RENDERER.set(wm));
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_command_encoder() -> Box<wgpu::CommandEncoder> {
     let wm = RENDERER.get().unwrap();
 
@@ -155,7 +155,7 @@ pub struct TextureView_ {
     bind_group: wgpu::BindGroup
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_texture_view(texture: &Texture_) -> Box<TextureView_> {
     let wm = RENDERER.get().unwrap();
 
@@ -194,7 +194,7 @@ pub extern "C" fn create_texture_view(texture: &Texture_) -> Box<TextureView_> {
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_render_pass(encoder: &mut wgpu::CommandEncoder, color_texture: &TextureView_, clear: bool, clear_color: u32, depth_texture: Option<&TextureView_>, clear_depth: bool, depth: f64) -> Box<wgpu::RenderPass<'static>> {
     let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: None,
@@ -243,7 +243,7 @@ pub extern "C" fn create_render_pass(encoder: &mut wgpu::CommandEncoder, color_t
     Box::new(render_pass.forget_lifetime())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn write_mapped_buffer(buffer: &wgpu::Buffer, data: *mut u8, size: u64) {
     let wm = RENDERER.get().unwrap();
     wm.gpu.queue.write_buffer(
@@ -311,8 +311,8 @@ pub mod blaze3d {
         pub uniforms: *const UniformDescriptor,
         pub uniforms_count: u64,
         pub vertex_format: &'a VertexFormat,
-        pub vertex_shader: *const c_char,
-        pub fragment_shader: *const c_char,
+        pub vertex_shader: Box<String>,
+        pub fragment_shader: Box<String>,
         pub defines: *const [*const c_char; 2],
         pub defines_count: u64,
         pub frag_state: &'a FragState,
@@ -320,7 +320,7 @@ pub mod blaze3d {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_buffer(label: *const c_char, usage: u32, size: u64) -> Box<wgpu::Buffer> {
     let wm = RENDERER.get().unwrap();
 
@@ -345,14 +345,14 @@ pub extern "C" fn create_buffer(label: *const c_char, usage: u32, size: u64) -> 
     Box::new(buffer)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn write_to_buffer(buffer: &wgpu::Buffer, start: u64, length: u64, data: *const u8) {
     let wm = RENDERER.get().unwrap();
 
     wm.gpu.queue.write_buffer(buffer, start, std::slice::from_raw_parts(data, length as _));
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn copy_buffer_to_buffer(encoder: &mut wgpu::CommandEncoder, src: &wgpu::Buffer, dest: &wgpu::Buffer, src_offset: u64, dest_offset: u64, length: u64) {
     let wm = RENDERER.get().unwrap();
 
@@ -365,17 +365,17 @@ pub unsafe extern "C" fn copy_buffer_to_buffer(encoder: &mut wgpu::CommandEncode
     );
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn bind_render_pipeline_to_pass(render_pass: &mut wgpu::RenderPass, pipeline: &wgpu::RenderPipeline) {
     render_pass.set_pipeline(pipeline);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn bind_texture_to_render_pass(render_pass: &mut wgpu::RenderPass, slot: u32, texture: &TextureView_) {
     render_pass.set_bind_group(slot, &texture.bind_group, &[]);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn compile_render_pipeline(render_pipeline_description: &RenderPipeline) -> Box<wgpu::RenderPipeline> {
     let wm = RENDERER.get().unwrap();
 
@@ -394,9 +394,6 @@ pub unsafe extern "C" fn compile_render_pipeline(render_pipeline_description: &R
 
     let vertex_elements = std::slice::from_raw_parts(render_pipeline_description.vertex_format.elements, render_pipeline_description.vertex_format.elements_count as _);
 
-    let vert_shader = CStr::from_ptr(render_pipeline_description.vertex_shader).to_str().unwrap();
-    let frag_shader = CStr::from_ptr(render_pipeline_description.fragment_shader).to_str().unwrap();
-
     let defines_slice = std::slice::from_raw_parts(render_pipeline_description.defines, render_pipeline_description.defines_count as _);
 
     let defines = defines_slice.iter().map(|[key, value]| {
@@ -406,15 +403,12 @@ pub unsafe extern "C" fn compile_render_pipeline(render_pipeline_description: &R
         )
     }).collect::<Vec<(&str, &str)>>();
 
-    dbg!(&defines);
-    dbg!(&uniforms);
-
-    println!("VERT: {vert_shader}\nFRAG: {frag_shader}");
+    // println!("VERT: {vert_shader_processed}\nFRAG: {frag_shader_processed}");
 
     let vert_module = wm.gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: ShaderSource::Glsl {
-            shader: Cow::Borrowed(vert_shader),
+            shader: Cow::Borrowed(&render_pipeline_description.vertex_shader),
             stage: naga::ShaderStage::Vertex,
             defines: &defines,
         },
@@ -423,7 +417,7 @@ pub unsafe extern "C" fn compile_render_pipeline(render_pipeline_description: &R
     let frag_module = wm.gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: ShaderSource::Glsl {
-            shader: Cow::Borrowed(frag_shader),
+            shader: Cow::Borrowed(&render_pipeline_description.fragment_shader),
             stage: naga::ShaderStage::Fragment,
             defines: &defines,
         },
@@ -469,11 +463,11 @@ pub unsafe extern "C" fn compile_render_pipeline(render_pipeline_description: &R
             entry_point: Some("main"),
             compilation_options: Default::default(),
             buffers: &[
-                Some(wgpu::VertexBufferLayout {
+                wgpu::VertexBufferLayout {
                     array_stride: render_pipeline_description.vertex_format.vertex_size,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &vertex_attributes,
-                })
+                }
             ],
         },
         primitive: wgpu::PrimitiveState {
@@ -483,7 +477,7 @@ pub unsafe extern "C" fn compile_render_pipeline(render_pipeline_description: &R
                 3 => wgpu::PrimitiveTopology::PointList,
                 4 => wgpu::PrimitiveTopology::TriangleList,
                 5 => wgpu::PrimitiveTopology::TriangleStrip,
-                6 => unimplemented!(),
+                6 => wgpu::PrimitiveTopology::TriangleList,
                 //Quads
                 7 => wgpu::PrimitiveTopology::TriangleList,
                 _ => unimplemented!()
@@ -530,7 +524,7 @@ pub unsafe extern "C" fn compile_render_pipeline(render_pipeline_description: &R
     Box::new(pipeline)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn present_texture(mut encoder: Box<wgpu::CommandEncoder>, texture_view: &TextureView_) {
     let wm = RENDERER.get().unwrap();
 
@@ -552,13 +546,14 @@ pub extern "C" fn present_texture(mut encoder: Box<wgpu::CommandEncoder>, textur
         blitter.copy(&wm.gpu.device, &mut encoder, &texture_view.texture_view, &view);
 
         wm.gpu.queue.submit([encoder.finish()]);
-        wm.gpu.queue.present(surface_texture);
+        // wm.gpu.queue.present(surface_texture);
+        surface_texture.present();
     } else {
         panic!()
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_buffer_init(label: *const c_char, usage: u32, data: *mut u8, size: u64) -> Box<wgpu::Buffer> {
     let wm = RENDERER.get().unwrap();
 
@@ -588,7 +583,7 @@ pub struct Texture_ {
     format: wgpu::TextureFormat
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn create_texture(format_id: u32, width: u32, height: u32, depth_or_layers: u32, usage: u32) -> Box<Texture_> {
     let wm = RENDERER.get().unwrap();
 
@@ -628,25 +623,25 @@ pub extern "C" fn create_texture(format_id: u32, width: u32, height: u32, depth_
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn drop_texture(_: Box<Texture_>) {
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn drop_texture_view(_: Box<TextureView_>) {
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn drop_buffer(_: Box<wgpu::Buffer>) {
 }
 
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn max_texture_size() -> u32 {
     RENDERER.get().unwrap().gpu.device.limits().max_texture_dimension_2d
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn min_uniform_offset_alignment() -> u32 {
     RENDERER.get().unwrap().gpu.device.limits().min_uniform_buffer_offset_alignment
 }

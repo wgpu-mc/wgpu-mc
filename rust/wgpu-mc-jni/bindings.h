@@ -39,6 +39,8 @@ typedef enum NormalizedType NormalizedType;
 typedef uint64_t NormalizedType;
 #endif // __STDC_VERSION__ >= 202311L
 
+typedef struct String String;
+
 typedef struct TextureView_ TextureView_;
 
 typedef struct Texture_ Texture_;
@@ -68,8 +70,8 @@ typedef struct RenderPipeline {
   const struct UniformDescriptor *uniforms;
   uint64_t uniforms_count;
   const struct VertexFormat *vertex_format;
-  const char *vertex_shader;
-  const char *fragment_shader;
+  struct String *vertex_shader;
+  struct String *fragment_shader;
   const char *const (*defines)[2];
   uint64_t defines_count;
   const struct FragState *frag_state;
@@ -128,3 +130,7 @@ void drop_buffer(uint8_t*);
 uint32_t max_texture_size(void);
 
 uint32_t min_uniform_offset_alignment(void);
+
+uint8_t *extract_directives(const char *glsl);
+
+struct String *prepare_shader_for_naga(const char *glsl, uint8_t *directives, bool explicit_mip);

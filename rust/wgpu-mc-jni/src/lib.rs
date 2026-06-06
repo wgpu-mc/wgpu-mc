@@ -1,5 +1,6 @@
 pub extern crate wgpu_mc;
 
+
 use arc_swap::access::Access;
 use arc_swap::{ArcSwap, ArcSwapAny};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -57,6 +58,7 @@ mod pia;
 mod renderer;
 mod settings;
 mod device;
+pub mod preprocessing;
 
 #[derive(Debug)]
 struct MinecraftRenderState {

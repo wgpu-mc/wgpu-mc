@@ -262,7 +262,7 @@ impl RenderGraph {
                         Some(layout) => layout.clone(),
                     }
                 }
-            }.into_iter().map(Option::from).collect::<Vec<_>>();
+            }.into_iter().collect::<Vec<_>>();
 
             let label = pipeline_name.to_string();
 
