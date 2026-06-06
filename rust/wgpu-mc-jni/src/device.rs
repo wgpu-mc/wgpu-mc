@@ -1,6 +1,6 @@
 use crate::device::blaze3d::{NormalizedType, RenderPipeline, UniformType};
-use crate::preprocessing::shim_samplers;
-use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing};
+use crate::preprocessing::{shim_samplers, OrphanDestroyer};
+use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing, cyntax};
 use futures::executor::block_on;
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JClass, JString};
@@ -12,18 +12,22 @@ use raw_window_handle::{
     Win32WindowHandle, WindowHandle, WindowsDisplayHandle,
 };
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char, c_int};
 use std::fs::remove_dir;
+use std::hash::{DefaultHasher, Hasher};
 use std::io::pipe;
 use std::num::NonZeroIsize;
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::ptr::{null, null_mut};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use glsl::parser::Parse;
-use glsl::syntax::ShaderStage;
+use glsl::syntax::{ExternalDeclaration, Preprocessor, PreprocessorVersion, ShaderStage};
 use glsl::transpiler::glsl::show_translation_unit;
+use glsl::visitor::HostMut;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, TextureBlitter, TextureBlitterBuilder};
 use wgpu_mc::wgpu::{BlendState, ShaderLocation, ShaderSource, TextureFormat, naga};
 use wgpu_mc::{Display, WindowSize, WmRenderer, wgpu};
@@ -468,41 +472,84 @@ pub unsafe extern "C" fn compile_render_pipeline(
     let frag_source = unsafe { CStr::from_ptr(render_pipeline_description.fragment_shader).to_str().unwrap() };
     let vert_source = unsafe { CStr::from_ptr(render_pipeline_description.vertex_shader).to_str().unwrap() };
 
+    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    d.push("shader");
+
+    if !d.exists() {
+        std::fs::create_dir(&d).unwrap();
+    }
+
+    let mut h = DefaultHasher::new();
+    h.write(vert_source.as_bytes());
+    h.write(frag_source.as_bytes());
+    let out = h.finish();
+
+    let mut d_ = d.clone();
+
+    d.push(format!("{out}.in"));
+    std::fs::write(d, format!("## VERT ##\n{vert_source}\n\n## FRAG ##\n{frag_source}")).unwrap();
+
+    println!("Working on {out}");
+
     let mut vert_stage_ast = ShaderStage::parse(vert_source).unwrap();
     let mut frag_stage_ast = ShaderStage::parse(frag_source).unwrap();
 
-    preprocessing::fix_version(&mut vert_stage_ast);
-    preprocessing::fix_version(&mut frag_stage_ast);
+    vert_stage_ast.0.0.retain(|excl|
+        !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Version(_)))
+        && !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Line(_)))
+    );
+    frag_stage_ast.0.0.retain(|excl|
+        !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Version(_)))
+            && !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Line(_)))
+    );
 
-    let uniform_map = uniforms.iter().enumerate().map(|(index, u)| (u.name.to_string(), index as u32)).collect();
+    let mut out1 = String::new();
+    let mut out2 = String::new();
+
+    show_translation_unit(&mut out1, &vert_stage_ast);
+    show_translation_unit(&mut out2, &frag_stage_ast);
+
+    let preprocessed_vert = cyntax::preprocess(&out1, &defines);
+    let preprocessed_frag = cyntax::preprocess(&out2, &defines);
+
+    let mut vert_stage_ast = ShaderStage::parse(preprocessed_vert).unwrap();
+    let mut frag_stage_ast = ShaderStage::parse(preprocessed_frag).unwrap();
+
+    let uniform_map: HashMap<String, u32> = uniforms.iter().enumerate().map(|(index, u)| (u.name.to_string(), index as u32)).collect();
+
+    let mut destroyer = OrphanDestroyer {
+        uniform_found: false,
+        active: false,
+        orphan_found: false,
+        uniform_set: uniform_map.clone(),
+    };
+
+    vert_stage_ast.visit_mut(&mut destroyer);
+    frag_stage_ast.visit_mut(&mut destroyer);
 
     preprocessing::apply_layouts(&mut vert_stage_ast, &mut frag_stage_ast, uniform_map);
 
-    println!("##vsource##\n{vert_source}");
-
-    thread::sleep(Duration::from_millis(50));
-
     shim_samplers(&mut vert_stage_ast, true);
-
-    thread::sleep(Duration::from_millis(50));
-
-    println!("##fsource##\n{frag_source}");
-
-    thread::sleep(Duration::from_millis(50));
-
     shim_samplers(&mut frag_stage_ast, false);
 
-    thread::sleep(Duration::from_millis(50));
+    vert_stage_ast.0.0.insert(0, ExternalDeclaration::Preprocessor(Preprocessor::Version(PreprocessorVersion {
+        version: 440,
+        profile: None,
+    })));
+
+    frag_stage_ast.0.0.insert(0, ExternalDeclaration::Preprocessor(Preprocessor::Version(PreprocessorVersion {
+        version: 440,
+        profile: None,
+    })));
 
     let mut vert_processed = String::new();
     let mut frag_processed = String::new();
 
-    println!("##vert##\n{vert_processed}##frag##\n{frag_processed}");
-
-    thread::sleep(Duration::from_millis(20));
-
     show_translation_unit(&mut vert_processed, &vert_stage_ast);
     show_translation_unit(&mut frag_processed, &frag_stage_ast);
+
+    d_.push(format!("{out}.out"));
+    std::fs::write(d_, format!("## VERT ##\n{vert_processed}\n\n## FRAG ##\n{frag_processed}")).unwrap();
 
     let vert_module = wm
         .gpu

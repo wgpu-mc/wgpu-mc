@@ -622,6 +622,17 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "codespan-reporting"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
+dependencies = [
+ "serde",
+ "termcolor",
+ "unicode-width",
+]
+
+[[package]]
+name = "codespan-reporting"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
@@ -814,6 +825,73 @@ name = "cursor-icon"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
+
+[[package]]
+name = "cyntax_common"
+version = "0.1.0"
+source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+dependencies = [
+ "codespan-reporting 0.12.0",
+ "string-interner",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
+]
+
+[[package]]
+name = "cyntax_consteval"
+version = "0.1.0"
+source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+dependencies = [
+ "cyntax_common",
+ "cyntax_errors",
+ "cyntax_parser",
+]
+
+[[package]]
+name = "cyntax_errors"
+version = "0.1.0"
+source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+dependencies = [
+ "codespan-reporting 0.12.0",
+ "cyntax_common",
+]
+
+[[package]]
+name = "cyntax_lexer"
+version = "0.1.0"
+source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+dependencies = [
+ "cyntax_common",
+ "cyntax_errors",
+ "peekmore",
+ "smallvec",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
+]
+
+[[package]]
+name = "cyntax_parser"
+version = "0.1.0"
+source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+dependencies = [
+ "cyntax_common",
+ "cyntax_errors",
+ "cyntax_lexer",
+ "peekmore",
+]
+
+[[package]]
+name = "cyntax_preprocessor"
+version = "0.1.0"
+source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+dependencies = [
+ "cyntax_common",
+ "cyntax_consteval",
+ "cyntax_errors",
+ "cyntax_lexer",
+ "cyntax_parser",
+ "peekmore",
+]
 
 [[package]]
 name = "darling"
@@ -1430,15 +1508,6 @@ dependencies = [
 [[package]]
 name = "glsl"
 version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "577ac945ce66a4b7004c6e2807f517f94ef027dda89df578abe1fbb979d22f49"
-dependencies = [
- "nom",
-]
-
-[[package]]
-name = "glsl"
-version = "7.0.0"
 source = "git+https://github.com/wgpu-mc/glsl.git?rev=25c6466d#25c6466dbbc7a5c1d296c3127b2904e375601917"
 dependencies = [
  "nom",
@@ -1934,6 +2003,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0263a3d970d5c054ed9312c0057b4f3bde9c0b33836d3637361d4a9e6e7a408"
 
 [[package]]
+name = "includium"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19fad245d6df3d9a02ce924f89611fa7fec12064cb71f0225402d8db4795508d"
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2407,7 +2482,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cfg-if",
  "cfg_aliases",
- "codespan-reporting",
+ "codespan-reporting 0.13.1",
  "half",
  "hashbrown 0.16.1",
  "hexf-parse",
@@ -2996,6 +3071,12 @@ dependencies = [
  "digest",
  "hmac",
 ]
+
+[[package]]
+name = "peekmore"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9163e1259760e83d528d1b3171e5100c1767f10c52e1c4d6afad26e63d47d758"
 
 [[package]]
 name = "percent-encoding"
@@ -3924,6 +4005,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731"
 
 [[package]]
+name = "string-interner"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23de088478b31c349c9ba67816fa55d9355232d63c3afea8bf513e31f0f1d2c0"
+dependencies = [
+ "hashbrown 0.15.5",
+ "serde",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3936,6 +4027,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 
 [[package]]
+name = "strum"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
+
+[[package]]
 name = "strum_macros"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3945,6 +4042,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
+ "syn 2.0.100",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
  "syn 2.0.100",
 ]
 
@@ -4924,7 +5033,11 @@ dependencies = [
  "arc-swap",
  "arrayvec",
  "bytemuck",
+ "codespan-reporting 0.12.0",
  "crate-root",
+ "cyntax_common",
+ "cyntax_lexer",
+ "cyntax_preprocessor",
  "env_logger",
  "fastanvil",
  "fastnbt",
@@ -4932,7 +5045,7 @@ dependencies = [
  "futures",
  "glam",
  "glob",
- "glsl 7.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "glsl",
  "log",
  "parking_lot",
  "rayon",
@@ -4940,6 +5053,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "string-interner",
  "wgpu-mc",
  "wgpu-mc-jni",
  "winit",
@@ -4954,11 +5068,16 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "cbindgen",
+ "codespan-reporting 0.12.0",
  "crossbeam-channel",
+ "cyntax_common",
+ "cyntax_lexer",
+ "cyntax_preprocessor",
  "env_logger",
  "futures",
  "glam",
- "glsl 7.0.0 (git+https://github.com/wgpu-mc/glsl.git?rev=25c6466d)",
+ "glsl",
+ "includium",
  "jni",
  "jni_fn",
  "lazy_static",
@@ -4973,8 +5092,9 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "slab",
- "strum",
- "strum_macros",
+ "string-interner",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "wgpu-mc",
  "winapi",
 ]

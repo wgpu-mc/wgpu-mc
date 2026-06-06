@@ -59,6 +59,7 @@ mod renderer;
 mod settings;
 mod device;
 pub mod preprocessing;
+pub mod cyntax;
 
 #[derive(Debug)]
 struct MinecraftRenderState {

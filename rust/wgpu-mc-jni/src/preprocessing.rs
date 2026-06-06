@@ -6,6 +6,7 @@ use glsl::parser::{Parse, ParseError};
 use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, Declaration, Expr, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SingleDeclaration, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
 use glsl::transpiler::glsl::show_translation_unit;
 use glsl::visitor::{Host, HostMut, Visit, Visitor, VisitorMut};
+use includium::{process, PreprocessorConfig};
 use wgpu_mc::wgpu;
 
 struct VersionFixer;
@@ -18,9 +19,9 @@ impl VisitorMut for VersionFixer {
 #[derive(Debug)]
 struct SamplerFinder {
     layout_qualifiers: Option<[LayoutQualifierSpec; 2]>,
-    names: Vec<String>,
+    names: HashMap<String, TypeSpecifierNonArray>,
     uniform: bool,
-    sampler: bool
+    sampler: Option<TypeSpecifierNonArray>
 }
 
 #[derive(Debug)]
@@ -39,10 +40,6 @@ impl VisitorMut for TypeChanger {
                 LayoutQualifierSpec::Shared => true,
             }
         }).collect();
-
-        if self.new_binding.is_none() {
-            dbg!(&qualifier);
-        }
 
         qualifier.ids.0.push(self.new_binding.take().unwrap());
 
@@ -65,14 +62,12 @@ impl VisitorMut for TypeChanger {
 
 impl Visitor for SamplerFinder {
     fn visit_single_declaration(&mut self, decl: &SingleDeclaration) -> Visit {
-        self.names.push(decl.name.as_ref().unwrap().0.clone());
+        self.names.insert(decl.name.as_ref().unwrap().0.clone(), decl.ty.ty.ty.clone());
 
         Visit::Children
     }
 
     fn visit_layout_qualifier_spec(&mut self, spec: &LayoutQualifierSpec) -> Visit {
-        // dbg!(spec);
-
         match spec {
             LayoutQualifierSpec::Identifier(Identifier(v), Some(expr)) if v == "set" => match &**expr {
                 Expr::IntConst(_) | Expr::UIntConst(_) => {
@@ -97,7 +92,18 @@ impl Visitor for SamplerFinder {
     }
 
     fn visit_type_specifier_non_array(&mut self, t: &TypeSpecifierNonArray) -> Visit {
-        self.sampler |= matches!(t, TypeSpecifierNonArray::Sampler2D);
+        match t {
+            TypeSpecifierNonArray::Sampler2D => {
+
+            }
+            _ => {}
+        }
+
+        if matches!(t,
+            TypeSpecifierNonArray::Sampler2D | TypeSpecifierNonArray::SamplerCube
+        ) {
+            self.sampler = Some(t.clone());
+        }
 
         Visit::Children
     }
@@ -105,15 +111,15 @@ impl Visitor for SamplerFinder {
 
 struct FunctionCallExpandSampler<'a> {
     local_funcs: &'a [String],
-    samplers: &'a [String]
+    samplers: HashMap<String, String>
 }
 
-struct BuiltinFunctionCallMergeSampler2D<'a> {
+struct BuiltinFunctionCallMergeSampler<'a> {
     local_funcs: &'a [String],
-    samplers: &'a [String]
+    samplers: HashMap<String, String>
 }
 
-impl<'a> VisitorMut for BuiltinFunctionCallMergeSampler2D<'a> {
+impl<'a> VisitorMut for BuiltinFunctionCallMergeSampler<'a> {
 
     //This visitor is called on calls to built-in functions
 
@@ -124,17 +130,20 @@ impl<'a> VisitorMut for BuiltinFunctionCallMergeSampler2D<'a> {
             if self.local_funcs.contains(&func_name.0) {
                 let mut v = FunctionCallExpandSampler {
                     local_funcs: self.local_funcs,
-                    samplers: self.samplers,
+                    samplers: self.samplers.clone(),
                 };
                 expr.visit_mut(&mut v);
             }
         } else if let Expr::Variable(ident) = expr {
             //This variable is referencing a sampler, and we're in a built-in function call
-            if self.samplers.contains(&ident.0) {
-                *expr = Expr::FunCall(FunIdentifier::Identifier(Identifier("sampler2D".into())), vec![
-                    Expr::Variable(Identifier(format!("{}_wm_t2d", ident.0))),
-                    Expr::Variable(Identifier(format!("{}_wm_sampler", ident.0))),
-                ]);
+            match self.samplers.get(&ident.0) {
+                None => {}
+                Some(constructor) => {
+                    *expr = Expr::FunCall(FunIdentifier::Identifier(Identifier(constructor.to_string())), vec![
+                        Expr::Variable(Identifier(format!("{}_wm_texshim", ident.0))),
+                        Expr::Variable(Identifier(format!("{}_wm_sampler", ident.0))),
+                    ]);
+                }
             }
         }
 
@@ -147,16 +156,16 @@ impl<'a> VisitorMut for FunctionCallExpandSampler<'a> {
     fn visit_expr(&mut self, expr: &mut Expr) -> Visit {
         if let Expr::FunCall(FunIdentifier::Identifier(func_name), params) = expr {
             if !self.local_funcs.contains(&func_name.0) {
-                let mut v = BuiltinFunctionCallMergeSampler2D {
+                let mut v = BuiltinFunctionCallMergeSampler {
                     local_funcs: &[],
-                    samplers: self.samplers,
+                    samplers: self.samplers.clone(),
                 };
                 expr.visit_mut(&mut v);
             } else {
                 *params = params.iter().map(|p| {
-                    if let Expr::Variable(var_name) = p && self.samplers.contains(&var_name.0) {
+                    if let Expr::Variable(var_name) = p && self.samplers.contains_key(&var_name.0) {
                         vec![
-                            Expr::Variable(Identifier(format!("{var_name}_wm_t2d"))),
+                            Expr::Variable(Identifier(format!("{var_name}_wm_texshim"))),
                             Expr::Variable(Identifier(format!("{var_name}_wm_sampler"))),
                         ]
                     } else {
@@ -171,12 +180,20 @@ impl<'a> VisitorMut for FunctionCallExpandSampler<'a> {
 
 }
 
-struct Sampler2DExpansion {
-    samplers: Vec<String>,
+fn get_sampler_constructor_for_glsl_type(specifier: &TypeSpecifierNonArray) -> String {
+    match specifier {
+        TypeSpecifierNonArray::Sampler2D => "sampler2D".into(),
+        TypeSpecifierNonArray::SamplerCube => "samplerCube".into(),
+        _ => unreachable!()
+    }
+}
+
+struct SamplerExpansion {
+    samplers: HashMap<String, String>,
     local_functions: Vec<String>
 }
 
-impl VisitorMut for Sampler2DExpansion {
+impl VisitorMut for SamplerExpansion {
     fn visit_function_prototype(&mut self, proto: &mut FunctionPrototype) -> Visit {
         self.local_functions.push(proto.name.0.clone());
 
@@ -184,8 +201,10 @@ impl VisitorMut for Sampler2DExpansion {
             match &param {
                 FunctionParameterDeclaration::Unnamed(_, _) => unimplemented!(),
                 FunctionParameterDeclaration::Named(qual, decl) => {
-                    if decl.ty.ty == TypeSpecifierNonArray::Sampler2D {
-                        if !self.samplers.contains(&decl.ident.ident.0) { self.samplers.push(decl.ident.ident.0.clone()); }
+                    if matches!(decl.ty.ty, TypeSpecifierNonArray::Sampler2D | TypeSpecifierNonArray::SamplerCube) {
+                        if !self.samplers.contains_key(&decl.ident.ident.0) {
+                            self.samplers.insert(decl.ident.ident.0.clone(), get_sampler_constructor_for_glsl_type(&decl.ty.ty));
+                        }
 
                         vec![
                             FunctionParameterDeclaration::Named(
@@ -193,7 +212,7 @@ impl VisitorMut for Sampler2DExpansion {
                                 FunctionParameterDeclarator {
                                     ty: TypeSpecifier { ty: TypeSpecifierNonArray::TypeName(TypeName("texture2D".into())), array_specifier: None },
                                     ident: ArrayedIdentifier {
-                                        ident: Identifier(format!("{}_wm_t2d", decl.ident.ident.0)),
+                                        ident: Identifier(format!("{}_wm_texshim", decl.ident.ident.0)),
                                         array_spec: None,
                                     },
                                 }
@@ -223,7 +242,7 @@ impl VisitorMut for Sampler2DExpansion {
         if let Expr::FunCall(FunIdentifier::Identifier(_), _) = expr {
             let mut f = FunctionCallExpandSampler {
                 local_funcs: &self.local_functions,
-                samplers: &self.samplers,
+                samplers: self.samplers.clone(),
             };
 
             expr.visit_mut(&mut f);
@@ -317,60 +336,149 @@ impl VisitorMut for RewriteGLBuiltinSemantics {
 
         Visit::Children
     }
+
+    fn visit_type_specifier_non_array(&mut self, t: &mut TypeSpecifierNonArray) -> Visit {
+        match &t {
+            TypeSpecifierNonArray::ISamplerBuffer => {
+                *t = TypeSpecifierNonArray::TypeName(TypeName("textureBuffer".to_string()));
+            },
+            _ => {}
+        };
+
+        Visit::Children
+    }
+
 }
 
-struct IncrementingAnnotator {
-    offset: u32,
-    target: StorageQualifier,
-    found: bool,
-    insert_location: Option<u32>,
-    map: HashMap<String, u32>,
+pub struct IncrementingAnnotator {
+    pub offset: u32,
+    pub target: StorageQualifier,
+    pub found: bool,
+    pub insert_location: Option<u32>,
+    pub map: HashMap<String, u32>,
 }
 
-struct InAnnotator {
-    in_found: bool,
-    insert_location: Option<u32>,
-    map: HashMap<String, u32>,
+pub struct InAnnotator {
+    pub in_found: bool,
+    pub insert_location: Option<u32>,
+    pub map: HashMap<String, u32>,
 }
 
-struct UniformAnnotator {
-    uniform_found: bool,
-    uniform_set: Option<u32>,
-    uniform_sets: HashMap<String, u32>
+pub struct UniformAnnotator {
+    pub uniform_found: bool,
+    pub uniform_set: Option<u32>,
+    pub uniform_sets: HashMap<String, u32>,
+    pub active: bool
+}
+
+pub struct OrphanDestroyer {
+    pub uniform_found: bool,
+    pub active: bool,
+    pub orphan_found: bool,
+    pub uniform_set: HashMap<String, u32>
+}
+
+impl VisitorMut for OrphanDestroyer {
+    fn visit_block(&mut self, block: &mut Block) -> Visit {
+        self.uniform_found = false;
+
+        self.active = true;
+        block.qualifier.to_owned().visit_mut(self);
+        self.active = false;
+
+        if self.uniform_found {
+            self.orphan_found = !self.uniform_set.contains_key(&block.name.0);
+        }
+
+        Visit::Children
+    }
+
+    fn visit_translation_unit(&mut self, unit: &mut TranslationUnit) -> Visit {
+        let mut keep = vec![];
+
+        for ex in &mut unit.0.0 {
+            ex.visit_mut(self);
+
+            if !self.orphan_found {
+                keep.push(ex.clone());
+            }
+
+            self.orphan_found = false;
+        }
+
+        unit.0.0 = keep;
+
+        Visit::Parent
+    }
+
+    fn visit_single_declaration(
+        &mut self,
+        single_decl: &mut SingleDeclaration,
+    ) -> Visit {
+        self.uniform_found = false;
+
+        self.active = true;
+        single_decl.ty.to_owned().visit_mut(self);
+        self.active = false;
+
+        if self.uniform_found {
+            self.orphan_found = !self.uniform_set.contains_key(&single_decl.name.as_ref().unwrap().0);
+        }
+
+        Visit::Children
+    }
+
+    fn visit_storage_qualifier(&mut self, qual: &mut StorageQualifier) -> Visit {
+        if !self.active { return Visit::Children; }
+
+        self.uniform_found = matches!(qual, StorageQualifier::Uniform);
+
+        Visit::Children
+    }
 }
 
 impl VisitorMut for UniformAnnotator {
+    fn visit_block(&mut self, block: &mut Block) -> Visit {
+        self.uniform_found = false;
+
+        self.active = true;
+        block.qualifier.to_owned().visit_mut(self);
+        self.active = false;
+
+        if self.uniform_found {
+            self.uniform_set = Some(self.uniform_sets.get(&block.name.0).copied().unwrap());
+        }
+
+        Visit::Children
+    }
+
     fn visit_single_declaration(
         &mut self,
         single_decl: &mut glsl::syntax::SingleDeclaration,
     ) -> Visit {
         self.uniform_found = false;
+
+        self.active = true;
         single_decl.ty.to_owned().visit_mut(self);
+        self.active = false;
 
         if self.uniform_found {
-            self.uniform_set = self.uniform_sets.get(&single_decl.name.as_ref().unwrap().0).copied();
+            self.uniform_set = Some(self.uniform_sets.get(
+                &single_decl.name.as_ref().unwrap().0
+            ).copied().expect(&single_decl.name.as_ref().unwrap().0));
         }
 
         Visit::Children
     }
 
-    fn visit_block(&mut self, block: &mut Block) -> Visit {
-        self.uniform_found = false;
-        block.qualifier.to_owned().visit_mut(self);
-
-        if self.uniform_found {
-            self.uniform_set = self.uniform_sets.get(&block.name.0).copied();
-        }
-
-        Visit::Children
-    }
-
-    fn visit_type_qualifier(&mut self, qual: &mut glsl::syntax::TypeQualifier) -> Visit {
+    fn visit_type_qualifier(&mut self, qual: &mut TypeQualifier) -> Visit {
         match self.uniform_set.take() {
             Some(set) => {
                 qual.qualifiers
                     .0
                     .insert(0, TypeQualifierSpec::parse(format!("layout(set = {set}, binding = 0)")).unwrap());
+
+                return Visit::Parent;
             }
             None => {}
         }
@@ -379,6 +487,8 @@ impl VisitorMut for UniformAnnotator {
     }
 
     fn visit_storage_qualifier(&mut self, qual: &mut StorageQualifier) -> Visit {
+        if !self.active { return Visit::Children; }
+
         self.uniform_found = matches!(qual, StorageQualifier::Uniform);
 
         Visit::Children
@@ -395,7 +505,7 @@ impl VisitorMut for InAnnotator {
 
         if self.in_found {
             let name = &single_decl.name.as_ref().unwrap().0;
-            self.insert_location = self.map.get(name).copied();
+            self.insert_location = Some(self.map.get(name).copied().unwrap());
         }
 
         Visit::Children
@@ -454,8 +564,7 @@ impl VisitorMut for IncrementingAnnotator {
     }
 
     fn visit_storage_qualifier(&mut self, qual: &mut StorageQualifier) -> Visit {
-        let target = &self.target;
-        self.found = matches!(&qual, target);
+        self.found = *qual == self.target;
 
         Visit::Children
     }
@@ -502,6 +611,7 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
         uniform_found: false,
         uniform_set: None,
         uniform_sets: uniform_map,
+        active: false,
     };
 
     let mut in_annotator = IncrementingAnnotator {
@@ -522,6 +632,9 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
         map: out_annotator.map,
     };
 
+    uniform_annotator.uniform_found = false;
+    uniform_annotator.uniform_set = None;
+
     frag_stage.visit_mut(&mut in_annotator);
     frag_stage.visit_mut(&mut uniform_annotator);
 }
@@ -532,31 +645,29 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
     let mut sampler_uniform_names = vec![];
 
     for (index, ext) in shader_stage.0.0.iter().enumerate() {
-        let mut finder = SamplerFinder { layout_qualifiers: None, names: vec![], uniform: false, sampler: false };
+        let mut finder = SamplerFinder { layout_qualifiers: None, names: HashMap::new(), uniform: false, sampler: None };
         ext.visit(&mut finder);
 
-        if let Some([a,b]) = finder.layout_qualifiers && finder.uniform && finder.sampler {
+        if let Some([a,b]) = finder.layout_qualifiers && finder.uniform && let Some(sampler_type) = finder.sampler {
             let mut texture_uniform = ext.clone();
             let mut sampler_uniform = ext.clone();
 
             sampler_uniform_names.extend(finder.names);
 
-            dbg!(&texture_uniform);
+            let (texture_type, sampler_type) = match sampler_type {
+                TypeSpecifierNonArray::Sampler2D => ("texture2D".to_string(), "sampler".to_string()),
+                TypeSpecifierNonArray::SamplerCube => ("textureCube".to_string(), "sampler".to_string()),
+                _ => unreachable!()
+            };
 
             texture_uniform.visit_mut(&mut TypeChanger {
-                new_t: Some(TypeSpecifierNonArray::TypeName(TypeName("texture2D".into()))),
+                new_t: Some(TypeSpecifierNonArray::TypeName(TypeName(texture_type))),
                 new_binding: Some(a),
-                name_ext: "_wm_t2d".to_string(),
+                name_ext: "_wm_texshim".to_string(),
             });
 
-            for _ in 0..10 {
-                println!();
-            }
-
-            dbg!(&sampler_uniform);
-
             sampler_uniform.visit_mut(&mut TypeChanger {
-                new_t: Some(TypeSpecifierNonArray::TypeName(TypeName("sampler".into()))),
+                new_t: Some(TypeSpecifierNonArray::TypeName(TypeName(sampler_type))),
                 new_binding: Some(b),
                 name_ext: "_wm_sampler".to_string(),
             });
@@ -565,7 +676,7 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
         }
     }
 
-    for (target, texture, sampler) in swap {
+    for (target, texture, sampler) in swap.into_iter().rev() {
         shader_stage.0.0.insert(target+1, sampler);
         shader_stage.0.0.insert(target+1, texture);
         shader_stage.0.0.remove(target);
@@ -573,8 +684,8 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
 
     shader_stage.visit_mut(&mut NagaFixConstArrayExplicit { size: None });
 
-    let mut expander = Sampler2DExpansion {
-        samplers: sampler_uniform_names,
+    let mut expander = SamplerExpansion {
+        samplers: sampler_uniform_names.iter().map(|(l, r)| (l.clone(), get_sampler_constructor_for_glsl_type(&r))).collect(),
         local_functions: vec![],
     };
 
