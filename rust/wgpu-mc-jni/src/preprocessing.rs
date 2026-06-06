@@ -8,6 +8,13 @@ use glsl::transpiler::glsl::show_translation_unit;
 use glsl::visitor::{Host, HostMut, Visit, Visitor, VisitorMut};
 use wgpu_mc::wgpu;
 
+struct VersionFixer;
+impl VisitorMut for VersionFixer {
+    fn visit_preprocessor_version(&mut self,pv: &mut glsl::syntax::PreprocessorVersion) -> Visit {
+        pv.version = 440;
+        Visit::Parent
+    }
+}
 #[derive(Debug)]
 struct SamplerFinder {
     layout_qualifiers: Option<[LayoutQualifierSpec; 2]>,
@@ -479,7 +486,9 @@ pub unsafe extern "C" fn extract_directives(glsl: *const c_char) -> *mut u8 {
 
     Box::into_raw(Box::new(directives)) as *mut u8
 }
-
+pub fn fix_version(shader_stage: &mut ShaderStage) {
+    shader_stage.visit_mut(&mut VersionFixer);
+}
 pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage, uniform_map: HashMap<String, u32>) {
     let mut out_annotator = IncrementingAnnotator {
         offset: 0,
@@ -522,7 +531,6 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
     let mut decl_to_remove = vec![];
     let mut decl_to_add = vec![];
     let mut sampler_uniform_names = vec![];
-
     for (ext_id, ext) in shader_stage.0.0.iter().enumerate() {
         let mut finder = SamplerFinder { layout_qualifiers: None, names: vec![], uniform: false, sampler: false };
         ext.visit(&mut finder);

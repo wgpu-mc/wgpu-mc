@@ -469,7 +469,11 @@ pub unsafe extern "C" fn compile_render_pipeline(
     let mut vert_stage_ast = ShaderStage::parse(vert_source).unwrap();
     let mut frag_stage_ast = ShaderStage::parse(frag_source).unwrap();
 
+    preprocessing::fix_version(&mut vert_stage_ast);
+    preprocessing::fix_version(&mut frag_stage_ast);
+
     let uniform_map = uniforms.iter().enumerate().map(|(index, u)| (u.name.to_string(), index as u32)).collect();
+
 
     preprocessing::apply_layouts(&mut vert_stage_ast, &mut frag_stage_ast, uniform_map);
 
