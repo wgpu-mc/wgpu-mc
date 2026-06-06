@@ -15,7 +15,6 @@ import org.jspecify.annotations.NonNull;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWNativeWin32;
 import org.lwjgl.glfw.GLFWNativeX11;
-import org.lwjgl.system.linux.X11;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -30,7 +29,7 @@ public class WgpuDevice implements GpuDeviceBackend {
     @Getter
     private final ShaderSource defaultShaderSource;
 
-//    private final BiFunction<Identifier, ShaderType, String> shaderSourceGetter;
+    // private final BiFunction<Identifier, ShaderType, String> shaderSourceGetter;
 
     public WgpuDevice(long window, ShaderSource shaderSource) {
         this.defaultShaderSource = shaderSource;
@@ -45,7 +44,15 @@ public class WgpuDevice implements GpuDeviceBackend {
         GLFW.glfwPollEvents();
         GLFW.glfwPollEvents();
 
-        WgpuNative.createDevice(GLFWNativeX11.glfwGetX11Display(), GLFWNativeX11.glfwGetX11Window(window), w[0], h[0]);
+        if (GLFW.glfwGetPlatform() == GLFW.GLFW_PLATFORM_WIN32) {
+            // windows doesn't use display, so 0 is fine
+            WgpuNative.createDevice(0, GLFWNativeWin32.glfwGetWin32Window(window), w[0], h[0]);
+        } else if (GLFW.glfwGetPlatform() == GLFW.GLFW_PLATFORM_X11) {
+            WgpuNative.createDevice(GLFWNativeX11.glfwGetX11Display(), GLFWNativeX11.glfwGetX11Window(window), w[0],
+                    h[0]);
+        } else {
+            throw new Exception("Platform not supported");
+        }
 
         this.minUniformOffsetAlignment = WM.min_uniform_offset_alignment();
         this.maxTextureSize = WM.max_texture_size();
@@ -57,20 +64,27 @@ public class WgpuDevice implements GpuDeviceBackend {
     }
 
     @Override
-    public @NonNull GpuSampler createSampler(@NonNull AddressMode addressModeU, @NonNull AddressMode addressModeV, @NonNull FilterMode minFilter, @NonNull FilterMode magFilter, int maxAnisotropy, @NonNull OptionalDouble maxLod) {
+    public @NonNull GpuSampler createSampler(@NonNull AddressMode addressModeU, @NonNull AddressMode addressModeV,
+            @NonNull FilterMode minFilter, @NonNull FilterMode magFilter, int maxAnisotropy,
+            @NonNull OptionalDouble maxLod) {
         return new WgpuSampler();
     }
 
     @Override
-    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable Supplier<String> label, @GpuTexture.Usage int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers, int mipLevels) {
-//        return this.createTexture(label.get(), usage, format, height, mipLevels, );
-        return this.createTexture(label == null ? "<wm/unnamed mc texture>" : label.get(), usage, format ,width, height, depthOrLayers, mipLevels);
+    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable Supplier<String> label,
+            @GpuTexture.Usage int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers,
+            int mipLevels) {
+        // return this.createTexture(label.get(), usage, format, height, mipLevels, );
+        return this.createTexture(label == null ? "<wm/unnamed mc texture>" : label.get(), usage, format, width, height,
+                depthOrLayers, mipLevels);
     }
 
     @Override
-    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable String label, @GpuTexture.Usage int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers, int mipLevels) {
+    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable String label,
+            @GpuTexture.Usage int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers,
+            int mipLevels) {
         return new WgpuTexture(usage, label, format, width, height, depthOrLayers, mipLevels);
-//        return null;
+        // return null;
     }
 
     @Override
@@ -84,12 +98,14 @@ public class WgpuDevice implements GpuDeviceBackend {
     }
 
     @Override
-    public @NonNull GpuBuffer createBuffer(@org.jspecify.annotations.Nullable Supplier<String> label, @GpuBuffer.Usage int usage, long size) {
+    public @NonNull GpuBuffer createBuffer(@org.jspecify.annotations.Nullable Supplier<String> label,
+            @GpuBuffer.Usage int usage, long size) {
         return new WgpuBuffer(label != null ? label.get() : "<wm/unnamed mc buffer>", usage, size);
     }
 
     @Override
-    public @NonNull GpuBuffer createBuffer(@Nullable Supplier<String> labelGetter, int usage, @NonNull ByteBuffer data) {
+    public @NonNull GpuBuffer createBuffer(@Nullable Supplier<String> labelGetter, int usage,
+            @NonNull ByteBuffer data) {
         return new WgpuBuffer(labelGetter != null ? labelGetter.get() : "<wm/unnamed mc buffer>", usage, data);
     }
 
@@ -139,10 +155,12 @@ public class WgpuDevice implements GpuDeviceBackend {
     }
 
     @Override
-    public @NonNull CompiledRenderPipeline precompilePipeline(@NonNull RenderPipeline pipeline, @org.jspecify.annotations.Nullable ShaderSource shaderSource) {
+    public @NonNull CompiledRenderPipeline precompilePipeline(@NonNull RenderPipeline pipeline,
+            @org.jspecify.annotations.Nullable ShaderSource shaderSource) {
         var source = shaderSource != null ? shaderSource : this.defaultShaderSource;
-        
-        return WgpuCompiledRenderPipeline.wgpuRenderPipelines.computeIfAbsent(pipeline, p -> new WgpuCompiledRenderPipeline(p, source));
+
+        return WgpuCompiledRenderPipeline.wgpuRenderPipelines.computeIfAbsent(pipeline,
+                p -> new WgpuCompiledRenderPipeline(p, source));
     }
 
     @Override
