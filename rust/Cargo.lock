@@ -1437,6 +1437,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "glsl"
+version = "7.0.0"
+source = "git+https://github.com/wgpu-mc/glsl.git?rev=25c6466d#25c6466dbbc7a5c1d296c3127b2904e375601917"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "glutin_wgl_sys"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4924,7 +4932,7 @@ dependencies = [
  "futures",
  "glam",
  "glob",
- "glsl",
+ "glsl 7.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log",
  "parking_lot",
  "rayon",
@@ -4950,7 +4958,7 @@ dependencies = [
  "env_logger",
  "futures",
  "glam",
- "glsl",
+ "glsl 7.0.0 (git+https://github.com/wgpu-mc/glsl.git?rev=25c6466d)",
  "jni",
  "jni_fn",
  "lazy_static",

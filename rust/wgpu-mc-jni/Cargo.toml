@@ -35,7 +35,7 @@ log = "0.4.17"
 env_logger = "0.11"
 serde_yaml = "0.9"
 serde-binary = "0.5.0"
-glsl = "7.0.0"
+glsl = {git = "https://github.com/wgpu-mc/glsl.git", rev = "25c6466d"}
 
 [build-dependencies]
 cbindgen = "0.29"
