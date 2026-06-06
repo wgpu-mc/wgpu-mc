@@ -40,6 +40,10 @@ impl VisitorMut for TypeChanger {
             }
         }).collect();
 
+        if self.new_binding.is_none() {
+            dbg!(&qualifier);
+        }
+
         qualifier.ids.0.push(self.new_binding.take().unwrap());
 
         Visit::Parent
@@ -386,8 +390,6 @@ impl VisitorMut for InAnnotator {
         &mut self,
         single_decl: &mut glsl::syntax::SingleDeclaration,
     ) -> Visit {
-        println!("visited");
-
         self.in_found = false;
         single_decl.ty.to_owned().visit_mut(self);
 
@@ -425,8 +427,6 @@ impl VisitorMut for IncrementingAnnotator {
         &mut self,
         single_decl: &mut glsl::syntax::SingleDeclaration,
     ) -> Visit {
-        println!("visited");
-
         self.found = false;
         single_decl.ty.to_owned().visit_mut(self);
 
@@ -528,10 +528,10 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
 
 pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> String {
 
-    let mut decl_to_remove = vec![];
-    let mut decl_to_add = vec![];
+    let mut swap = vec![];
     let mut sampler_uniform_names = vec![];
-    for (ext_id, ext) in shader_stage.0.0.iter().enumerate() {
+
+    for (index, ext) in shader_stage.0.0.iter().enumerate() {
         let mut finder = SamplerFinder { layout_qualifiers: None, names: vec![], uniform: false, sampler: false };
         ext.visit(&mut finder);
 
@@ -541,11 +541,19 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
 
             sampler_uniform_names.extend(finder.names);
 
+            dbg!(&texture_uniform);
+
             texture_uniform.visit_mut(&mut TypeChanger {
                 new_t: Some(TypeSpecifierNonArray::TypeName(TypeName("texture2D".into()))),
                 new_binding: Some(a),
                 name_ext: "_wm_t2d".to_string(),
             });
+
+            for _ in 0..10 {
+                println!();
+            }
+
+            dbg!(&sampler_uniform);
 
             sampler_uniform.visit_mut(&mut TypeChanger {
                 new_t: Some(TypeSpecifierNonArray::TypeName(TypeName("sampler".into()))),
@@ -553,9 +561,14 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
                 name_ext: "_wm_sampler".to_string(),
             });
 
-            decl_to_add.extend([texture_uniform, sampler_uniform]);
-            decl_to_remove.push(ext_id);
+            swap.push((index, texture_uniform, sampler_uniform));
         }
+    }
+
+    for (target, texture, sampler) in swap {
+        shader_stage.0.0.insert(target+1, sampler);
+        shader_stage.0.0.insert(target+1, texture);
+        shader_stage.0.0.remove(target);
     }
 
     shader_stage.visit_mut(&mut NagaFixConstArrayExplicit { size: None });
@@ -567,19 +580,11 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
 
     shader_stage.visit_mut(&mut expander);
 
-    //in reverse because removing from an array shifts to the left, so starting from the right keeps the remaining indices intact
-    for id in decl_to_remove.iter().rev() {
-        shader_stage.0.0.remove(*id);
-    }
-
     if explicit_mip {
         shader_stage.visit_mut(&mut ExplicitMipWhenSampling);
     }
 
     shader_stage.visit_mut(&mut RewriteGLBuiltinSemantics);
-
-    //Insert after version decl
-    shader_stage.0.0.splice(1..1, decl_to_add);
 
     let mut output = String::new();
 

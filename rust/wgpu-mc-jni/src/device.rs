@@ -19,6 +19,8 @@ use std::num::NonZeroIsize;
 use std::ops::Deref;
 use std::ptr::{null, null_mut};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use glsl::parser::Parse;
 use glsl::syntax::ShaderStage;
 use glsl::transpiler::glsl::show_translation_unit;
@@ -474,14 +476,30 @@ pub unsafe extern "C" fn compile_render_pipeline(
 
     let uniform_map = uniforms.iter().enumerate().map(|(index, u)| (u.name.to_string(), index as u32)).collect();
 
-
     preprocessing::apply_layouts(&mut vert_stage_ast, &mut frag_stage_ast, uniform_map);
 
+    println!("##vsource##\n{vert_source}");
+
+    thread::sleep(Duration::from_millis(50));
+
     shim_samplers(&mut vert_stage_ast, true);
+
+    thread::sleep(Duration::from_millis(50));
+
+    println!("##fsource##\n{frag_source}");
+
+    thread::sleep(Duration::from_millis(50));
+
     shim_samplers(&mut frag_stage_ast, false);
+
+    thread::sleep(Duration::from_millis(50));
 
     let mut vert_processed = String::new();
     let mut frag_processed = String::new();
+
+    println!("##vert##\n{vert_processed}##frag##\n{frag_processed}");
+
+    thread::sleep(Duration::from_millis(20));
 
     show_translation_unit(&mut vert_processed, &vert_stage_ast);
     show_translation_unit(&mut frag_processed, &frag_stage_ast);

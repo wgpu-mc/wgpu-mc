@@ -19,7 +19,7 @@
 tasks.register('copyToResources', Copy) {
     dependsOn 'copyBindings'
 
-    from ('target/debug/' + System.mapLibraryName("wgpu_mc_jni"))
+    from ('target/release/' + System.mapLibraryName("wgpu_mc_jni"))
     into '../fabric/build/resources/main/assets/wgpu_mc/natives/'
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
@@ -33,5 +33,5 @@ tasks.register('copyBindings', Copy) {
 }
 
 tasks.register("build", Exec) {
-    commandLine "cargo", "build" /* , "--release" */
+    commandLine "cargo", "build", "--release"
 }
