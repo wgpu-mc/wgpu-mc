@@ -58,7 +58,7 @@ public class WgpuNative {
     public static native void setAllocator(long ptr);
 
 
-    public static native void createDevice(long window, int w, int h);
+    public static native void createDevice(long display, long window, int w, int h);
 
 
 

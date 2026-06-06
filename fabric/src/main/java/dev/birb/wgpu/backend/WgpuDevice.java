@@ -14,6 +14,8 @@ import org.jetbrains.annotations.Nullable;
 import org.jspecify.annotations.NonNull;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWNativeWin32;
+import org.lwjgl.glfw.GLFWNativeX11;
+import org.lwjgl.system.linux.X11;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -37,14 +39,13 @@ public class WgpuDevice implements GpuDeviceBackend {
         int[] h = new int[1];
 
         GLFW.glfwGetFramebufferSize(window, w, h);
-
         GLFW.glfwFocusWindow(window);
         GLFW.glfwShowWindow(window);
 
         GLFW.glfwPollEvents();
         GLFW.glfwPollEvents();
 
-        WgpuNative.createDevice(GLFWNativeWin32.glfwGetWin32Window(window), w[0], h[0]);
+        WgpuNative.createDevice(GLFWNativeX11.glfwGetX11Display(), GLFWNativeX11.glfwGetX11Window(window), w[0], h[0]);
 
         this.minUniformOffsetAlignment = WM.min_uniform_offset_alignment();
         this.maxTextureSize = WM.max_texture_size();
