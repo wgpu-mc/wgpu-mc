@@ -4924,6 +4924,7 @@ dependencies = [
  "futures",
  "glam",
  "glob",
+ "glsl",
  "log",
  "parking_lot",
  "rayon",

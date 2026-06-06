@@ -1,6 +1,6 @@
 use crate::device::blaze3d::{NormalizedType, RenderPipeline, UniformType};
 use crate::preprocessing::shim_samplers;
-use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER};
+use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing};
 use futures::executor::block_on;
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JClass, JString};
@@ -19,6 +19,9 @@ use std::num::NonZeroIsize;
 use std::ops::Deref;
 use std::ptr::{null, null_mut};
 use std::sync::Arc;
+use glsl::parser::Parse;
+use glsl::syntax::ShaderStage;
+use glsl::transpiler::glsl::show_translation_unit;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, TextureBlitter, TextureBlitterBuilder};
 use wgpu_mc::wgpu::{BlendState, ShaderLocation, ShaderSource, TextureFormat, naga};
 use wgpu_mc::{Display, WindowSize, WmRenderer, wgpu};
@@ -336,8 +339,8 @@ pub mod blaze3d {
         pub uniforms: *const UniformDescriptor,
         pub uniforms_count: u64,
         pub vertex_format: &'a VertexFormat,
-        pub vertex_shader: Box<String>,
-        pub fragment_shader: Box<String>,
+        pub vertex_shader: *const c_char,
+        pub fragment_shader: *const c_char,
         pub defines: *const [*const c_char; 2],
         pub defines_count: u64,
         pub frag_state: &'a FragState,
@@ -460,7 +463,24 @@ pub unsafe extern "C" fn compile_render_pipeline(
         })
         .collect::<Vec<(&str, &str)>>();
 
-    // println!("VERT: {vert_shader_processed}\nFRAG: {frag_shader_processed}");
+    let frag_source = unsafe { CStr::from_ptr(render_pipeline_description.fragment_shader).to_str().unwrap() };
+    let vert_source = unsafe { CStr::from_ptr(render_pipeline_description.vertex_shader).to_str().unwrap() };
+
+    let mut vert_stage_ast = ShaderStage::parse(vert_source).unwrap();
+    let mut frag_stage_ast = ShaderStage::parse(frag_source).unwrap();
+
+    let uniform_map = uniforms.iter().enumerate().map(|(index, u)| (u.name.to_string(), index as u32)).collect();
+
+    preprocessing::apply_layouts(&mut vert_stage_ast, &mut frag_stage_ast, uniform_map);
+
+    shim_samplers(&mut vert_stage_ast, true);
+    shim_samplers(&mut frag_stage_ast, false);
+
+    let mut vert_processed = String::new();
+    let mut frag_processed = String::new();
+
+    show_translation_unit(&mut vert_processed, &vert_stage_ast);
+    show_translation_unit(&mut frag_processed, &frag_stage_ast);
 
     let vert_module = wm
         .gpu
@@ -468,7 +488,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Glsl {
-                shader: Cow::Borrowed(&render_pipeline_description.vertex_shader),
+                shader: Cow::Borrowed(&vert_processed),
                 stage: naga::ShaderStage::Vertex,
                 defines: &defines,
             },
@@ -480,7 +500,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Glsl {
-                shader: Cow::Borrowed(&render_pipeline_description.fragment_shader),
+                shader: Cow::Borrowed(&frag_processed),
                 stage: naga::ShaderStage::Fragment,
                 defines: &defines,
             },
@@ -506,10 +526,10 @@ pub unsafe extern "C" fn compile_render_pipeline(
         })
         .collect::<Vec<_>>();
 
-    dbg!(
-        &vertex_attributes,
-        render_pipeline_description.vertex_format.vertex_size
-    );
+    // dbg!(
+    //     &vertex_attributes,
+    //     render_pipeline_description.vertex_format.vertex_size
+    // );
 
     let layout = wm
         .gpu

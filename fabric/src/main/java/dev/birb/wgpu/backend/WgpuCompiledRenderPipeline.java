@@ -5,13 +5,6 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
 import dev.birb.wm.WM;
-import io.github.douira.glsl_transformer.ast.node.TranslationUnit;
-import io.github.douira.glsl_transformer.ast.node.Version;
-import io.github.douira.glsl_transformer.ast.node.VersionStatement;
-import io.github.douira.glsl_transformer.ast.print.ASTPrinter;
-import io.github.douira.glsl_transformer.ast.print.PrintType;
-import io.github.douira.glsl_transformer.ast.query.RootSupplier;
-import io.github.douira.glsl_transformer.ast.transform.ASTParser;
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
 import lombok.Getter;
 import net.fabricmc.api.EnvType;
@@ -24,7 +17,6 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
@@ -94,33 +86,14 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             var vertexFormat = pipeline.getVertexFormat();
             var elements = vertexFormat.getElements();
 
-            var parser = new ASTParser();
-
-            var vertexShape = new Object2IntArrayMap<String>();
-
-            for(int i=0;i<elements.size();i++) {
-                vertexShape.put(vertexFormat.getElementName(vertexFormat.getElements().get(i)), i);
-            }
+//            var vertexShape = new Object2IntArrayMap<String>();
+//
+//            for(int i=0;i<elements.size();i++) {
+//                vertexShape.put(vertexFormat.getElementName(vertexFormat.getElements().get(i)), i);
+//            }
 
             var fragSource = getOrSourceShader(pipeline.getFragmentShader(), ShaderType.FRAGMENT, pipeline.getShaderDefines(), shaderSource);
             var vertSource = getOrSourceShader(pipeline.getVertexShader(), ShaderType.VERTEX, pipeline.getShaderDefines(), shaderSource);
-
-            var fragDirectives = WM.extract_directives(arena.allocateFrom(fragSource));
-            var vertDirectives = WM.extract_directives(arena.allocateFrom(vertSource));
-
-            TranslationUnit fragTU;
-            TranslationUnit vertTU;
-
-            try {
-                fragTU = parser.parseTranslationUnit(RootSupplier.DEFAULT, fragSource);
-                vertTU = parser.parseTranslationUnit(RootSupplier.DEFAULT, vertSource);
-            } catch(NullPointerException e) {
-                throw new RuntimeException("bruh");
-            }
-
-            var stages = Map.of(ShaderType.VERTEX, vertTU, ShaderType.FRAGMENT, fragTU);
-
-            LayoutTransformer.transformGrouped(parser, stages, new ShaderType[] { ShaderType.VERTEX, ShaderType.FRAGMENT }, vertexShape);
 
             var m = new Object2IntArrayMap<String>();
 
@@ -134,25 +107,6 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                 var sampler = pipeline.getSamplers().get(i);
                 m.put(sampler, samplerOffset + i);
             }
-
-            vertTU.getRoot().indexBuildSession(() -> {
-                LayoutTransformer.transformUniforms(parser, vertTU, vertTU.getRoot(), m);
-            });
-            fragTU.getRoot().indexBuildSession(() -> {
-                LayoutTransformer.transformUniforms(parser, fragTU, fragTU.getRoot(), m);
-            });
-
-            fragTU.getRoot().nodeIndex.getUnique(VersionStatement.class).version = Version.GLSL44;
-            vertTU.getRoot().nodeIndex.getUnique(VersionStatement.class).version = Version.GLSL44;
-
-            var processedVert = ASTPrinter.print(PrintType.INDENTED, vertTU);
-            var processedFrag = ASTPrinter.print(PrintType.INDENTED, fragTU);
-
-            processedFragBuffer = arena.allocateFrom(processedFrag);
-            processedVertBuffer = arena.allocateFrom(processedVert);
-
-            var finalFragShader = WM.prepare_shader_for_naga(processedFragBuffer, fragDirectives, false);
-            var finalVertShader = WM.prepare_shader_for_naga(processedVertBuffer, vertDirectives, true);
 
             var vertexFormatElements = arena.allocate(vertexFormatElementLayout, elements.size());
 
@@ -236,8 +190,8 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             renderPipelineStruct.set(ValueLayout.ADDRESS, 0, uniformDescriptions);
             renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8, pipeline.getUniforms().size() + pipeline.getSamplers().size());
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 2, vertexFormatBuffer);
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 3, finalVertShader);
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 4, finalFragShader);
+            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 3, arena.allocateFrom(vertSource));
+            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 4, arena.allocateFrom(fragSource));
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 5, definesBuffer);
             renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8 * 6, defines.values().size());
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 7, fragStateBuffer);

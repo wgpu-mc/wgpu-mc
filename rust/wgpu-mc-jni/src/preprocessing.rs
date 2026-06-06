@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::ffi::{c_char, CStr, CString};
 use std::io::Cursor;
 use std::str::FromStr;
 use glsl::parser::{Parse, ParseError};
-use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Declaration, Expr, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SingleDeclaration, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
+use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, Declaration, Expr, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SingleDeclaration, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
 use glsl::transpiler::glsl::show_translation_unit;
 use glsl::visitor::{Host, HostMut, Visit, Visitor, VisitorMut};
 use wgpu_mc::wgpu;
@@ -307,6 +308,153 @@ impl VisitorMut for RewriteGLBuiltinSemantics {
     }
 }
 
+struct IncrementingAnnotator {
+    offset: u32,
+    target: StorageQualifier,
+    found: bool,
+    insert_location: Option<u32>,
+    map: HashMap<String, u32>,
+}
+
+struct InAnnotator {
+    in_found: bool,
+    insert_location: Option<u32>,
+    map: HashMap<String, u32>,
+}
+
+struct UniformAnnotator {
+    uniform_found: bool,
+    uniform_set: Option<u32>,
+    uniform_sets: HashMap<String, u32>
+}
+
+impl VisitorMut for UniformAnnotator {
+    fn visit_single_declaration(
+        &mut self,
+        single_decl: &mut glsl::syntax::SingleDeclaration,
+    ) -> Visit {
+        self.uniform_found = false;
+        single_decl.ty.to_owned().visit_mut(self);
+
+        if self.uniform_found {
+            self.uniform_set = self.uniform_sets.get(&single_decl.name.as_ref().unwrap().0).copied();
+        }
+
+        Visit::Children
+    }
+
+    fn visit_block(&mut self, block: &mut Block) -> Visit {
+        self.uniform_found = false;
+        block.qualifier.to_owned().visit_mut(self);
+
+        if self.uniform_found {
+            self.uniform_set = self.uniform_sets.get(&block.name.0).copied();
+        }
+
+        Visit::Children
+    }
+
+    fn visit_type_qualifier(&mut self, qual: &mut glsl::syntax::TypeQualifier) -> Visit {
+        match self.uniform_set.take() {
+            Some(set) => {
+                qual.qualifiers
+                    .0
+                    .insert(0, TypeQualifierSpec::parse(format!("layout(set = {set}, binding = 0)")).unwrap());
+            }
+            None => {}
+        }
+
+        Visit::Children
+    }
+
+    fn visit_storage_qualifier(&mut self, qual: &mut StorageQualifier) -> Visit {
+        self.uniform_found = matches!(qual, StorageQualifier::Uniform);
+
+        Visit::Children
+    }
+}
+
+impl VisitorMut for InAnnotator {
+    fn visit_single_declaration(
+        &mut self,
+        single_decl: &mut glsl::syntax::SingleDeclaration,
+    ) -> Visit {
+        println!("visited");
+
+        self.in_found = false;
+        single_decl.ty.to_owned().visit_mut(self);
+
+        if self.in_found {
+            let name = &single_decl.name.as_ref().unwrap().0;
+            self.insert_location = self.map.get(name).copied();
+        }
+
+        Visit::Children
+    }
+
+    fn visit_type_qualifier(&mut self, qual: &mut glsl::syntax::TypeQualifier) -> Visit {
+        match self.insert_location.take() {
+            Some(offset) => {
+                qual.qualifiers
+                    .0
+                    .insert(0, TypeQualifierSpec::parse(format!("layout(location = {offset})")).unwrap());
+            }
+            None => {}
+        }
+
+        Visit::Children
+    }
+
+    fn visit_storage_qualifier(&mut self, qual: &mut StorageQualifier) -> Visit {
+        self.in_found = matches!(qual, StorageQualifier::In);
+
+        Visit::Children
+    }
+}
+
+
+impl VisitorMut for IncrementingAnnotator {
+    fn visit_single_declaration(
+        &mut self,
+        single_decl: &mut glsl::syntax::SingleDeclaration,
+    ) -> Visit {
+        println!("visited");
+
+        self.found = false;
+        single_decl.ty.to_owned().visit_mut(self);
+
+        if self.found {
+            let name = single_decl.name.as_ref().unwrap().0.clone();
+            self.insert_location = Some(self.offset);
+            self.map.insert(name, self.offset);
+            self.offset += 1;
+        }
+
+        Visit::Children
+    }
+
+    fn visit_type_qualifier(&mut self, qual: &mut glsl::syntax::TypeQualifier) -> Visit {
+        match self.insert_location.take() {
+            Some(offset) => {
+                qual.qualifiers
+                    .0
+                    .insert(0, TypeQualifierSpec::parse(format!("layout(location = {offset})")).unwrap());
+            }
+            None => {}
+        }
+
+        Visit::Children
+    }
+
+    fn visit_storage_qualifier(&mut self, qual: &mut StorageQualifier) -> Visit {
+        let target = &self.target;
+        self.found = matches!(&qual, target);
+
+        Visit::Children
+    }
+}
+
+
 //Get all the directives, except for version
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn extract_directives(glsl: *const c_char) -> *mut u8 {
@@ -332,24 +480,44 @@ pub unsafe extern "C" fn extract_directives(glsl: *const c_char) -> *mut u8 {
     Box::into_raw(Box::new(directives)) as *mut u8
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn prepare_shader_for_naga(glsl: *const c_char, directives: *mut u8, explicit_mip: bool) -> Box<String> {
-    let directives = unsafe { Box::from_raw(directives as *mut Vec<(u32, ExternalDeclaration)>) };
+pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage, uniform_map: HashMap<String, u32>) {
+    let mut out_annotator = IncrementingAnnotator {
+        offset: 0,
+        target: StorageQualifier::Out,
+        found: false,
+        insert_location: None,
+        map: HashMap::new(),
+    };
 
-    Box::new(shim_samplers(
-        unsafe { CStr::from_ptr(glsl).to_str().unwrap() },
-        directives,
-        explicit_mip
-    ))
+    let mut uniform_annotator = UniformAnnotator {
+        uniform_found: false,
+        uniform_set: None,
+        uniform_sets: uniform_map,
+    };
+
+    let mut in_annotator = IncrementingAnnotator {
+        offset: 0,
+        target: StorageQualifier::In,
+        found: false,
+        insert_location: None,
+        map: Default::default(),
+    };
+
+    vert_stage.visit_mut(&mut out_annotator);
+    vert_stage.visit_mut(&mut in_annotator);
+    vert_stage.visit_mut(&mut uniform_annotator);
+
+    let mut in_annotator = InAnnotator {
+        in_found: false,
+        insert_location: None,
+        map: out_annotator.map,
+    };
+
+    frag_stage.visit_mut(&mut in_annotator);
+    frag_stage.visit_mut(&mut uniform_annotator);
 }
 
-pub fn shim_samplers(glsl: &str, directives: Box<Vec<(u32, ExternalDeclaration)>>, explicit_mip: bool) -> String {
-
-    let mut shader_stage = ShaderStage::parse(glsl).unwrap();
-
-    for (i, d) in directives.into_iter().rev() {
-        shader_stage.0.0.insert(i as usize, d);
-    }
+pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> String {
 
     let mut decl_to_remove = vec![];
     let mut decl_to_add = vec![];

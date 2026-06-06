@@ -51,7 +51,7 @@ public class WgpuDevice implements GpuDeviceBackend {
             WgpuNative.createDevice(GLFWNativeX11.glfwGetX11Display(), GLFWNativeX11.glfwGetX11Window(window), w[0],
                     h[0]);
         } else {
-            throw new Exception("Platform not supported");
+            throw new RuntimeException("Platform not supported");
         }
 
         this.minUniformOffsetAlignment = WM.min_uniform_offset_alignment();

@@ -30,7 +30,6 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
     implementation files().builtBy(":wgpu-mc-rust:copyToResources")
-    implementation "io.github.douira:glsl-transformer:3.0.0-pre3"
 }
 
 processResources {
