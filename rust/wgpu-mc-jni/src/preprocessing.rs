@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::{c_char, CStr, CString};
 use std::io::Cursor;
+use std::iter::Flatten;
 use std::str::FromStr;
 use glsl::parser::{Parse, ParseError};
 use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, Declaration, Expr, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SingleDeclaration, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
@@ -29,6 +30,26 @@ struct TypeChanger {
     new_t: Option<TypeSpecifierNonArray>,
     new_binding: Option<LayoutQualifierSpec>,
     name_ext: String
+}
+
+struct FlattenSets {
+    accum: u32
+}
+
+impl VisitorMut for FlattenSets {
+    fn visit_layout_qualifier_spec(&mut self, spec: &mut LayoutQualifierSpec) -> Visit {
+        if let LayoutQualifierSpec::Identifier(a, Some(b)) = spec {
+            if let Expr::IntConst(set) = &mut **b && &a.0 == "set" {
+                *set = 0;
+            } else if let Expr::IntConst(binding)  = &mut **b && &a.0 == "binding" {
+                *binding = self.accum as i32;
+                self.accum += 1;
+            }
+        }
+
+        Visit::Children
+    }
+
 }
 
 impl VisitorMut for TypeChanger {
@@ -414,7 +435,7 @@ impl VisitorMut for SamplerBufferRewriter {
                 self.buffers.push(name.clone());
 
                 *decl = Declaration::parse(format!(
-                    "layout(std430, set = {}, binding = {}) buffer {name}Block {{ int[] inner; }} {name};", self.set, self.binding
+                    "layout(std430, set = {}, binding = {}) readonly buffer {name}Block {{ int[] inner; }} {name};", self.set, self.binding
                 )).unwrap();
             }
         }
@@ -775,6 +796,9 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
     }
 
     shader_stage.visit_mut(&mut RewriteGLBuiltinSemantics);
+    shader_stage.visit_mut(&mut FlattenSets {
+        accum: 0,
+    });
 
     let mut output = String::new();
 

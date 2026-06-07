@@ -18,6 +18,22 @@ typedef enum UniformType UniformType;
 typedef uint64_t UniformType;
 #endif // __STDC_VERSION__ >= 202311L
 
+enum TexelFormat
+#if __STDC_VERSION__ >= 202311L
+  : uint64_t
+#endif // __STDC_VERSION__ >= 202311L
+ {
+  RGBA8 = 0,
+  RED8 = 1,
+  RED8I = 2,
+  DEPTH32 = 3,
+};
+#if __STDC_VERSION__ >= 202311L
+typedef enum TexelFormat TexelFormat;
+#else
+typedef uint64_t TexelFormat;
+#endif // __STDC_VERSION__ >= 202311L
+
 enum NormalizedType
 #if __STDC_VERSION__ >= 202311L
   : uint64_t
@@ -46,6 +62,7 @@ typedef struct Texture_ Texture_;
 typedef struct UniformDescriptor {
   UniformType type_;
   const char *name;
+  TexelFormat texture_format;
 } UniformDescriptor;
 
 typedef struct VertexFormatElement {

@@ -1,4 +1,4 @@
-use crate::device::blaze3d::{NormalizedType, RenderPipeline, UniformType};
+use crate::device::blaze3d::{NormalizedType, RenderPipeline, TexelFormat, UniformType};
 use crate::preprocessing::{shim_samplers, OrphanDestroyer};
 use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing, cyntax};
 use futures::executor::block_on;
@@ -329,10 +329,21 @@ pub mod blaze3d {
         Sampler = 2,
     }
 
+    #[repr(u64)]
+    #[derive(Copy, Clone, Debug)]
+    pub enum TexelFormat {
+        RGBA8 = 0,
+        RED8 = 1,
+        RED8I = 2,
+        DEPTH32 = 3
+    }
+
     #[repr(C)]
     pub struct UniformDescriptor {
         pub type_: UniformType,
         pub name: *const c_char,
+        //If its a texel buffer
+        pub texture_format: TexelFormat
     }
 
     #[repr(C)]
@@ -440,11 +451,13 @@ pub unsafe extern "C" fn compile_render_pipeline(
         struct Uniform<'a> {
             name: &'a str,
             type_: UniformType,
+            format: TexelFormat
         }
 
         Uniform {
             name: CStr::from_ptr(u.name).to_str().unwrap(),
             type_: u.type_,
+            format: u.texture_format
         }
     })
     .collect::<Vec<_>>();
@@ -482,7 +495,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
     let mut h = DefaultHasher::new();
     h.write(vert_source.as_bytes());
     h.write(frag_source.as_bytes());
-    let out = h.finish();
+    let out = format!("{:x}", h.finish());
 
     let mut d_ = d.clone();
 
@@ -516,6 +529,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
     let mut frag_stage_ast = ShaderStage::parse(preprocessed_frag).unwrap();
 
     let uniform_map: HashMap<String, u32> = uniforms.iter().enumerate().map(|(index, u)| (u.name.to_string(), index as u32)).collect();
+    dbg!(&uniform_map);
 
     preprocessing::apply_layouts(&mut vert_stage_ast, &mut frag_stage_ast, uniform_map);
 
@@ -590,23 +604,93 @@ pub unsafe extern "C" fn compile_render_pipeline(
     //     render_pipeline_description.vertex_format.vertex_size
     // );
 
+    let bgl = wm.gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &uniforms
+            .iter()
+            .scan(0, |i, uniform| {
+                Some(match uniform.type_ {
+                    UniformType::TexelBuffer => {
+                        match uniform.format {
+                            TexelFormat::RGBA8 | TexelFormat::DEPTH32 => {
+                                *i += 2;
+
+                                vec![
+                                    wgpu::BindGroupLayoutEntry {
+                                        binding: *i - 2,
+                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        ty: wgpu::BindingType::Texture {
+                                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                            view_dimension: wgpu::TextureViewDimension::D2,
+                                            multisampled: false,
+                                        },
+                                        count: None,
+                                    },
+                                    wgpu::BindGroupLayoutEntry {
+                                        binding: *i - 1,
+                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                                        count: None,
+                                    },
+                                ]
+                            },
+                            TexelFormat::RED8 | TexelFormat::RED8I => {
+                                *i += 1;
+
+                                vec![
+                                    wgpu::BindGroupLayoutEntry {
+                                        binding: *i - 1,
+                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        ty: wgpu::BindingType::Buffer {
+                                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                            has_dynamic_offset: false,
+                                            min_binding_size: None,
+                                        },
+                                        count: None,
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                    UniformType::UBO => {
+                        *i += 1;
+                        vec![
+                            wgpu::BindGroupLayoutEntry {
+                                binding: *i - 1,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            }
+                        ]
+                    },
+                    UniformType::Sampler => {
+                        *i += 1;
+
+                        vec![
+                            wgpu::BindGroupLayoutEntry {
+                                binding: *i - 1,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                                count: None,
+                            }
+                        ]
+                    }
+                })
+            })
+            .flatten()
+            .collect::<Vec<_>>(),
+    });
+
     let layout = wm
         .gpu
         .device
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &uniforms
-                .iter()
-                .map(|uniform| {
-                    Some(match uniform.type_ {
-                        UniformType::TexelBuffer => wm.bind_group_layouts.get("texture").unwrap(),
-                        UniformType::UBO => wm.bind_group_layouts.get("matrix").unwrap(),
-                        UniformType::Sampler => {
-                            wm.bind_group_layouts.get("texture_and_sampler").unwrap()
-                        }
-                    })
-                })
-                .collect::<Vec<_>>(),
+            bind_group_layouts: &[Some(&bgl)],
             immediate_size: 0,
         });
 
