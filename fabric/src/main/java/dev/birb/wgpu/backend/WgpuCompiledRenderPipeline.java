@@ -5,7 +5,8 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.shaders.UniformType;
-import dev.birb.wm.WM;
+import dev.birb.wgpu.helper.GpuFormatHelper;
+import dev.birb.wm.*;
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
 import lombok.Getter;
 import net.fabricmc.api.EnvType;
@@ -18,7 +19,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
-import java.util.ArrayList;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
@@ -36,8 +37,7 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
     private static final MemoryLayout vertexFormatLayout = MemoryLayout.structLayout(
             ValueLayout.ADDRESS.withName("elements"),
             ValueLayout.JAVA_LONG.withName("elements_count"),
-            ValueLayout.JAVA_LONG.withName("vertex_size"),
-            ValueLayout.JAVA_LONG.withName("primitive")
+            ValueLayout.JAVA_LONG.withName("vertex_size")
     ).withName("VertexFormat {}");
 
     private static final MemoryLayout uniformDescriptionLayout = MemoryLayout.structLayout(
@@ -45,18 +45,6 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             ValueLayout.ADDRESS.withName("name"),
             ValueLayout.JAVA_LONG.withName("format")
     );
-
-    private static final MemoryLayout renderPipelineLayout = MemoryLayout.structLayout(
-            ValueLayout.ADDRESS.withTargetLayout(uniformDescriptionLayout).withName("uniforms"),
-            ValueLayout.JAVA_LONG.withName("uniforms_count"),
-            ValueLayout.ADDRESS.withTargetLayout(vertexFormatLayout).withName("vertex_format"),
-            ValueLayout.ADDRESS.withName("vert_shader"),
-            ValueLayout.ADDRESS.withName("frag_shader"),
-            ValueLayout.ADDRESS.withName("defines"),
-            ValueLayout.JAVA_LONG.withName("defines_count"),
-            ValueLayout.ADDRESS.withName("frag_state"),
-            ValueLayout.JAVA_LONG.withName("depth")
-    ).withName("RenderPipeline {}").withByteAlignment(8);
 
     @Environment(EnvType.CLIENT)
     private record ShaderCompilationKey(Identifier id, ShaderType type, ShaderDefines defines) {
@@ -86,8 +74,30 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             var processedFragBuffer = MemorySegment.NULL;
             var processedVertBuffer = MemorySegment.NULL;
 
-            var vertexFormat = pipeline.getVertexFormat();
-            var elements = vertexFormat.getElements();
+            var vertexFormats = VertexFormat.allocateArray(pipeline.getVertexFormatBindings().length, arena);
+
+            for(int v=0;v<pipeline.getVertexFormatBindings().length;v++) {
+                var vertexFormat = pipeline.getVertexFormatBindings()[v];
+
+                var elements = Objects.requireNonNull(vertexFormat).getElements();
+
+                var vertexFormatElements = arena.allocate(vertexFormatElementLayout, elements.size());
+
+                for(long i=0;i<elements.size();i++) {
+                    var formatElement = elements.get((int) i);
+
+                    MemorySegment seg = vertexFormatElements.asSlice(vertexFormatElementLayout.byteSize() * i, vertexFormatElementLayout.byteSize());
+                    seg.set(ValueLayout.JAVA_LONG, 0, formatElement.offset());
+                    seg.set(ValueLayout.JAVA_LONG, 8, GpuFormatHelper.gpuFormatToRustEnum(formatElement.format()));
+                }
+
+                var vertexFormatBuffer = arena.allocate(vertexFormatLayout);
+
+                vertexFormatBuffer.set(ValueLayout.ADDRESS, 0, vertexFormatElements);
+                vertexFormatBuffer.set(ValueLayout.JAVA_LONG,8, elements.size());
+                vertexFormatBuffer.set(ValueLayout.JAVA_LONG, 16, vertexFormat.getVertexSize());
+            }
+
 
 //            var vertexShape = new Object2IntArrayMap<String>();
 //
@@ -100,121 +110,85 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
 
             var m = new Object2IntArrayMap<String>();
 
-            for(int u=0; u<pipeline.getUniforms().size(); u++) {
-                m.put(pipeline.getUniforms().get(u).name(), u);
-            }
+            var bind_group_descriptors = arena.allocate(BlazeBindGroupLayout.layout(), pipeline.getBindGroupLayouts().size());
 
-            int samplerOffset = m.size();
+            var raw_array_bind_group_descriptors = RawArray_BlazeBindGroupLayout.allocate(arena);
+            RawArray_BlazeBindGroupLayout.contents(raw_array_bind_group_descriptors, bind_group_descriptors);
+            RawArray_BlazeBindGroupLayout.size(raw_array_bind_group_descriptors, pipeline.getBindGroupLayouts().size());
 
-            for(int i=0;i<pipeline.getSamplers().size();i++) {
-                var sampler = pipeline.getSamplers().get(i);
-                m.put(sampler, samplerOffset + i);
-            }
+            for(int i=0;i<pipeline.getBindGroupLayouts().size();i++) {
+                var layout = pipeline.getBindGroupLayouts().get(i);
+                var entryCount = layout.getSamplers().size() + layout.getUniforms().size();
 
-            var vertexFormatElements = arena.allocate(vertexFormatElementLayout, elements.size());
+                var bind_group_descriptor_seg = BlazeBindGroupLayout.asSlice(bind_group_descriptors, i);
 
-            for(long i=0;i<elements.size();i++) {
-                var formatElement = elements.get((int) i);
+                var bind_group_entries = BindGroupEntryDescriptor.allocateArray(entryCount, arena);
+                var raw_array_entries = RawArray_BindGroupEntryDescriptor.allocate(arena);
+                RawArray_BindGroupEntryDescriptor.size(raw_array_entries, entryCount);
+                RawArray_BindGroupEntryDescriptor.contents(raw_array_entries, bind_group_entries);
 
-                long t_ = switch(formatElement.id()) {
-                    case 0 -> 1;
-                    case 1 -> 8;
-                    case 2 -> 4;
-                    case 3, 4 -> 7;
-                    case 5 -> 9;
-                    case 6 -> 5;
-                    default -> throw new IllegalStateException("Unexpected value: " + formatElement.id());
-                };
+                BlazeBindGroupLayout.entries(bind_group_descriptor_seg, raw_array_entries);
 
-                MemorySegment seg = vertexFormatElements.asSlice(vertexFormatElementLayout.byteSize() * i, vertexFormatElementLayout.byteSize());
-                seg.set(ValueLayout.JAVA_LONG, 0, vertexFormat.getOffsetsByElement()[formatElement.id()]);
-                seg.set(ValueLayout.JAVA_LONG, 8, t_);
-            }
+                for(var u=0;u<layout.getUniforms().size();u++) {
+                    var uniform = layout.getUniforms().get(u);
 
-            var vertexFormatBuffer = arena.allocate(vertexFormatLayout);
-
-            vertexFormatBuffer.set(ValueLayout.ADDRESS, 0, vertexFormatElements);
-            vertexFormatBuffer.set(ValueLayout.JAVA_LONG,8, elements.size());
-            vertexFormatBuffer.set(ValueLayout.JAVA_LONG, 16, vertexFormat.getVertexSize());
-            vertexFormatBuffer.set(ValueLayout.JAVA_LONG, 24, switch(pipeline.getVertexFormatMode()) {
-                case LINES -> 0;
-                case DEBUG_LINES -> 1;
-                case DEBUG_LINE_STRIP -> 2;
-                case POINTS -> 3;
-                case TRIANGLES -> 4;
-                case TRIANGLE_STRIP -> 5;
-                case TRIANGLE_FAN -> 6;
-                case QUADS -> 7;
-            });
-
-            ArrayList<RenderPipeline.UniformDescription> uniformsAugmented = new ArrayList<>(pipeline.getUniforms());
-
-            if(pipeline.getUniforms().stream().noneMatch(u -> u.name().equals("Globals"))) {
-                uniformsAugmented.add(
-                        new RenderPipeline.UniformDescription("Globals", UniformType.UNIFORM_BUFFER)
-                );
-            }
-
-            var uniformDescriptions = arena.allocate(MemoryLayout.sequenceLayout(uniformsAugmented.size() + pipeline.getSamplers().size(), uniformDescriptionLayout));
-
-            for(int i=0;i<uniformsAugmented.size();i++) {
-                var uniform = uniformsAugmented.get(i);
-
-                int type = switch(uniform.type()) {
-                    case TEXEL_BUFFER -> 0;
-                    case UNIFORM_BUFFER -> 1;
-                };
-
-                var name = arena.allocateFrom(uniform.name());
-
-                var uniformDescriptor = uniformDescriptions.asSlice(uniformDescriptionLayout.byteSize() * i, uniformDescriptionLayout.byteSize());
-                uniformDescriptor.set(ValueLayout.JAVA_LONG, 0, type);
-                uniformDescriptor.set(ValueLayout.ADDRESS, 8, name);
-                if(uniform.textureFormat() != null) {
-                    uniformDescriptor.set(ValueLayout.JAVA_LONG, 16, switch(uniform.textureFormat()) {
-                        case RGBA8 -> 0;
-                        case RED8 -> 1;
-                        case RED8I -> 2;
-                        case DEPTH32 -> 3;
+                    var descriptor = BindGroupEntryDescriptor.asSlice(bind_group_entries, u);
+                    BindGroupEntryDescriptor.type_(descriptor, switch(uniform.type()) {
+                        case TEXEL_BUFFER -> 0;
+                        case UNIFORM_BUFFER -> 1;
                     });
+                    if(uniform.type() == UniformType.TEXEL_BUFFER) {
+                        BindGroupEntryDescriptor.texture_format(descriptor, GpuFormatHelper.gpuFormatToRustEnum(Objects.requireNonNull(uniform.gpuFormat())));
+                    }
                 }
             }
 
-            for(int i=0;i<pipeline.getSamplers().size();i++) {
-                var sampler = pipeline.getSamplers().get(i);
-                var name = arena.allocateFrom(sampler);
+            var vertexFormatsRawArray = RawArray_VertexFormat.allocateArray(pipeline.getVertexFormatBindings().length, arena);
+            RawArray_VertexFormat.contents(vertexFormatsRawArray, vertexFormats);
+            RawArray_VertexFormat.size(vertexFormatsRawArray, pipeline.getVertexFormatBindings().length);
 
-                var uniformDescriptor = uniformDescriptions.asSlice(uniformDescriptionLayout.byteSize() * (i + uniformsAugmented.size()), uniformDescriptionLayout.byteSize());
+            var defines_raw_array = RawArray_______________FfiStr__________2.allocate(arena);
+            var defines = arena.allocate(MemoryLayout.sequenceLayout(2, ValueLayout.ADDRESS), pipeline.getShaderDefines().values().size());
+            RawArray_______________FfiStr__________2.contents(defines_raw_array, defines);
+            RawArray_______________FfiStr__________2.size(defines_raw_array, pipeline.getShaderDefines().values().size());
 
-                uniformDescriptor.set(ValueLayout.JAVA_LONG, 0, 2);
-                uniformDescriptor.set(ValueLayout.ADDRESS, 8, name);
+            int d = 0;
+            for(var entry : pipeline.getShaderDefines().values().entrySet()) {
+                var slice = defines.asSlice(d * ValueLayout.ADDRESS.byteSize() * 2, ValueLayout.ADDRESS.byteSize() * 2);
+                slice.set(ValueLayout.ADDRESS, 0, arena.allocateFrom(entry.getKey()));
+                slice.set(ValueLayout.ADDRESS, ValueLayout.ADDRESS.byteSize(), arena.allocateFrom(entry.getValue()));
+                d++;
             }
 
-            var defines = pipeline.getShaderDefines();
+            var colorTargetCount = pipeline.getColorTargetStates().length;
 
-            var definesBuffer = arena.allocate(MemoryLayout.sequenceLayout(defines.values().size(), MemoryLayout.structLayout(ValueLayout.ADDRESS, ValueLayout.ADDRESS)));
-            var definesEntries = defines.values().entrySet().iterator();
+            var rawArrayColorTargetState = RawArray_BlazeColorTargetState.allocate(arena);
+            var colorTargetStates = BlazeColorTargetState.allocateArray(colorTargetCount, arena);
 
-            for(int i=0;i<defines.values().size();i++) {
-                var define = definesEntries.next();
-                MemorySegment definePair = definesBuffer.asSlice(16L * i, 16);
-                definePair.set(ValueLayout.ADDRESS, 0, arena.allocateFrom(define.getKey()));
-                definePair.set(ValueLayout.ADDRESS, 8, arena.allocateFrom(define.getValue()));
+            RawArray_BlazeColorTargetState.size(rawArrayColorTargetState, colorTargetCount);
+            RawArray_BlazeColorTargetState.contents(rawArrayColorTargetState, colorTargetStates);
+
+            for(int i=0;i<colorTargetCount;i++) {
+                var colorTargetState = pipeline.getColorTargetStates()[i];
+                var slice = BlazeColorTargetState.asSlice(colorTargetStates, i);
+                
+                //todo
+            }
+            
+            var depthTargetState = MemorySegment.NULL;
+            
+            if(pipeline.getDepthStencilState() != null) {
+                depthTargetState = BlazeDepthStencilState.allocate(arena);
             }
 
-            var fragStateBuffer = arena.allocate(8, 8);
-
-            var renderPipelineStruct = arena.allocate(renderPipelineLayout);
-
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 0, uniformDescriptions);
-            renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8, uniformsAugmented.size() + pipeline.getSamplers().size());
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 2, vertexFormatBuffer);
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 3, arena.allocateFrom(vertSource));
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 4, arena.allocateFrom(fragSource));
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 5, definesBuffer);
-            renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8 * 6, defines.values().size());
-            renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 7, fragStateBuffer);
-            renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8 * 8, pipeline.wantsDepthTexture() ? 1 : 0);
+            var renderPipelineStruct = dev.birb.wm.RenderPipeline.allocate(arena);
+            dev.birb.wm.RenderPipeline.bind_group_layouts(renderPipelineStruct, raw_array_bind_group_descriptors);
+            dev.birb.wm.RenderPipeline.vertex_formats(renderPipelineStruct, vertexFormatsRawArray);
+            dev.birb.wm.RenderPipeline.vertex_shader(renderPipelineStruct, arena.allocateFrom(vertSource));
+            dev.birb.wm.RenderPipeline.fragment_shader(renderPipelineStruct, arena.allocateFrom(fragSource));
+            dev.birb.wm.RenderPipeline.defines(renderPipelineStruct, defines_raw_array);
+            dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
+            dev.birb.wm.RenderPipeline.color_target_states(renderPipelineStruct, rawArrayColorTargetState);
 
             System.out.println(pipeline.getLocation());
             nativePipeline = WM.compile_render_pipeline(renderPipelineStruct);

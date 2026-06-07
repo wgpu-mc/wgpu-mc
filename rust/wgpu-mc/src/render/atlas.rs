@@ -13,7 +13,7 @@ use wgpu::Extent3d;
 
 use crate::mc::resource::{ResourcePath, ResourceProvider};
 use crate::texture::{TextureAndView, UV};
-use crate::{Display, WmRenderer};
+use crate::{Gpu, WmRenderer};
 
 /// The width and height of an [atlas](Atlas];
 pub const ATLAS_DIMENSIONS: u32 = 2048;
@@ -76,7 +76,7 @@ impl Debug for Atlas {
 }
 
 impl Atlas {
-    pub fn new(display: &Display, _resizes: bool) -> Self {
+    pub fn new(display: &Gpu, _resizes: bool) -> Self {
         let tv = TextureAndView::from_rgb_bytes(
             display,
             &vec![0u8; (ATLAS_DIMENSIONS * ATLAS_DIMENSIONS) as usize * 4],
@@ -228,7 +228,7 @@ pub struct TextureManager {
 
 impl TextureManager {
     #[must_use]
-    pub fn new(wgpu_state: &Display) -> Self {
+    pub fn new(wgpu_state: &Gpu) -> Self {
         let sampler = wgpu_state.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,

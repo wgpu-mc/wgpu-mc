@@ -11,7 +11,7 @@ use wgpu_mc::{
         util::{BufferInitDescriptor, DeviceExt},
         BufferAddress, BufferBindingType, PresentMode,
     },
-    Display, WmRenderer,
+    Gpu, WmRenderer,
 };
 
 use crate::{

@@ -1,21 +1,18 @@
 package dev.birb.wgpu.backend;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
-import com.mojang.blaze3d.systems.CommandEncoderBackend;
-import com.mojang.blaze3d.systems.GpuDeviceBackend;
+import com.mojang.blaze3d.systems.*;
 import com.mojang.blaze3d.textures.*;
-import dev.birb.wgpu.rust.WgpuNative;
 import dev.birb.wm.WM;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 import org.jspecify.annotations.NonNull;
-import org.lwjgl.glfw.GLFW;
-import org.lwjgl.glfw.GLFWNativeWin32;
-import org.lwjgl.glfw.GLFWNativeX11;
 
+import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.OptionalDouble;
@@ -23,39 +20,23 @@ import java.util.function.Supplier;
 
 public class WgpuDevice implements GpuDeviceBackend {
 
-    private final int minUniformOffsetAlignment;
-    private final int maxTextureSize;
-
     @Getter
     private final ShaderSource defaultShaderSource;
 
+    @Getter
+    private final MemorySegment wmGpuHandle;
+
     // private final BiFunction<Identifier, ShaderType, String> shaderSourceGetter;
 
-    public WgpuDevice(long window, ShaderSource shaderSource) {
-        this.defaultShaderSource = shaderSource;
+    public WgpuDevice(ShaderSource defaultShaderSource) {
+        this.defaultShaderSource = defaultShaderSource;
 
-        int[] w = new int[1];
-        int[] h = new int[1];
+        this.wmGpuHandle = WM.create_device();
+    }
 
-        GLFW.glfwGetFramebufferSize(window, w, h);
-        GLFW.glfwFocusWindow(window);
-        GLFW.glfwShowWindow(window);
-
-        GLFW.glfwPollEvents();
-        GLFW.glfwPollEvents();
-
-        if (GLFW.glfwGetPlatform() == GLFW.GLFW_PLATFORM_WIN32) {
-            // windows doesn't use display, so 0 is fine
-            WgpuNative.createDevice(0, GLFWNativeWin32.glfwGetWin32Window(window), w[0], h[0]);
-        } else if (GLFW.glfwGetPlatform() == GLFW.GLFW_PLATFORM_X11) {
-            WgpuNative.createDevice(GLFWNativeX11.glfwGetX11Display(), GLFWNativeX11.glfwGetX11Window(window), w[0],
-                    h[0]);
-        } else {
-            throw new RuntimeException("Platform not supported");
-        }
-
-        this.minUniformOffsetAlignment = WM.min_uniform_offset_alignment();
-        this.maxTextureSize = WM.max_texture_size();
+    @Override
+    public @NonNull GpuSurfaceBackend createSurface(long windowHandle) {
+        return new WgpuSurface(this, this.wmGpuHandle, windowHandle);
     }
 
     @Override
@@ -71,20 +52,29 @@ public class WgpuDevice implements GpuDeviceBackend {
     }
 
     @Override
-    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable Supplier<String> label,
-            @GpuTexture.Usage int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers,
-            int mipLevels) {
-        // return this.createTexture(label.get(), usage, format, height, mipLevels, );
-        return this.createTexture(label == null ? "<wm/unnamed mc texture>" : label.get(), usage, format, width, height,
-                depthOrLayers, mipLevels);
+    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable Supplier<String> label, @GpuTexture.Usage int usage, @NonNull GpuFormat format, int width, int height, int depthOrLayers, int mipLevels) {
+        return new WgpuTexture(
+                usage,
+                label != null ? label.get() : "<wm/unnamed mc texture>",
+                format,
+                width,
+                height,
+                depthOrLayers,
+                mipLevels
+        );
     }
 
     @Override
-    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable String label,
-            @GpuTexture.Usage int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers,
-            int mipLevels) {
-        return new WgpuTexture(usage, label, format, width, height, depthOrLayers, mipLevels);
-        // return null;
+    public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable String label, @GpuTexture.Usage int usage, @NonNull GpuFormat format, int width, int height, int depthOrLayers, int mipLevels) {
+        return new WgpuTexture(
+                usage,
+                label,
+                format,
+                width,
+                height,
+                depthOrLayers,
+                mipLevels
+        );
     }
 
     @Override
@@ -110,11 +100,6 @@ public class WgpuDevice implements GpuDeviceBackend {
     }
 
     @Override
-    public @NonNull String getImplementationInformation() {
-        return "wgpu";
-    }
-
-    @Override
     public @NonNull List<String> getLastDebugMessages() {
         return List.of();
     }
@@ -122,36 +107,6 @@ public class WgpuDevice implements GpuDeviceBackend {
     @Override
     public boolean isDebuggingEnabled() {
         return false;
-    }
-
-    @Override
-    public @NonNull String getVendor() {
-        return "wgpu";
-    }
-
-    @Override
-    public @NonNull String getBackendName() {
-        return "wgpu";
-    }
-
-    @Override
-    public @NonNull String getVersion() {
-        return "22";
-    }
-
-    @Override
-    public @NonNull String getRenderer() {
-        return "electrum";
-    }
-
-    @Override
-    public int getMaxTextureSize() {
-        return this.maxTextureSize;
-    }
-
-    @Override
-    public int getUniformOffsetAlignment() {
-        return minUniformOffsetAlignment;
     }
 
     @Override
@@ -170,32 +125,24 @@ public class WgpuDevice implements GpuDeviceBackend {
     }
 
     @Override
-    public @NonNull List<String> getEnabledExtensions() {
-        return List.of();
-    }
-
-    @Override
-    public int getMaxSupportedAnisotropy() {
-        return 1;
-    }
-
-    @Override
     public void close() {
 
     }
 
     @Override
-    public void setVsync(boolean enabled) {
-
+    public @NonNull GpuQueryPool createTimestampQueryPool(int size) {
+        return null;
     }
 
     @Override
-    public void presentFrame() {
-
+    public long getTimestampNow() {
+        return 0;
     }
 
     @Override
-    public boolean isZZeroToOne() {
-        return false;
+    public @NonNull DeviceInfo getDeviceInfo() {
+        return null;
     }
+
+
 }

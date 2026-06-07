@@ -1,7 +1,8 @@
 package dev.birb.wgpu.backend;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.textures.GpuTexture;
-import com.mojang.blaze3d.textures.TextureFormat;
+import dev.birb.wgpu.helper.GpuFormatHelper;
 import dev.birb.wm.WM;
 
 import java.lang.foreign.MemorySegment;
@@ -12,18 +13,10 @@ public class WgpuTexture extends GpuTexture {
     final MemorySegment texture;
     private AtomicBoolean closed = new AtomicBoolean();
 
-    public WgpuTexture(int usage, String string, TextureFormat textureFormat, int width, int height, int depthOrLayers, int mips) {
-        super(usage, string, textureFormat, width, height, depthOrLayers, mips);
+    public WgpuTexture(int usage, String string, GpuFormat gpuFormat, int width, int height, int depthOrLayers, int mips) {
+        super(usage, string, gpuFormat, width, height, depthOrLayers, mips);
 
-
-        int formatId = switch(textureFormat) {
-            case RGBA8 -> 0;
-            case RED8 -> 1;
-            case RED8I -> 2;
-            case DEPTH32 -> 3;
-        };
-
-        texture = WM.create_texture(formatId, width, height, depthOrLayers, usage);
+        texture = WM.create_texture(GpuFormatHelper.gpuFormatToRustEnum(gpuFormat), width, height, depthOrLayers, usage);
     }
 
     @Override

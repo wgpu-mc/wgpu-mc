@@ -8,9 +8,12 @@ fn main() {
     cbindgen::Builder::new()
         .with_crate(crate_dir)
         .with_config(Config::from_file("cbindgen.toml").unwrap())
-        .with_std_types(true)
+        .with_std_types(false)
         .with_cpp_compat(false)
         .with_language(Language::C)
+        .with_parse_deps(true)
+        .with_parse_include(&["wgpu"])
+        .exclude_item("FfiStr")
         .generate()
         .expect("Unable to generate bindings")
         .write_to_file("bindings.h");

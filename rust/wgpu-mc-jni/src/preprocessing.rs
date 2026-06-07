@@ -27,44 +27,10 @@ struct SamplerFinder {
 #[derive(Debug)]
 struct TypeChanger {
     new_t: Option<TypeSpecifierNonArray>,
-    new_binding: Option<LayoutQualifierSpec>,
     name_ext: String
 }
 
-struct FlattenSets {
-    accum: u32
-}
-
-impl VisitorMut for FlattenSets {
-    fn visit_layout_qualifier_spec(&mut self, spec: &mut LayoutQualifierSpec) -> Visit {
-        if let LayoutQualifierSpec::Identifier(a, Some(b)) = spec {
-            if let Expr::IntConst(set) = &mut **b && &a.0 == "set" {
-                *set = 0;
-            } else if let Expr::IntConst(binding)  = &mut **b && &a.0 == "binding" {
-                *binding = self.accum as i32;
-                self.accum += 1;
-            }
-        }
-
-        Visit::Children
-    }
-
-}
-
 impl VisitorMut for TypeChanger {
-
-    fn visit_layout_qualifier(&mut self, qualifier: &mut LayoutQualifier) -> Visit {
-        qualifier.ids.0 = qualifier.ids.0.clone().into_iter().filter(|spec| {
-            match spec {
-                LayoutQualifierSpec::Identifier(key, _) => key.0 != "binding",
-                LayoutQualifierSpec::Shared => true,
-            }
-        }).collect();
-
-        qualifier.ids.0.push(self.new_binding.take().unwrap());
-
-        Visit::Parent
-    }
 
     fn visit_single_declaration(&mut self, decl: &mut SingleDeclaration) -> Visit {
         decl.name.as_mut().unwrap().0.extend(self.name_ext.chars());
@@ -86,25 +52,7 @@ impl Visitor for SamplerFinder {
 
         Visit::Children
     }
-
-    fn visit_layout_qualifier_spec(&mut self, spec: &LayoutQualifierSpec) -> Visit {
-        match spec {
-            LayoutQualifierSpec::Identifier(Identifier(v), Some(expr)) if v == "set" => match &**expr {
-                Expr::IntConst(_) | Expr::UIntConst(_) => {
-                    self.layout_qualifiers = Some([
-                        LayoutQualifierSpec::Identifier(Identifier("binding".into()), Some(Box::new(Expr::IntConst(0)))),
-                        LayoutQualifierSpec::Identifier(Identifier("binding".into()), Some(Box::new(Expr::IntConst(1))))
-                    ]);
-
-                    Visit::Children
-                },
-                _ => Visit::Children
-            },
-            _ => Visit::Children
-        }
-
-    }
-
+    
     fn visit_type_qualifier_spec(&mut self, t: &TypeQualifierSpec) -> Visit {
         self.uniform |= matches!(t, TypeQualifierSpec::Storage(StorageQualifier::Uniform));
 
@@ -112,13 +60,6 @@ impl Visitor for SamplerFinder {
     }
 
     fn visit_type_specifier_non_array(&mut self, t: &TypeSpecifierNonArray) -> Visit {
-        match t {
-            TypeSpecifierNonArray::Sampler2D => {
-
-            }
-            _ => {}
-        }
-
         if matches!(t,
             TypeSpecifierNonArray::Sampler2D | TypeSpecifierNonArray::SamplerCube
         ) {
@@ -376,8 +317,8 @@ pub struct InAnnotator {
 
 pub struct UniformAnnotator {
     pub uniform_found: bool,
-    pub uniform_set: Option<u32>,
-    pub uniform_sets: HashMap<String, u32>,
+    pub uniform_binding: Option<(u32, u32)>,
+    pub uniform_sets: HashMap<String, (u32, u32)>,
     pub active: bool
 }
 
@@ -533,7 +474,7 @@ impl VisitorMut for UniformAnnotator {
         self.active = false;
 
         if self.uniform_found {
-            self.uniform_set = Some(self.uniform_sets.get(&block.name.0).copied().expect(&block.name.0));
+            self.uniform_binding = Some(self.uniform_sets.get(&block.name.0).copied().expect(&block.name.0));
         }
 
         Visit::Children
@@ -550,7 +491,7 @@ impl VisitorMut for UniformAnnotator {
         self.active = false;
 
         if self.uniform_found {
-            self.uniform_set = Some(self.uniform_sets.get(
+            self.uniform_binding = Some(self.uniform_sets.get(
                 &single_decl.name.as_ref().unwrap().0
             ).copied().expect(&single_decl.name.as_ref().unwrap().0));
         }
@@ -559,11 +500,11 @@ impl VisitorMut for UniformAnnotator {
     }
 
     fn visit_type_qualifier(&mut self, qual: &mut TypeQualifier) -> Visit {
-        match self.uniform_set.take() {
-            Some(set) => {
+        match self.uniform_binding.take() {
+            Some((set, binding)) => {
                 qual.qualifiers
                     .0
-                    .insert(0, TypeQualifierSpec::parse(format!("layout(set = {set}, binding = 0)")).unwrap());
+                    .insert(0, TypeQualifierSpec::parse(format!("layout(set = {set}, binding = {binding})")).unwrap());
 
                 return Visit::Parent;
             }
@@ -592,7 +533,7 @@ impl VisitorMut for InAnnotator {
 
         if self.in_found {
             let name = &single_decl.name.as_ref().unwrap().0;
-            self.insert_location = Some(self.map.get(name).copied().unwrap());
+            self.insert_location = Some(self.map.get(name).copied().expect(name));
         }
 
         Visit::Children
@@ -685,7 +626,7 @@ pub unsafe extern "C" fn extract_directives(glsl: *const c_char) -> *mut u8 {
 pub fn fix_version(shader_stage: &mut ShaderStage) {
     shader_stage.visit_mut(&mut VersionFixer);
 }
-pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage, uniform_map: HashMap<String, u32>) {
+pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage, uniform_map: HashMap<String, (u32, u32)>) {
     let mut out_annotator = IncrementingAnnotator {
         offset: 0,
         target: StorageQualifier::Out,
@@ -696,12 +637,12 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
 
     let mut uniform_annotator = UniformAnnotator {
         uniform_found: false,
-        uniform_set: None,
+        uniform_binding: None,
         uniform_sets: uniform_map,
         active: false,
     };
 
-    let mut in_annotator = IncrementingAnnotator {
+    let mut incrementing_in_annotator = IncrementingAnnotator {
         offset: 0,
         target: StorageQualifier::In,
         found: false,
@@ -710,7 +651,7 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
     };
 
     vert_stage.visit_mut(&mut out_annotator);
-    vert_stage.visit_mut(&mut in_annotator);
+    vert_stage.visit_mut(&mut incrementing_in_annotator);
     vert_stage.visit_mut(&mut uniform_annotator);
 
     let mut in_annotator = InAnnotator {
@@ -720,7 +661,7 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
     };
 
     uniform_annotator.uniform_found = false;
-    uniform_annotator.uniform_set = None;
+    uniform_annotator.uniform_binding = None;
 
     frag_stage.visit_mut(&mut in_annotator);
     frag_stage.visit_mut(&mut uniform_annotator);
@@ -735,7 +676,7 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
         let mut finder = SamplerFinder { layout_qualifiers: None, names: HashMap::new(), uniform: false, sampler: None };
         ext.visit(&mut finder);
 
-        if let Some([a,b]) = finder.layout_qualifiers && finder.uniform && let Some(sampler_type) = finder.sampler {
+        if finder.uniform && let Some(sampler_type) = finder.sampler {
             let mut texture_uniform = ext.clone();
             let mut sampler_uniform = ext.clone();
 
@@ -749,13 +690,11 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
 
             texture_uniform.visit_mut(&mut TypeChanger {
                 new_t: Some(TypeSpecifierNonArray::TypeName(TypeName(texture_type))),
-                new_binding: Some(a),
                 name_ext: "_wm_texshim".to_string(),
             });
 
             sampler_uniform.visit_mut(&mut TypeChanger {
                 new_t: Some(TypeSpecifierNonArray::TypeName(TypeName(sampler_type))),
-                new_binding: Some(b),
                 name_ext: "_wm_sampler".to_string(),
             });
 
@@ -795,9 +734,6 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
     }
 
     shader_stage.visit_mut(&mut RewriteGLBuiltinSemantics);
-    shader_stage.visit_mut(&mut FlattenSets {
-        accum: 0,
-    });
 
     let mut output = String::new();
 

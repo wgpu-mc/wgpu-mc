@@ -3,7 +3,7 @@ use std::sync::Arc;
 use image::GenericImageView;
 use wgpu::Extent3d;
 
-use crate::{Display, WmRenderer};
+use crate::{Gpu, WmRenderer};
 
 pub type TextureId = u32;
 pub type UV = ((u16, u16), (u16, u16));
@@ -20,7 +20,7 @@ impl TextureAndView {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn from_image_file_bytes(
-        wgpu_state: &Display,
+        wgpu_state: &Gpu,
         bytes: &[u8],
         label: &str,
     ) -> Result<Self, anyhow::Error> {
@@ -29,7 +29,7 @@ impl TextureAndView {
     }
 
     pub fn from_image(
-        wgpu_state: &Display,
+        wgpu_state: &Gpu,
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self, anyhow::Error> {
@@ -51,7 +51,7 @@ impl TextureAndView {
     }
 
     pub fn from_rgb_bytes(
-        wgpu_state: &Display,
+        wgpu_state: &Gpu,
         bytes: &[u8],
         size: Extent3d,
         label: Option<&str>,

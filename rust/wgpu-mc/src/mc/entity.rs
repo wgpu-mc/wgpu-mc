@@ -11,7 +11,7 @@ use wgpu::{BufferDescriptor, BufferUsages};
 use crate::render::atlas::Atlas;
 use crate::render::entity::EntityVertex;
 use crate::texture::UV;
-use crate::{Display, WmRenderer};
+use crate::{Gpu, WmRenderer};
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -24,7 +24,7 @@ pub struct EntityManager {
 }
 
 impl EntityManager {
-    pub fn new(wgpu_state: &Display) -> Self {
+    pub fn new(wgpu_state: &Gpu) -> Self {
         Self {
             mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, false)),
             //TODO: support resizing the atlas
@@ -426,7 +426,7 @@ fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<S
 
 impl Entity {
     ///Create an entity from an [EntityPart] and upload it's mesh to the GPU
-    pub fn new(name: String, root: EntityPart, wgpu_state: &Display) -> Self {
+    pub fn new(name: String, root: EntityPart, wgpu_state: &Gpu) -> Self {
         let mut parts = HashMap::new();
 
         recurse_get_names(&root, &mut 0, &mut parts);

@@ -2,13 +2,15 @@ package dev.birb.wgpu.backend;
 
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.birb.wm.WM;
+import lombok.Getter;
 
 import java.lang.foreign.MemorySegment;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WgpuTextureView extends GpuTextureView {
 
-    final MemorySegment nativeView;
+    @Getter
+    private final MemorySegment nativeView;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     protected WgpuTextureView(WgpuTexture texture, int baseMipLevel, int mipLevels) {

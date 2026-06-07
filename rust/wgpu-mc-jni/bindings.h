@@ -18,92 +18,190 @@ typedef enum UniformType UniformType;
 typedef uint64_t UniformType;
 #endif // __STDC_VERSION__ >= 202311L
 
-enum TexelFormat
+enum GpuFormat
 #if __STDC_VERSION__ >= 202311L
   : uint64_t
 #endif // __STDC_VERSION__ >= 202311L
  {
-  RGBA8 = 0,
-  RED8 = 1,
-  RED8I = 2,
-  DEPTH32 = 3,
+  R8_UNORM = 1,
+  R8_SNORM = 2,
+  RG8_UNORM = 3,
+  RG8_SNORM = 4,
+  RGB8_UNORM = 5,
+  RGB8_SNORM = 6,
+  RGBA8_UNORM = 7,
+  RGBA8_SNORM = 8,
+  R16_UNORM = 9,
+  R16_SNORM = 10,
+  RG16_UNORM = 11,
+  RG16_SNORM = 12,
+  RGB16_UNORM = 13,
+  RGB16_SNORM = 14,
+  RGBA16_UNORM = 15,
+  RGBA16_SNORM = 16,
+  R8_UINT = 17,
+  R8_SINT = 18,
+  RG8_UINT = 19,
+  RG8_SINT = 20,
+  RGB8_UINT = 21,
+  RGB8_SINT = 22,
+  RGBA8_UINT = 23,
+  RGBA8_SINT = 24,
+  R16_UINT = 25,
+  R16_SINT = 26,
+  RG16_UINT = 27,
+  RG16_SINT = 28,
+  RGB16_UINT = 29,
+  RGB16_SINT = 30,
+  RGBA16_UINT = 31,
+  RGBA16_SINT = 32,
+  R32_UINT = 33,
+  R32_SINT = 34,
+  RG32_UINT = 35,
+  RG32_SINT = 36,
+  RGB32_UINT = 37,
+  RGB32_SINT = 38,
+  RGBA32_UINT = 39,
+  RGBA32_SINT = 40,
+  R16_FLOAT = 41,
+  RG16_FLOAT = 42,
+  RGB16_FLOAT = 43,
+  RGBA16_FLOAT = 44,
+  R32_FLOAT = 45,
+  RG32_FLOAT = 46,
+  RGB32_FLOAT = 47,
+  RGBA32_FLOAT = 48,
+  RGB10A2_UNORM = 49,
+  RGB10A2_UINT = 50,
+  RG11B10_FLOAT = 51,
+  D32_FLOAT = 52,
+  D32_FLOAT_S8_UINT = 53,
+  D24_UNORM_S8_UINT = 54,
+  D16_UNORM = 55,
+  S8_UINT = 56,
 };
 #if __STDC_VERSION__ >= 202311L
-typedef enum TexelFormat TexelFormat;
+typedef enum GpuFormat GpuFormat;
 #else
-typedef uint64_t TexelFormat;
-#endif // __STDC_VERSION__ >= 202311L
-
-enum NormalizedType
-#if __STDC_VERSION__ >= 202311L
-  : uint64_t
-#endif // __STDC_VERSION__ >= 202311L
- {
-  F32x3 = 1,
-  U8x8 = 2,
-  U8x4 = 3,
-  F32x2 = 4,
-  F32 = 5,
-  F32x4 = 6,
-  I16x2 = 7,
-  U8x4Norm = 8,
-  S8x3Norm = 9,
-};
-#if __STDC_VERSION__ >= 202311L
-typedef enum NormalizedType NormalizedType;
-#else
-typedef uint64_t NormalizedType;
+typedef uint64_t GpuFormat;
 #endif // __STDC_VERSION__ >= 202311L
 
 typedef struct TextureView_ TextureView_;
 
 typedef struct Texture_ Texture_;
 
-typedef struct UniformDescriptor {
+typedef struct AttachmentDescriptor__________f32__________4 {
+  const struct TextureView_ *texture_view;
+  const float (*clear_value)[4];
+} AttachmentDescriptor__________f32__________4;
+
+typedef struct RawArray______AttachmentDescriptor__________f32__________4 {
+  const struct AttachmentDescriptor__________f32__________4 *const *contents;
+  uint64_t size;
+} RawArray______AttachmentDescriptor__________f32__________4;
+
+typedef struct AttachmentDescriptor_f64 {
+  const struct TextureView_ *texture_view;
+  const double *clear_value;
+} AttachmentDescriptor_f64;
+
+typedef struct RenderPassDescriptor {
+  const struct RawArray______AttachmentDescriptor__________f32__________4 *attachments;
+  const struct AttachmentDescriptor_f64 *depth_attachment;
+} RenderPassDescriptor;
+
+typedef struct BindGroupEntryDescriptor {
   UniformType type_;
-  const char *name;
-  TexelFormat texture_format;
-} UniformDescriptor;
+  const uint8_t *name;
+  GpuFormat texture_format;
+} BindGroupEntryDescriptor;
+
+typedef struct RawArray_BindGroupEntryDescriptor {
+  const struct BindGroupEntryDescriptor *contents;
+  uint64_t size;
+} RawArray_BindGroupEntryDescriptor;
+
+typedef struct BlazeBindGroupLayout {
+  const struct RawArray_BindGroupEntryDescriptor *entries;
+} BlazeBindGroupLayout;
+
+typedef struct RawArray_BlazeBindGroupLayout {
+  const struct BlazeBindGroupLayout *contents;
+  uint64_t size;
+} RawArray_BlazeBindGroupLayout;
+
+typedef struct BlazeColorTargetState {
+  uint64_t blend_function;
+} BlazeColorTargetState;
+
+typedef struct RawArray_BlazeColorTargetState {
+  const struct BlazeColorTargetState *contents;
+  uint64_t size;
+} RawArray_BlazeColorTargetState;
+
+typedef struct BlazeDepthStencilState {
+  uint64_t compare_function;
+} BlazeDepthStencilState;
 
 typedef struct VertexFormatElement {
   uint64_t offset;
-  NormalizedType type_;
+  GpuFormat type_;
 } VertexFormatElement;
 
+typedef struct RawArray_VertexFormatElement {
+  const struct VertexFormatElement *contents;
+  uint64_t size;
+} RawArray_VertexFormatElement;
+
 typedef struct VertexFormat {
-  const struct VertexFormatElement *elements;
-  uint64_t elements_count;
+  const struct RawArray_VertexFormatElement *elements;
   uint64_t vertex_size;
   uint64_t primitive;
 } VertexFormat;
+
+typedef struct RawArray_VertexFormat {
+  const struct VertexFormat *contents;
+  uint64_t size;
+} RawArray_VertexFormat;
+
+typedef struct RawArray_______________FfiStr__________2 {
+  const uint8_t *const (*contents)[2];
+  uint64_t size;
+} RawArray_______________FfiStr__________2;
 
 typedef struct FragState {
 
 } FragState;
 
 typedef struct RenderPipeline {
-  const struct UniformDescriptor *uniforms;
-  uint64_t uniforms_count;
-  const struct VertexFormat *vertex_format;
-  const char *vertex_shader;
-  const char *fragment_shader;
-  const char *const (*defines)[2];
-  uint64_t defines_count;
+  const struct RawArray_BlazeBindGroupLayout *bind_group_layouts;
+  const struct RawArray_BlazeColorTargetState *color_target_states;
+  const struct BlazeDepthStencilState *depth_stencil_state;
+  const struct RawArray_VertexFormat *vertex_formats;
+  const uint8_t *vertex_shader;
+  const uint8_t *fragment_shader;
+  const struct RawArray_______________FfiStr__________2 *defines;
   const struct FragState *frag_state;
-  uint64_t depth;
 } RenderPipeline;
+
+void configure_surface(const uint8_t *device,
+                       const uint8_t *surface,
+                       uint32_t width,
+                       uint32_t height,
+                       uint32_t present_mode);
+
+void drop_surface(uint8_t*);
+
+uint8_t *create_device(void);
+
+uint8_t *create_surface(const uint8_t *gpu, uint64_t display, uint64_t window);
 
 uint8_t *create_command_encoder(void);
 
 struct TextureView_ *create_texture_view(const struct Texture_ *texture);
 
 uint8_t *create_render_pass(uint8_t *encoder,
-                            const struct TextureView_ *color_texture,
-                            bool clear,
-                            uint32_t clear_color,
-                            const struct TextureView_ *depth_texture,
-                            bool clear_depth,
-                            double depth);
+                            const struct RenderPassDescriptor *render_pass_descriptor);
 
 void write_mapped_buffer(const uint8_t *buffer, uint8_t *data, uint64_t size);
 
@@ -130,7 +228,7 @@ void present_texture(uint8_t *encoder, const struct TextureView_ *texture_view);
 
 uint8_t *create_buffer_init(const char *label, uint32_t usage, uint8_t *data, uint64_t size);
 
-struct Texture_ *create_texture(uint32_t format_id,
+struct Texture_ *create_texture(GpuFormat format_id,
                                 uint32_t width,
                                 uint32_t height,
                                 uint32_t depth_or_layers,
@@ -147,3 +245,5 @@ uint32_t max_texture_size(void);
 uint32_t min_uniform_offset_alignment(void);
 
 uint8_t *extract_directives(const char *glsl);
+
+void thing(GpuFormat format);

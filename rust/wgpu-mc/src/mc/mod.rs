@@ -16,7 +16,7 @@ use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
 use crate::util::BindableBuffer;
-use crate::{Display, WmRenderer};
+use crate::{Gpu, WmRenderer};
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -273,7 +273,7 @@ pub struct MinecraftState {
 
 impl MinecraftState {
     #[must_use]
-    pub fn new(wgpu_state: &Display, resource_provider: Arc<dyn ResourceProvider>) -> Self {
+    pub fn new(wgpu_state: &Gpu, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
             entity_models: RwLock::new(HashMap::new()),
 

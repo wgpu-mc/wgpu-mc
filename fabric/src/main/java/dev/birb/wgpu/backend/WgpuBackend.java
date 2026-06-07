@@ -22,13 +22,13 @@ public class WgpuBackend implements GpuBackend {
     }
 
     @Override
-    public void handleWindowCreationErrors(GLFWErrorCapture.Error error) throws BackendCreationException {
+    public void handleWindowCreationErrors(GLFWErrorCapture.@NonNull Error error) {
 
     }
 
     @Override
-    public @NonNull GpuDevice createDevice(long window, ShaderSource defaultShaderSource, GpuDebugOptions debugOptions) {
-        return new GpuDevice(new WgpuDevice(window, defaultShaderSource));
+    public @NonNull GpuDevice createDevice(long window, @NonNull ShaderSource defaultShaderSource, @NonNull GpuDebugOptions debugOptions, @NonNull Runnable criticalShaderLoader) throws BackendCreationException {
+        return new GpuDevice(new WgpuDevice(defaultShaderSource), criticalShaderLoader);
     }
 
 }

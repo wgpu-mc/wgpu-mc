@@ -1,9 +1,10 @@
 package dev.birb.wgpu.backend;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import dev.birb.wm.WM;
 import lombok.Getter;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.lwjgl.system.MemoryUtil;
 
 import java.lang.foreign.Arena;
@@ -47,25 +48,11 @@ public class WgpuBuffer extends GpuBuffer {
         if(!closed.compareAndExchange(false, true)) WM.drop_buffer(nativeBuffer);
     }
 
-    public static class WgpuMappedView implements MappedView {
-
-        private final ByteBuffer data;
-        private final WgpuBuffer buffer;
-
-        public WgpuMappedView(long size, WgpuBuffer buffer) {
-            this.data = MemoryUtil.memAlloc((int) size);
-            this.buffer = buffer;
-        }
-
-        @Override
-        public @NotNull ByteBuffer data() {
-            return data;
-        }
-
-        @Override
-        public void close() {
-//            WM.write_mapped_buffer(buffer.nativeBuffer, MemorySegment.ofBuffer(data), data.capacity());
-        }
+    @Override
+    public GpuBufferSlice.@NonNull MappedView map(long offset, long length, boolean read, boolean write) {
+        ByteBuffer data = MemoryUtil.memAlignedAlloc(16, (int) length);
+        return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {});
     }
+
 
 }

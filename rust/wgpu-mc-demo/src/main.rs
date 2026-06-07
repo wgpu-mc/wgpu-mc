@@ -16,7 +16,7 @@ fn main() {
 /*#version 330*/
 
 uniform vec2 Fog;
-uniform sampler2D DynamicTransforms;
+uniform sampler2D Sampler;
 uniform vec2 Projection;
 
 void main() {
@@ -26,11 +26,10 @@ void main() {
     // dbg!(&vert_stage);
 
     let mut uniform_map = HashMap::new();
-    uniform_map.insert("Fog".into(), 0);
-    uniform_map.insert("DynamicTransforms".into(), 1);
-    uniform_map.insert("Projection".into(), 2);
-    // uniform_map.insert("Fog".into(), 0);
-    // uniform_map.insert("Fog".into(), 0);
+    uniform_map.insert("Fog".into(), (0, 0));
+    uniform_map.insert("Sampler_wm_texshim".into(), (0, 1));
+    uniform_map.insert("Sampler_wm_sampler".into(), (0, 2));
+    uniform_map.insert("Projection".into(), (1, 0));
 
     let mut out_annotator = IncrementingAnnotator {
         offset: 0,
@@ -42,7 +41,7 @@ void main() {
 
     let mut uniform_annotator = UniformAnnotator {
         uniform_found: false,
-        uniform_set: None,
+        uniform_binding: None,
         uniform_sets: uniform_map.clone(),
         active: false,
     };
@@ -54,11 +53,7 @@ void main() {
         insert_location: None,
         map: Default::default(),
     };
-
-
-
-    vert_stage.visit_mut(&mut uniform_annotator);
-
+    
     let mut rewriter = SamplerBufferRewriter {
         is_sampler_buffer: false,
         set: 0,
@@ -77,6 +72,7 @@ void main() {
     let mut out = String::new();
 
     shim_samplers(&mut vert_stage, true);
+    vert_stage.visit_mut(&mut uniform_annotator);
 
     show_translation_unit(&mut out, &vert_stage);
 
