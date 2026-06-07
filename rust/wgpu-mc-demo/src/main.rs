@@ -23,8 +23,6 @@ void main() {
 }
     "#).unwrap();
 
-    // dbg!(&vert_stage);
-
     let mut uniform_map = HashMap::new();
     uniform_map.insert("Fog".into(), (0, 0));
     uniform_map.insert("Sampler_wm_texshim".into(), (0, 1));
@@ -53,12 +51,11 @@ void main() {
         insert_location: None,
         map: Default::default(),
     };
-    
+
     let mut rewriter = SamplerBufferRewriter {
         is_sampler_buffer: false,
-        set: 0,
-        binding: 0,
         buffers: vec![],
+        uniform_sets: &uniform_map,
     };
 
     vert_stage.visit_mut(&mut rewriter);

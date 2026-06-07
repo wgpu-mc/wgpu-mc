@@ -16,14 +16,14 @@ use std::collections::HashMap;
 use std::ffi::{c_char, CStr};
 use std::hash::{DefaultHasher, Hasher};
 use std::io::pipe;
-use std::num::NonZeroIsize;
+use std::num::{NonZero, NonZeroIsize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use glsl::parser::Parse;
-use glsl::syntax::{ExternalDeclaration, Preprocessor, PreprocessorVersion, ShaderStage};
+use glsl::syntax::{ExternalDeclaration, Preprocessor, PreprocessorVersion, ShaderStage, TypeSpecifierNonArray};
 use glsl::transpiler::glsl::show_translation_unit;
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, TextureBlitterBuilder};
-use wgpu_mc::wgpu::{naga, BlendState, PresentMode, ShaderSource};
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, StagingBelt, TextureBlitterBuilder};
+use wgpu_mc::wgpu::{naga, BlendState, IndexFormat, Limits, PresentMode, ShaderSource};
 use wgpu_mc::{wgpu, Gpu, WmRenderer};
 use wgpu_mc::util::WmArena;
 use crate::blaze::{GpuFormat, PrimitiveTopology, BlazeRenderPassDescriptor, RenderPipeline, UniformType};
@@ -80,7 +80,10 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
         required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS,
-        required_limits: Default::default(),
+        required_limits: Limits {
+            max_bind_groups: adapter.limits().max_bind_groups,
+            ..adapter.limits()
+        },
         experimental_features: Default::default(),
         memory_hints: Default::default(),
         trace: Default::default(),
@@ -99,6 +102,12 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
     });
     
     let wm = WmRenderer::new(Arc::new(gpu), resource_provider);
+
+    let blitter = TextureBlitterBuilder::new(&wm.gpu.device, wgpu::TextureFormat::Bgra8Unorm)
+        .sample_type(wgpu::FilterMode::Nearest)
+        .build();
+
+    drop(BLITTER.set(blitter));
     
     Box::into_raw(Box::new(wm)) as *mut usize as jlong
 }
@@ -166,11 +175,6 @@ pub unsafe extern "C" fn create_surface(wm: &WmRenderer, display: u64, window: u
 //
 //     wm.init();
 //
-//     let blitter = TextureBlitterBuilder::new(&wm.wm.gpu.device, wgpu::TextureFormat::Bgra8Unorm)
-//         .sample_type(wgpu::FilterMode::Nearest)
-//         .build();
-//
-//     drop(BLITTER.set(blitter));
 //     drop(RENDERER.set(wm));
 // }
 
@@ -231,8 +235,6 @@ pub extern "C" fn create_render_pass(
     encoder: &mut wgpu::CommandEncoder,
     render_pass_descriptor: &BlazeRenderPassDescriptor
 ) -> Box<wgpu::RenderPass<'static>> {
-    dbg!(&render_pass_descriptor);
-    
     let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: None,
         color_attachments: &render_pass_descriptor.attachments.iter().map(|attachment| {
@@ -275,13 +277,6 @@ pub extern "C" fn create_render_pass(
     });
 
     Box::new(render_pass.forget_lifetime())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn write_mapped_buffer(wm: &WmRenderer, buffer: &wgpu::Buffer, data: *mut u8, size: u64) {
-    wm.gpu.queue.write_buffer(buffer, 0, unsafe {
-        std::slice::from_raw_parts(data, size as _)
-    });
 }
 
 #[unsafe(no_mangle)]
@@ -342,6 +337,33 @@ pub unsafe extern "C" fn bind_render_pipeline_to_pass(
     render_pass.set_pipeline(pipeline);
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn set_index_buffer(pass: &mut wgpu::RenderPass, buffer: &wgpu::Buffer, int_indices: bool) {
+    pass.set_index_buffer(buffer.slice(..), if int_indices { IndexFormat::Uint32 } else { IndexFormat::Uint16 });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn set_vertex_buffer(pass: &mut wgpu::RenderPass, slot: u32, buffer: &wgpu::Buffer, buffer_start: u64, size: u64) {
+    pass.set_vertex_buffer(slot, buffer.slice(buffer_start..buffer_start + size));
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn draw(pass: &mut wgpu::RenderPass, vertex_count: u32, instance_count: u32, first_vertex: u32, first_instance: u32) {
+    pass.draw(
+        first_vertex..first_vertex + vertex_count,
+        first_instance..first_instance + instance_count
+    );
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn draw_indexed(pass: &mut wgpu::RenderPass, index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32) {
+    pass.draw_indexed(
+        first_index..first_index + index_count,
+        vertex_offset,
+        first_instance..first_instance + instance_count
+    );
+}
+
 pub type WgpuTextureFormat = wgpu::TextureFormat;
 
 #[unsafe(no_mangle)]
@@ -358,29 +380,6 @@ pub unsafe extern "C" fn compile_render_pipeline(
     wm: &WmRenderer,
     render_pipeline_description: &RenderPipeline,
 ) -> Box<wgpu::RenderPipeline> {
-    dbg!(render_pipeline_description.bind_group_layouts);
-    dbg!(&render_pipeline_description);
-
-    println!("1");
-
-    let defines_debug: Vec<(String, String)> = render_pipeline_description.defines
-        .iter()
-        .map(|[key, value]| {
-            (
-                key.to_string(), value.to_string()
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let defines: Vec<(String, MacroD)> = render_pipeline_description.defines
-        .iter()
-        .map(|[key, value]| {
-            (
-                key.to_string(),
-                MacroD::Simple(&**value),
-            )
-        })
-        .collect::<Vec<_>>();
 
     let frag_source = render_pipeline_description.fragment_shader.to_string();
     let vert_source = render_pipeline_description.vertex_shader.to_string();
@@ -402,30 +401,13 @@ pub unsafe extern "C" fn compile_render_pipeline(
     d.push(format!("{out}.in"));
     std::fs::write(d, format!("## VERT ##\n{vert_source}\n\n## FRAG ##\n{frag_source}")).unwrap();
 
-    println!("Working on {out}");
+    let directives = format!("#version 440\n{}\n", render_pipeline_description.directives);
 
-    let mut vert_stage_ast = ShaderStage::parse(vert_source).unwrap();
-    let mut frag_stage_ast = ShaderStage::parse(frag_source).unwrap();
+    let vert_source = format!("{directives}{vert_source}");
+    let frag_source = format!("{directives}{frag_source}");
 
-    println!("2");
-
-    vert_stage_ast.0.0.retain(|excl|
-        !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Version(_)))
-        && !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Line(_)))
-    );
-    frag_stage_ast.0.0.retain(|excl|
-        !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Version(_)))
-            && !matches!(excl, ExternalDeclaration::Preprocessor(Preprocessor::Line(_)))
-    );
-
-    let mut out1 = String::new();
-    let mut out2 = String::new();
-
-    show_translation_unit(&mut out1, &vert_stage_ast);
-    show_translation_unit(&mut out2, &frag_stage_ast);
-
-    let preprocessed_vert = cyntax::preprocess_str(&out1, &defines);
-    let preprocessed_frag = cyntax::preprocess_str(&out2, &defines);
+    let preprocessed_vert = cyntax::preprocess_str(&vert_source, &[]);
+    let preprocessed_frag = cyntax::preprocess_str(&frag_source, &[]);
 
     let mut vert_stage_ast = ShaderStage::parse(preprocessed_vert).unwrap();
     let mut frag_stage_ast = ShaderStage::parse(preprocessed_frag).unwrap();
@@ -453,17 +435,26 @@ pub unsafe extern "C" fn compile_render_pipeline(
             }).flatten().collect::<Vec<(String, (u32, u32))>>()
     }).flatten().collect();
 
-    println!("3");
-
-    // dbg!(&shimmed_uniform_offsets);
-    dbg!(&defines_debug);
+    let mut sampler_types = HashMap::new();
 
     //Split the samplers, as well as do some other pre-processing
-    shim_samplers(&mut vert_stage_ast, true);
-    shim_samplers(&mut frag_stage_ast, false);
+    sampler_types.extend(shim_samplers(&mut vert_stage_ast, true));
+    sampler_types.extend(shim_samplers(&mut frag_stage_ast, false));
+
+    let vertex_in_shape = render_pipeline_description.vertex_formats.iter().scan(0, |location, format| {
+        Some(format.elements.iter().map(|element| {
+            *location += 1;
+            (element.name.to_string(), *location - 1)
+        }).collect::<Vec<(String, u32)>>())
+    }).flatten().collect();
 
     //Apply the set and binding layouts to the uniforms
-    preprocessing::apply_layouts(&mut vert_stage_ast, &mut frag_stage_ast, shimmed_uniform_offsets);
+    preprocessing::apply_layouts(
+        &mut vert_stage_ast,
+        &mut frag_stage_ast,
+        shimmed_uniform_offsets,
+        vertex_in_shape
+    );
 
     vert_stage_ast.0.0.insert(0, ExternalDeclaration::Preprocessor(Preprocessor::Version(PreprocessorVersion {
         version: 440,
@@ -495,8 +486,6 @@ pub unsafe extern "C" fn compile_render_pipeline(
                 defines: &[],
             },
         });
-
-    println!("4");
 
     let frag_module = wm.gpu
         .device
@@ -550,24 +539,45 @@ pub unsafe extern "C" fn compile_render_pipeline(
                         UniformType::Sampler => {
                             *index += 2;
 
-                            vec![
-                                wgpu::BindGroupLayoutEntry {
-                                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                    ty: wgpu::BindingType::Texture {
-                                        sample_type: Default::default(),
-                                        view_dimension: wgpu::TextureViewDimension::D2,
-                                        multisampled: false,
+                            match sampler_types.get(&*entry.name).unwrap() {
+                                TypeSpecifierNonArray::SamplerCube => vec![
+                                    wgpu::BindGroupLayoutEntry {
+                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        ty: wgpu::BindingType::Texture {
+                                            sample_type: Default::default(),
+                                            view_dimension: wgpu::TextureViewDimension::Cube,
+                                            multisampled: false,
+                                        },
+                                        count: None,
+                                        binding: *index - 2,
                                     },
-                                    count: None,
-                                    binding: *index - 2,
-                                },
-                                wgpu::BindGroupLayoutEntry {
-                                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                                    count: None,
-                                    binding: *index - 1,
-                                }
-                            ]
+                                    wgpu::BindGroupLayoutEntry {
+                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                                        count: None,
+                                        binding: *index - 1,
+                                    }
+                                ],
+                                TypeSpecifierNonArray::Sampler2D => vec![
+                                    wgpu::BindGroupLayoutEntry {
+                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        ty: wgpu::BindingType::Texture {
+                                            sample_type: Default::default(),
+                                            view_dimension: wgpu::TextureViewDimension::D2,
+                                            multisampled: false,
+                                        },
+                                        count: None,
+                                        binding: *index - 2,
+                                    },
+                                    wgpu::BindGroupLayoutEntry {
+                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                                        count: None,
+                                        binding: *index - 1,
+                                    }
+                                ],
+                                _ => unimplemented!()
+                            }
                         }
                     }
                 )
@@ -576,8 +586,6 @@ pub unsafe extern "C" fn compile_render_pipeline(
 
         wm.gpu.device.create_bind_group_layout(&descriptor)
     }).collect();
-
-    println!("5");
 
     let vertex_buffers = render_pipeline_description.vertex_formats.iter().scan(0, |shader_location, vertex_format| {
         Some(wgpu::VertexBufferLayout {
@@ -590,8 +598,14 @@ pub unsafe extern "C" fn compile_render_pipeline(
                     format: match element.format {
                         GpuFormat::RGB32_FLOAT => wgpu::VertexFormat::Float32x3,
                         GpuFormat::RG16_SINT => wgpu::VertexFormat::Sint16x2,
+                        GpuFormat::RG16_UINT => wgpu::VertexFormat::Uint16x2,
+                        GpuFormat::RG32_SINT => wgpu::VertexFormat::Sint32x2,
+                        GpuFormat::RGB32_SINT => wgpu::VertexFormat::Sint32x3,
+                        GpuFormat::RG16_SNORM => wgpu::VertexFormat::Snorm16x2,
                         GpuFormat::RG32_FLOAT => wgpu::VertexFormat::Float32x2,
                         GpuFormat::RGBA8_UNORM => wgpu::VertexFormat::Unorm8x4,
+                        GpuFormat::RGBA8_SNORM => wgpu::VertexFormat::Snorm8x4,
+                        GpuFormat::R32_FLOAT => wgpu::VertexFormat::Float32,
                         _ => unimplemented!("Unimplemented conversion from GpuFormat {:?} to wgpu", element.format)
                     },
                     offset: element.offset,
@@ -659,9 +673,69 @@ pub unsafe extern "C" fn compile_render_pipeline(
             cache: None,
         });
 
-    println!("6");
-
     Box::new(pipeline)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn unmap_buffer(buffer: &wgpu::Buffer) {
+    buffer.unmap();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn drop_buffer_view(_: Box<wgpu::BufferView>) {
+
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn write_buffer_with(wm: &WmRenderer, buffer: &wgpu::Buffer, data: *const u8, len: u64) {
+    let mut view = wm.gpu.queue.write_buffer_with(buffer, 0, NonZero::new(len).unwrap()).unwrap();
+
+    view.copy_from_slice(
+        unsafe {
+            std::slice::from_raw_parts(data, len as usize)
+        }
+    );
+}
+
+
+#[unsafe(no_mangle)]
+pub extern "C" fn allocate_gpu_buffer_mapped(wm: &WmRenderer, size: u64, usages: u64) -> Box<wgpu::Buffer> {
+    Box::new(wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE,
+        mapped_at_creation: true,
+    }))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn present_surface(
+    wm: &WmRenderer
+) {
+    let surface = wm.gpu.surface.lock();
+
+    if let wgpu::CurrentSurfaceTexture::Success(surface_texture) =
+        surface.as_ref().unwrap().get_current_texture()
+    {
+        surface_texture.present();
+    } else {
+
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn submit_command_encoder(
+    wm: &WmRenderer,
+    encoder: Box<wgpu::CommandEncoder>
+) {
+    wm.gpu.queue.submit([encoder.finish()]);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn submit_render_pass(
+    _: Box<wgpu::RenderPass>
+) {
+
 }
 
 #[unsafe(no_mangle)]
@@ -700,9 +774,9 @@ pub extern "C" fn present_texture(
 
         wm.gpu.queue.submit([encoder.finish()]);
         // wm.wm.gpu.queue.present(surface_texture);
-        // surface_texture.present();
+        surface_texture.present();
     } else {
-        panic!()
+
     }
 }
 

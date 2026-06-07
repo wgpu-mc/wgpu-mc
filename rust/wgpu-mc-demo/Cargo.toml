@@ -26,7 +26,7 @@ parking_lot = "0.12.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 glsl = { git = "https://github.com/wgpu-mc/glsl.git" }
-cyntax = {git = "https://github.com/wgpu-mc/cyntax.git"}
+cyntax = { git = "https://github.com/wgpu-mc/cyntax.git", rev="20c1b1f12d7406809c126f3d9ed843b5f08729c3" }
 
 codespan-reporting = "0.12.0"
 string-interner = "0.19.0"

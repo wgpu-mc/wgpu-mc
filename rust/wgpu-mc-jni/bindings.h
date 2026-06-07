@@ -166,6 +166,7 @@ typedef struct BlazeDepthStencilState {
 typedef struct VertexFormatElement {
   uint64_t offset;
   GpuFormat format;
+  char* name;
 } VertexFormatElement;
 
 typedef struct RawArray_VertexFormatElement {
@@ -183,11 +184,6 @@ typedef struct RawArray_VertexFormat {
   uint64_t size;
 } RawArray_VertexFormat;
 
-typedef struct RawArray__________FfiStr__________2 {
-  const char* (*contents)[2];
-  uint64_t size;
-} RawArray__________FfiStr__________2;
-
 typedef struct FragState {
 
 } FragState;
@@ -199,7 +195,7 @@ typedef struct RenderPipeline {
   const struct RawArray_VertexFormat *vertex_formats;
   char* vertex_shader;
   char* fragment_shader;
-  const struct RawArray__________FfiStr__________2 *defines;
+  char* directives;
   const struct FragState *frag_state;
   PrimitiveTopology primitive_topology;
 } RenderPipeline;
@@ -216,8 +212,6 @@ struct TextureView_ *create_texture_view(const uint8_t *wm, const struct Texture
 
 uint8_t *create_render_pass(uint8_t *encoder,
                             const struct BlazeRenderPassDescriptor *render_pass_descriptor);
-
-void write_mapped_buffer(const uint8_t *wm, const uint8_t *buffer, uint8_t *data, uint64_t size);
 
 uint8_t *create_buffer(const uint8_t *wm, const char *label, uint32_t usage, uint64_t size);
 
@@ -237,12 +231,47 @@ void copy_buffer_to_buffer(const uint8_t *wm,
 
 void bind_render_pipeline_to_pass(uint8_t *render_pass, const struct RenderPipeline *pipeline);
 
+void set_index_buffer(uint8_t *pass, const uint8_t *buffer, bool int_indices);
+
+void set_vertex_buffer(uint8_t *pass,
+                       uint32_t slot,
+                       const uint8_t *buffer,
+                       uint64_t buffer_start,
+                       uint64_t size);
+
+void draw(uint8_t *pass,
+          uint32_t vertex_count,
+          uint32_t instance_count,
+          uint32_t first_vertex,
+          uint32_t first_instance);
+
+void draw_indexed(uint8_t *pass,
+                  uint32_t index_count,
+                  uint32_t instance_count,
+                  uint32_t first_index,
+                  int32_t vertex_offset,
+                  uint32_t first_instance);
+
 void bind_texture_to_render_pass(uint8_t *render_pass,
                                  uint32_t slot,
                                  const struct TextureView_ *texture);
 
 struct RenderPipeline *compile_render_pipeline(const uint8_t *wm,
                                                const struct RenderPipeline *render_pipeline_description);
+
+void unmap_buffer(const uint8_t *buffer);
+
+void drop_buffer_view(uint8_t*);
+
+void write_buffer_with(const uint8_t *wm, const uint8_t *buffer, const uint8_t *data, uint64_t len);
+
+uint8_t *allocate_gpu_buffer_mapped(const uint8_t *wm, uint64_t size, uint64_t usages);
+
+void present_surface(const uint8_t *wm);
+
+void submit_command_encoder(const uint8_t *wm, uint8_t *encoder);
+
+void submit_render_pass(uint8_t*);
 
 void present_texture(const uint8_t *wm, uint8_t *encoder, const struct TextureView_ *texture_view);
 

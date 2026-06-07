@@ -52,7 +52,7 @@ impl Visitor for SamplerFinder {
 
         Visit::Children
     }
-    
+
     fn visit_type_qualifier_spec(&mut self, t: &TypeQualifierSpec) -> Visit {
         self.uniform |= matches!(t, TypeQualifierSpec::Storage(StorageQualifier::Uniform));
 
@@ -330,11 +330,10 @@ pub struct OrphanDestroyer {
 }
 
 
-pub struct SamplerBufferRewriter {
+pub struct SamplerBufferRewriter<'a> {
     pub is_sampler_buffer: bool,
-    pub set: u32,
-    pub binding: u32,
-    pub buffers: Vec<String>
+    pub buffers: Vec<String>,
+    pub uniform_sets: &'a HashMap<String, (u32, u32)>
 }
 
 pub struct RewriteFetches<'a> {
@@ -364,7 +363,7 @@ impl<'a> VisitorMut for RewriteFetches<'a> {
 
 }
 
-impl VisitorMut for SamplerBufferRewriter {
+impl VisitorMut for SamplerBufferRewriter<'_> {
     fn visit_declaration(&mut self, decl: &mut Declaration) -> Visit {
         if let Declaration::InitDeclaratorList(i) = decl {
             i.visit_mut(self);
@@ -374,25 +373,12 @@ impl VisitorMut for SamplerBufferRewriter {
             if self.is_sampler_buffer {
                 self.buffers.push(name.clone());
 
+                let (set, binding) = self.uniform_sets.get(name).copied().unwrap();
+
                 *decl = Declaration::parse(format!(
-                    "layout(std430, set = {}, binding = {}) readonly buffer {name}Block {{ int[] inner; }} {name};", self.set, self.binding
+                    "layout(std430, set = {set}, binding = {binding}) readonly buffer {name}Block {{ int[] inner; }} {name};"
                 )).unwrap();
             }
-        }
-
-        Visit::Children
-    }
-
-    fn visit_layout_qualifier_spec(&mut self, spec: &mut LayoutQualifierSpec) -> Visit {
-        match spec {
-            LayoutQualifierSpec::Identifier(key, Some(val)) => {
-                if let Expr::IntConst(set)  = &**val && &key.0 == "set" {
-                    self.set = *set as u32;
-                } else if let Expr::IntConst(binding)  = &**val && &key.0 == "binding" {
-                    self.binding = *binding as u32;
-                }
-            }
-            _ => {}
         }
 
         Visit::Children
@@ -626,7 +612,7 @@ pub unsafe extern "C" fn extract_directives(glsl: *const c_char) -> *mut u8 {
 pub fn fix_version(shader_stage: &mut ShaderStage) {
     shader_stage.visit_mut(&mut VersionFixer);
 }
-pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage, uniform_map: HashMap<String, (u32, u32)>) {
+pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage, uniform_map: HashMap<String, (u32, u32)>, vertex_layout_shape: HashMap<String, u32>) {
     let mut out_annotator = IncrementingAnnotator {
         offset: 0,
         target: StorageQualifier::Out,
@@ -642,12 +628,10 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
         active: false,
     };
 
-    let mut incrementing_in_annotator = IncrementingAnnotator {
-        offset: 0,
-        target: StorageQualifier::In,
-        found: false,
+    let mut incrementing_in_annotator = InAnnotator {
+        in_found: false,
         insert_location: None,
-        map: Default::default(),
+        map: vertex_layout_shape,
     };
 
     vert_stage.visit_mut(&mut out_annotator);
@@ -665,9 +649,25 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
 
     frag_stage.visit_mut(&mut in_annotator);
     frag_stage.visit_mut(&mut uniform_annotator);
+
+    let mut rewriter = SamplerBufferRewriter {
+        is_sampler_buffer: false,
+        buffers: vec![],
+        uniform_sets: &uniform_annotator.uniform_sets,
+    };
+
+    vert_stage.visit_mut(&mut rewriter);
+    vert_stage.visit_mut(&mut RewriteFetches {
+        buffers: &rewriter.buffers,
+    });
+
+    frag_stage.visit_mut(&mut rewriter);
+    frag_stage.visit_mut(&mut RewriteFetches {
+        buffers: &rewriter.buffers,
+    });
 }
 
-pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> String {
+pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> HashMap<String, TypeSpecifierNonArray> {
 
     let mut swap = vec![];
     let mut sampler_uniform_names = vec![];
@@ -708,18 +708,6 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
         shader_stage.0.0.remove(target);
     }
 
-    let mut rewriter = SamplerBufferRewriter {
-        is_sampler_buffer: false,
-        set: 0,
-        binding: 0,
-        buffers: vec![],
-    };
-
-    shader_stage.visit_mut(&mut rewriter);
-    shader_stage.visit_mut(&mut RewriteFetches {
-        buffers: &rewriter.buffers,
-    });
-
     shader_stage.visit_mut(&mut NagaFixConstArrayExplicit { size: None });
 
     let mut expander = SamplerExpansion {
@@ -735,10 +723,6 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
 
     shader_stage.visit_mut(&mut RewriteGLBuiltinSemantics);
 
-    let mut output = String::new();
-
-    show_translation_unit(&mut output, &shader_stage);
-
-    output
+    sampler_uniform_names.into_iter().collect()
 
 }

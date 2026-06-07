@@ -829,7 +829,7 @@ checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
 [[package]]
 name = "cyntax"
 version = "0.1.0"
-source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
+source = "git+https://github.com/wgpu-mc/cyntax.git?rev=20c1b1f12d7406809c126f3d9ed843b5f08729c3#20c1b1f12d7406809c126f3d9ed843b5f08729c3"
 dependencies = [
  "cyntax_common",
  "cyntax_consteval",
@@ -842,10 +842,9 @@ dependencies = [
 [[package]]
 name = "cyntax_common"
 version = "0.1.0"
-source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
+source = "git+https://github.com/wgpu-mc/cyntax.git?rev=20c1b1f12d7406809c126f3d9ed843b5f08729c3#20c1b1f12d7406809c126f3d9ed843b5f08729c3"
 dependencies = [
  "codespan-reporting 0.12.0",
- "string-interner",
  "strum 0.27.2",
  "strum_macros 0.27.2",
 ]
@@ -853,7 +852,7 @@ dependencies = [
 [[package]]
 name = "cyntax_consteval"
 version = "0.1.0"
-source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
+source = "git+https://github.com/wgpu-mc/cyntax.git?rev=20c1b1f12d7406809c126f3d9ed843b5f08729c3#20c1b1f12d7406809c126f3d9ed843b5f08729c3"
 dependencies = [
  "cyntax_common",
  "cyntax_errors",
@@ -863,7 +862,7 @@ dependencies = [
 [[package]]
 name = "cyntax_errors"
 version = "0.1.0"
-source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
+source = "git+https://github.com/wgpu-mc/cyntax.git?rev=20c1b1f12d7406809c126f3d9ed843b5f08729c3#20c1b1f12d7406809c126f3d9ed843b5f08729c3"
 dependencies = [
  "codespan-reporting 0.12.0",
  "cyntax_common",
@@ -872,7 +871,7 @@ dependencies = [
 [[package]]
 name = "cyntax_lexer"
 version = "0.1.0"
-source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
+source = "git+https://github.com/wgpu-mc/cyntax.git?rev=20c1b1f12d7406809c126f3d9ed843b5f08729c3#20c1b1f12d7406809c126f3d9ed843b5f08729c3"
 dependencies = [
  "cyntax_common",
  "cyntax_errors",
@@ -885,7 +884,7 @@ dependencies = [
 [[package]]
 name = "cyntax_parser"
 version = "0.1.0"
-source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
+source = "git+https://github.com/wgpu-mc/cyntax.git?rev=20c1b1f12d7406809c126f3d9ed843b5f08729c3#20c1b1f12d7406809c126f3d9ed843b5f08729c3"
 dependencies = [
  "cyntax_common",
  "cyntax_errors",

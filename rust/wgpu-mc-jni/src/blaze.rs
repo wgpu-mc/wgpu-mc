@@ -14,7 +14,6 @@ pub struct RawArray<T: Sized> {
 impl<T> RawArray<T> {
 
     pub(crate) fn iter(&self) -> IntoIter<&T> {
-        dbg!(self.size);
         (0..self.size as usize).map(|index| &self[index]).collect::<Vec<&T>>().into_iter()
     }
 
@@ -85,6 +84,7 @@ pub extern "C" fn dummy(_: BlazeRenderPassDescriptor) {}
 pub struct VertexFormatElement {
     pub offset: u64,
     pub format: GpuFormat,
+    pub name: FfiStr
 }
 
 #[repr(C)]
@@ -182,7 +182,8 @@ pub struct RenderPipeline<'a> {
     pub vertex_formats: &'a RawArray<VertexFormat<'a>>,
     pub vertex_shader: FfiStr,
     pub fragment_shader: FfiStr,
-    pub defines: &'a RawArray<[FfiStr; 2]>,
+    pub directives: FfiStr,
+    // pub defines: &'a RawArray<[FfiStr; 2]>,
     pub frag_state: Option<&'a FragState>,
     pub primitive_topology: PrimitiveTopology
 }

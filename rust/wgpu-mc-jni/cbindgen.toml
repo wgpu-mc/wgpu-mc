@@ -8,3 +8,6 @@
 "Gpu" = "uint8_t"
 "FfiStr" = "char*"
 "WmRenderer" = "uint8_t"
+"StagingBelt" = "uint8_t"
+"BufferView" = "uint8_t"
+"QueueWriteBufferView" = "uint8_t"
