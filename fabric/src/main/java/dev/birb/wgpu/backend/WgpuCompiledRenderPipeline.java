@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
+import com.mojang.blaze3d.shaders.UniformType;
 import dev.birb.wm.WM;
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
 import lombok.Getter;
@@ -17,6 +18,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
@@ -40,7 +42,8 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
 
     private static final MemoryLayout uniformDescriptionLayout = MemoryLayout.structLayout(
             ValueLayout.JAVA_LONG.withName("type_"),
-            ValueLayout.ADDRESS.withName("name")
+            ValueLayout.ADDRESS.withName("name"),
+            ValueLayout.JAVA_LONG.withName("format")
     );
 
     private static final MemoryLayout renderPipelineLayout = MemoryLayout.structLayout(
@@ -144,10 +147,18 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                 case QUADS -> 7;
             });
 
-            var uniformDescriptions = arena.allocate(MemoryLayout.sequenceLayout(pipeline.getUniforms().size() + pipeline.getSamplers().size(), uniformDescriptionLayout));
+            ArrayList<RenderPipeline.UniformDescription> uniformsAugmented = new ArrayList<>(pipeline.getUniforms());
 
-            for(int i=0;i<pipeline.getUniforms().size();i++) {
-                var uniform = pipeline.getUniforms().get(i);
+            if(pipeline.getUniforms().stream().noneMatch(u -> u.name().equals("Globals"))) {
+                uniformsAugmented.add(
+                        new RenderPipeline.UniformDescription("Globals", UniformType.UNIFORM_BUFFER)
+                );
+            }
+
+            var uniformDescriptions = arena.allocate(MemoryLayout.sequenceLayout(uniformsAugmented.size() + pipeline.getSamplers().size(), uniformDescriptionLayout));
+
+            for(int i=0;i<uniformsAugmented.size();i++) {
+                var uniform = uniformsAugmented.get(i);
 
                 int type = switch(uniform.type()) {
                     case TEXEL_BUFFER -> 0;
@@ -159,13 +170,21 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                 var uniformDescriptor = uniformDescriptions.asSlice(uniformDescriptionLayout.byteSize() * i, uniformDescriptionLayout.byteSize());
                 uniformDescriptor.set(ValueLayout.JAVA_LONG, 0, type);
                 uniformDescriptor.set(ValueLayout.ADDRESS, 8, name);
+                if(uniform.textureFormat() != null) {
+                    uniformDescriptor.set(ValueLayout.JAVA_LONG, 16, switch(uniform.textureFormat()) {
+                        case RGBA8 -> 0;
+                        case RED8 -> 1;
+                        case RED8I -> 2;
+                        case DEPTH32 -> 3;
+                    });
+                }
             }
 
             for(int i=0;i<pipeline.getSamplers().size();i++) {
                 var sampler = pipeline.getSamplers().get(i);
                 var name = arena.allocateFrom(sampler);
 
-                var uniformDescriptor = uniformDescriptions.asSlice(uniformDescriptionLayout.byteSize() * (i + pipeline.getUniforms().size()), uniformDescriptionLayout.byteSize());
+                var uniformDescriptor = uniformDescriptions.asSlice(uniformDescriptionLayout.byteSize() * (i + uniformsAugmented.size()), uniformDescriptionLayout.byteSize());
 
                 uniformDescriptor.set(ValueLayout.JAVA_LONG, 0, 2);
                 uniformDescriptor.set(ValueLayout.ADDRESS, 8, name);
@@ -188,7 +207,7 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             var renderPipelineStruct = arena.allocate(renderPipelineLayout);
 
             renderPipelineStruct.set(ValueLayout.ADDRESS, 0, uniformDescriptions);
-            renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8, pipeline.getUniforms().size() + pipeline.getSamplers().size());
+            renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8, uniformsAugmented.size() + pipeline.getSamplers().size());
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 2, vertexFormatBuffer);
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 3, arena.allocateFrom(vertSource));
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 4, arena.allocateFrom(fragSource));
@@ -197,6 +216,7 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             renderPipelineStruct.set(ValueLayout.ADDRESS, 8 * 7, fragStateBuffer);
             renderPipelineStruct.set(ValueLayout.JAVA_LONG, 8 * 8, pipeline.wantsDepthTexture() ? 1 : 0);
 
+            System.out.println(pipeline.getLocation());
             nativePipeline = WM.compile_render_pipeline(renderPipelineStruct);
         }
 
