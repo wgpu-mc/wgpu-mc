@@ -1,6 +1,7 @@
 use crate::device::blaze3d::{NormalizedType, RenderPipeline, TexelFormat, UniformType};
 use crate::preprocessing::{shim_samplers, OrphanDestroyer};
-use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing, cyntax};
+use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing};
+use cyntax::MacroD;
 use futures::executor::block_on;
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JClass, JString};
@@ -472,15 +473,15 @@ pub unsafe extern "C" fn compile_render_pipeline(
         render_pipeline_description.defines_count as _,
     );
 
-    let defines = defines_slice
+    let defines: Vec<(String, MacroD)> = defines_slice
         .iter()
         .map(|[key, value]| {
             (
-                CStr::from_ptr(*key).to_str().unwrap(),
-                CStr::from_ptr(*value).to_str().unwrap(),
+                CStr::from_ptr(*key).to_str().unwrap().to_string(),
+                cyntax::MacroD::Simple(CStr::from_ptr(*value).to_str().unwrap()),
             )
         })
-        .collect::<Vec<(&str, &str)>>();
+        .collect::<Vec<_>>();
 
     let frag_source = unsafe { CStr::from_ptr(render_pipeline_description.fragment_shader).to_str().unwrap() };
     let vert_source = unsafe { CStr::from_ptr(render_pipeline_description.vertex_shader).to_str().unwrap() };
@@ -522,8 +523,8 @@ pub unsafe extern "C" fn compile_render_pipeline(
     show_translation_unit(&mut out1, &vert_stage_ast);
     show_translation_unit(&mut out2, &frag_stage_ast);
 
-    let preprocessed_vert = cyntax::preprocess(&out1, &defines);
-    let preprocessed_frag = cyntax::preprocess(&out2, &defines);
+    let preprocessed_vert = cyntax::preprocess_str(&out1, &defines);
+    let preprocessed_frag = cyntax::preprocess_str(&out1, &defines);
 
     let mut vert_stage_ast = ShaderStage::parse(preprocessed_vert).unwrap();
     let mut frag_stage_ast = ShaderStage::parse(preprocessed_frag).unwrap();
@@ -563,7 +564,8 @@ pub unsafe extern "C" fn compile_render_pipeline(
             source: ShaderSource::Glsl {
                 shader: Cow::Borrowed(&vert_processed),
                 stage: naga::ShaderStage::Vertex,
-                defines: &defines,
+                // Don't pass any defines, the shader is already preprocessed above
+                defines: &[],
             },
         });
 
@@ -575,7 +577,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
             source: ShaderSource::Glsl {
                 shader: Cow::Borrowed(&frag_processed),
                 stage: naga::ShaderStage::Fragment,
-                defines: &defines,
+                defines: &[],
             },
         });
 

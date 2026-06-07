@@ -827,9 +827,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
 
 [[package]]
+name = "cyntax"
+version = "0.1.0"
+source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
+dependencies = [
+ "cyntax_common",
+ "cyntax_consteval",
+ "cyntax_errors",
+ "cyntax_lexer",
+ "cyntax_parser",
+ "peekmore",
+]
+
+[[package]]
 name = "cyntax_common"
 version = "0.1.0"
-source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
 dependencies = [
  "codespan-reporting 0.12.0",
  "string-interner",
@@ -840,7 +853,7 @@ dependencies = [
 [[package]]
 name = "cyntax_consteval"
 version = "0.1.0"
-source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
 dependencies = [
  "cyntax_common",
  "cyntax_errors",
@@ -850,7 +863,7 @@ dependencies = [
 [[package]]
 name = "cyntax_errors"
 version = "0.1.0"
-source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
 dependencies = [
  "codespan-reporting 0.12.0",
  "cyntax_common",
@@ -859,7 +872,7 @@ dependencies = [
 [[package]]
 name = "cyntax_lexer"
 version = "0.1.0"
-source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
 dependencies = [
  "cyntax_common",
  "cyntax_errors",
@@ -872,24 +885,11 @@ dependencies = [
 [[package]]
 name = "cyntax_parser"
 version = "0.1.0"
-source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
+source = "git+https://github.com/wgpu-mc/cyntax.git#f71083310555a9ac13757fd6b6e6304657dbc199"
 dependencies = [
  "cyntax_common",
  "cyntax_errors",
  "cyntax_lexer",
- "peekmore",
-]
-
-[[package]]
-name = "cyntax_preprocessor"
-version = "0.1.0"
-source = "git+https://github.com/accusitive/cyntax.git#f026daab66eaaee5843a4d4cae20b8d20f22778a"
-dependencies = [
- "cyntax_common",
- "cyntax_consteval",
- "cyntax_errors",
- "cyntax_lexer",
- "cyntax_parser",
  "peekmore",
 ]
 
@@ -1508,7 +1508,8 @@ dependencies = [
 [[package]]
 name = "glsl"
 version = "7.0.0"
-source = "git+https://github.com/wgpu-mc/glsl.git?rev=25c6466d#25c6466dbbc7a5c1d296c3127b2904e375601917"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "577ac945ce66a4b7004c6e2807f517f94ef027dda89df578abe1fbb979d22f49"
 dependencies = [
  "nom",
 ]
@@ -2001,12 +2002,6 @@ name = "imgref"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0263a3d970d5c054ed9312c0057b4f3bde9c0b33836d3637361d4a9e6e7a408"
-
-[[package]]
-name = "includium"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19fad245d6df3d9a02ce924f89611fa7fec12064cb71f0225402d8db4795508d"
 
 [[package]]
 name = "indexmap"
@@ -5035,9 +5030,7 @@ dependencies = [
  "bytemuck",
  "codespan-reporting 0.12.0",
  "crate-root",
- "cyntax_common",
- "cyntax_lexer",
- "cyntax_preprocessor",
+ "cyntax",
  "env_logger",
  "fastanvil",
  "fastnbt",
@@ -5068,16 +5061,12 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "cbindgen",
- "codespan-reporting 0.12.0",
  "crossbeam-channel",
- "cyntax_common",
- "cyntax_lexer",
- "cyntax_preprocessor",
+ "cyntax",
  "env_logger",
  "futures",
  "glam",
  "glsl",
- "includium",
  "jni",
  "jni_fn",
  "lazy_static",
@@ -5092,7 +5081,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "slab",
- "string-interner",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "wgpu-mc",
