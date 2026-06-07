@@ -14,6 +14,7 @@ pub struct RawArray<T: Sized> {
 impl<T> RawArray<T> {
 
     pub(crate) fn iter(&self) -> IntoIter<&T> {
+        dbg!(self.size);
         (0..self.size as usize).map(|index| &self[index]).collect::<Vec<&T>>().into_iter()
     }
 
@@ -34,13 +35,17 @@ impl<'a, T> IntoIterator for RawArray<T> {
 
 impl<T> Debug for RawArray<T> where T: Debug {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut list = f.debug_list();
+        f.debug_struct("RawArray")
+            .field("size", &self.size)
+            .field_with("contents", |f| {
+                let mut list = f.debug_list();
 
-        for i in self.size as usize..self.size as usize {
-            list.entry(&self[i]);
-        }
+                for i in 0..self.size as usize {
+                    list.entry(&self[i]);
+                }
 
-        list.finish()
+                list.finish()
+            }).finish()
     }
 }
 
@@ -49,7 +54,7 @@ impl<T> Index<usize> for RawArray<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        assert!(0 <= index && index < self.size as usize);
+        assert!(index < self.size as usize);
 
         unsafe {
             self.contents.offset(index as isize).as_ref_unchecked()
@@ -59,30 +64,34 @@ impl<T> Index<usize> for RawArray<T> {
 }
 
 #[repr(C)]
-pub struct AttachmentDescriptor<'a, ClearVal: Sized> {
-    pub texture_view: &'a TextureView_,
+#[derive(Debug)]
+pub struct BlazeAttachmentDescriptor<'a, ClearVal: Sized + Debug> {
+    pub texture_view: Option<&'a TextureView_>,
     pub clear_value: Option<&'a ClearVal>
 }
 
 #[repr(C)]
-pub struct RenderPassDescriptor<'a> {
-    pub attachments: &'a RawArray<&'a AttachmentDescriptor<'a, [f32; 4]>>,
-    pub depth_attachment: Option<&'a AttachmentDescriptor<'a, f64>>
+#[derive(Debug)]
+pub struct BlazeRenderPassDescriptor<'a> {
+    pub attachments: &'a RawArray<&'a BlazeAttachmentDescriptor<'a, [f32; 4]>>,
+    pub depth_attachment: Option<&'a BlazeAttachmentDescriptor<'a, f64>>
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dummy(_: BlazeRenderPassDescriptor) {}
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct VertexFormatElement {
     pub offset: u64,
-    pub type_: GpuFormat,
+    pub format: GpuFormat,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct VertexFormat<'a> {
     pub elements: &'a RawArray<VertexFormatElement>,
-    pub vertex_size: u64,
-    pub primitive: u64,
+    pub vertex_size: u64
 }
 
 #[repr(u64)]
@@ -95,15 +104,15 @@ pub enum UniformType {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct BindGroupEntryDescriptor<'a> {
+pub struct BindGroupEntryDescriptor {
     pub type_: UniformType,
-    pub name: &'a FfiStr,
+    pub name: FfiStr,
     pub texture_format: GpuFormat
 }
 
 #[repr(transparent)]
 pub struct FfiStr {
-    ptr: CStr
+    ptr: *const c_char
 }
 
 impl Deref for FfiStr {
@@ -111,7 +120,7 @@ impl Deref for FfiStr {
 
     fn deref(&self) -> &Self::Target {
         unsafe {
-            CStr::from_ptr(self as *const Self as *const c_char).to_str().unwrap()
+            CStr::from_ptr(self.ptr).to_str().unwrap()
         }
     }
 }
@@ -137,7 +146,7 @@ pub struct FragState {}
 #[repr(C)]
 #[derive(Debug)]
 pub struct BlazeBindGroupLayout<'a> {
-    pub entries: &'a RawArray<BindGroupEntryDescriptor<'a>>
+    pub entries: &'a RawArray<BindGroupEntryDescriptor>
 }
 
 #[repr(C)]
@@ -147,9 +156,21 @@ pub struct BlazeColorTargetState {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct BlazeDepthStencilState {
     compare_function: u64
+}
+
+#[repr(u64)]
+#[derive(Copy, Clone, Debug)]
+pub enum PrimitiveTopology {
+    Lines = 1,
+    DebugLineStrip = 2,
+    Points = 3,
+    Tris = 4,
+    TriangleStrip = 5,
+    TriangleFan = 6,
+    Quads = 7,
 }
 
 #[repr(C)]
@@ -157,18 +178,20 @@ pub struct BlazeDepthStencilState {
 pub struct RenderPipeline<'a> {
     pub bind_group_layouts: &'a RawArray<BlazeBindGroupLayout<'a>>,
     pub color_target_states: &'a RawArray<BlazeColorTargetState>,
-    pub depth_stencil_state: &'a BlazeDepthStencilState,
+    pub depth_stencil_state: Option<&'a BlazeDepthStencilState>,
     pub vertex_formats: &'a RawArray<VertexFormat<'a>>,
-    pub vertex_shader: &'a FfiStr,
-    pub fragment_shader: &'a FfiStr,
-    pub defines: &'a RawArray<[&'a FfiStr; 2]>,
-    pub frag_state: Option<&'a FragState>
+    pub vertex_shader: FfiStr,
+    pub fragment_shader: FfiStr,
+    pub defines: &'a RawArray<[FfiStr; 2]>,
+    pub frag_state: Option<&'a FragState>,
+    pub primitive_topology: PrimitiveTopology
 }
 
 #[repr(u64)]
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug)]
 pub enum GpuFormat {
+    None = 0,
     R8_UNORM = 1,
     R8_SNORM = 2,
     RG8_UNORM = 3,

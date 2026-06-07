@@ -48,17 +48,7 @@ public class WgpuNative {
         System.load(object.getAbsolutePath());
     }
 
-    /**
-     * returns  true if the operation succeeded
-     */
-    public static native int getTextureId(String identifier);
-
-    public static native String getBackend();
-
-    public static native void setAllocator(long ptr);
-
-
-    public static native void createDevice(long display, long window, int w, int h);
+    public static native long create_device();
 
 
 

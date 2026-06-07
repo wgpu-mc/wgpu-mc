@@ -13,10 +13,10 @@ public class WgpuTexture extends GpuTexture {
     final MemorySegment texture;
     private AtomicBoolean closed = new AtomicBoolean();
 
-    public WgpuTexture(int usage, String string, GpuFormat gpuFormat, int width, int height, int depthOrLayers, int mips) {
+    public WgpuTexture(WgpuDevice device, int usage, String string, GpuFormat gpuFormat, int width, int height, int depthOrLayers, int mips) {
         super(usage, string, gpuFormat, width, height, depthOrLayers, mips);
 
-        texture = WM.create_texture(GpuFormatHelper.gpuFormatToRustEnum(gpuFormat), width, height, depthOrLayers, usage);
+        texture = WM.create_texture(device.getWm(), GpuFormatHelper.gpuFormatToRustEnum(gpuFormat), width, height, depthOrLayers, usage);
     }
 
     @Override

@@ -69,7 +69,7 @@ pub use treeculler::Frustum;
 pub struct Gpu {
     pub instance: wgpu::Instance,
     pub adapter: wgpu::Adapter,
-    pub surface: Mutex<Option<Surface<'static>>>,
+    pub surface: Mutex<Option<Arc<Surface<'static>>>>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue
 }
@@ -82,7 +82,7 @@ pub type ChunkUpdateData = (IVec3, Vec<BakedLayer>);
 ///
 /// `RenderGraph` is used in tandem with `World` to render scenes.
 pub struct WmRenderer {
-    pub gpu: Gpu,
+    pub gpu: Arc<Gpu>,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: MinecraftState,
     pub chunk_update_queue: (Sender<ChunkUpdateData>, Mutex<Receiver<ChunkUpdateData>>),
@@ -99,7 +99,7 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-    pub fn new(display: Gpu, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
+    pub fn new(display: Arc<Gpu>, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         let mc = MinecraftState::new(&display, resource_provider);
         let (sender, receiver) = channel();
         Self {

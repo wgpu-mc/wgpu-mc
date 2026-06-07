@@ -12,11 +12,14 @@ public class WgpuTextureView extends GpuTextureView {
     @Getter
     private final MemorySegment nativeView;
     private final AtomicBoolean closed = new AtomicBoolean();
+    @Getter
+    private final WgpuDevice device;
 
-    protected WgpuTextureView(WgpuTexture texture, int baseMipLevel, int mipLevels) {
+    protected WgpuTextureView(WgpuDevice device, WgpuTexture texture, int baseMipLevel, int mipLevels) {
         super(texture, baseMipLevel, mipLevels);
+        this.device = device;
 
-        nativeView = WM.create_texture_view(texture.texture);
+        nativeView = WM.create_texture_view(this.device.getWm(), texture.texture);
     }
 
     @Override

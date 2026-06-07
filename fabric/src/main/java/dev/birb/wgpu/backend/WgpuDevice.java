@@ -7,7 +7,7 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.systems.*;
 import com.mojang.blaze3d.textures.*;
-import dev.birb.wm.WM;
+import dev.birb.wgpu.rust.WgpuNative;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 import org.jspecify.annotations.NonNull;
@@ -16,6 +16,8 @@ import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.OptionalDouble;
+import java.util.OptionalLong;
+import java.util.Set;
 import java.util.function.Supplier;
 
 public class WgpuDevice implements GpuDeviceBackend {
@@ -24,19 +26,19 @@ public class WgpuDevice implements GpuDeviceBackend {
     private final ShaderSource defaultShaderSource;
 
     @Getter
-    private final MemorySegment wmGpuHandle;
+    private final MemorySegment wm;
 
     // private final BiFunction<Identifier, ShaderType, String> shaderSourceGetter;
 
     public WgpuDevice(ShaderSource defaultShaderSource) {
         this.defaultShaderSource = defaultShaderSource;
 
-        this.wmGpuHandle = WM.create_device();
+        this.wm = MemorySegment.ofAddress(WgpuNative.create_device());
     }
 
     @Override
     public @NonNull GpuSurfaceBackend createSurface(long windowHandle) {
-        return new WgpuSurface(this, this.wmGpuHandle, windowHandle);
+        return new WgpuSurface(this, windowHandle);
     }
 
     @Override
@@ -54,6 +56,7 @@ public class WgpuDevice implements GpuDeviceBackend {
     @Override
     public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable Supplier<String> label, @GpuTexture.Usage int usage, @NonNull GpuFormat format, int width, int height, int depthOrLayers, int mipLevels) {
         return new WgpuTexture(
+                this,
                 usage,
                 label != null ? label.get() : "<wm/unnamed mc texture>",
                 format,
@@ -67,6 +70,7 @@ public class WgpuDevice implements GpuDeviceBackend {
     @Override
     public @NonNull GpuTexture createTexture(@org.jspecify.annotations.Nullable String label, @GpuTexture.Usage int usage, @NonNull GpuFormat format, int width, int height, int depthOrLayers, int mipLevels) {
         return new WgpuTexture(
+                this,
                 usage,
                 label,
                 format,
@@ -79,24 +83,24 @@ public class WgpuDevice implements GpuDeviceBackend {
 
     @Override
     public @NonNull GpuTextureView createTextureView(@NonNull GpuTexture texture) {
-        return new WgpuTextureView((WgpuTexture) texture, 1, 1);
+        return new WgpuTextureView(this, (WgpuTexture) texture, 1, 1);
     }
 
     @Override
     public @NonNull GpuTextureView createTextureView(@NonNull GpuTexture texture, int baseMipLevel, int mipLevels) {
-        return new WgpuTextureView((WgpuTexture) texture, baseMipLevel, mipLevels);
+        return new WgpuTextureView(this, (WgpuTexture) texture, baseMipLevel, mipLevels);
     }
 
     @Override
     public @NonNull GpuBuffer createBuffer(@org.jspecify.annotations.Nullable Supplier<String> label,
             @GpuBuffer.Usage int usage, long size) {
-        return new WgpuBuffer(label != null ? label.get() : "<wm/unnamed mc buffer>", usage, size);
+        return new WgpuBuffer(this, label != null ? label.get() : "<wm/unnamed mc buffer>", usage, size);
     }
 
     @Override
     public @NonNull GpuBuffer createBuffer(@Nullable Supplier<String> labelGetter, int usage,
             @NonNull ByteBuffer data) {
-        return new WgpuBuffer(labelGetter != null ? labelGetter.get() : "<wm/unnamed mc buffer>", usage, data);
+        return new WgpuBuffer(this, labelGetter != null ? labelGetter.get() : "<wm/unnamed mc buffer>", usage, data);
     }
 
     @Override
@@ -115,7 +119,7 @@ public class WgpuDevice implements GpuDeviceBackend {
         var source = shaderSource != null ? shaderSource : this.defaultShaderSource;
 
         return WgpuCompiledRenderPipeline.wgpuRenderPipelines.computeIfAbsent(pipeline,
-                p -> new WgpuCompiledRenderPipeline(p, source));
+                p -> new WgpuCompiledRenderPipeline(this, p, source));
     }
 
     @Override
@@ -131,7 +135,27 @@ public class WgpuDevice implements GpuDeviceBackend {
 
     @Override
     public @NonNull GpuQueryPool createTimestampQueryPool(int size) {
-        return null;
+        return new GpuQueryPool() {
+            @Override
+            public int size() {
+                return 0;
+            }
+
+            @Override
+            public @NonNull OptionalLong getValue(int index) {
+                return OptionalLong.empty();
+            }
+
+            @Override
+            public OptionalLong @NonNull [] getValues(int index, int count) {
+                return new OptionalLong[0];
+            }
+
+            @Override
+            public void close() {
+
+            }
+        };
     }
 
     @Override
@@ -141,7 +165,19 @@ public class WgpuDevice implements GpuDeviceBackend {
 
     @Override
     public @NonNull DeviceInfo getDeviceInfo() {
-        return null;
+        return new DeviceInfo(
+                "wgpu",
+                "wgpu",
+                "-",
+                false,
+                "wgpu-mc",
+                1.0f,
+                new DeviceLimits(1, 1, 4096, 100000000, 1, 4),
+                new DeviceFeatures(true, false, false, false, false, false, false),
+                Set.of(),
+                new HintsAndWorkarounds(false, true),
+                DeviceType.DISCRETE
+        );
     }
 
 

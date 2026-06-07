@@ -1,3 +1,4 @@
+#![feature(debug_closure_helpers)]
 pub extern crate wgpu_mc;
 
 

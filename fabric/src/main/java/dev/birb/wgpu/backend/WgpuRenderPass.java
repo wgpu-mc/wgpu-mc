@@ -10,7 +10,7 @@ import com.mojang.blaze3d.systems.RenderPassBackend;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import dev.birb.wm.WM;
+import dev.birb.wm.*;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.PointerBuffer;
@@ -27,7 +27,7 @@ public class WgpuRenderPass implements RenderPassBackend {
     private static final MemoryLayout vec4fLayout = MemoryLayout.sequenceLayout(
             4, ValueLayout.JAVA_FLOAT
     );
-    
+
     private static final MemoryLayout attachmentDescriptorLayout = MemoryLayout.structLayout(
             AddressLayout.ADDRESS.withName("texture_view"),
             AddressLayout.ADDRESS.withName("clear_value")
@@ -40,16 +40,18 @@ public class WgpuRenderPass implements RenderPassBackend {
     );
 
 
-    public WgpuRenderPass(WgpuDevice device, MemorySegment nativeCommandEncoder, RenderPassDescriptor descriptor) {
+    public WgpuRenderPass(WgpuDevice device, WgpuCommandEncoder encoder, RenderPassDescriptor descriptor) {
         this.device = device;
-        
+
         try(Arena arena = Arena.ofConfined()) {
-            var rawRenderPass = arena.allocate(renderPassLayout);
-            
-            var attachmentsAllocation = arena.allocate(ValueLayout.ADDRESS, descriptor.colorAttachments().size());
-            
+            var rawRenderPass = BlazeRenderPassDescriptor.allocate(arena);
+
+            var attachmentsAllocation = BlazeAttachmentDescriptor__________f32__________4.allocateArray(descriptor.colorAttachments().size(), arena);
+
             for(int i=0;i<descriptor.colorAttachments().size();i++) {
                 var attachment = descriptor.colorAttachments().get(i);
+
+                var attachmentSeg = BlazeAttachmentDescriptor__________f32__________4.asSlice(attachmentsAllocation, i);
 
                 var clearValRaw = MemorySegment.NULL;
 
@@ -63,19 +65,17 @@ public class WgpuRenderPass implements RenderPassBackend {
                 }
 
                 var view = (WgpuTextureView) attachment.textureView();
-                var attachmentDescriptor = arena.allocate(attachmentDescriptorLayout);
-                attachmentDescriptor.set(ValueLayout.ADDRESS, 0, view.getNativeView());
-                attachmentDescriptor.set(ValueLayout.ADDRESS, 8, clearValRaw);
-                
-                attachmentsAllocation.set(ValueLayout.ADDRESS, i * ValueLayout.ADDRESS.byteSize(), attachmentDescriptor);
+
+                BlazeAttachmentDescriptor__________f32__________4.texture_view(attachmentSeg, view.getNativeView());
+                BlazeAttachmentDescriptor__________f32__________4.clear_value(attachmentSeg, clearValRaw);
             }
-            
+
             MemorySegment depthAttachment = MemorySegment.NULL;
-            
+
             if(descriptor.depthAttachment() != null) {
-                depthAttachment = arena.allocate(attachmentDescriptorLayout);
+                depthAttachment = BlazeAttachmentDescriptor_f64.allocate(arena);
                 var depthView = ((WgpuTextureView) descriptor.depthAttachment().textureView()).getNativeView();
-                
+
                 MemorySegment clearValue = MemorySegment.NULL;
 
                 if (descriptor.depthAttachment != null && descriptor.depthAttachment.clearValue().isPresent()) {
@@ -83,15 +83,19 @@ public class WgpuRenderPass implements RenderPassBackend {
                     clearValue.set(ValueLayout.JAVA_DOUBLE, 0, descriptor.depthAttachment().clearValue().getAsDouble());
                 }
 
-                depthAttachment.set(ValueLayout.ADDRESS, 0, depthView);
-                depthAttachment.set(ValueLayout.ADDRESS, ValueLayout.ADDRESS.byteSize(), clearValue);
+                BlazeAttachmentDescriptor_f64.texture_view(depthAttachment, depthView);
+                BlazeAttachmentDescriptor_f64.clear_value(depthAttachment, clearValue);
             }
-            
-            rawRenderPass.set(ValueLayout.ADDRESS, 0, attachmentsAllocation);
-            rawRenderPass.set(ValueLayout.ADDRESS, ValueLayout.ADDRESS.byteSize(), depthAttachment);
+
+            var colorAttachmentsRawArray = RawArray______BlazeAttachmentDescriptor__________f32__________4.allocate(arena);
+            RawArray______BlazeAttachmentDescriptor__________f32__________4.size(colorAttachmentsRawArray, descriptor.colorAttachments().size());
+            RawArray______BlazeAttachmentDescriptor__________f32__________4.contents(colorAttachmentsRawArray, attachmentsAllocation);
+
+            BlazeRenderPassDescriptor.attachments(rawRenderPass, colorAttachmentsRawArray);
+            BlazeRenderPassDescriptor.depth_attachment(rawRenderPass, depthAttachment);
 
             this.nativePass = WM.create_render_pass(
-                    nativeCommandEncoder,
+                    encoder.getNativeCommandEncoder(),
                     rawRenderPass
             );
         }
@@ -109,7 +113,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void setPipeline(@NonNull RenderPipeline pipeline) {
-        WgpuCompiledRenderPipeline wgpuPipeline = WgpuCompiledRenderPipeline.wgpuRenderPipelines.computeIfAbsent(pipeline, p -> new WgpuCompiledRenderPipeline(p, this.device.getDefaultShaderSource()));
+        WgpuCompiledRenderPipeline wgpuPipeline = WgpuCompiledRenderPipeline.wgpuRenderPipelines.computeIfAbsent(pipeline, p -> new WgpuCompiledRenderPipeline(this.device, p, this.device.getDefaultShaderSource()));
         WM.bind_render_pipeline_to_pass(nativePass, wgpuPipeline.getNativePipeline());
     }
 
@@ -141,7 +145,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void setVertexBuffer(int slot, @Nullable GpuBufferSlice vertexBuffer) {
-        
+
     }
 
     @Override

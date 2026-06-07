@@ -6,6 +6,7 @@ import com.mojang.blaze3d.buffers.GpuFence;
 import com.mojang.blaze3d.systems.*;
 import com.mojang.blaze3d.textures.GpuTexture;
 import dev.birb.wm.WM;
+import lombok.Getter;
 import org.apache.commons.lang3.NotImplementedException;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.NonNull;
@@ -16,6 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WgpuCommandEncoder implements CommandEncoderBackend {
 
+    @Getter
     private final MemorySegment nativeCommandEncoder;
     private final AtomicBoolean closed = new AtomicBoolean();
 
@@ -23,7 +25,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     WgpuCommandEncoder(WgpuDevice device) {
         this.device = device;
-        nativeCommandEncoder = WM.create_command_encoder();
+        nativeCommandEncoder = WM.create_command_encoder(device.getWm());
     }
 
     @Override
@@ -39,7 +41,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     @Override
     public @NonNull RenderPassBackend createRenderPass(@NonNull RenderPassDescriptor descriptor) {
         if(closed.get()) throw new IllegalStateException();
-        return new WgpuRenderPass(this.device, nativeCommandEncoder, descriptor);
+        return new WgpuRenderPass(this.device, this, descriptor);
     }
 
     @Override
@@ -70,6 +72,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     @Override
     public void writeToBuffer(@NonNull GpuBufferSlice destination, @NonNull ByteBuffer data) {
         WM.write_to_buffer(
+                this.device.getWm(),
                 ((WgpuBuffer) destination.buffer()).getNativeBuffer(),
                 destination.offset(),
                 destination.length(),
@@ -82,6 +85,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
         assert target.length() >= source.length();
 
         WM.copy_buffer_to_buffer(
+                this.device.getWm(),
                 nativeCommandEncoder,
                 ((WgpuBuffer) source.buffer()).getNativeBuffer(),
                 ((WgpuBuffer) target.buffer()).getNativeBuffer(),
