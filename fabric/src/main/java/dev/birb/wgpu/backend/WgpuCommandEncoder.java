@@ -123,7 +123,17 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public @NonNull GpuFence createFence() {
-        return null;
+        return new GpuFence() {
+            @Override
+            public void close() {
+
+            }
+
+            @Override
+            public boolean awaitCompletion(long timeoutNS) {
+                return true;
+            }
+        };
     }
 
     @Override

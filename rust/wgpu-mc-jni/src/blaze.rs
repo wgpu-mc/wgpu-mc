@@ -66,14 +66,14 @@ impl<T> Index<usize> for RawArray<T> {
 #[repr(C)]
 #[derive(Debug)]
 pub struct BlazeAttachmentDescriptor<'a, ClearVal: Sized + Debug> {
-    pub texture_view: Option<&'a TextureView_>,
+    pub texture_view: &'a TextureView_,
     pub clear_value: Option<&'a ClearVal>
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct BlazeRenderPassDescriptor<'a> {
-    pub attachments: &'a RawArray<&'a BlazeAttachmentDescriptor<'a, [f32; 4]>>,
+    pub attachments: &'a RawArray<BlazeAttachmentDescriptor<'a, [f32; 4]>>,
     pub depth_attachment: Option<&'a BlazeAttachmentDescriptor<'a, f64>>
 }
 

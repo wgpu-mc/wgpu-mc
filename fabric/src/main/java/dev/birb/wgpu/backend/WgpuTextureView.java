@@ -7,9 +7,8 @@ import lombok.Getter;
 import java.lang.foreign.MemorySegment;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class WgpuTextureView extends GpuTextureView {
+public class WgpuTextureView extends GpuTextureView implements NativeResource {
 
-    @Getter
     private final MemorySegment nativeView;
     private final AtomicBoolean closed = new AtomicBoolean();
     @Getter
@@ -25,6 +24,11 @@ public class WgpuTextureView extends GpuTextureView {
     @Override
     public void close() {
         if(!closed.compareAndExchange(false, true)) WM.drop_texture_view(nativeView);
+    }
+
+    @Override
+    public MemorySegment getNativeUnsafe() {
+        return this.nativeView;
     }
 
     @Override

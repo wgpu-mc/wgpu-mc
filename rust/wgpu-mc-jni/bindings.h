@@ -115,10 +115,10 @@ typedef struct BlazeAttachmentDescriptor__________f32__________4 {
   const float (*clear_value)[4];
 } BlazeAttachmentDescriptor__________f32__________4;
 
-typedef struct RawArray______BlazeAttachmentDescriptor__________f32__________4 {
-  const struct BlazeAttachmentDescriptor__________f32__________4 *const *contents;
+typedef struct RawArray_BlazeAttachmentDescriptor__________f32__________4 {
+  const struct BlazeAttachmentDescriptor__________f32__________4 *contents;
   uint64_t size;
-} RawArray______BlazeAttachmentDescriptor__________f32__________4;
+} RawArray_BlazeAttachmentDescriptor__________f32__________4;
 
 typedef struct BlazeAttachmentDescriptor_f64 {
   const struct TextureView_ *texture_view;
@@ -126,7 +126,7 @@ typedef struct BlazeAttachmentDescriptor_f64 {
 } BlazeAttachmentDescriptor_f64;
 
 typedef struct BlazeRenderPassDescriptor {
-  const struct RawArray______BlazeAttachmentDescriptor__________f32__________4 *attachments;
+  const struct RawArray_BlazeAttachmentDescriptor__________f32__________4 *attachments;
   const struct BlazeAttachmentDescriptor_f64 *depth_attachment;
 } BlazeRenderPassDescriptor;
 

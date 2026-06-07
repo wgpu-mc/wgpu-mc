@@ -232,13 +232,13 @@ pub extern "C" fn create_render_pass(
     render_pass_descriptor: &BlazeRenderPassDescriptor
 ) -> Box<wgpu::RenderPass<'static>> {
     dbg!(&render_pass_descriptor);
-
+    
     let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: None,
         color_attachments: &render_pass_descriptor.attachments.iter().map(|attachment| {
             Some(
                 wgpu::RenderPassColorAttachment {
-                    view: &attachment.texture_view.as_ref().unwrap().texture_view,
+                    view: &attachment.texture_view.texture_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: match attachment.clear_value {
@@ -259,7 +259,7 @@ pub extern "C" fn create_render_pass(
             )
         }).collect::<Vec<_>>(),
         depth_stencil_attachment: render_pass_descriptor.depth_attachment.map(|tex| wgpu::RenderPassDepthStencilAttachment {
-            view: &tex.texture_view.as_ref().unwrap().texture_view,
+            view: &tex.texture_view.texture_view,
             depth_ops: match tex.clear_value {
                 None => Default::default(),
                 Some(clear_val) => Some(wgpu::Operations {

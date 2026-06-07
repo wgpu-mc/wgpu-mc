@@ -28,18 +28,6 @@ public class WgpuRenderPass implements RenderPassBackend {
             4, ValueLayout.JAVA_FLOAT
     );
 
-    private static final MemoryLayout attachmentDescriptorLayout = MemoryLayout.structLayout(
-            AddressLayout.ADDRESS.withName("texture_view"),
-            AddressLayout.ADDRESS.withName("clear_value")
-    );
-
-    private static final MemoryLayout renderPassLayout = MemoryLayout.structLayout(
-            AddressLayout.ADDRESS.withName("attachments").withTargetLayout(attachmentDescriptorLayout),
-            AddressLayout.JAVA_LONG.withName("attachments#count"),
-            AddressLayout.ADDRESS.withName("depth_attachment")
-    );
-
-
     public WgpuRenderPass(WgpuDevice device, WgpuCommandEncoder encoder, RenderPassDescriptor descriptor) {
         this.device = device;
 
@@ -66,7 +54,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
                 var view = (WgpuTextureView) attachment.textureView();
 
-                BlazeAttachmentDescriptor__________f32__________4.texture_view(attachmentSeg, view.getNativeView());
+                BlazeAttachmentDescriptor__________f32__________4.texture_view(attachmentSeg, view.getNative());
                 BlazeAttachmentDescriptor__________f32__________4.clear_value(attachmentSeg, clearValRaw);
             }
 
@@ -74,7 +62,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
             if(descriptor.depthAttachment() != null) {
                 depthAttachment = BlazeAttachmentDescriptor_f64.allocate(arena);
-                var depthView = ((WgpuTextureView) descriptor.depthAttachment().textureView()).getNativeView();
+                var depthView = ((WgpuTextureView) descriptor.depthAttachment().textureView()).getNative();
 
                 MemorySegment clearValue = MemorySegment.NULL;
 
