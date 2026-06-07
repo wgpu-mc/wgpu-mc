@@ -517,16 +517,6 @@ pub unsafe extern "C" fn compile_render_pipeline(
 
     let uniform_map: HashMap<String, u32> = uniforms.iter().enumerate().map(|(index, u)| (u.name.to_string(), index as u32)).collect();
 
-    let mut destroyer = OrphanDestroyer {
-        uniform_found: false,
-        active: false,
-        orphan_found: false,
-        uniform_set: uniform_map.clone(),
-    };
-
-    vert_stage_ast.visit_mut(&mut destroyer);
-    frag_stage_ast.visit_mut(&mut destroyer);
-
     preprocessing::apply_layouts(&mut vert_stage_ast, &mut frag_stage_ast, uniform_map);
 
     shim_samplers(&mut vert_stage_ast, true);

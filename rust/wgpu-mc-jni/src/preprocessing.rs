@@ -4,7 +4,7 @@ use std::io::Cursor;
 use std::str::FromStr;
 use glsl::parser::{Parse, ParseError};
 use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, Declaration, Expr, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SingleDeclaration, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
-use glsl::transpiler::glsl::show_translation_unit;
+use glsl::transpiler::glsl::{show_expr, show_translation_unit};
 use glsl::visitor::{Host, HostMut, Visit, Visitor, VisitorMut};
 use includium::{process, PreprocessorConfig};
 use wgpu_mc::wgpu;
@@ -321,11 +321,12 @@ impl VisitorMut for NagaFixConstArrayExplicit {
 struct RewriteGLBuiltinSemantics;
 
 impl VisitorMut for RewriteGLBuiltinSemantics {
+
     fn visit_expr(&mut self, expr: &mut Expr) -> Visit {
         if let Expr::Variable(ident) = expr {
             match &ident.0[..] {
                 "gl_VertexID" => {
-                    ident.0 = "gl_VertexIndex".into();
+                    ident.0 = "int(gl_VertexIndex)".into();
                 },
                 "gl_InstanceID" => {
                     ident.0 = "gl_InstanceIndex".into();
@@ -333,17 +334,6 @@ impl VisitorMut for RewriteGLBuiltinSemantics {
                 _ => {}
             }
         }
-
-        Visit::Children
-    }
-
-    fn visit_type_specifier_non_array(&mut self, t: &mut TypeSpecifierNonArray) -> Visit {
-        match &t {
-            TypeSpecifierNonArray::ISamplerBuffer => {
-                *t = TypeSpecifierNonArray::TypeName(TypeName("textureBuffer".to_string()));
-            },
-            _ => {}
-        };
 
         Visit::Children
     }
@@ -376,6 +366,83 @@ pub struct OrphanDestroyer {
     pub active: bool,
     pub orphan_found: bool,
     pub uniform_set: HashMap<String, u32>
+}
+
+
+pub struct SamplerBufferRewriter {
+    pub is_sampler_buffer: bool,
+    pub set: u32,
+    pub binding: u32,
+    pub buffers: Vec<String>
+}
+
+pub struct RewriteFetches<'a> {
+    pub buffers: &'a [String],
+}
+
+impl<'a> VisitorMut for RewriteFetches<'a> {
+    fn visit_expr(&mut self, expression_base: &mut Expr) -> Visit {
+        if let Expr::FunCall(FunIdentifier::Identifier(ident), e) = expression_base && ident.0 == "texelFetch" {
+            if let Expr::Variable(ident) = e.first().unwrap() {
+                if self.buffers.contains(&ident.0) {
+                    let op = e.get(1).unwrap();
+
+                    let mut expr_out = String::new();
+
+                    show_expr(&mut expr_out, op);
+
+                    *expression_base = Expr::parse(
+                        format!("ivec2({}.inner[{expr_out}], 0)", ident.0)
+                    ).unwrap();
+                }
+            }
+        }
+
+        Visit::Children
+    }
+
+}
+
+impl VisitorMut for SamplerBufferRewriter {
+    fn visit_declaration(&mut self, decl: &mut Declaration) -> Visit {
+        if let Declaration::InitDeclaratorList(i) = decl {
+            i.visit_mut(self);
+
+            let name = &i.head.name.as_ref().unwrap().0;
+
+            if self.is_sampler_buffer {
+                self.buffers.push(name.clone());
+
+                *decl = Declaration::parse(format!(
+                    "layout(std430, set = {}, binding = {}) buffer {name}Block {{ int[] inner; }} {name};", self.set, self.binding
+                )).unwrap();
+            }
+        }
+
+        Visit::Children
+    }
+
+    fn visit_layout_qualifier_spec(&mut self, spec: &mut LayoutQualifierSpec) -> Visit {
+        match spec {
+            LayoutQualifierSpec::Identifier(key, Some(val)) => {
+                if let Expr::IntConst(set)  = &**val && &key.0 == "set" {
+                    self.set = *set as u32;
+                } else if let Expr::IntConst(binding)  = &**val && &key.0 == "binding" {
+                    self.binding = *binding as u32;
+                }
+            }
+            _ => {}
+        }
+
+        Visit::Children
+    }
+
+    fn visit_type_specifier_non_array(&mut self, t: &mut TypeSpecifierNonArray) -> Visit {
+        self.is_sampler_buffer = matches!(t, TypeSpecifierNonArray::ISamplerBuffer);
+
+        Visit::Parent
+    }
+
 }
 
 impl VisitorMut for OrphanDestroyer {
@@ -446,7 +513,7 @@ impl VisitorMut for UniformAnnotator {
         self.active = false;
 
         if self.uniform_found {
-            self.uniform_set = Some(self.uniform_sets.get(&block.name.0).copied().unwrap());
+            self.uniform_set = Some(self.uniform_sets.get(&block.name.0).copied().expect(&block.name.0));
         }
 
         Visit::Children
@@ -681,6 +748,18 @@ pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> Stri
         shader_stage.0.0.insert(target+1, texture);
         shader_stage.0.0.remove(target);
     }
+
+    let mut rewriter = SamplerBufferRewriter {
+        is_sampler_buffer: false,
+        set: 0,
+        binding: 0,
+        buffers: vec![],
+    };
+
+    shader_stage.visit_mut(&mut rewriter);
+    shader_stage.visit_mut(&mut RewriteFetches {
+        buffers: &rewriter.buffers,
+    });
 
     shader_stage.visit_mut(&mut NagaFixConstArrayExplicit { size: None });
 

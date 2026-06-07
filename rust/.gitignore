@@ -2,4 +2,4 @@
 /wgpu-mc-demo/res/assets
 /.idea
 ./\.DS_Store
-/wgpu-mc-jni/shader
+/wgpu-mc-jni/shader/**
