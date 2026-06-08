@@ -1,13 +1,10 @@
 use std::collections::HashMap;
-use std::ffi::{c_char, CStr, CString};
-use std::io::Cursor;
-use std::iter::Flatten;
-use std::str::FromStr;
-use glsl::parser::{Parse, ParseError};
-use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, CompoundStatement, Declaration, Expr, ExprStatement, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SimpleStatement, SingleDeclaration, Statement, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
+use std::ffi::{c_char, CStr};
+use glsl::parser::{Parse};
+use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, CompoundStatement, Declaration, Expr, ExprStatement, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, PreprocessorVersion, ShaderStage, SimpleStatement, SingleDeclaration, Statement, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
 use glsl::transpiler::glsl::{show_expr, show_translation_unit};
 use glsl::visitor::{Host, HostMut, Visit, Visitor, VisitorMut};
-use wgpu_mc::wgpu;
+use crate::preprocessing;
 
 struct VersionFixer;
 impl VisitorMut for VersionFixer {
@@ -654,7 +651,7 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
     let mut uniform_annotator = UniformAnnotator {
         uniform_found: false,
         uniform_binding: None,
-        uniform_sets: uniform_map,
+        uniform_sets: uniform_map.clone(),
         active: false,
     };
 
@@ -674,16 +671,10 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
         map: out_annotator.map,
     };
 
-    uniform_annotator.uniform_found = false;
-    uniform_annotator.uniform_binding = None;
-
-    frag_stage.visit_mut(&mut in_annotator);
-    frag_stage.visit_mut(&mut uniform_annotator);
-
     let mut rewriter = SamplerBufferRewriter {
         is_sampler_buffer: false,
         buffers: vec![],
-        uniform_sets: &uniform_annotator.uniform_sets,
+        uniform_sets: &uniform_map,
     };
 
     vert_stage.visit_mut(&mut rewriter);
@@ -691,10 +682,104 @@ pub fn apply_layouts(vert_stage: &mut ShaderStage, frag_stage: &mut ShaderStage,
         buffers: &rewriter.buffers,
     });
 
+    uniform_annotator.uniform_found = false;
+    uniform_annotator.uniform_binding = None;
+
+    frag_stage.visit_mut(&mut in_annotator);
+    frag_stage.visit_mut(&mut uniform_annotator);
+
     frag_stage.visit_mut(&mut rewriter);
     frag_stage.visit_mut(&mut RewriteFetches {
         buffers: &rewriter.buffers,
     });
+}
+
+/// There is a not entirely trivial amount of work done to convert shaders from Minecraft's source into something that wgpu is okay with;
+/// The steps performed are respectively:
+///
+/// Identify the sampler* uniforms by name and type
+/// Split each of them into two uniforms and append a suffix, respectively
+/// a texture* uniform with suffix _wm_texshim, and a sampler uniform with suffix _wm_sampler
+///
+/// Patch the constant arrays to include the ordinality of the array in the left-side type identifier, as naga (as of the time of writing this) where it fails to validate constant arrays without it
+///
+/// [SamplerFinder], [SamplerExpansion]
+/// In any locally defined function header (as well as corresponding calls), expand any reference to the previous sampler* (un-"shimmed" uniform) into the two newly created uniform variables. Any reference to the uniform within a call to a built-in GLSL function needs to be wrapped in the sampler* constructor, with the new uniforms
+///
+/// [ExplicitMipWhenSampling]
+/// If we're in a vertex shader, any reference to texture sampling must have an explicit mip level defined (we hardcode it to 0), as WebGPU does not support automatic mip levels in texture sampling in vertex stages
+///
+/// [RewriteGLBuiltinSemantics]
+/// Rewrite gl_[Vertex/Instance]ID to gl_*Index, wrap invocations of gl_VertexIndex in `int(...)` because for some reason naga thinks its an unsigned integer when I'm pretty sure it's supposed to be signed
+///
+/// Then follows the [apply_layouts] stage. This takes in both the vertex sahder and fragment shader together, as information about the vertex output from the vertex stage is fed into the mappings of the vertex input annotator for the fragment shader.
+///
+/// ## Vertex transformation
+///
+/// First, [IncrementingAnnotator] automatically applies indices to the vertex shader `out` declarations, creating the mapping of (uniform name) -> index
+///
+/// [InAnnotator] is then passed the vertex buffer layout, which then mutates the vertex stage, applying the correct indices to the vertex input bindings (by name) to the vertex shader
+///
+/// [UniformAnnotator] is then called onto the vertex stage, with the specified uniform map locations generated from the pipeline layout description.
+///
+/// [SamplerBufferRewriter] is called on the vertex shader. This patches isamplerBuffer to instead become an SSBO and not a uniform binding. This also requires support in the pipeline creation process.
+///
+/// [RewriteFetches] is then called to rewrite `texelFetch(buffer, index)`es into ivec2(buffer[index], 0). It's surrounded by ivec2 because in the shaders a common pattern is `texelFetch(buffer, index).r` and this seemed simpler than matching on .r, however maybe it's an unnecessary patch.
+///
+/// ## Fragment transformation
+///
+/// [InAnnotator] is fed the map generated by the vertex stage's [IncrementingAnnotator] and is applied to the fragment shader.
+///
+/// The [UniformAnnotator] is reset (if necessary), which is then invoked to mutate the fragment shader.
+///
+/// [SamplerBufferRewriter] and successively [RewriteFetches] is called on the fragment shader.
+///
+/// Finally, the version is rewritten in both stages to be #version 440
+///
+pub fn process_shaders(vert_source: &str, frag_source: &str, directives: &str, uniform_locations: HashMap<String, (u32, u32)>, vertex_stage_input_layout: HashMap<String, u32>) -> (String, String) {
+    let vert_source = format!("{directives}{vert_source}");
+    let frag_source = format!("{directives}{frag_source}");
+
+    let preprocessed_vert = cyntax::preprocess_str(&vert_source, &[]);
+    let preprocessed_frag = cyntax::preprocess_str(&frag_source, &[]);
+
+    let mut vert_stage_ast = ShaderStage::parse(preprocessed_vert).unwrap();
+    let mut frag_stage_ast = ShaderStage::parse(preprocessed_frag).unwrap();
+
+    let mut sampler_types = HashMap::new();
+
+    //Split the samplers, as well as do some other pre-processing
+    sampler_types.extend(shim_samplers(&mut vert_stage_ast, true));
+    sampler_types.extend(shim_samplers(&mut frag_stage_ast, false));
+
+    //Apply the set and binding layouts to the uniforms
+    apply_layouts(
+        &mut vert_stage_ast,
+        &mut frag_stage_ast,
+        uniform_locations,
+        vertex_stage_input_layout
+    );
+
+    vert_stage_ast.0.0.insert(0, ExternalDeclaration::Preprocessor(Preprocessor::Version(PreprocessorVersion {
+        version: 440,
+        profile: None,
+    })));
+
+    frag_stage_ast.0.0.insert(0, ExternalDeclaration::Preprocessor(Preprocessor::Version(PreprocessorVersion {
+        version: 440,
+        profile: None,
+    })));
+
+    frag_stage_ast.visit_mut(&mut RemovePointSize { is_point_var: false });
+    vert_stage_ast.visit_mut(&mut RemovePointSize { is_point_var: false });
+
+    let mut vert_processed = String::new();
+    let mut frag_processed = String::new();
+
+    show_translation_unit(&mut vert_processed, &vert_stage_ast);
+    show_translation_unit(&mut frag_processed, &frag_stage_ast);
+
+    (vert_processed, frag_processed)
 }
 
 pub fn shim_samplers(shader_stage: &mut ShaderStage, explicit_mip: bool) -> HashMap<String, TypeSpecifierNonArray> {

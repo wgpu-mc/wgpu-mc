@@ -1,4 +1,4 @@
-use crate::preprocessing::{shim_samplers, RemovePointSize};
+use crate::preprocessing::{process_shaders, shim_samplers, RemovePointSize};
 use crate::{preprocessing, MinecraftResourceManagerAdapter, BLITTER, RENDERER};
 use cyntax::MacroD;
 use futures::executor::block_on;
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn drop_surface(wm: &WmRenderer) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::DX12,
+        backends: wgpu::Backends::PRIMARY,
         flags: wgpu::InstanceFlags::VALIDATION
             | wgpu::InstanceFlags::DEBUG
             | wgpu::InstanceFlags::GPU_BASED_VALIDATION,
@@ -381,103 +381,46 @@ pub unsafe extern "C" fn compile_render_pipeline(
     wm: &WmRenderer,
     render_pipeline_description: &RenderPipeline,
 ) -> Box<wgpu::RenderPipeline> {
-
-    let frag_source = render_pipeline_description.fragment_shader.to_string();
-    let vert_source = render_pipeline_description.vertex_shader.to_string();
-
-    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push("shader");
-
-    if !d.exists() {
-        std::fs::create_dir(&d).unwrap();
-    }
-
-    let mut h = DefaultHasher::new();
-    h.write(vert_source.as_bytes());
-    h.write(frag_source.as_bytes());
-    let out = format!("{:x}", h.finish());
-
-    let mut d_ = d.clone();
-
-    d.push(format!("{out}.in"));
-    std::fs::write(d, format!("## VERT ##\n{vert_source}\n\n## FRAG ##\n{frag_source}")).unwrap();
-
+    
     let directives = format!("#version 440\n{}\n", render_pipeline_description.directives);
 
-    let vert_source = format!("{directives}{vert_source}");
-    let frag_source = format!("{directives}{frag_source}");
-
-    let preprocessed_vert = cyntax::preprocess_str(&vert_source, &[]);
-    let preprocessed_frag = cyntax::preprocess_str(&frag_source, &[]);
-
-    let mut vert_stage_ast = ShaderStage::parse(preprocessed_vert).unwrap();
-    let mut frag_stage_ast = ShaderStage::parse(preprocessed_frag).unwrap();
-
-    let shimmed_uniform_offsets: HashMap<String, (u32, u32)> = render_pipeline_description.bind_group_layouts.iter().enumerate().map(|(set, blaze_bgl)| {
-            blaze_bgl.entries.iter().scan(0u32, |index, entry| {
-                let set = set as u32;
-
-                Some(match entry.type_ {
-                    UniformType::TexelBuffer | UniformType::UBO => {
-                        *index += 1;
-                        vec![
-                            (entry.name.to_string(), (set, *index - 1))
-                        ]
-                    },
-                    UniformType::Sampler => {
-                        *index += 2;
-
-                        vec![
-                            (format!("{}_wm_texshim", entry.name), (set, *index - 2)),
-                            (format!("{}_wm_sampler", entry.name), (set, *index - 1)),
-                        ]
-                    }
-                })
-            }).flatten().collect::<Vec<(String, (u32, u32))>>()
-    }).flatten().collect();
-
-    let mut sampler_types = HashMap::new();
-
-    //Split the samplers, as well as do some other pre-processing
-    sampler_types.extend(shim_samplers(&mut vert_stage_ast, true));
-    sampler_types.extend(shim_samplers(&mut frag_stage_ast, false));
-
-    let vertex_in_shape = render_pipeline_description.vertex_formats.iter().scan(0, |location, format| {
+    let vertex_stage_input_layout = render_pipeline_description.vertex_formats.iter().scan(0, |location, format| {
         Some(format.elements.iter().map(|element| {
             *location += 1;
             (element.name.to_string(), *location - 1)
         }).collect::<Vec<(String, u32)>>())
     }).flatten().collect();
 
-    //Apply the set and binding layouts to the uniforms
-    preprocessing::apply_layouts(
-        &mut vert_stage_ast,
-        &mut frag_stage_ast,
+    let shimmed_uniform_offsets: HashMap<String, (u32, u32)> = render_pipeline_description.bind_group_layouts.iter().enumerate().map(|(set, blaze_bgl)| {
+        blaze_bgl.entries.iter().scan(0u32, |index, entry| {
+            let set = set as u32;
+
+            Some(match entry.type_ {
+                UniformType::TexelBuffer | UniformType::UBO => {
+                    *index += 1;
+                    vec![
+                        (entry.name.to_string(), (set, *index - 1))
+                    ]
+                },
+                UniformType::Sampler => {
+                    *index += 2;
+
+                    vec![
+                        (format!("{}_wm_texshim", entry.name), (set, *index - 2)),
+                        (format!("{}_wm_sampler", entry.name), (set, *index - 1)),
+                    ]
+                }
+            })
+        }).flatten().collect::<Vec<(String, (u32, u32))>>()
+    }).flatten().collect();
+    
+    let (vert_processed, frag_processed) = process_shaders(
+        &*render_pipeline_description.vertex_shader,
+        &*render_pipeline_description.fragment_shader,
+        &directives,
         shimmed_uniform_offsets,
-        vertex_in_shape
+        vertex_stage_input_layout
     );
-
-    vert_stage_ast.0.0.insert(0, ExternalDeclaration::Preprocessor(Preprocessor::Version(PreprocessorVersion {
-        version: 440,
-        profile: None,
-    })));
-
-    frag_stage_ast.0.0.insert(0, ExternalDeclaration::Preprocessor(Preprocessor::Version(PreprocessorVersion {
-        version: 440,
-        profile: None,
-    })));
-
-    frag_stage_ast.visit_mut(&mut RemovePointSize { is_point_var: false });
-    vert_stage_ast.visit_mut(&mut RemovePointSize { is_point_var: false });
-
-    let mut vert_processed = String::new();
-    let mut frag_processed = String::new();
-
-    show_translation_unit(&mut vert_processed, &vert_stage_ast);
-    show_translation_unit(&mut frag_processed, &frag_stage_ast);
-
-    d_.push(format!("{out}.out"));
-    std::fs::write(d_, format!("## VERT ##\n{vert_processed}\n\n## FRAG ##\n{frag_processed}")).unwrap();
 
     let vert_module = wm.gpu
         .device
