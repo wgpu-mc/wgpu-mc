@@ -3,21 +3,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-enum UniformType
-#if __STDC_VERSION__ >= 202311L
-  : uint64_t
-#endif // __STDC_VERSION__ >= 202311L
- {
-  TexelBuffer = 0,
-  UBO = 1,
-  Sampler = 2,
-};
-#if __STDC_VERSION__ >= 202311L
-typedef enum UniformType UniformType;
-#else
-typedef uint64_t UniformType;
-#endif // __STDC_VERSION__ >= 202311L
-
 enum GpuFormat
 #if __STDC_VERSION__ >= 202311L
   : uint64_t
@@ -87,6 +72,21 @@ typedef enum GpuFormat GpuFormat;
 typedef uint64_t GpuFormat;
 #endif // __STDC_VERSION__ >= 202311L
 
+enum UniformType
+#if __STDC_VERSION__ >= 202311L
+  : uint64_t
+#endif // __STDC_VERSION__ >= 202311L
+ {
+  TexelBuffer = 0,
+  UBO = 1,
+  Sampler = 2,
+};
+#if __STDC_VERSION__ >= 202311L
+typedef enum UniformType UniformType;
+#else
+typedef uint64_t UniformType;
+#endif // __STDC_VERSION__ >= 202311L
+
 enum PrimitiveTopology
 #if __STDC_VERSION__ >= 202311L
   : uint64_t
@@ -106,12 +106,14 @@ typedef enum PrimitiveTopology PrimitiveTopology;
 typedef uint64_t PrimitiveTopology;
 #endif // __STDC_VERSION__ >= 202311L
 
-typedef struct TextureView_ TextureView_;
+typedef struct BindGroups_ BindGroups_;
 
-typedef struct Texture_ Texture_;
+typedef struct BindingBuilder BindingBuilder;
+
+typedef struct BlazePipeline BlazePipeline;
 
 typedef struct BlazeAttachmentDescriptor__________f32__________4 {
-  const struct TextureView_ *texture_view;
+  const uint8_t *texture_view;
   const float (*clear_value)[4];
 } BlazeAttachmentDescriptor__________f32__________4;
 
@@ -121,7 +123,7 @@ typedef struct RawArray_BlazeAttachmentDescriptor__________f32__________4 {
 } RawArray_BlazeAttachmentDescriptor__________f32__________4;
 
 typedef struct BlazeAttachmentDescriptor_f64 {
-  const struct TextureView_ *texture_view;
+  const uint8_t *texture_view;
   const double *clear_value;
 } BlazeAttachmentDescriptor_f64;
 
@@ -142,7 +144,7 @@ typedef struct RawArray_BindGroupEntryDescriptor {
 } RawArray_BindGroupEntryDescriptor;
 
 typedef struct BlazeBindGroupLayout {
-  const struct RawArray_BindGroupEntryDescriptor *entries;
+  struct RawArray_BindGroupEntryDescriptor *entries;
 } BlazeBindGroupLayout;
 
 typedef struct RawArray_BlazeBindGroupLayout {
@@ -151,7 +153,7 @@ typedef struct RawArray_BlazeBindGroupLayout {
 } RawArray_BlazeBindGroupLayout;
 
 typedef struct BlazeColorTargetState {
-  uint64_t blend_function;
+  GpuFormat format;
 } BlazeColorTargetState;
 
 typedef struct RawArray_BlazeColorTargetState {
@@ -161,6 +163,7 @@ typedef struct RawArray_BlazeColorTargetState {
 
 typedef struct BlazeDepthStencilState {
   uint64_t compare_function;
+  uint64_t active;
 } BlazeDepthStencilState;
 
 typedef struct VertexFormatElement {
@@ -175,7 +178,7 @@ typedef struct RawArray_VertexFormatElement {
 } RawArray_VertexFormatElement;
 
 typedef struct VertexFormat {
-  const struct RawArray_VertexFormatElement *elements;
+  struct RawArray_VertexFormatElement *elements;
   uint64_t vertex_size;
 } VertexFormat;
 
@@ -189,16 +192,27 @@ typedef struct FragState {
 } FragState;
 
 typedef struct RenderPipeline {
-  const struct RawArray_BlazeBindGroupLayout *bind_group_layouts;
-  const struct RawArray_BlazeColorTargetState *color_target_states;
-  const struct BlazeDepthStencilState *depth_stencil_state;
-  const struct RawArray_VertexFormat *vertex_formats;
+  char* name;
+  struct RawArray_BlazeBindGroupLayout *bind_group_layouts;
+  struct RawArray_BlazeColorTargetState *color_target_states;
+  struct BlazeDepthStencilState *depth_stencil_state;
+  struct RawArray_VertexFormat *vertex_formats;
   char* vertex_shader;
   char* fragment_shader;
   char* directives;
-  const struct FragState *frag_state;
+  struct FragState *frag_state;
   PrimitiveTopology primitive_topology;
 } RenderPipeline;
+
+void dummy(struct BlazeRenderPassDescriptor);
+
+struct BindGroups_ *finalize_binding_builder(const uint8_t *wm,
+                                             struct BindingBuilder *binding_builder,
+                                             const struct BlazePipeline *blaze_pipeline);
+
+struct BindingBuilder *create_binding_builder(void);
+
+void thing(GpuFormat format);
 
 void configure_surface(const uint8_t *wm, uint32_t width, uint32_t height, uint32_t present_mode);
 
@@ -208,7 +222,11 @@ void create_surface(const uint8_t *wm, uint64_t display, uint64_t window);
 
 uint8_t *create_command_encoder(const uint8_t *wm);
 
-struct TextureView_ *create_texture_view(const uint8_t *wm, const struct Texture_ *texture);
+uint8_t *create_texture_view(const uint8_t *wm, const uint8_t *texture, uint32_t usage);
+
+void drop_binding_builder(struct BindingBuilder*);
+
+void drop_render_pass(uint8_t*);
 
 uint8_t *create_render_pass(uint8_t *encoder,
                             const struct BlazeRenderPassDescriptor *render_pass_descriptor);
@@ -229,7 +247,7 @@ void copy_buffer_to_buffer(const uint8_t *wm,
                            uint64_t dest_offset,
                            uint64_t length);
 
-void bind_render_pipeline_to_pass(uint8_t *render_pass, const struct RenderPipeline *pipeline);
+void bind_render_pipeline_to_pass(uint8_t *render_pass, const struct BlazePipeline *pipeline);
 
 void set_index_buffer(uint8_t *pass, const uint8_t *buffer, bool int_indices);
 
@@ -240,24 +258,37 @@ void set_vertex_buffer(uint8_t *pass,
                        uint64_t size);
 
 void draw(uint8_t *pass,
+          struct BindGroups_ *bind_groups,
           uint32_t vertex_count,
           uint32_t instance_count,
           uint32_t first_vertex,
           uint32_t first_instance);
 
 void draw_indexed(uint8_t *pass,
+                  struct BindGroups_ *bind_groups,
                   uint32_t index_count,
                   uint32_t instance_count,
                   uint32_t first_index,
                   int32_t vertex_offset,
                   uint32_t first_instance);
 
-void bind_texture_to_render_pass(uint8_t *render_pass,
-                                 uint32_t slot,
-                                 const struct TextureView_ *texture);
+struct BlazePipeline *compile_render_pipeline(const uint8_t *wm,
+                                              const struct RenderPipeline *render_pipeline_description);
 
-struct RenderPipeline *compile_render_pipeline(const uint8_t *wm,
-                                               const struct RenderPipeline *render_pipeline_description);
+void bind_buffer(struct BindingBuilder *binding_builder,
+                 char* uniform_name,
+                 const uint8_t *buffer,
+                 uint64_t offset,
+                 uint64_t length);
+
+void bind_texture_and_sampler(struct BindingBuilder *binding_builder,
+                              char* uniform_name,
+                              const uint8_t *texture,
+                              const uint8_t *sampler);
+
+uint8_t *create_sampler(const uint8_t *wm);
+
+void drop_sampler(uint8_t*);
 
 void unmap_buffer(const uint8_t *buffer);
 
@@ -279,7 +310,7 @@ void copy_buffer_to_texture(uint8_t *encoder,
                             uint32_t source_y,
                             uint32_t source_width,
                             uint32_t source_height,
-                            const struct Texture_ *destination,
+                            const uint8_t *destination,
                             uint32_t destination_x,
                             uint32_t destination_y,
                             uint32_t copy_width,
@@ -288,7 +319,7 @@ void copy_buffer_to_texture(uint8_t *encoder,
                             uint32_t depth_or_array_layers);
 
 void write_to_texture(const uint8_t *wm,
-                      const struct Texture_ *destination,
+                      const uint8_t *destination,
                       const uint8_t *source,
                       uint64_t source_size,
                       uint32_t mip_level,
@@ -300,10 +331,10 @@ void write_to_texture(const uint8_t *wm,
 
 void submit_command_encoder(const uint8_t *wm, uint8_t *encoder);
 
-void submit_render_pass(uint8_t*);
+void submit_render_pass(const uint8_t *wm, uint8_t *encoder, uint8_t *pass);
 
 void blit_from_texture(const uint8_t *wm,
-                       const struct TextureView_ *texture_view,
+                       const uint8_t *texture_view,
                        const uint8_t *surface_texture);
 
 uint8_t *create_buffer_init(const uint8_t *wm,
@@ -312,16 +343,17 @@ uint8_t *create_buffer_init(const uint8_t *wm,
                             uint8_t *data,
                             uint64_t size);
 
-struct Texture_ *create_texture(const uint8_t *wm,
-                                GpuFormat format_id,
-                                uint32_t width,
-                                uint32_t height,
-                                uint32_t depth_or_layers,
-                                uint32_t usage);
+uint8_t *create_texture(const uint8_t *wm,
+                        GpuFormat format_id,
+                        uint32_t width,
+                        uint32_t height,
+                        uint32_t depth_or_layers,
+                        uint32_t usage,
+                        char* name);
 
-void drop_texture(struct Texture_*);
+void drop_texture(uint8_t*);
 
-void drop_texture_view(struct TextureView_*);
+void drop_texture_view(uint8_t*);
 
 void drop_buffer(uint8_t*);
 
@@ -330,7 +362,3 @@ uint32_t max_texture_size(const uint8_t *wm);
 uint32_t min_uniform_offset_alignment(const uint8_t *wm);
 
 uint8_t *extract_directives(const char *glsl);
-
-void dummy(struct BlazeRenderPassDescriptor);
-
-void thing(GpuFormat format);

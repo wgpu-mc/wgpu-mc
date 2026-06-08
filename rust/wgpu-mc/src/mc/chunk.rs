@@ -7,18 +7,18 @@
 //! Minecraft splits chunks into 16-block tall pieces called chunk sections, for
 //! rendering purposes.
 use arrayvec::ArrayVec;
-use glam::{ivec3, vec3, IVec2, IVec3, Vec3Swizzles};
+use glam::{IVec2, IVec3, Vec3Swizzles, ivec3, vec3};
 use range_alloc::RangeAllocator;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::{Not, Range};
 use std::sync::Arc;
 
+use crate::WmRenderer;
+use crate::mc::BlockManager;
 use crate::mc::block::{BlockModelFace, ChunkBlockState, ModelMesh};
 use crate::mc::direction::Direction;
-use crate::mc::BlockManager;
 use crate::render::pipeline::Vertex;
-use crate::WmRenderer;
 
 pub const CHUNK_WIDTH: usize = 16;
 pub const CHUNK_AREA: usize = CHUNK_WIDTH * CHUNK_WIDTH;

@@ -11,6 +11,7 @@ import org.joml.Vector4fc;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -22,6 +23,8 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     private final MemorySegment nativeCommandEncoder;
     private final AtomicBoolean closed = new AtomicBoolean();
 
+    private final WgpuTransientMemory transientMemory;
+
     @Nullable
     private WgpuRenderPass renderPass;
 
@@ -30,6 +33,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     WgpuCommandEncoder(WgpuDevice device) {
         this.device = device;
         nativeCommandEncoder = WM.create_command_encoder(device.getWm());
+        this.transientMemory = new WgpuTransientMemory(device, this);
     }
 
     @Override
@@ -40,6 +44,12 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                     this.nativeCommandEncoder
             );
 
+            try {
+                this.transientMemory.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+
             return;
         }
 
@@ -48,7 +58,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public @NonNull TransientMemory transientMemory() {
-        return new WgpuTransientMemory(device, this);
+        return transientMemory;
     }
 
     @Override
@@ -60,7 +70,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public void submitRenderPass() {
-        WM.submit_render_pass(Objects.requireNonNull(this.renderPass).getNativePass());
+        WM.submit_render_pass(device.getWm(), this.getNativeCommandEncoder(), Objects.requireNonNull(this.renderPass).getNativePass());
     }
 
     @Override

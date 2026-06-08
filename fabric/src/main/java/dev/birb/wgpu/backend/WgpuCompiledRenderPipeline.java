@@ -37,7 +37,10 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
     }
 
     @Getter
-    private final MemorySegment nativePipeline;
+    private MemorySegment pipelineWithDepth;
+
+    @Getter
+    private MemorySegment pipelineWithoutDepth;
 
     @Getter
     private final ShaderSource shaderSource;
@@ -149,30 +152,31 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             var rawArrayColorTargetState = RawArray_BlazeColorTargetState.allocate(arena);
             var colorTargetStates = BlazeColorTargetState.allocateArray(colorTargetCount, arena);
 
-            RawArray_BlazeColorTargetState.size(rawArrayColorTargetState, colorTargetCount);
             RawArray_BlazeColorTargetState.contents(rawArrayColorTargetState, colorTargetStates);
 
             for(int i=0;i<colorTargetCount;i++) {
                 var colorTargetState = pipeline.getColorTargetStates()[i];
-                var slice = BlazeColorTargetState.asSlice(colorTargetStates, i);
 
+                if(colorTargetState == null) {
+                    colorTargetCount = i;
+                    break;
+                }
+
+                var slice = BlazeColorTargetState.asSlice(colorTargetStates, i);
+                BlazeColorTargetState.format(slice, GpuFormatHelper.gpuFormatToRustEnum(colorTargetState.format()));
             }
+
+            RawArray_BlazeColorTargetState.size(rawArrayColorTargetState, colorTargetCount);
 
             var depthTargetState = MemorySegment.NULL;
 
-            if(pipeline.getDepthStencilState() != null) {
-//                depthTargetState = BlazeDepthStencilState.allocate(arena);
-
-            }
-
             var renderPipelineStruct = dev.birb.wm.RenderPipeline.allocate(arena);
+            dev.birb.wm.RenderPipeline.name(renderPipelineStruct, arena.allocateFrom(pipeline.getLocation().toString()));
             dev.birb.wm.RenderPipeline.bind_group_layouts(renderPipelineStruct, bind_group_layouts_raw_array);
             dev.birb.wm.RenderPipeline.vertex_formats(renderPipelineStruct, vertexFormatsRawArray);
             dev.birb.wm.RenderPipeline.vertex_shader(renderPipelineStruct, arena.allocateFrom(vertSource));
             dev.birb.wm.RenderPipeline.fragment_shader(renderPipelineStruct, arena.allocateFrom(fragSource));
-//            dev.birb.wm.RenderPipeline.defines(renderPipelineStruct, defines_raw_array);
             dev.birb.wm.RenderPipeline.directives(renderPipelineStruct, arena.allocateFrom(directives));
-            dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
             dev.birb.wm.RenderPipeline.color_target_states(renderPipelineStruct, rawArrayColorTargetState);
             dev.birb.wm.RenderPipeline.primitive_topology(renderPipelineStruct, switch(pipeline.getPrimitiveTopology()) {
                 case LINES, DEBUG_LINES -> 1;
@@ -184,7 +188,31 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                 case QUADS -> 7;
             });
 
-            nativePipeline = WM.compile_render_pipeline(
+            if(pipeline.wantsDepthTexture()) {
+                depthTargetState = BlazeDepthStencilState.allocate(arena);
+                BlazeDepthStencilState.active(depthTargetState, 0);
+
+                dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
+
+                pipelineWithoutDepth = WM.compile_render_pipeline(
+                        device.getWm(),
+                        renderPipelineStruct
+                );
+
+            } else {
+                pipelineWithoutDepth = WM.compile_render_pipeline(
+                        device.getWm(),
+                        renderPipelineStruct
+                );
+
+                depthTargetState = BlazeDepthStencilState.allocate(arena);
+                BlazeDepthStencilState.active(depthTargetState, 0);
+
+                dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
+
+            }
+            
+            pipelineWithDepth = WM.compile_render_pipeline(
                     device.getWm(),
                     renderPipelineStruct
             );

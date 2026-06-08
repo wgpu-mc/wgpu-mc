@@ -18,7 +18,7 @@ public class WgpuTextureView extends GpuTextureView implements NativeResource {
         super(texture, baseMipLevel, mipLevels);
         this.device = device;
 
-        nativeView = WM.create_texture_view(this.device.getWm(), texture.texture);
+        nativeView = WM.create_texture_view(this.device.getWm(), texture.texture, texture.usage());
     }
 
     @Override

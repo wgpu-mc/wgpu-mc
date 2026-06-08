@@ -1,6 +1,6 @@
+use cbindgen::{Config, Language};
 use std::env;
 use std::panic::catch_unwind;
-use cbindgen::{Config, Language};
 
 fn main() {
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -15,6 +15,8 @@ fn main() {
         // .with_parse_include(&["wgpu"])
         .exclude_item("FfiStr")
         // .exclude_item("Arc<Surface>")
+        .exclude_item("Sampler")
+        .exclude_item("Vec")
         .generate()
         .expect("Unable to generate bindings")
         .write_to_file("bindings.h");

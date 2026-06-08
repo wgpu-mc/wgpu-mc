@@ -1,5 +1,5 @@
 use crate::WmRenderer;
-use std::alloc::{alloc_zeroed, dealloc, Layout};
+use std::alloc::{Layout, alloc_zeroed, dealloc};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::marker::PhantomData;

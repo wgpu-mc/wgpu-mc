@@ -1,18 +1,18 @@
 #![feature(debug_closure_helpers)]
+#![feature(ptr_metadata)]
 pub extern crate wgpu_mc;
-
 
 use arc_swap::access::Access;
 use arc_swap::{ArcSwap, ArcSwapAny};
 use byteorder::{LittleEndian, ReadBytesExt};
 use core::slice;
-use crossbeam_channel::{unbounded, Receiver, Sender};
-use glam::{ivec2, ivec3, IVec3, Mat4};
+use crossbeam_channel::{Receiver, Sender, unbounded};
+use glam::{IVec3, Mat4, ivec2, ivec3};
 use jni::objects::{
     AutoElements, GlobalRef, JByteArray, JClass, JFloatArray, JIntArray, JLongArray, JObject,
     JObjectArray, JPrimitiveArray, JString, JValue, JValueOwned, ReleaseMode, WeakRef,
 };
-use jni::sys::{jboolean, jbyte, jfloat, jint, jlong, jsize, jstring, JNI_FALSE, JNI_TRUE};
+use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jbyte, jfloat, jint, jlong, jsize, jstring};
 use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
 use once_cell::sync::{Lazy, OnceCell};
@@ -24,7 +24,7 @@ use renderer::MATRICES;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{stdout, Cursor, Write};
+use std::io::{Cursor, Write, stdout};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -34,7 +34,7 @@ use wgpu_mc::render::graph::{Geometry, RenderGraph, ResourceBacking};
 use wgpu_mc::wgpu::util::{DeviceExt, TextureBlitter};
 
 use wgpu_mc::mc::block::{BlockstateKey, ChunkBlockState};
-use wgpu_mc::mc::chunk::{bake_section, BlockStateProvider, LightLevel};
+use wgpu_mc::mc::chunk::{BlockStateProvider, LightLevel, bake_section};
 use wgpu_mc::mc::resource::{ResourcePath, ResourceProvider};
 use wgpu_mc::mc::{RenderEffectsData, Scene, SkyState};
 use wgpu_mc::minecraft_assets::schemas::blockstates::multipart::StateValue;
@@ -51,16 +51,16 @@ use crate::settings::Settings;
 
 mod alloc;
 mod application;
+pub mod blaze;
+mod device;
 pub mod entity;
 mod gl;
 mod lighting;
 mod palette;
 mod pia;
+pub mod preprocessing;
 mod renderer;
 mod settings;
-mod device;
-pub mod preprocessing;
-pub mod blaze;
 
 #[derive(Debug)]
 struct MinecraftRenderState {
@@ -326,7 +326,7 @@ pub fn registerBlockState(
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn reloadStorage(_env: JNIEnv, _class: JClass, clampedViewDistance: jint, scene: jlong) {
     let scene = unsafe { &mut *(scene as *mut Scene) };
-    
+
     let mut section_storage = scene.section_storage.write();
     section_storage.clear();
     section_storage.set_width(clampedViewDistance);
@@ -471,7 +471,6 @@ pub fn registerBlock(mut env: JNIEnv, _class: JClass, name: JString) {
 
     BLOCKS.lock().push(name);
 }
-
 
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn cacheBlockStates(mut env: JNIEnv, _class: JClass) {
@@ -648,7 +647,7 @@ pub fn bindRenderEffectsData(
     fog_color: JFloatArray,
     color_modulator: JFloatArray,
     dimension_fog_color: JFloatArray,
-    scene: jlong
+    scene: jlong,
 ) {
     let scene = unsafe { &mut *(scene as *mut Scene) };
 

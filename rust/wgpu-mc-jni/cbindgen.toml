@@ -12,3 +12,4 @@
 "BufferView" = "uint8_t"
 "QueueWriteBufferView" = "uint8_t"
 "SurfaceTexture" = "uint8_t"
+"Sampler" = "uint8_t"

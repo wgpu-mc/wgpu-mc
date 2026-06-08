@@ -4,6 +4,7 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import dev.birb.wm.WM;
 import lombok.Getter;
+import net.minecraft.util.Mth;
 import org.jspecify.annotations.NonNull;
 import org.lwjgl.system.MemoryUtil;
 
@@ -29,12 +30,12 @@ public class WgpuBuffer extends GpuBuffer {
                         device.getWm(),
                         labelSeg,
                         usage,
-                        size
+                        Mth.roundToward(size, 16)
                 );
             } else {
                 nativeBuffer = WM.allocate_gpu_buffer_mapped(
                         device.getWm(),
-                        size,
+                        Mth.roundToward(size, 16),
                         usage
                 );
             }
@@ -47,7 +48,7 @@ public class WgpuBuffer extends GpuBuffer {
         try(Arena arena = Arena.ofConfined()) {
             MemorySegment labelSeg = arena.allocateFrom(label);
 
-            nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofBuffer(data), data.capacity());
+            nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofBuffer(data), Mth.roundToward(data.capacity(), 16));
         }
     }
 
@@ -64,7 +65,9 @@ public class WgpuBuffer extends GpuBuffer {
     @Override
     public GpuBufferSlice.@NonNull MappedView map(long offset, long length, boolean read, boolean write) {
         ByteBuffer data = MemoryUtil.memAlignedAlloc(16, (int) length);
-        return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {});
+        return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {
+            MemoryUtil.memFree(data);
+        });
     }
 
 

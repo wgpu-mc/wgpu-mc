@@ -1,15 +1,23 @@
+use codespan_reporting::files::SimpleFiles;
+use glsl::parser::Parse;
+use glsl::syntax::{
+    BinaryOp, Block, Declaration, Expr, ExternalDeclaration, FunIdentifier, LayoutQualifierSpec,
+    Preprocessor, PreprocessorPragma, ShaderStage, SingleDeclaration, StorageQualifier,
+    TranslationUnit, TypeQualifier, TypeQualifierSpec, TypeSpecifierNonArray,
+};
+use glsl::transpiler::glsl::{show_expr, show_translation_unit};
+use glsl::visitor::{HostMut, Visit, VisitorMut};
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::str::FromStr;
-use codespan_reporting::files::SimpleFiles;
-use glsl::parser::Parse;
-use glsl::syntax::{BinaryOp, Block, Declaration, Expr, ExternalDeclaration, FunIdentifier, LayoutQualifierSpec, Preprocessor, PreprocessorPragma, ShaderStage, SingleDeclaration, StorageQualifier, TranslationUnit, TypeQualifier, TypeQualifierSpec, TypeSpecifierNonArray};
-use glsl::transpiler::glsl::{show_expr, show_translation_unit};
-use glsl::visitor::{HostMut, Visit, VisitorMut};
 use wgpu_mc_jni::preprocessing;
-use wgpu_mc_jni::preprocessing::{shim_samplers, IncrementingAnnotator, OrphanDestroyer, RemovePointSize, RewriteFetches, SamplerBufferRewriter, UniformAnnotator};
+use wgpu_mc_jni::preprocessing::{
+    IncrementingAnnotator, OrphanDestroyer, RemovePointSize, RewriteFetches, SamplerBufferRewriter,
+    UniformAnnotator, shim_samplers,
+};
 fn main() {
-    let mut vert_stage = ShaderStage::parse(r#"
+    let mut vert_stage = ShaderStage::parse(
+        r#"
 #version 330
 
 #line 0 1
@@ -22,7 +30,9 @@ uniform vec2 Projection;
 void main() {
     gl_PointSize = 1;
 }
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     let mut uniform_map = HashMap::new();
     uniform_map.insert("Fog".into(), (0, 0));
@@ -64,7 +74,9 @@ void main() {
         buffers: &rewriter.buffers,
     });
 
-    vert_stage.visit_mut(&mut RemovePointSize { is_point_var: false });
+    vert_stage.visit_mut(&mut RemovePointSize {
+        is_point_var: false,
+    });
 
     vert_stage.visit_mut(&mut out_annotator);
     vert_stage.visit_mut(&mut in_annotator);

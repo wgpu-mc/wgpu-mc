@@ -11,12 +11,12 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
 use wgpu_mc::render::graph::{
-    set_push_constants, BoundPipeline, Geometry, RenderGraph, WmBindGroup,
+    BoundPipeline, Geometry, RenderGraph, WmBindGroup, set_push_constants,
 };
 use wgpu_mc::texture::BindableTexture;
 use wgpu_mc::util::WmArena;
-use wgpu_mc::wgpu::{vertex_attr_array, Buffer, IndexFormat};
-use wgpu_mc::{wgpu, WmRenderer};
+use wgpu_mc::wgpu::{Buffer, IndexFormat, vertex_attr_array};
+use wgpu_mc::{WmRenderer, wgpu};
 
 #[derive(Debug, Pod, Zeroable, Copy, Clone)]
 #[repr(C)]

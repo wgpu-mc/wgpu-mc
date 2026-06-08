@@ -2,7 +2,7 @@ use glam::ivec3;
 use linked_hash_map::LinkedHashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
-use treeculler::{BVol, Frustum, Vec3, AABB};
+use treeculler::{AABB, BVol, Frustum, Vec3};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use wgpu::{
@@ -11,12 +11,13 @@ use wgpu::{
     StoreOp,
 };
 
+use crate::WmRenderer;
+use crate::mc::Scene;
 use crate::mc::chunk::RenderLayer;
 use crate::mc::entity::InstanceVertex;
 use crate::mc::resource::ResourcePath;
-use crate::mc::Scene;
 use crate::render::entity::EntityVertex;
-use crate::render::pipeline::{QuadVertex, BLOCK_ATLAS};
+use crate::render::pipeline::{BLOCK_ATLAS, QuadVertex};
 use crate::render::shader::WgslShader;
 use crate::render::shaderpack::{
     BindGroupDef, LonghandResourceConfig, PipelineConfig, ShaderPackConfig,
@@ -25,7 +26,6 @@ use crate::render::shaderpack::{
 use crate::render::sky::{SkyVertex, SunMoonVertex};
 use crate::texture::TextureAndView;
 use crate::util::WmArena;
-use crate::WmRenderer;
 
 pub trait Geometry: Send + Sync {
     fn render<'graph: 'pass + 'arena, 'pass, 'arena: 'pass>(
@@ -199,13 +199,11 @@ impl RenderGraph {
                             .collect::<Vec<wgpu::BindGroupEntry>>();
 
                         let bind_group =
-                            wm.gpu
-                                .device
-                                .create_bind_group(&wgpu::BindGroupDescriptor {
-                                    label: None,
-                                    layout: bind_group_layouts[vec_index].as_ref().unwrap(),
-                                    entries: &entries,
-                                });
+                            wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                                label: None,
+                                layout: bind_group_layouts[vec_index].as_ref().unwrap(),
+                                entries: &entries,
+                            });
 
                         (*slot as u32, WmBindGroup::Custom(bind_group))
                     }
@@ -215,26 +213,28 @@ impl RenderGraph {
                 })
                 .collect::<Vec<(u32, WmBindGroup)>>();
 
-            let immediate_size: u32 = pipeline_config.immediates.iter().map(|(index, name)| {
-                    match &name[..] {
-                        "@pc_mat4_model" => 64,
-                        "@pc_section_position" => 12,
-                        "@pc_total_sections" => 4,
-                        "@pc_parts_per_entity" => 4,
-                        "@pc_electrum_color" => 16,
-                        "@pc_environment_data" => 68,
-                        _ => unimplemented!(),
-                    }
-            }).sum();
+            let immediate_size: u32 = pipeline_config
+                .immediates
+                .iter()
+                .map(|(index, name)| match &name[..] {
+                    "@pc_mat4_model" => 64,
+                    "@pc_section_position" => 12,
+                    "@pc_total_sections" => 4,
+                    "@pc_parts_per_entity" => 4,
+                    "@pc_electrum_color" => 16,
+                    "@pc_environment_data" => 68,
+                    _ => unimplemented!(),
+                })
+                .sum();
 
-            let layout =
-                wm.gpu
-                    .device
-                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: None,
-                        bind_group_layouts: &bind_group_layouts,
-                        immediate_size,
-                    });
+            let layout = wm
+                .gpu
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: None,
+                    bind_group_layouts: &bind_group_layouts,
+                    immediate_size,
+                });
 
             let shader = WgslShader::init(
                 &ResourcePath(format!("wgpu_mc:shaders/{}.wgsl", pipeline_name)),
@@ -262,7 +262,9 @@ impl RenderGraph {
                         Some(layout) => layout.clone(),
                     }
                 }
-            }.into_iter().collect::<Vec<_>>();
+            }
+            .into_iter()
+            .collect::<Vec<_>>();
 
             let label = pipeline_name.to_string();
 
@@ -276,7 +278,7 @@ impl RenderGraph {
                             module: &shader.module,
                             entry_point: Some("vert"),
                             compilation_options: Default::default(),
-                            buffers: &vertex_buffer
+                            buffers: &vertex_buffer,
                         },
                         primitive: wgpu::PrimitiveState {
                             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -371,12 +373,9 @@ impl RenderGraph {
                                 .get_bytes(&ResourcePath::from(&src[..]))
                                 .unwrap();
 
-                            let tav = TextureAndView::from_image_file_bytes(
-                                &wm.gpu,
-                                &bytes,
-                                resource_id,
-                            )
-                            .unwrap();
+                            let tav =
+                                TextureAndView::from_image_file_bytes(&wm.gpu, &bytes, resource_id)
+                                    .unwrap();
 
                             resources.insert(
                                 resource_id.clone(),
@@ -741,14 +740,14 @@ impl RenderGraph {
                 //     }
                 //     let stars_vertex_buffer = scene.stars_vertex_buffer.read();
                 //     let stars_vertex = stars_vertex_buffer.as_ref().unwrap().slice(..);
-                // 
+                //
                 //     let stars_index_buffer = scene.stars_index_buffer.read();
                 //     let stars_index = stars_index_buffer.as_ref().unwrap().slice(..);
-                // 
+                //
                 //     render_pass.set_pipeline(&bound_pipeline.pipeline);
                 //     let pc = get_environmental_push_constants(scene);
                 //     set_push_constants(pipeline_config, &mut render_pass, Some(pc));
-                // 
+                //
                 //     render_pass.set_vertex_buffer(0, stars_vertex);
                 //     render_pass.set_index_buffer(stars_index, IndexFormat::Uint32);
                 //     render_pass.draw_indexed(0..*scene.stars_length.read(), 0, 0..1);
@@ -803,18 +802,13 @@ pub fn set_push_constants(
     render_pass: &mut wgpu::RenderPass,
     push_constants: Option<HashMap<String, (Vec<u8>, wgpu::ShaderStages)>>,
 ) {
-    pipeline
-        .immediates
-        .iter()
-        .for_each(|(offset, resource)| {
-            match push_constants
-                .as_ref()
-                .and_then(|others| others.get(resource))
-            {
-                None => unimplemented!("Unknown push constant resource value"),
-                Some((data, stages)) => {
-                    render_pass.set_immediates(*offset as u32, data)
-                }
-            }
-        });
+    pipeline.immediates.iter().for_each(|(offset, resource)| {
+        match push_constants
+            .as_ref()
+            .and_then(|others| others.get(resource))
+        {
+            None => unimplemented!("Unknown push constant resource value"),
+            Some((data, stages)) => render_pass.set_immediates(*offset as u32, data),
+        }
+    });
 }

@@ -1,36 +1,44 @@
-use crate::preprocessing::{process_shaders, shim_samplers, RemovePointSize};
-use crate::{preprocessing, MinecraftResourceManagerAdapter, BLITTER, RENDERER};
+use crate::blaze::{BindGroups_, BindingBuilder, BlazeBindingResource, BlazeRenderPassDescriptor, FfiStr, GpuFormat, PrimitiveTopology, RenderPipeline, UniformType};
+use crate::preprocessing::{RemovePointSize, process_shaders, shim_samplers, ProcessedShaderResult};
+use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing};
 use cyntax::MacroD;
 use futures::executor::block_on;
-use jni::{JNIEnv, JavaVM};
+use glsl::parser::Parse;
+use glsl::syntax::{
+    ExternalDeclaration, Preprocessor, PreprocessorVersion, ShaderStage, TypeSpecifierNonArray,
+};
+use glsl::transpiler::glsl::show_translation_unit;
+use glsl::visitor::HostMut;
 use jni::objects::JClass;
 use jni::sys::jlong;
+use jni::{JNIEnv, JavaVM};
 use jni_fn::jni_fn;
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{
-    RawDisplayHandle, RawWindowHandle,
-    Win32WindowHandle, WindowsDisplayHandle,
+    RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowsDisplayHandle,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::ffi::{c_char, CStr};
+use std::ffi::{CStr, c_char};
 use std::hash::{DefaultHasher, Hasher};
 use std::io::pipe;
 use std::num::{NonZero, NonZeroIsize};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
-use glsl::parser::Parse;
-use glsl::syntax::{ExternalDeclaration, Preprocessor, PreprocessorVersion, ShaderStage, TypeSpecifierNonArray};
-use glsl::transpiler::glsl::show_translation_unit;
-use glsl::visitor::HostMut;
-use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, StagingBelt, TextureBlitterBuilder};
-use wgpu_mc::wgpu::{naga, BlendState, BufferAddress, CurrentSurfaceTexture, Extent3d, IndexFormat, Limits, Origin3d, PresentMode, ShaderSource, SurfaceTexture, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo};
-use wgpu_mc::{wgpu, Gpu, WmRenderer};
+use futures::sink::unfold;
 use wgpu_mc::util::WmArena;
-use crate::blaze::{GpuFormat, PrimitiveTopology, BlazeRenderPassDescriptor, RenderPipeline, UniformType};
+use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, StagingBelt, TextureBlitterBuilder};
+use wgpu_mc::wgpu::{BlendState, BufferAddress, CurrentSurfaceTexture, Extent3d, IndexFormat, Limits, Origin3d, PresentMode, ShaderSource, SurfaceTexture, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, naga, Color, Operations};
+use wgpu_mc::{Gpu, WmRenderer, wgpu};
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn configure_surface(wm: &WmRenderer, width: u32, height: u32, present_mode: u32) {
+pub unsafe extern "C" fn configure_surface(
+    wm: &WmRenderer,
+    width: u32,
+    height: u32,
+    present_mode: u32,
+) {
     let lock = wm.gpu.surface.lock();
     let surface = lock.as_ref().unwrap();
 
@@ -48,7 +56,7 @@ pub unsafe extern "C" fn configure_surface(wm: &WmRenderer, width: u32, height: 
             desired_maximum_frame_latency: 0,
             alpha_mode: Default::default(),
             view_formats: vec![wgpu::TextureFormat::Bgra8Unorm],
-        }
+        },
     );
 }
 
@@ -60,7 +68,7 @@ pub unsafe extern "C" fn drop_surface(wm: &WmRenderer) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::PRIMARY,
+        backends: wgpu::Backends::DX12,
         flags: wgpu::InstanceFlags::VALIDATION
             | wgpu::InstanceFlags::DEBUG
             | wgpu::InstanceFlags::GPU_BASED_VALIDATION,
@@ -70,13 +78,12 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
         // flags: Default::default()
     });
 
-    let adapter = block_on(instance.request_adapter(
-        &wgpu::RequestAdapterOptions {
-            power_preference: Default::default(),
-            force_fallback_adapter: false,
-            compatible_surface: None,
-        }
-    )).unwrap();
+    let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: Default::default(),
+        force_fallback_adapter: false,
+        compatible_surface: None,
+    }))
+    .unwrap();
 
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
@@ -88,20 +95,21 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
         experimental_features: Default::default(),
         memory_hints: Default::default(),
         trace: Default::default(),
-    })).unwrap();
-    
+    }))
+    .unwrap();
+
     let gpu = Gpu {
         instance,
         adapter,
         surface: Mutex::new(None),
         device,
-        queue
+        queue,
     };
 
     let resource_provider = Arc::new(MinecraftResourceManagerAdapter {
         jvm: env.get_java_vm().unwrap(),
     });
-    
+
     let wm = WmRenderer::new(Arc::new(gpu), resource_provider);
 
     let blitter = TextureBlitterBuilder::new(&wm.gpu.device, wgpu::TextureFormat::Bgra8Unorm)
@@ -109,7 +117,7 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
         .build();
 
     drop(BLITTER.set(blitter));
-    
+
     Box::into_raw(Box::new(wm)) as *mut usize as jlong
 }
 
@@ -153,8 +161,6 @@ pub unsafe extern "C" fn create_surface(wm: &WmRenderer, display: u64, window: u
     *wm.gpu.surface.lock() = Some(surface_arc.clone());
 }
 
-
-
 //     surface.configure(&device, &surface_config);
 //
 //     println!("configured");
@@ -190,18 +196,16 @@ pub extern "C" fn create_command_encoder(wm: &WmRenderer) -> Box<wgpu::CommandEn
     )
 }
 
-#[derive(Debug)]
-pub struct TextureView_ {
-    texture_view: wgpu::TextureView,
-    bind_group: wgpu::BindGroup,
-}
-
 #[unsafe(no_mangle)]
-pub extern "C" fn create_texture_view(wm: &WmRenderer, texture: &Texture_) -> Box<TextureView_> {
-    let texture_view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+pub extern "C" fn create_texture_view(wm: &WmRenderer, texture: &wgpu::Texture, usage: u32) -> Box<wgpu::TextureView> {
+    let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
-        format: Some(texture.format),
-        dimension: Some(wgpu::TextureViewDimension::D2),
+        format: Some(texture.format()),
+        dimension: Some(if (usage & 16) != 0 {
+            wgpu::TextureViewDimension::Cube
+        } else {
+            wgpu::TextureViewDimension::D2
+        }),
         usage: None,
         aspect: Default::default(),
         base_mip_level: 0,
@@ -209,68 +213,55 @@ pub extern "C" fn create_texture_view(wm: &WmRenderer, texture: &Texture_) -> Bo
         base_array_layer: 0,
         array_layer_count: None,
     });
-
-    let layout_name = if texture.format == wgpu::TextureFormat::Depth32Float {
-        "texture_depth"
-    } else {
-        "texture"
-    };
-
-    let bind_group = wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &wm.bind_group_layouts.get(layout_name).unwrap(),
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: wgpu::BindingResource::TextureView(&texture_view),
-        }],
-    });
-
-    Box::new(TextureView_ {
-        texture_view,
-        bind_group,
-    })
+    
+    Box::new(texture_view)
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn drop_binding_builder(_: Box<BindingBuilder>) { }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn drop_render_pass(_: Box<wgpu::RenderPass>) { }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn create_render_pass(
     encoder: &mut wgpu::CommandEncoder,
-    render_pass_descriptor: &BlazeRenderPassDescriptor
+    render_pass_descriptor: &BlazeRenderPassDescriptor,
 ) -> Box<wgpu::RenderPass<'static>> {
     let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: None,
-        color_attachments: &render_pass_descriptor.attachments.iter().map(|attachment| {
-            Some(
-                wgpu::RenderPassColorAttachment {
-                    view: &attachment.texture_view.texture_view,
+        color_attachments: &render_pass_descriptor
+            .attachments
+            .iter()
+            .map(|attachment| {
+                Some(wgpu::RenderPassColorAttachment {
+                    view: &attachment.texture_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: match attachment.clear_value {
                         None => Default::default(),
-                        Some(clear_color) => {
-                            wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: clear_color[0] as f64,
-                                    g: clear_color[1] as f64,
-                                    b: clear_color[2] as f64,
-                                    a: clear_color[3] as f64,
-                                }),
-                                store: Default::default(),
-                            }
-                        }
+                        Some(clear_color) => wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: clear_color[0] as f64,
+                                g: clear_color[1] as f64,
+                                b: clear_color[2] as f64,
+                                a: clear_color[3] as f64,
+                            }),
+                            store: Default::default(),
+                        },
                     },
-                }
-            )
-        }).collect::<Vec<_>>(),
-        depth_stencil_attachment: render_pass_descriptor.depth_attachment.map(|tex| wgpu::RenderPassDepthStencilAttachment {
-            view: &tex.texture_view.texture_view,
-            depth_ops: match tex.clear_value {
-                None => Default::default(),
-                Some(clear_val) => Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(*clear_val as f32),
-                    ..Default::default()
                 })
-            },
-            stencil_ops: None,
+            })
+            .collect::<Vec<_>>(),
+        depth_stencil_attachment: render_pass_descriptor.depth_attachment.map(|tex| {
+            wgpu::RenderPassDepthStencilAttachment {
+                view: &tex.texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    ..Default::default()
+                }),
+                stencil_ops: None,
+            }
         }),
         timestamp_writes: None,
         occlusion_query_set: None,
@@ -281,7 +272,12 @@ pub extern "C" fn create_render_pass(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn create_buffer(wm: &WmRenderer, label: *const c_char, usage: u32, size: u64) -> Box<wgpu::Buffer> {
+pub extern "C" fn create_buffer(
+    wm: &WmRenderer,
+    label: *const c_char,
+    usage: u32,
+    size: u64,
+) -> Box<wgpu::Buffer> {
     let label = unsafe { CStr::from_ptr(label) };
 
     let mut wgpu_usage_flags = wgpu::BufferUsages::empty();
@@ -311,8 +307,7 @@ pub unsafe extern "C" fn write_to_buffer(
     length: u64,
     data: *const u8,
 ) {
-    wm.
-        gpu
+    wm.gpu
         .queue
         .write_buffer(buffer, start, std::slice::from_raw_parts(data, length as _));
 }
@@ -333,96 +328,152 @@ pub unsafe extern "C" fn copy_buffer_to_buffer(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn bind_render_pipeline_to_pass(
     render_pass: &mut wgpu::RenderPass,
-    pipeline: &wgpu::RenderPipeline,
+    pipeline: &BlazePipeline,
 ) {
-    render_pass.set_pipeline(pipeline);
+    render_pass.set_pipeline(&pipeline.pipeline);
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn set_index_buffer(pass: &mut wgpu::RenderPass, buffer: &wgpu::Buffer, int_indices: bool) {
-    pass.set_index_buffer(buffer.slice(..), if int_indices { IndexFormat::Uint32 } else { IndexFormat::Uint16 });
+pub unsafe extern "C" fn set_index_buffer(
+    pass: &mut wgpu::RenderPass,
+    buffer: &wgpu::Buffer,
+    int_indices: bool,
+) {
+    pass.set_index_buffer(
+        buffer.slice(..),
+        if int_indices {
+            IndexFormat::Uint32
+        } else {
+            IndexFormat::Uint16
+        },
+    );
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn set_vertex_buffer(pass: &mut wgpu::RenderPass, slot: u32, buffer: &wgpu::Buffer, buffer_start: u64, size: u64) {
+pub unsafe extern "C" fn set_vertex_buffer(
+    pass: &mut wgpu::RenderPass,
+    slot: u32,
+    buffer: &wgpu::Buffer,
+    buffer_start: u64,
+    size: u64,
+) {
     pass.set_vertex_buffer(slot, buffer.slice(buffer_start..buffer_start + size));
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn draw(pass: &mut wgpu::RenderPass, vertex_count: u32, instance_count: u32, first_vertex: u32, first_instance: u32) {
+pub unsafe extern "C" fn draw(
+    pass: &mut wgpu::RenderPass,
+    bind_groups: Box<BindGroups_>,
+    vertex_count: u32,
+    instance_count: u32,
+    first_vertex: u32,
+    first_instance: u32,
+) {
+    bind_groups.0.iter().enumerate().for_each(|(index, group)| {
+        pass.set_bind_group(index as u32, group, &[]);
+    });
+
     pass.draw(
         first_vertex..first_vertex + vertex_count,
-        first_instance..first_instance + instance_count
+        first_instance..first_instance + instance_count,
     );
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn draw_indexed(pass: &mut wgpu::RenderPass, index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32) {
+pub unsafe extern "C" fn draw_indexed(
+    pass: &mut wgpu::RenderPass,
+    bind_groups: Box<BindGroups_>,
+    index_count: u32,
+    instance_count: u32,
+    first_index: u32,
+    vertex_offset: i32,
+    first_instance: u32,
+) {
+    bind_groups.0.iter().enumerate().for_each(|(index, group)| {
+        pass.set_bind_group(index as u32, group, &[]);
+    });
+
     pass.draw_indexed(
         first_index..first_index + index_count,
         vertex_offset,
-        first_instance..first_instance + instance_count
+        first_instance..first_instance + instance_count,
     );
 }
 
-pub type WgpuTextureFormat = wgpu::TextureFormat;
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn bind_texture_to_render_pass(
-    render_pass: &mut wgpu::RenderPass,
-    slot: u32,
-    texture: &TextureView_,
-) {
-    render_pass.set_bind_group(slot, &texture.bind_group, &[]);
+pub struct BlazePipeline {
+    pipeline: wgpu::RenderPipeline,
+    pub blaze_descriptor: RenderPipeline,
+    pub uniform_map: HashMap<String, (u32, u32)>,
+    pub bind_group_layouts: Vec<wgpu::BindGroupLayout>
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn compile_render_pipeline(
     wm: &WmRenderer,
     render_pipeline_description: &RenderPipeline,
-) -> Box<wgpu::RenderPipeline> {
-    
+) -> Box<BlazePipeline> {
     let directives = format!("#version 440\n{}\n", render_pipeline_description.directives);
 
-    let vertex_stage_input_layout = render_pipeline_description.vertex_formats.iter().scan(0, |location, format| {
-        Some(format.elements.iter().map(|element| {
-            *location += 1;
-            (element.name.to_string(), *location - 1)
-        }).collect::<Vec<(String, u32)>>())
-    }).flatten().collect();
+    let vertex_stage_input_layout = render_pipeline_description
+        .vertex_formats
+        .iter()
+        .scan(0, |location, format| {
+            Some(
+                format
+                    .elements
+                    .iter()
+                    .map(|element| {
+                        *location += 1;
+                        (element.name.to_string(), *location - 1)
+                    })
+                    .collect::<Vec<(String, u32)>>(),
+            )
+        })
+        .flatten()
+        .collect();
 
-    let shimmed_uniform_offsets: HashMap<String, (u32, u32)> = render_pipeline_description.bind_group_layouts.iter().enumerate().map(|(set, blaze_bgl)| {
-        blaze_bgl.entries.iter().scan(0u32, |index, entry| {
-            let set = set as u32;
+    let shimmed_uniform_offsets: HashMap<String, (u32, u32)> = render_pipeline_description
+        .bind_group_layouts
+        .iter()
+        .enumerate()
+        .map(|(set, blaze_bgl)| {
+            blaze_bgl
+                .entries
+                .iter()
+                .scan(0u32, |index, entry| {
+                    let set = set as u32;
 
-            Some(match entry.type_ {
-                UniformType::TexelBuffer | UniformType::UBO => {
-                    *index += 1;
-                    vec![
-                        (entry.name.to_string(), (set, *index - 1))
-                    ]
-                },
-                UniformType::Sampler => {
-                    *index += 2;
+                    Some(match entry.type_ {
+                        UniformType::TexelBuffer | UniformType::UBO => {
+                            *index += 1;
+                            vec![(entry.name.to_string(), (set, *index - 1))]
+                        }
+                        UniformType::Sampler => {
+                            *index += 2;
 
-                    vec![
-                        (format!("{}_wm_texshim", entry.name), (set, *index - 2)),
-                        (format!("{}_wm_sampler", entry.name), (set, *index - 1)),
-                    ]
-                }
-            })
-        }).flatten().collect::<Vec<(String, (u32, u32))>>()
-    }).flatten().collect();
-    
-    let (vert_processed, frag_processed) = process_shaders(
+                            vec![
+                                (format!("{}_wm_texshim", entry.name), (set, *index - 2)),
+                                (format!("{}_wm_sampler", entry.name), (set, *index - 1)),
+                            ]
+                        }
+                    })
+                })
+                .flatten()
+                .collect::<Vec<(String, (u32, u32))>>()
+        })
+        .flatten()
+        .collect();
+
+    let ProcessedShaderResult { frag: frag_processed, vert: vert_processed, sampler_types } = process_shaders(
         &*render_pipeline_description.vertex_shader,
         &*render_pipeline_description.fragment_shader,
         &directives,
-        shimmed_uniform_offsets,
-        vertex_stage_input_layout
+        &shimmed_uniform_offsets,
+        vertex_stage_input_layout,
     );
 
-    let vert_module = wm.gpu
+    let vert_module = wm
+        .gpu
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -434,7 +485,8 @@ pub unsafe extern "C" fn compile_render_pipeline(
             },
         });
 
-    let frag_module = wm.gpu
+    let frag_module = wm
+        .gpu
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -447,16 +499,20 @@ pub unsafe extern "C" fn compile_render_pipeline(
 
     let arena = WmArena::new(64);
 
-    let bind_group_layouts: Vec<wgpu::BindGroupLayout> = render_pipeline_description.bind_group_layouts.iter().map(|blaze_bgl| {
-        let descriptor = wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &blaze_bgl.entries.iter().scan(0, |index, entry| {
-                Some(
-                    match entry.type_ {
-                        UniformType::TexelBuffer => {
-                            *index += 1;
-                            vec![
-                                wgpu::BindGroupLayoutEntry {
+    let bind_group_layouts: Vec<wgpu::BindGroupLayout> = render_pipeline_description
+        .bind_group_layouts
+        .iter()
+        .map(|blaze_bgl| {
+            let descriptor = wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &blaze_bgl
+                    .entries
+                    .iter()
+                    .scan(0, |index, entry| {
+                        Some(match entry.type_ {
+                            UniformType::TexelBuffer => {
+                                *index += 1;
+                                vec![wgpu::BindGroupLayoutEntry {
                                     binding: *index - 1,
                                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                     ty: wgpu::BindingType::Buffer {
@@ -465,13 +521,11 @@ pub unsafe extern "C" fn compile_render_pipeline(
                                         min_binding_size: None,
                                     },
                                     count: None,
-                                }
-                            ]
-                        },
-                        UniformType::UBO => {
-                            *index += 1;
-                            vec![
-                                wgpu::BindGroupLayoutEntry {
+                                }]
+                            }
+                            UniformType::UBO => {
+                                *index += 1;
+                                vec![wgpu::BindGroupLayoutEntry {
                                     binding: *index - 1,
                                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                                     ty: wgpu::BindingType::Buffer {
@@ -480,97 +534,105 @@ pub unsafe extern "C" fn compile_render_pipeline(
                                         min_binding_size: None,
                                     },
                                     count: None,
-                                }
-                            ]
-                        },
-                        UniformType::Sampler => {
-                            *index += 2;
-
-                            match sampler_types.get(&*entry.name).unwrap() {
-                                TypeSpecifierNonArray::SamplerCube => vec![
-                                    wgpu::BindGroupLayoutEntry {
-                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                        ty: wgpu::BindingType::Texture {
-                                            sample_type: Default::default(),
-                                            view_dimension: wgpu::TextureViewDimension::Cube,
-                                            multisampled: false,
-                                        },
-                                        count: None,
-                                        binding: *index - 2,
-                                    },
-                                    wgpu::BindGroupLayoutEntry {
-                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                                        count: None,
-                                        binding: *index - 1,
-                                    }
-                                ],
-                                TypeSpecifierNonArray::Sampler2D => vec![
-                                    wgpu::BindGroupLayoutEntry {
-                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                        ty: wgpu::BindingType::Texture {
-                                            sample_type: Default::default(),
-                                            view_dimension: wgpu::TextureViewDimension::D2,
-                                            multisampled: false,
-                                        },
-                                        count: None,
-                                        binding: *index - 2,
-                                    },
-                                    wgpu::BindGroupLayoutEntry {
-                                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                                        count: None,
-                                        binding: *index - 1,
-                                    }
-                                ],
-                                _ => unimplemented!()
+                                }]
                             }
-                        }
-                    }
-                )
-            }).flatten().collect::<Vec<_>>(),
-        };
+                            UniformType::Sampler => {
+                                *index += 2;
 
-        wm.gpu.device.create_bind_group_layout(&descriptor)
-    }).collect();
+                                match sampler_types.get(&*entry.name).unwrap() {
+                                    TypeSpecifierNonArray::SamplerCube => vec![
+                                        wgpu::BindGroupLayoutEntry {
+                                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                            ty: wgpu::BindingType::Texture {
+                                                sample_type: Default::default(),
+                                                view_dimension: wgpu::TextureViewDimension::Cube,
+                                                multisampled: false,
+                                            },
+                                            count: None,
+                                            binding: *index - 2,
+                                        },
+                                        wgpu::BindGroupLayoutEntry {
+                                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                            ty: wgpu::BindingType::Sampler(
+                                                wgpu::SamplerBindingType::Filtering,
+                                            ),
+                                            count: None,
+                                            binding: *index - 1,
+                                        },
+                                    ],
+                                    TypeSpecifierNonArray::Sampler2D => vec![
+                                        wgpu::BindGroupLayoutEntry {
+                                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                            ty: wgpu::BindingType::Texture {
+                                                sample_type: Default::default(),
+                                                view_dimension: wgpu::TextureViewDimension::D2,
+                                                multisampled: false,
+                                            },
+                                            count: None,
+                                            binding: *index - 2,
+                                        },
+                                        wgpu::BindGroupLayoutEntry {
+                                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                            ty: wgpu::BindingType::Sampler(
+                                                wgpu::SamplerBindingType::Filtering,
+                                            ),
+                                            count: None,
+                                            binding: *index - 1,
+                                        },
+                                    ],
+                                    _ => unimplemented!(),
+                                }
+                            }
+                        })
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>(),
+            };
 
-    let vertex_buffers = render_pipeline_description.vertex_formats.iter().scan(0, |shader_location, vertex_format| {
-        Some(wgpu::VertexBufferLayout {
-            array_stride: render_pipeline_description.vertex_formats[0].vertex_size,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: arena.alloc(vertex_format.elements.iter().map(|element| {
-                *shader_location += 1;
-
-                wgpu::VertexAttribute {
-                    format: match element.format {
-                        GpuFormat::RGB32_FLOAT => wgpu::VertexFormat::Float32x3,
-                        GpuFormat::RG16_SINT => wgpu::VertexFormat::Sint16x2,
-                        GpuFormat::RG16_UINT => wgpu::VertexFormat::Uint16x2,
-                        GpuFormat::RG32_SINT => wgpu::VertexFormat::Sint32x2,
-                        GpuFormat::RGB32_SINT => wgpu::VertexFormat::Sint32x3,
-                        GpuFormat::RG16_SNORM => wgpu::VertexFormat::Snorm16x2,
-                        GpuFormat::RG32_FLOAT => wgpu::VertexFormat::Float32x2,
-                        GpuFormat::RGBA8_UNORM => wgpu::VertexFormat::Unorm8x4,
-                        GpuFormat::RGBA8_SNORM => wgpu::VertexFormat::Snorm8x4,
-                        GpuFormat::R32_FLOAT => wgpu::VertexFormat::Float32,
-                        _ => unimplemented!("Unimplemented conversion from GpuFormat {:?} to wgpu", element.format)
-                    },
-                    offset: element.offset,
-                    shader_location: *shader_location - 1,
-                }
-            }).collect::<Vec<wgpu::VertexAttribute>>()),
+            wm.gpu.device.create_bind_group_layout(&descriptor)
         })
-    }).collect::<Vec<wgpu::VertexBufferLayout>>();
+        .collect();
 
-    let layout = wm.gpu
+    let vertex_buffers = render_pipeline_description
+        .vertex_formats
+        .iter()
+        .scan(0, |shader_location, vertex_format| {
+            Some(wgpu::VertexBufferLayout {
+                array_stride: render_pipeline_description.vertex_formats[0].vertex_size,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: arena.alloc(
+                    vertex_format
+                        .elements
+                        .iter()
+                        .map(|element| {
+                            *shader_location += 1;
+
+                            wgpu::VertexAttribute {
+                                format: element.format.to_wgpu_vertex_format(),
+                                offset: element.offset,
+                                shader_location: *shader_location - 1,
+                            }
+                        })
+                        .collect::<Vec<wgpu::VertexAttribute>>(),
+                ),
+            })
+        })
+        .collect::<Vec<wgpu::VertexBufferLayout>>();
+
+    let layout = wm
+        .gpu
         .device
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &bind_group_layouts.iter().map(Option::from).collect::<Vec<_>>(),
+            bind_group_layouts: &bind_group_layouts
+                .iter()
+                .map(Option::from)
+                .collect::<Vec<_>>(),
             immediate_size: 0,
         });
 
-    let pipeline = wm.gpu
+    let pipeline = wm
+        .gpu
         .device
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
@@ -593,35 +655,71 @@ pub unsafe extern "C" fn compile_render_pipeline(
                 polygon_mode: Default::default(),
                 conservative: false,
             },
-            //todo
-            depth_stencil: if true {
-                Some(wgpu::DepthStencilState {
+            depth_stencil: render_pipeline_description.depth_stencil_state.as_ref().map(|state| {
+                wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
-                    depth_write_enabled: Some(true),
+                    depth_write_enabled: Some(state.active == 1),
                     depth_compare: Some(wgpu::CompareFunction::Less),
                     stencil: Default::default(),
                     bias: Default::default(),
-                })
-            } else {
-                None
-            },
+                }
+            }),
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &frag_module,
                 entry_point: Some("main"),
                 compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: Default::default(),
-                })],
+                targets: &render_pipeline_description.color_target_states.iter().map(|state| {
+                    Some(wgpu::ColorTargetState {
+                        format: state.format.to_wgpu_texture_format(),
+                        blend: Some(BlendState::REPLACE),
+                        write_mask: Default::default(),
+                    })
+                }).collect::<Vec<_>>(),
             }),
             multiview_mask: None,
             cache: None,
         });
 
-    Box::new(pipeline)
+    Box::new(BlazePipeline {
+        pipeline,
+        blaze_descriptor: render_pipeline_description.clone(),
+        uniform_map: shimmed_uniform_offsets,
+        bind_group_layouts,
+    })
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bind_buffer(binding_builder: &mut BindingBuilder, uniform_name: FfiStr, buffer: &wgpu::Buffer, offset: u64, length: u64) {
+    binding_builder.bindings.insert(uniform_name.to_string(), BlazeBindingResource::Buffer(buffer.clone(), offset..offset + length));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn bind_texture_and_sampler(binding_builder: &mut BindingBuilder, uniform_name: FfiStr, texture: &wgpu::TextureView, sampler: &wgpu::Sampler) {
+    binding_builder.bindings.insert(format!("{}_wm_texshim", uniform_name.to_string()), BlazeBindingResource::TextureView(texture.clone()));
+    binding_builder.bindings.insert(format!("{}_wm_sampler", uniform_name.to_string()), BlazeBindingResource::Sampler(sampler.clone()));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn create_sampler(wm: &WmRenderer) -> Box<wgpu::Sampler> {
+    Box::new(wm.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: None,
+        address_mode_u: Default::default(),
+        address_mode_v: Default::default(),
+        address_mode_w: Default::default(),
+        mag_filter: Default::default(),
+        min_filter: Default::default(),
+        mipmap_filter: Default::default(),
+        lod_min_clamp: 0.0,
+        lod_max_clamp: 0.0,
+        compare: None,
+        anisotropy_clamp: 1,
+        border_color: None,
+    }))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn drop_sampler(_: Box<wgpu::Sampler>) {}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn unmap_buffer(buffer: &wgpu::Buffer) {
@@ -629,24 +727,30 @@ pub extern "C" fn unmap_buffer(buffer: &wgpu::Buffer) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn drop_buffer_view(_: Box<wgpu::BufferView>) {
+pub extern "C" fn drop_buffer_view(_: Box<wgpu::BufferView>) {}
 
+#[unsafe(no_mangle)]
+pub extern "C" fn write_buffer_with(
+    wm: &WmRenderer,
+    buffer: &wgpu::Buffer,
+    data: *const u8,
+    len: u64,
+) {
+    let mut view = wm
+        .gpu
+        .queue
+        .write_buffer_with(buffer, 0, NonZero::new(len).unwrap())
+        .unwrap();
+
+    view.copy_from_slice(unsafe { std::slice::from_raw_parts(data, len as usize) });
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn write_buffer_with(wm: &WmRenderer, buffer: &wgpu::Buffer, data: *const u8, len: u64) {
-    let mut view = wm.gpu.queue.write_buffer_with(buffer, 0, NonZero::new(len).unwrap()).unwrap();
-
-    view.copy_from_slice(
-        unsafe {
-            std::slice::from_raw_parts(data, len as usize)
-        }
-    );
-}
-
-
-#[unsafe(no_mangle)]
-pub extern "C" fn allocate_gpu_buffer_mapped(wm: &WmRenderer, size: u64, usages: u64) -> Box<wgpu::Buffer> {
+pub extern "C" fn allocate_gpu_buffer_mapped(
+    wm: &WmRenderer,
+    size: u64,
+    usages: u64,
+) -> Box<wgpu::Buffer> {
     Box::new(wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size,
@@ -656,15 +760,11 @@ pub extern "C" fn allocate_gpu_buffer_mapped(wm: &WmRenderer, size: u64, usages:
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn acquire_next_texture(
-    wm: &WmRenderer
-) -> *mut SurfaceTexture {
+pub extern "C" fn acquire_next_texture(wm: &WmRenderer) -> *mut SurfaceTexture {
     let lock = wm.gpu.surface.lock();
     let surface = lock.as_ref().unwrap().get_current_texture();
 
-    if let wgpu::CurrentSurfaceTexture::Success(surface_texture) =
-        surface
-    {
+    if let wgpu::CurrentSurfaceTexture::Success(surface_texture) = surface {
         Box::into_raw(Box::new(surface_texture))
     } else {
         0 as _
@@ -672,10 +772,7 @@ pub extern "C" fn acquire_next_texture(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn present_surface(
-    wm: &WmRenderer,
-    surface_texture: Box<SurfaceTexture>
-) {
+pub extern "C" fn present_surface(wm: &WmRenderer, surface_texture: Box<SurfaceTexture>) {
     surface_texture.present();
 }
 
@@ -689,29 +786,33 @@ pub extern "C" fn copy_buffer_to_texture(
     source_y: u32,
     source_width: u32,
     source_height: u32,
-    destination: &Texture_,
+    destination: &wgpu::Texture,
     destination_x: u32,
     destination_y: u32,
     copy_width: u32,
     copy_height: u32,
     mip_level: u32,
-    depth_or_array_layers: u32
+    depth_or_array_layers: u32,
 ) {
     //TODO buffer slice?
 
-    if mip_level != 0 { return; }
+    if mip_level != 0 {
+        return;
+    }
 
     encoder.copy_buffer_to_texture(
         TexelCopyBufferInfo {
             buffer,
             layout: TexelCopyBufferLayout {
                 offset: (source_width * source_y + source_x) as BufferAddress,
-                bytes_per_row: Some(source_width * destination.format.block_copy_size(None).unwrap()),
+                bytes_per_row: Some(
+                    source_width * destination.format().block_copy_size(None).unwrap(),
+                ),
                 rows_per_image: Some(source_height),
             },
         },
         TexelCopyTextureInfo {
-            texture: &destination.texture,
+            texture: &destination,
             mip_level,
             origin: Origin3d {
                 x: destination_x,
@@ -724,14 +825,14 @@ pub extern "C" fn copy_buffer_to_texture(
             width: copy_width,
             height: copy_height,
             depth_or_array_layers,
-        }
+        },
     );
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn write_to_texture(
     wm: &WmRenderer,
-    destination: &Texture_,
+    destination: &wgpu::Texture,
     source: *const u8,
     source_size: u64,
     mip_level: u32,
@@ -739,13 +840,15 @@ pub extern "C" fn write_to_texture(
     dest_x: u32,
     dest_y: u32,
     width: u32,
-    height: u32
+    height: u32,
 ) {
-    if mip_level != 0 { return; }
+    if mip_level != 0 {
+        return;
+    }
 
     wm.gpu.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
-            texture: &destination.texture,
+            texture: &destination,
             mip_level,
             origin: Origin3d {
                 x: dest_x,
@@ -757,43 +860,45 @@ pub extern "C" fn write_to_texture(
         unsafe { std::slice::from_raw_parts(source, source_size as _) },
         TexelCopyBufferLayout {
             offset: 0,
-            bytes_per_row: Some(destination.format.block_copy_size(None).unwrap() * width),
+            bytes_per_row: Some(destination.format().block_copy_size(None).unwrap() * width),
             rows_per_image: Some(height),
         },
         Extent3d {
             width,
             height,
             depth_or_array_layers,
-        }
+        },
     );
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn submit_command_encoder(
-    wm: &WmRenderer,
-    encoder: Box<wgpu::CommandEncoder>
-) {
+pub extern "C" fn submit_command_encoder(wm: &WmRenderer, encoder: Box<wgpu::CommandEncoder>) {
     wm.gpu.queue.submit([encoder.finish()]);
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn submit_render_pass(
-    _: Box<wgpu::RenderPass>
-) {
+pub extern "C" fn submit_render_pass(wm: &WmRenderer, encoder: &mut wgpu::CommandEncoder, pass: Box<wgpu::RenderPass>) {
+    let encoder = std::mem::replace(encoder, wm.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: None,
+    }));
 
+    drop(pass);
+
+    wm.gpu.queue.submit([encoder.finish()]);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn blit_from_texture(
     wm: &WmRenderer,
-    texture_view: &TextureView_,
+    texture_view: &wgpu::TextureView,
     surface_texture: &SurfaceTexture,
 ) {
     let blitter = BLITTER.get().unwrap();
 
-    let mut encoder = wm.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: None,
-    });
+    let mut encoder = wm
+        .gpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
     let view = surface_texture
         .texture
@@ -812,7 +917,7 @@ pub extern "C" fn blit_from_texture(
     blitter.copy(
         &wm.gpu.device,
         &mut encoder,
-        &texture_view.texture_view,
+        &texture_view,
         &view,
     );
 
@@ -848,11 +953,6 @@ pub extern "C" fn create_buffer_init(
     Box::new(buffer)
 }
 
-pub struct Texture_ {
-    texture: Box<wgpu::Texture>,
-    format: wgpu::TextureFormat,
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn create_texture(
     wm: &WmRenderer,
@@ -861,7 +961,8 @@ pub extern "C" fn create_texture(
     height: u32,
     depth_or_layers: u32,
     usage: u32,
-) -> Box<Texture_> {
+    name: FfiStr
+) -> Box<wgpu::Texture> {
     let mut wgpu_usage_flags = wgpu::TextureUsages::empty();
 
     wgpu_usage_flags.set(wgpu::TextureUsages::COPY_DST, usage & 1 != 0);
@@ -869,15 +970,10 @@ pub extern "C" fn create_texture(
     wgpu_usage_flags.set(wgpu::TextureUsages::TEXTURE_BINDING, usage & 4 != 0);
     wgpu_usage_flags.set(wgpu::TextureUsages::RENDER_ATTACHMENT, usage & 8 != 0);
 
-    let format = match format_id {
-        GpuFormat::RGBA8_UNORM => wgpu::TextureFormat::Rgba8Unorm,
-        GpuFormat::R8_UNORM => wgpu::TextureFormat::R8Unorm,
-        GpuFormat::D32_FLOAT => wgpu::TextureFormat::Depth32Float,
-        _ => unreachable!("{format_id:?}"),
-    };
+    let format = format_id.to_wgpu_texture_format();
 
     let texture = wm.gpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
+        label: Some(&*name),
         size: wgpu::Extent3d {
             width,
             height,
@@ -891,35 +987,24 @@ pub extern "C" fn create_texture(
         view_formats: &[],
     });
 
-    Box::new(Texture_ {
-        texture: Box::new(texture),
-        format,
-    })
+    Box::new(texture)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn drop_texture(_: Box<Texture_>) {}
+pub extern "C" fn drop_texture(_: Box<wgpu::Texture>) {}
 
 #[unsafe(no_mangle)]
-pub extern "C" fn drop_texture_view(_: Box<TextureView_>) {}
+pub extern "C" fn drop_texture_view(_: Box<wgpu::TextureView>) {}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn drop_buffer(_: Box<wgpu::Buffer>) {}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn max_texture_size(wm: &WmRenderer) -> u32 {
-    wm
-        .gpu
-        .device
-        .limits()
-        .max_texture_dimension_2d
+    wm.gpu.device.limits().max_texture_dimension_2d
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn min_uniform_offset_alignment(wm: &WmRenderer) -> u32 {
-    wm
-        .gpu
-        .device
-        .limits()
-        .min_uniform_buffer_offset_alignment
+    wm.gpu.device.limits().min_uniform_buffer_offset_alignment
 }

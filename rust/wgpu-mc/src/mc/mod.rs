@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use chunk::SectionStorage;
-use glam::{ivec2, IVec2};
+use glam::{IVec2, ivec2};
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use minecraft_assets::schemas::blockstates::multipart::StateValue;
@@ -112,7 +112,7 @@ impl Block {
                             )
                         })?;
 
-                Some((full.1 .1[0].clone(), full.0 as u16))
+                Some((full.1.1[0].clone(), full.0 as u16))
             }
         }
     }
@@ -128,7 +128,7 @@ impl Multipart {
     pub fn generate_mesh<'a>(
         &self,
         key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)>
-            + Clone,
+        + Clone,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
     ) -> Arc<ModelMesh> {
@@ -190,7 +190,7 @@ pub struct Scene {
 
     pub entity_instances: Mutex<HashMap<String, BundledEntityInstances>>,
     pub sky_state: ArcSwap<SkyState>,
-    
+
     pub render_effects: ArcSwap<RenderEffectsData>,
 
     pub depth_texture: RwLock<wgpu::Texture>,

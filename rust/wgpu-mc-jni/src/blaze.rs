@@ -1,38 +1,59 @@
-use std::ffi::{c_char, CStr};
+use std::collections::HashMap;
+use crate::device::{BlazePipeline};
+use std::ffi::{CStr, c_char, CString};
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::{Map, Zip};
+use std::mem;
 use std::ops::{Deref, Index, Range};
 use std::vec::IntoIter;
-use crate::device::TextureView_;
+use glsl::syntax::TypeSpecifierNonArray;
+use wgpu_mc::{wgpu, WmRenderer};
+use wgpu_mc::wgpu::{BufferAddress, BufferSize};
 
 #[repr(C)]
 pub struct RawArray<T: Sized> {
     contents: *const T,
-    size: u64
+    size: u64,
+}
+
+impl<T> Clone for RawArray<T> where T: Clone {
+    fn clone(&self) -> Self {
+        let cloned_contents: Vec<T> = self.iter().cloned().collect();
+
+        assert_eq!(cloned_contents.len() as u64, self.size);
+
+        Self {
+            contents: Box::into_raw(cloned_contents.into_boxed_slice()).to_raw_parts().0 as *const _,
+            size: self.size,
+        }
+    }
 }
 
 impl<T> RawArray<T> {
-
     pub(crate) fn iter(&self) -> IntoIter<&T> {
-        (0..self.size as usize).map(|index| &self[index]).collect::<Vec<&T>>().into_iter()
+        (0..self.size as usize)
+            .map(|index| &self[index])
+            .collect::<Vec<&T>>()
+            .into_iter()
     }
-
 }
 
 impl<'a, T> IntoIterator for RawArray<T> {
-
     type Item = T;
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (0..self.size as usize).map(|index| {
-            unsafe { std::ptr::read(self.contents.offset(index as isize)) }
-        }).collect::<Vec<T>>().into_iter()
+        (0..self.size as usize)
+            .map(|index| unsafe { std::ptr::read(self.contents.offset(index as isize)) })
+            .collect::<Vec<T>>()
+            .into_iter()
     }
-
 }
 
-impl<T> Debug for RawArray<T> where T: Debug {
+impl<T> Debug for RawArray<T>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RawArray")
             .field("size", &self.size)
@@ -44,54 +65,149 @@ impl<T> Debug for RawArray<T> where T: Debug {
                 }
 
                 list.finish()
-            }).finish()
+            })
+            .finish()
     }
 }
 
 impl<T> Index<usize> for RawArray<T> {
-
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
         assert!(index < self.size as usize);
 
-        unsafe {
-            self.contents.offset(index as isize).as_ref_unchecked()
-        }
+        unsafe { self.contents.offset(index as isize).as_ref_unchecked() }
     }
-
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct BlazeAttachmentDescriptor<'a, ClearVal: Sized + Debug> {
-    pub texture_view: &'a TextureView_,
-    pub clear_value: Option<&'a ClearVal>
+    pub texture_view: &'a wgpu::TextureView,
+    pub clear_value: Option<&'a ClearVal>,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct BlazeRenderPassDescriptor<'a> {
     pub attachments: &'a RawArray<BlazeAttachmentDescriptor<'a, [f32; 4]>>,
-    pub depth_attachment: Option<&'a BlazeAttachmentDescriptor<'a, f64>>
+    pub depth_attachment: Option<&'a BlazeAttachmentDescriptor<'a, f64>>,
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn dummy(_: BlazeRenderPassDescriptor) {}
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VertexFormatElement {
     pub offset: u64,
     pub format: GpuFormat,
-    pub name: FfiStr
+    pub name: FfiStr,
+}
+
+#[derive(Debug)]
+pub enum BlazeBindingResource {
+    TextureView(wgpu::TextureView),
+    Sampler(wgpu::Sampler),
+    Buffer(wgpu::Buffer, Range<BufferAddress>)
+}
+
+#[derive(Debug)]
+pub struct BindingBuilder {
+    pub bindings: HashMap<String, BlazeBindingResource>
+}
+
+pub struct BindGroups_(pub Vec<wgpu::BindGroup>);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn finalize_binding_builder(wm: &WmRenderer, binding_builder: &mut BindingBuilder, blaze_pipeline: &BlazePipeline) -> Box<BindGroups_> {
+    let bindings = &binding_builder.bindings;
+
+    let bind_groups = blaze_pipeline.blaze_descriptor
+        .bind_group_layouts
+        .iter()
+        .zip(&blaze_pipeline.bind_group_layouts)
+        .map(|(blaze_bgl, wgpu_bgl)| {
+            let entries = blaze_bgl
+                .entries
+                .iter()
+                .scan(0, |index, entry| {
+                    Some(match entry.type_ {
+                        UniformType::TexelBuffer | UniformType::UBO => {
+                            *index += 1;
+
+                            let (ssbo_backer, range) = if let Some(BlazeBindingResource::Buffer(buffer, slice)) = bindings.get(&format!("{}", entry.name)) {
+                                (buffer, slice)
+                            } else {
+                                panic!("Couldn't find buffer {entry:?} in {bindings:?}");
+                            };
+
+                            vec![
+                                wgpu::BindGroupEntry {
+                                    binding: *index - 1,
+                                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                        buffer: ssbo_backer,
+                                        offset: range.start,
+                                        size: Some(BufferSize::new(range.end - range.start).unwrap()),
+                                    })
+                                }
+                            ]
+                        }
+                        UniformType::Sampler => {
+                            *index += 2;
+
+                            let view = if let BlazeBindingResource::TextureView (texture) = bindings.get(&format!("{}_wm_texshim", entry.name)).unwrap() {
+                                texture
+                            } else {
+                                panic!("Type mismatch");
+                            };
+
+                            let sampler = if let BlazeBindingResource::Sampler (sampler) = bindings.get(&format!("{}_wm_sampler", entry.name)).unwrap() {
+                                sampler
+                            } else {
+                                panic!("Type mismatch");
+                            };
+
+
+                            vec![
+                                wgpu::BindGroupEntry {
+                                    binding: *index - 2,
+                                    resource: wgpu::BindingResource::TextureView(view)
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: *index - 1,
+                                    resource: wgpu::BindingResource::Sampler(sampler)
+                                },
+                            ]
+                        }
+                    })
+                })
+                .flatten()
+                .collect::<Vec<_>>();
+
+            wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &wgpu_bgl,
+                entries: &entries,
+            })
+        })
+        .collect();
+
+    Box::new(BindGroups_(bind_groups))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn create_binding_builder() -> Box<BindingBuilder> {
+    Box::new(BindingBuilder {
+        bindings: HashMap::new(),
+    })
 }
 
 #[repr(C)]
-#[derive(Debug)]
-pub struct VertexFormat<'a> {
-    pub elements: &'a RawArray<VertexFormatElement>,
-    pub vertex_size: u64
+#[derive(Clone, Debug)]
+pub struct VertexFormat {
+    pub elements: Box<RawArray<VertexFormatElement>>,
+    pub vertex_size: u64,
 }
 
 #[repr(u64)]
@@ -103,34 +219,38 @@ pub enum UniformType {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BindGroupEntryDescriptor {
     pub type_: UniformType,
     pub name: FfiStr,
-    pub texture_format: GpuFormat
+    pub texture_format: GpuFormat,
 }
 
 #[repr(transparent)]
 pub struct FfiStr {
-    ptr: *const c_char
+    ptr: *const c_char,
+}
+
+impl Clone for FfiStr {
+    fn clone(&self) -> Self {
+        Self {
+            ptr: CString::new(self.to_string()).unwrap().into_raw()
+        }
+    }
 }
 
 impl Deref for FfiStr {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        unsafe {
-            CStr::from_ptr(self.ptr).to_str().unwrap()
-        }
+        unsafe { CStr::from_ptr(self.ptr).to_str().unwrap() }
     }
 }
 
 impl Display for FfiStr {
-
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(&*self)
     }
-
 }
 
 impl Debug for FfiStr {
@@ -140,25 +260,27 @@ impl Debug for FfiStr {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FragState {}
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct BlazeBindGroupLayout<'a> {
-    pub entries: &'a RawArray<BindGroupEntryDescriptor>
+#[derive(Clone)]
+pub struct BlazeBindGroupLayout {
+    pub entries: Box<RawArray<BindGroupEntryDescriptor>>,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BlazeColorTargetState {
-    blend_function: u64,
+    pub format: GpuFormat
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct BlazeDepthStencilState {
-    compare_function: u64
+    compare_function: u64,
+    pub active: u64
 }
 
 #[repr(u64)]
@@ -174,18 +296,18 @@ pub enum PrimitiveTopology {
 }
 
 #[repr(C)]
-#[derive(Debug)]
-pub struct RenderPipeline<'a> {
-    pub bind_group_layouts: &'a RawArray<BlazeBindGroupLayout<'a>>,
-    pub color_target_states: &'a RawArray<BlazeColorTargetState>,
-    pub depth_stencil_state: Option<&'a BlazeDepthStencilState>,
-    pub vertex_formats: &'a RawArray<VertexFormat<'a>>,
+#[derive(Clone, Debug)]
+pub struct RenderPipeline {
+    pub name: FfiStr,
+    pub bind_group_layouts: Box<RawArray<BlazeBindGroupLayout>>,
+    pub color_target_states: Box<RawArray<BlazeColorTargetState>>,
+    pub depth_stencil_state: Option<Box<BlazeDepthStencilState>>,
+    pub vertex_formats: Box<RawArray<VertexFormat>>,
     pub vertex_shader: FfiStr,
     pub fragment_shader: FfiStr,
     pub directives: FfiStr,
-    // pub defines: &'a RawArray<[FfiStr; 2]>,
-    pub frag_state: Option<&'a FragState>,
-    pub primitive_topology: PrimitiveTopology
+    pub frag_state: Option<Box<FragState>>,
+    pub primitive_topology: PrimitiveTopology,
 }
 
 #[repr(u64)]
@@ -248,7 +370,36 @@ pub enum GpuFormat {
     D32_FLOAT_S8_UINT = 53,
     D24_UNORM_S8_UINT = 54,
     D16_UNORM = 55,
-    S8_UINT = 56
+    S8_UINT = 56,
+}
+
+impl GpuFormat {
+
+    pub fn to_wgpu_texture_format(&self) -> wgpu::TextureFormat {
+        match self {
+            GpuFormat::RGBA8_UNORM => wgpu::TextureFormat::Rgba8Unorm,
+            GpuFormat::R8_UNORM => wgpu::TextureFormat::R8Unorm,
+            GpuFormat::D32_FLOAT => wgpu::TextureFormat::Depth32Float,
+            _ => unimplemented!("{self:?}")
+        }
+    }
+
+    pub fn to_wgpu_vertex_format(&self) -> wgpu::VertexFormat {
+        match self {
+            GpuFormat::RGB32_FLOAT => wgpu::VertexFormat::Float32x3,
+            GpuFormat::RG16_SINT => wgpu::VertexFormat::Sint16x2,
+            GpuFormat::RG16_UINT => wgpu::VertexFormat::Uint16x2,
+            GpuFormat::RG32_SINT => wgpu::VertexFormat::Sint32x2,
+            GpuFormat::RGB32_SINT => wgpu::VertexFormat::Sint32x3,
+            GpuFormat::RG16_SNORM => wgpu::VertexFormat::Snorm16x2,
+            GpuFormat::RG32_FLOAT => wgpu::VertexFormat::Float32x2,
+            GpuFormat::RGBA8_UNORM => wgpu::VertexFormat::Unorm8x4,
+            GpuFormat::RGBA8_SNORM => wgpu::VertexFormat::Snorm8x4,
+            GpuFormat::R32_FLOAT => wgpu::VertexFormat::Float32,
+            _ => unimplemented!("{self:?}")
+        }
+    }
+
 }
 
 #[unsafe(no_mangle)]

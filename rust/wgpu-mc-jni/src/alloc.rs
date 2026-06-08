@@ -1,8 +1,8 @@
+use jni::JNIEnv;
 use jni::objects::JClass;
 use jni::sys::jlong;
-use jni::JNIEnv;
 use jni_fn::jni_fn;
-use std::alloc::{alloc, dealloc, GlobalAlloc, Layout};
+use std::alloc::{GlobalAlloc, Layout, alloc, dealloc};
 use std::ptr;
 
 /*
@@ -18,17 +18,20 @@ pub extern "C" fn alloc_bytes(size: u64, align: u64) -> *mut u8 {
 
 pub extern "C" fn dealloc_bytes(size: u64, align: u64) {
     unsafe {
-        dealloc(size as *mut u8, Layout::from_size_align(size as _, align as _).unwrap())
+        dealloc(
+            size as *mut u8,
+            Layout::from_size_align(size as _, align as _).unwrap(),
+        )
     }
 }
 
 // #[cfg(feature = "libc_alloc")]
 // #[global_allocator]
 // static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
-// 
+//
 // #[cfg(not(feature = "libc_alloc"))]
 // static mut GLOBAL_ALLOC: GlobalLibcAllocator = GlobalLibcAllocator::uninit();
-// 
+//
 // #[repr(C)]
 // #[derive(Clone, Copy)]
 // pub struct LibcAllocVtable {
@@ -37,40 +40,40 @@ pub extern "C" fn dealloc_bytes(size: u64, align: u64) {
 //     realloc: unsafe extern "C" fn(ptr: *mut u8, new_size: usize) -> *mut u8,
 //     calloc: unsafe extern "C" fn(num_elements: usize, element_size: usize) -> *mut u8,
 // }
-// 
+//
 // pub struct GlobalLibcAllocator {
 //     vtable: Option<LibcAllocVtable>,
 // }
-// 
+//
 // impl GlobalLibcAllocator {
 //     pub const fn uninit() -> Self {
 //         GlobalLibcAllocator { vtable: None }
 //     }
-// 
+//
 //     pub fn new(allocator: LibcAllocVtable) -> GlobalLibcAllocator {
 //         GlobalLibcAllocator {
 //             vtable: Some(allocator),
 //         }
 //     }
-// 
+//
 //     fn vtable(&self) -> &LibcAllocVtable {
 //         self.vtable
 //             .as_ref()
 //             .expect("Allocator functions not initialized")
 //     }
 // }
-// 
+//
 // unsafe impl GlobalAlloc for GlobalLibcAllocator {
 //     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 //         (self.vtable().aligned_alloc)(layout.align(), layout.size())
 //     }
-// 
+//
 //     unsafe fn dealloc(&self, ptr: *mut u8, _l: Layout) {
 //         (self.vtable().aligned_free)(ptr)
 //     }
-// 
+//
 //     /// Mirrors the unix libc impl for GlobalAlloc
-// 
+//
 //     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
 //         // See the comment above in `alloc` for why this check looks the way it does.
 //         if layout.align() <= MIN_ALIGN && layout.align() <= layout.size() {
@@ -83,14 +86,14 @@ pub extern "C" fn dealloc_bytes(size: u64, align: u64) {
 //             ptr
 //         }
 //     }
-// 
+//
 //     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
 //         if layout.align() <= MIN_ALIGN && layout.align() <= new_size {
 //             (self.vtable().realloc)(ptr, new_size)
 //         } else {
 //             // Docs for GlobalAlloc::realloc require this to be valid:
 //             let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
-// 
+//
 //             let new_ptr = self.alloc(new_layout);
 //             if !new_ptr.is_null() {
 //                 let size = new_size.min(layout.size());
@@ -101,13 +104,13 @@ pub extern "C" fn dealloc_bytes(size: u64, align: u64) {
 //         }
 //     }
 // }
-// 
+//
 // #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 // pub unsafe fn setAllocator(_env: JNIEnv, _class: JClass, ptr: jlong) {
 //     let vtable = *(ptr as usize as *mut LibcAllocVtable);
 //     GLOBAL_ALLOC = GlobalLibcAllocator::new(vtable);
 // }
-// 
+//
 // // The minimum alignment guaranteed by the architecture. This value is used to
 // // add fast paths for low alignment values.
 // #[cfg(any(

@@ -4,19 +4,21 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.systems.TransientMemory;
 import dev.birb.wm.WM;
+import net.minecraft.util.Mth;
 import org.jspecify.annotations.NonNull;
-import org.lwjgl.system.MemoryUtil;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-public class WgpuTransientMemory implements TransientMemory {
+public class WgpuTransientMemory implements TransientMemory, Closeable {
 
     private final WgpuDevice device;
-
+    private final Arena arena = Arena.ofConfined();
 
     public WgpuTransientMemory(WgpuDevice device, WgpuCommandEncoder encoder) {
         this.device = device;
@@ -24,7 +26,7 @@ public class WgpuTransientMemory implements TransientMemory {
 
     @Override
     public @NonNull ByteBuffer allocateCpu(long size, long alignment, long minimumAllocation, long elementSize) {
-        return MemoryUtil.memAlignedAlloc((int) size, (int) Math.max(size, minimumAllocation));
+        return arena.allocate(Mth.roundToward(size, alignment), alignment).asByteBuffer();
     }
 
     @Override
@@ -34,28 +36,25 @@ public class WgpuTransientMemory implements TransientMemory {
 
     @Override
     public @NonNull GpuBufferSlice allocateGpu(long size, long alignment, @GpuBuffer.Usage int usage, long minimumAllocation, long elementSize) {
-        var buffer = new WgpuBuffer(device, "", usage, size, false);
+        int newSize = Mth.roundToward((int) size, (int) Math.max(alignment, minimumAllocation));
+
+        var buffer = new WgpuBuffer(device, "", usage, newSize, false);
 
         return new GpuBufferSlice(buffer, 0, size);
     }
 
-    int align(int val, int factor) {
-        return (val + factor - 1) / factor * factor;
-    }
-
     @Override
     public GpuBufferSlice.@NonNull MappedView allocateGpuMapped(long size, long alignment, @GpuBuffer.Usage int usage, long minimumAllocation, long elementSize) {
-        var arena = Arena.ofAuto();
+        var newSize = Mth.roundToward(size, alignment);
+        var buffer = new WgpuBuffer(device, "", usage, newSize, false);
 
-        var buffer = new WgpuBuffer(device, "", usage, size, false);
-
-        ByteBuffer cpuBuffer = arena.allocate(size, alignment).asByteBuffer();
+        ByteBuffer cpuBuffer = arena.allocate(newSize, alignment).asByteBuffer();
 
         return new GpuBufferSlice.MappedView(
-                new GpuBufferSlice(buffer, 0, size),
+                new GpuBufferSlice(buffer, 0, newSize),
                 cpuBuffer,
                 () -> {
-                    WM.write_buffer_with(device.getWm(), buffer.getNativeBuffer(), MemorySegment.ofBuffer(cpuBuffer), size);
+                    WM.write_buffer_with(device.getWm(), buffer.getNativeBuffer(), MemorySegment.ofBuffer(cpuBuffer), newSize);
                 }
         );
     }
@@ -63,10 +62,10 @@ public class WgpuTransientMemory implements TransientMemory {
     @Override
     public @NonNull GpuBufferSlice uploadStaging(@NonNull List<ByteBuffer> data, long alignment, @GpuBuffer.Usage int usage, long minimumAllocation, long elementSize) {
         var arena = Arena.ofAuto();
-        int totalSize = 0;
+        var totalSize = 0;
 
         for(var buffer : data) {
-            totalSize += align(buffer.limit(), (int) alignment);
+            totalSize += Mth.roundToward(buffer.limit(), (int) alignment);
         }
 
         var bigBuffer = arena.allocate(totalSize, alignment);
@@ -74,7 +73,7 @@ public class WgpuTransientMemory implements TransientMemory {
         long offset = 0;
         for(var buffer : data) {
             bigBuffer.asSlice(offset).copyFrom(MemorySegment.ofBuffer(buffer));
-            offset += buffer.limit() + align(buffer.limit(), (int) alignment);
+            offset += buffer.limit() + Mth.roundToward(buffer.limit(), (int) alignment);
         }
 
         return new GpuBufferSlice(
@@ -112,5 +111,8 @@ public class WgpuTransientMemory implements TransientMemory {
     }
 
 
-
+    @Override
+    public void close() throws IOException {
+        this.arena.close();
+    }
 }

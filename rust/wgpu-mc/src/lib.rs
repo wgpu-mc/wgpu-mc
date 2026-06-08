@@ -40,12 +40,12 @@ See the [render::entity] module for an example of rendering an example entity.
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 use glam::IVec3;
-use mc::chunk::BakedLayer;
 use mc::Scene;
+use mc::chunk::BakedLayer;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
@@ -53,10 +53,10 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescripto
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
+use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;
-use crate::render::pipeline::{create_bind_group_layouts, BLOCK_ATLAS, ENTITY_ATLAS};
+use crate::render::pipeline::{BLOCK_ATLAS, ENTITY_ATLAS, create_bind_group_layouts};
 
 pub mod mc;
 pub mod render;
@@ -71,7 +71,7 @@ pub struct Gpu {
     pub adapter: wgpu::Adapter,
     pub surface: Mutex<Option<Arc<Surface<'static>>>>,
     pub device: wgpu::Device,
-    pub queue: wgpu::Queue
+    pub queue: wgpu::Queue,
 }
 
 /// Tuple of chunk positions and baked layers

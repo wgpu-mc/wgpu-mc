@@ -1,6 +1,6 @@
+use jni::JNIEnv;
 use jni::objects::{JClass, JString, JValue};
 use jni::sys::jint;
-use jni::JNIEnv;
 use jni_fn::jni_fn;
 use std::{collections::HashMap, sync::Arc};
 

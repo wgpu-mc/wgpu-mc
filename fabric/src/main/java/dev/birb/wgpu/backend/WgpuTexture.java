@@ -5,6 +5,7 @@ import com.mojang.blaze3d.textures.GpuTexture;
 import dev.birb.wgpu.helper.GpuFormatHelper;
 import dev.birb.wm.WM;
 
+import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -13,10 +14,12 @@ public class WgpuTexture extends GpuTexture {
     final MemorySegment texture;
     private AtomicBoolean closed = new AtomicBoolean();
 
-    public WgpuTexture(WgpuDevice device, int usage, String string, GpuFormat gpuFormat, int width, int height, int depthOrLayers, int mips) {
-        super(usage, string, gpuFormat, width, height, depthOrLayers, mips);
-
-        texture = WM.create_texture(device.getWm(), GpuFormatHelper.gpuFormatToRustEnum(gpuFormat), width, height, depthOrLayers, usage);
+    public WgpuTexture(WgpuDevice device, int usage, String name, GpuFormat gpuFormat, int width, int height, int depthOrLayers, int mips) {
+        super(usage, name, gpuFormat, width, height, depthOrLayers, mips);
+        
+        try(Arena arena = Arena.ofConfined()) {
+            texture = WM.create_texture(device.getWm(), GpuFormatHelper.gpuFormatToRustEnum(gpuFormat), width, height, depthOrLayers, usage, arena.allocateFrom(name));
+        }
     }
 
     @Override

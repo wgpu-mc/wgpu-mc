@@ -6,10 +6,15 @@ import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.systems.BackendCreationException;
 import com.mojang.blaze3d.systems.GpuBackend;
 import com.mojang.blaze3d.systems.GpuDevice;
+import dev.birb.wgpu.rust.WgpuNative;
 import org.jspecify.annotations.NonNull;
 import org.lwjgl.glfw.GLFW;
 
 public class WgpuBackend implements GpuBackend {
+
+    static {
+        WgpuNative.loadWm();
+    }
 
     @Override
     public @NonNull String getName() {

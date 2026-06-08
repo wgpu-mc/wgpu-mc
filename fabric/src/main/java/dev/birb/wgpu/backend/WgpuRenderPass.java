@@ -12,16 +12,20 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.birb.wm.*;
 import lombok.Getter;
+import net.minecraft.util.Mth;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.PointerBuffer;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.lang.foreign.*;
 import java.nio.IntBuffer;
 import java.util.Collection;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-public class WgpuRenderPass implements RenderPassBackend {
+public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     @Getter
     private final MemorySegment nativePass;
@@ -30,8 +34,18 @@ public class WgpuRenderPass implements RenderPassBackend {
             4, ValueLayout.JAVA_FLOAT
     );
 
+    @Nullable
+    private final MemorySegment bindingBuilder = WM.create_binding_builder();
+
+    @Nullable
+    private MemorySegment activePipeline;
+    private final AtomicBoolean closed = new AtomicBoolean();
+    private final boolean wantsDepth;
+
     public WgpuRenderPass(WgpuDevice device, WgpuCommandEncoder encoder, RenderPassDescriptor descriptor) {
         this.device = device;
+
+        this.wantsDepth = descriptor.depthAttachment != null;
 
         try(Arena arena = Arena.ofConfined()) {
             var rawRenderPass = BlazeRenderPassDescriptor.allocate(arena);
@@ -62,7 +76,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
             MemorySegment depthAttachment = MemorySegment.NULL;
 
-            if(descriptor.depthAttachment() != null) {
+            if(descriptor.depthAttachment != null) {
                 depthAttachment = BlazeAttachmentDescriptor_f64.allocate(arena);
                 var depthView = ((WgpuTextureView) descriptor.depthAttachment().textureView()).getNative();
 
@@ -104,12 +118,16 @@ public class WgpuRenderPass implements RenderPassBackend {
     @Override
     public void setPipeline(@NonNull RenderPipeline pipeline) {
         WgpuCompiledRenderPipeline wgpuPipeline = WgpuCompiledRenderPipeline.wgpuRenderPipelines.computeIfAbsent(pipeline, p -> new WgpuCompiledRenderPipeline(this.device, p, this.device.getDefaultShaderSource()));
-        WM.bind_render_pipeline_to_pass(nativePass, wgpuPipeline.getNativePipeline());
+        MemorySegment nativePipeline = this.wantsDepth ? wgpuPipeline.getPipelineWithDepth() : wgpuPipeline.getPipelineWithoutDepth();
+        WM.bind_render_pipeline_to_pass(nativePass, nativePipeline);
+        this.activePipeline = nativePipeline;
     }
 
     @Override
     public void bindTexture(@NonNull String name, @org.jspecify.annotations.Nullable GpuTextureView textureView, @org.jspecify.annotations.Nullable GpuSampler sampler) {
-//        WM.bind_texture_to_render_pass(nativePass, );
+        try(var arena = Arena.ofConfined()) {
+            WM.bind_texture_and_sampler(this.bindingBuilder, arena.allocateFrom(name), ((WgpuTextureView) textureView).getNative(), ((WgpuSampler) sampler).getNativeSampler());
+        }
     }
 
 
@@ -120,7 +138,9 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void setUniform(@NonNull String name, @NonNull GpuBufferSlice slice) {
-
+        try(var arena = Arena.ofConfined()) {
+            WM.bind_buffer(this.bindingBuilder, arena.allocateFrom(name), ((WgpuBuffer) slice.buffer()).getNativeBuffer(), slice.offset(), Mth.roundToward(slice.length(), 16));
+        }
     }
 
     @Override
@@ -135,7 +155,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void setVertexBuffer(int slot, @Nullable GpuBufferSlice vertexBuffer) {
-
+        WM.set_vertex_buffer(this.nativePass, slot, ((WgpuBuffer) vertexBuffer.buffer()).getNativeBuffer(), vertexBuffer.offset(), vertexBuffer.length());
     }
 
     @Override
@@ -145,47 +165,42 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int vertexOffset, int firstInstance) {
-        WM.draw_indexed(this.nativePass, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+        MemorySegment bindGroups = WM.finalize_binding_builder(device.getWm(), this.bindingBuilder, this.activePipeline);
+        WM.draw_indexed(this.nativePass, bindGroups, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     @Override
     public void multiDrawIndexed(IntBuffer drawParameters, int instanceCount, int firstInstance, int drawCount) {
-
     }
 
     @Override
     public void multiDrawIndexed(PointerBuffer firstIndexOffsets, IntBuffer indexCounts, IntBuffer vertexOffsets, int drawCount) {
-
     }
 
     @Override
     public void drawIndexedIndirect(GpuBufferSlice commands, int drawCount) {
-
     }
 
     @Override
     public <T> void drawMultipleIndexed(Collection<RenderPass.Draw<T>> draws, @Nullable GpuBuffer defaultIndexBuffer, @Nullable IndexType defaultIndexType, Collection<String> dynamicUniforms, T uniformArgument) {
-
     }
 
     @Override
     public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
-        WM.draw(this.nativePass, vertexCount, instanceCount, firstVertex, firstInstance);
+        MemorySegment bindGroups = WM.finalize_binding_builder(device.getWm(), this.bindingBuilder, this.activePipeline);
+        WM.draw(this.nativePass, bindGroups, vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     @Override
     public void multiDraw(IntBuffer drawParameters, int instanceCount, int firstInstance, int drawCount) {
-
     }
 
     @Override
     public void multiDraw(IntBuffer firstVertices, IntBuffer vertexCounts, int drawCount) {
-
     }
 
     @Override
     public void drawIndirect(GpuBufferSlice commands, int drawCount) {
-
     }
 
     @Override
@@ -193,4 +208,13 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     }
 
+    @Override
+    public void close() throws IOException{
+        if(!closed.compareAndExchange(false, true)) {
+            WM.drop_render_pass(this.nativePass);
+            WM.drop_binding_builder(this.bindingBuilder);
+        } else {
+            throw new IOException("Already closed");
+        }
+    }
 }

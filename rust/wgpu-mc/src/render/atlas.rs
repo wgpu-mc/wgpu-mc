@@ -3,8 +3,8 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use guillotiere::euclid::Size2D;
 use guillotiere::AtlasAllocator;
+use guillotiere::euclid::Size2D;
 use image::imageops::overlay;
 use image::{ImageBuffer, Rgba};
 use minecraft_assets::schemas;
@@ -204,7 +204,7 @@ impl Atlas {
                 width: self.size,
                 height: self.size,
                 depth_or_array_layers: 1,
-            }
+            },
         );
 
         false

@@ -50,7 +50,7 @@ public class WgpuDevice implements GpuDeviceBackend {
     public @NonNull GpuSampler createSampler(@NonNull AddressMode addressModeU, @NonNull AddressMode addressModeV,
             @NonNull FilterMode minFilter, @NonNull FilterMode magFilter, int maxAnisotropy,
             @NonNull OptionalDouble maxLod) {
-        return new WgpuSampler();
+        return new WgpuSampler(this);
     }
 
     @Override
@@ -94,7 +94,7 @@ public class WgpuDevice implements GpuDeviceBackend {
     @Override
     public @NonNull GpuBuffer createBuffer(@org.jspecify.annotations.Nullable Supplier<String> label,
             @GpuBuffer.Usage int usage, long size) {
-        return new WgpuBuffer(this, label != null ? label.get() : "<wm/unnamed mc buffer>", usage, size, false);
+        return new WgpuBuffer(this, label != null ? label.get() : "<wm/unnamed mc buffer>", usage, size * 5, false);
     }
 
     @Override
@@ -172,7 +172,7 @@ public class WgpuDevice implements GpuDeviceBackend {
                 false,
                 "wgpu-mc",
                 1.0f,
-                new DeviceLimits(1, 1, 4096, 100000000, 1, 4),
+                new DeviceLimits(1, 256, 4096, 100000000, 1, 4),
                 new DeviceFeatures(true, false, false, false, false, false, false),
                 Set.of(),
                 new HintsAndWorkarounds(false, true),
