@@ -229,6 +229,27 @@ void copy_buffer_to_buffer(const uint8_t *wm,
                            uint64_t dest_offset,
                            uint64_t length);
 
+void copy_texture_to_buffer(uint8_t *encoder,
+                            const struct Texture_ *source,
+                            const uint8_t *dest,
+                            uint64_t offset,
+                            uint32_t mip,
+                            uint32_t x,
+                            uint32_t y,
+                            uint32_t width,
+                            uint32_t height);
+
+void copy_texture_to_texture(uint8_t *encoder,
+                             const struct Texture_ *source,
+                             const struct Texture_ *destination,
+                             uint32_t mip,
+                             uint32_t dest_x,
+                             uint32_t dest_y,
+                             uint32_t src_x,
+                             uint32_t src_y,
+                             uint32_t width,
+                             uint32_t height);
+
 void bind_render_pipeline_to_pass(uint8_t *render_pass, const struct RenderPipeline *pipeline);
 
 void set_index_buffer(uint8_t *pass, const uint8_t *buffer, bool int_indices);

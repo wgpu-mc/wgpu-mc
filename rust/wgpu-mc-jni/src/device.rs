@@ -329,7 +329,66 @@ pub unsafe extern "C" fn copy_buffer_to_buffer(
 ) {
     encoder.copy_buffer_to_buffer(src, src_offset as _, dest, dest_offset, Some(length as _));
 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn copy_texture_to_buffer(
+    encoder: &mut wgpu::CommandEncoder,
+    source: &Texture_,
+    dest: &wgpu::Buffer,
+    offset: u64,
+    mip: u32, 
+    x: u32, 
+    y: u32, 
+    width: u32,
+    height: u32
+) {
+      let src_info = wgpu::TexelCopyTextureInfo {
+        texture: &source.texture,
+        mip_level: mip,
+        origin: Origin3d {
+            x: x,
+            y: y,
+            z: 0,
+        },
+        aspect: wgpu::TextureAspect::All,
+    };
+    let destination = wgpu::TexelCopyBufferInfo{
+        buffer: dest,
+        layout: TexelCopyBufferLayout {
+            offset,
+            bytes_per_row: Some(width * source.format.block_copy_size(None).unwrap()),
+            rows_per_image: Some(height),
+        },
+    };
+    let copy_size = Extent3d { width, height, depth_or_array_layers: 1 };
 
+    encoder.copy_texture_to_buffer(src_info, destination, copy_size);
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn copy_texture_to_texture(encoder: &mut wgpu::CommandEncoder, source: &Texture_, destination: &Texture_, mip: u32, dest_x: u32, dest_y: u32, src_x: u32, src_y: u32, width: u32, height: u32)  {
+    let src_info = wgpu::TexelCopyTextureInfo {
+        texture: &source.texture,
+        mip_level: mip,
+        origin: Origin3d {
+            x: src_x,
+            y: src_y,
+            z: 0,
+        },
+        aspect: wgpu::TextureAspect::All,
+    };
+    let dest_info = wgpu::TexelCopyTextureInfo {
+        texture: &destination.texture,
+        mip_level: mip,
+        origin: Origin3d { x: dest_x, y: dest_y, z: 0 },
+        aspect: wgpu::TextureAspect::All,
+    };
+
+    let extent = Extent3d{
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    encoder.copy_texture_to_texture(src_info, dest_info, extent);
+}
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn bind_render_pipeline_to_pass(
     render_pass: &mut wgpu::RenderPass,

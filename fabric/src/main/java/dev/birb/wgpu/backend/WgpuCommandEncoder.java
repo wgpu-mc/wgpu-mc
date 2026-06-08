@@ -153,12 +153,12 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public void copyTextureToBuffer(@NonNull GpuTexture source, @NonNull GpuBuffer destination, long offset, @NonNull Runnable callback, int mipLevel, int x, int y, int width, int height) {
-
+        WM.copy_texture_to_buffer(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuBuffer) destination).getNativeBuffer(), offset, mipLevel, x, y, width, height);
     }
 
     @Override
     public void copyTextureToTexture(@NonNull GpuTexture source, @NonNull GpuTexture destination, int mipLevel, int destX, int destY, int sourceX, int sourceY, int width, int height) {
-
+        WM.copy_texture_to_texture(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuTexture) destination).texture, mipLevel, destX, destY, sourceX, sourceY, width, height);
     }
 
 
