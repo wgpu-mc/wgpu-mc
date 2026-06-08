@@ -313,6 +313,18 @@ pub unsafe extern "C" fn write_to_buffer(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn flush_encoder(
+    wm: &WmRenderer,
+    encoder: &mut wgpu::CommandEncoder
+) {
+    let encoder = std::mem::replace(encoder, wm.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: None,
+    }));
+
+    wm.gpu.queue.submit([encoder.finish()]);
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn copy_buffer_to_buffer(
     wm: &WmRenderer,
     encoder: &mut wgpu::CommandEncoder,
@@ -324,7 +336,6 @@ pub unsafe extern "C" fn copy_buffer_to_buffer(
 ) {
     encoder.copy_buffer_to_buffer(src, src_offset as _, dest, dest_offset, Some(length as _));
 }
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn copy_texture_to_buffer(
     encoder: &mut wgpu::CommandEncoder,
@@ -933,17 +944,6 @@ pub extern "C" fn write_to_texture(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn submit_command_encoder(wm: &WmRenderer, encoder: Box<wgpu::CommandEncoder>) {
-    wm.gpu.queue.submit([encoder.finish()]);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn submit_render_pass(wm: &WmRenderer, encoder: &mut wgpu::CommandEncoder, pass: Box<wgpu::RenderPass>) {
-    let encoder = std::mem::replace(encoder, wm.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: None,
-    }));
-
-    drop(pass);
-
     wm.gpu.queue.submit([encoder.finish()]);
 }
 

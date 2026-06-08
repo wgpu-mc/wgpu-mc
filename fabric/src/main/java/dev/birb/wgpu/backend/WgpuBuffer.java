@@ -18,9 +18,14 @@ public class WgpuBuffer extends GpuBuffer {
     @Getter
     private final MemorySegment nativeBuffer;
     private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final WgpuDevice device;
 
     public WgpuBuffer(WgpuDevice device, String label, int usage, long size, boolean mapped) {
         super(usage, size);
+
+        this.device = device;
+
+        if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
 
         try(Arena arena = Arena.ofConfined()) {
             MemorySegment labelSeg = arena.allocateFrom(label);
@@ -45,10 +50,14 @@ public class WgpuBuffer extends GpuBuffer {
     public WgpuBuffer(WgpuDevice device, String label, int usage, ByteBuffer data) {
         super(usage, data.capacity());
 
+        if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
+
+        this.device = device;
+
         try(Arena arena = Arena.ofConfined()) {
             MemorySegment labelSeg = arena.allocateFrom(label);
 
-            nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofBuffer(data), Mth.roundToward(data.capacity(), 16));
+            nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofAddress(MemoryUtil.memAddress0(data)), Mth.roundToward(data.capacity(), 16));
         }
     }
 
@@ -65,9 +74,22 @@ public class WgpuBuffer extends GpuBuffer {
     @Override
     public GpuBufferSlice.@NonNull MappedView map(long offset, long length, boolean read, boolean write) {
         ByteBuffer data = MemoryUtil.memAlignedAlloc(16, (int) length);
-        return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {
-            MemoryUtil.memFree(data);
-        });
+        if(write) {
+            return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {
+                WM.write_to_buffer(
+                        device.getWm(),
+                        this.getNativeBuffer(),
+                        offset,
+                        length,
+                        MemorySegment.ofAddress(MemoryUtil.memAddress0(data))
+                );
+                MemoryUtil.memAlignedFree(data);
+            });
+        } else {
+            return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {
+                MemoryUtil.memAlignedFree(data);
+            });
+        }
     }
 
 

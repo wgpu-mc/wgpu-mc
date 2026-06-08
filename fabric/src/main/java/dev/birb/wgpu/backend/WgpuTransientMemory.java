@@ -48,13 +48,13 @@ public class WgpuTransientMemory implements TransientMemory, Closeable {
         var newSize = Mth.roundToward(size, alignment);
         var buffer = new WgpuBuffer(device, "", usage, newSize, false);
 
-        ByteBuffer cpuBuffer = arena.allocate(newSize, alignment).asByteBuffer();
+        MemorySegment cpuBuffer = arena.allocate(newSize, alignment);
 
         return new GpuBufferSlice.MappedView(
                 new GpuBufferSlice(buffer, 0, newSize),
-                cpuBuffer,
+                cpuBuffer.asByteBuffer(),
                 () -> {
-                    WM.write_buffer_with(device.getWm(), buffer.getNativeBuffer(), MemorySegment.ofBuffer(cpuBuffer), newSize);
+                    WM.write_buffer_with(device.getWm(), buffer.getNativeBuffer(), cpuBuffer, newSize);
                 }
         );
     }
