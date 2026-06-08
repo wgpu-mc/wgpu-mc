@@ -1,4 +1,4 @@
-use crate::preprocessing::shim_samplers;
+use crate::preprocessing::{shim_samplers, RemovePointSize};
 use crate::{preprocessing, MinecraftResourceManagerAdapter, BLITTER, RENDERER};
 use cyntax::MacroD;
 use futures::executor::block_on;
@@ -22,8 +22,9 @@ use std::sync::Arc;
 use glsl::parser::Parse;
 use glsl::syntax::{ExternalDeclaration, Preprocessor, PreprocessorVersion, ShaderStage, TypeSpecifierNonArray};
 use glsl::transpiler::glsl::show_translation_unit;
+use glsl::visitor::HostMut;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, StagingBelt, TextureBlitterBuilder};
-use wgpu_mc::wgpu::{naga, BlendState, IndexFormat, Limits, PresentMode, ShaderSource};
+use wgpu_mc::wgpu::{naga, BlendState, BufferAddress, CurrentSurfaceTexture, Extent3d, IndexFormat, Limits, Origin3d, PresentMode, ShaderSource, SurfaceTexture, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo};
 use wgpu_mc::{wgpu, Gpu, WmRenderer};
 use wgpu_mc::util::WmArena;
 use crate::blaze::{GpuFormat, PrimitiveTopology, BlazeRenderPassDescriptor, RenderPipeline, UniformType};
@@ -59,7 +60,7 @@ pub unsafe extern "C" fn drop_surface(wm: &WmRenderer) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::VULKAN,
+        backends: wgpu::Backends::DX12,
         flags: wgpu::InstanceFlags::VALIDATION
             | wgpu::InstanceFlags::DEBUG
             | wgpu::InstanceFlags::GPU_BASED_VALIDATION,
@@ -466,6 +467,9 @@ pub unsafe extern "C" fn compile_render_pipeline(
         profile: None,
     })));
 
+    frag_stage_ast.visit_mut(&mut RemovePointSize { is_point_var: false });
+    vert_stage_ast.visit_mut(&mut RemovePointSize { is_point_var: false });
+
     let mut vert_processed = String::new();
     let mut frag_processed = String::new();
 
@@ -709,18 +713,116 @@ pub extern "C" fn allocate_gpu_buffer_mapped(wm: &WmRenderer, size: u64, usages:
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn present_surface(
+pub extern "C" fn acquire_next_texture(
     wm: &WmRenderer
-) {
-    let surface = wm.gpu.surface.lock();
+) -> *mut SurfaceTexture {
+    let lock = wm.gpu.surface.lock();
+    let surface = lock.as_ref().unwrap().get_current_texture();
 
     if let wgpu::CurrentSurfaceTexture::Success(surface_texture) =
-        surface.as_ref().unwrap().get_current_texture()
+        surface
     {
-        surface_texture.present();
+        Box::into_raw(Box::new(surface_texture))
     } else {
-
+        0 as _
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn present_surface(
+    wm: &WmRenderer,
+    surface_texture: Box<SurfaceTexture>
+) {
+    surface_texture.present();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn copy_buffer_to_texture(
+    encoder: &mut wgpu::CommandEncoder,
+    buffer: &wgpu::Buffer,
+    buffer_start: u64,
+    buffer_end: u64,
+    source_x: u32,
+    source_y: u32,
+    source_width: u32,
+    source_height: u32,
+    destination: &Texture_,
+    destination_x: u32,
+    destination_y: u32,
+    copy_width: u32,
+    copy_height: u32,
+    mip_level: u32,
+    depth_or_array_layers: u32
+) {
+    //TODO buffer slice?
+
+    if mip_level != 0 { return; }
+
+    encoder.copy_buffer_to_texture(
+        TexelCopyBufferInfo {
+            buffer,
+            layout: TexelCopyBufferLayout {
+                offset: (source_width * source_y + source_x) as BufferAddress,
+                bytes_per_row: Some(source_width * destination.format.block_copy_size(None).unwrap()),
+                rows_per_image: Some(source_height),
+            },
+        },
+        TexelCopyTextureInfo {
+            texture: &destination.texture,
+            mip_level,
+            origin: Origin3d {
+                x: destination_x,
+                y: destination_y,
+                z: 0,
+            },
+            aspect: Default::default(),
+        },
+        Extent3d {
+            width: copy_width,
+            height: copy_height,
+            depth_or_array_layers,
+        }
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn write_to_texture(
+    wm: &WmRenderer,
+    destination: &Texture_,
+    source: *const u8,
+    source_size: u64,
+    mip_level: u32,
+    depth_or_array_layers: u32,
+    dest_x: u32,
+    dest_y: u32,
+    width: u32,
+    height: u32
+) {
+    if mip_level != 0 { return; }
+
+    wm.gpu.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &destination.texture,
+            mip_level,
+            origin: Origin3d {
+                x: dest_x,
+                y: dest_y,
+                z: 0,
+            },
+            aspect: Default::default(),
+        },
+        unsafe { std::slice::from_raw_parts(source, source_size as _) },
+        TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(destination.format.block_copy_size(None).unwrap() * width),
+            rows_per_image: Some(height),
+        },
+        Extent3d {
+            width,
+            height,
+            depth_or_array_layers,
+        }
+    );
 }
 
 #[unsafe(no_mangle)]
@@ -739,45 +841,39 @@ pub extern "C" fn submit_render_pass(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn present_texture(
+pub extern "C" fn blit_from_texture(
     wm: &WmRenderer,
-    mut encoder: Box<wgpu::CommandEncoder>,
     texture_view: &TextureView_,
+    surface_texture: &SurfaceTexture,
 ) {
-    let surface = wm.gpu.surface.lock();
+    let blitter = BLITTER.get().unwrap();
 
-    if let wgpu::CurrentSurfaceTexture::Success(surface_texture) =
-        surface.as_ref().unwrap().get_current_texture()
-    {
-        let blitter = BLITTER.get().unwrap();
+    let mut encoder = wm.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: None,
+    });
 
-        let view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                label: None,
-                format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
-                aspect: Default::default(),
-                base_mip_level: 0,
-                mip_level_count: None,
-                base_array_layer: 0,
-                array_layer_count: None,
-            });
+    let view = surface_texture
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor {
+            label: None,
+            format: Some(wgpu::TextureFormat::Bgra8Unorm),
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
+            aspect: Default::default(),
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
 
-        blitter.copy(
-            &wm.gpu.device,
-            &mut encoder,
-            &texture_view.texture_view,
-            &view,
-        );
+    blitter.copy(
+        &wm.gpu.device,
+        &mut encoder,
+        &texture_view.texture_view,
+        &view,
+    );
 
-        wm.gpu.queue.submit([encoder.finish()]);
-        // wm.wm.gpu.queue.present(surface_texture);
-        surface_texture.present();
-    } else {
-
-    }
+    wm.gpu.queue.submit([encoder.finish()]);
 }
 
 #[unsafe(no_mangle)]

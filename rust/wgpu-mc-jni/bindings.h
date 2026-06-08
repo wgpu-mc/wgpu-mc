@@ -267,13 +267,44 @@ void write_buffer_with(const uint8_t *wm, const uint8_t *buffer, const uint8_t *
 
 uint8_t *allocate_gpu_buffer_mapped(const uint8_t *wm, uint64_t size, uint64_t usages);
 
-void present_surface(const uint8_t *wm);
+uint8_t *acquire_next_texture(const uint8_t *wm);
+
+void present_surface(const uint8_t *wm, uint8_t *surface_texture);
+
+void copy_buffer_to_texture(uint8_t *encoder,
+                            const uint8_t *buffer,
+                            uint64_t buffer_start,
+                            uint64_t buffer_end,
+                            uint32_t source_x,
+                            uint32_t source_y,
+                            uint32_t source_width,
+                            uint32_t source_height,
+                            const struct Texture_ *destination,
+                            uint32_t destination_x,
+                            uint32_t destination_y,
+                            uint32_t copy_width,
+                            uint32_t copy_height,
+                            uint32_t mip_level,
+                            uint32_t depth_or_array_layers);
+
+void write_to_texture(const uint8_t *wm,
+                      const struct Texture_ *destination,
+                      const uint8_t *source,
+                      uint64_t source_size,
+                      uint32_t mip_level,
+                      uint32_t depth_or_array_layers,
+                      uint32_t dest_x,
+                      uint32_t dest_y,
+                      uint32_t width,
+                      uint32_t height);
 
 void submit_command_encoder(const uint8_t *wm, uint8_t *encoder);
 
 void submit_render_pass(uint8_t*);
 
-void present_texture(const uint8_t *wm, uint8_t *encoder, const struct TextureView_ *texture_view);
+void blit_from_texture(const uint8_t *wm,
+                       const struct TextureView_ *texture_view,
+                       const uint8_t *surface_texture);
 
 uint8_t *create_buffer_init(const uint8_t *wm,
                             const char *label,

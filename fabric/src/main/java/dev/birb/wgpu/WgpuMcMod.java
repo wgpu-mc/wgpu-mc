@@ -18,6 +18,7 @@ public class WgpuMcMod implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		WgpuNative.loadWm();
+		System.loadLibrary("renderdoc");
 //		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ShaderReloadListener());
 	}
 }

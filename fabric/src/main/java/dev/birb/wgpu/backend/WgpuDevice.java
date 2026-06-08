@@ -94,7 +94,7 @@ public class WgpuDevice implements GpuDeviceBackend {
     @Override
     public @NonNull GpuBuffer createBuffer(@org.jspecify.annotations.Nullable Supplier<String> label,
             @GpuBuffer.Usage int usage, long size) {
-        return new WgpuBuffer(this, label != null ? label.get() : "<wm/unnamed mc buffer>", usage, size);
+        return new WgpuBuffer(this, label != null ? label.get() : "<wm/unnamed mc buffer>", usage, size, false);
     }
 
     @Override

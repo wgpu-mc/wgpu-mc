@@ -7,12 +7,13 @@ import com.mojang.blaze3d.systems.*;
 import com.mojang.blaze3d.textures.GpuTexture;
 import dev.birb.wm.WM;
 import lombok.Getter;
-import org.apache.commons.lang3.NotImplementedException;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WgpuCommandEncoder implements CommandEncoderBackend {
@@ -20,6 +21,9 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     @Getter
     private final MemorySegment nativeCommandEncoder;
     private final AtomicBoolean closed = new AtomicBoolean();
+
+    @Nullable
+    private WgpuRenderPass renderPass;
 
     private final WgpuDevice device;
 
@@ -30,23 +34,33 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public void submit() {
+        if(!this.closed.compareAndExchange(false, true)) {
+            WM.submit_command_encoder(
+                    this.device.getWm(),
+                    this.nativeCommandEncoder
+            );
 
+            return;
+        }
+
+        throw new IllegalStateException("Submitting an encoder twice");
     }
 
     @Override
     public @NonNull TransientMemory transientMemory() {
-        throw new NotImplementedException();
+        return new WgpuTransientMemory(device, this);
     }
 
     @Override
     public @NonNull RenderPassBackend createRenderPass(@NonNull RenderPassDescriptor descriptor) {
         if(closed.get()) throw new IllegalStateException();
-        return new WgpuRenderPass(this.device, this, descriptor);
+        this.renderPass = new WgpuRenderPass(this.device, this, descriptor);
+        return this.renderPass;
     }
 
     @Override
     public void submitRenderPass() {
-
+        WM.submit_render_pass(Objects.requireNonNull(this.renderPass).getNativePass());
     }
 
     @Override
@@ -97,12 +111,39 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public void writeToTexture(@NonNull GpuTexture destination, @NonNull ByteBuffer source, int mipLevel, int depthOrLayer, int destX, int destY, int width, int height) {
-
+        WM.write_to_texture(
+                device.getWm(),
+                ((WgpuTexture) destination).texture,
+                MemorySegment.ofBuffer(source),
+                source.limit(),
+                mipLevel,
+                depthOrLayer,
+                destX,
+                destY,
+                width,
+                height
+        );
     }
 
     @Override
     public void copyBufferToTexture(@NonNull GpuBufferSlice source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, @NonNull GpuTexture destination, int destinationX, int destinationY, int copyWidth, int copyHeight, int mipLevel, int arrayLayer) {
-
+        WM.copy_buffer_to_texture(
+                this.getNativeCommandEncoder(),
+                ((WgpuBuffer) source.buffer()).getNativeBuffer(),
+                source.offset(),
+                source.offset() + source.length(),
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                ((WgpuTexture) destination).texture,
+                destinationX,
+                destinationY,
+                copyWidth,
+                copyHeight,
+                mipLevel,
+                arrayLayer
+        );
     }
 
     @Override

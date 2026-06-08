@@ -11,6 +11,7 @@ import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.birb.wm.*;
+import lombok.Getter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.PointerBuffer;
@@ -22,6 +23,7 @@ import java.util.function.Supplier;
 
 public class WgpuRenderPass implements RenderPassBackend {
 
+    @Getter
     private final MemorySegment nativePass;
     private final WgpuDevice device;
     private static final MemoryLayout vec4fLayout = MemoryLayout.sequenceLayout(
@@ -113,7 +115,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void setUniform(@NonNull String name, @NonNull GpuBuffer buffer) {
-
+        this.setUniform(name, buffer.slice());
     }
 
     @Override
@@ -138,12 +140,12 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void setIndexBuffer(GpuBuffer indexBuffer, IndexType indexType) {
-
+        WM.set_index_buffer(this.nativePass, ((WgpuBuffer) indexBuffer).getNativeBuffer(), indexType == IndexType.INT);
     }
 
     @Override
     public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int vertexOffset, int firstInstance) {
-
+        WM.draw_indexed(this.nativePass, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     @Override
@@ -168,7 +170,7 @@ public class WgpuRenderPass implements RenderPassBackend {
 
     @Override
     public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
-
+        WM.draw(this.nativePass, vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     @Override

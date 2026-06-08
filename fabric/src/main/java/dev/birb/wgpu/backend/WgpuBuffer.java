@@ -18,18 +18,26 @@ public class WgpuBuffer extends GpuBuffer {
     private final MemorySegment nativeBuffer;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    public WgpuBuffer(WgpuDevice device, String label, int usage, long size) {
+    public WgpuBuffer(WgpuDevice device, String label, int usage, long size, boolean mapped) {
         super(usage, size);
 
         try(Arena arena = Arena.ofConfined()) {
             MemorySegment labelSeg = arena.allocateFrom(label);
 
-            nativeBuffer = WM.create_buffer(
-                    device.getWm(),
-                    labelSeg,
-                    usage,
-                    size
-            );
+            if(!mapped) {
+                nativeBuffer = WM.create_buffer(
+                        device.getWm(),
+                        labelSeg,
+                        usage,
+                        size
+                );
+            } else {
+                nativeBuffer = WM.allocate_gpu_buffer_mapped(
+                        device.getWm(),
+                        size,
+                        usage
+                );
+            }
         }
     }
 

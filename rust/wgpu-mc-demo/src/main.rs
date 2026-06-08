@@ -7,7 +7,7 @@ use glsl::syntax::{BinaryOp, Block, Declaration, Expr, ExternalDeclaration, FunI
 use glsl::transpiler::glsl::{show_expr, show_translation_unit};
 use glsl::visitor::{HostMut, Visit, VisitorMut};
 use wgpu_mc_jni::preprocessing;
-use wgpu_mc_jni::preprocessing::{shim_samplers, IncrementingAnnotator, OrphanDestroyer, RewriteFetches, SamplerBufferRewriter, UniformAnnotator};
+use wgpu_mc_jni::preprocessing::{shim_samplers, IncrementingAnnotator, OrphanDestroyer, RemovePointSize, RewriteFetches, SamplerBufferRewriter, UniformAnnotator};
 fn main() {
     let mut vert_stage = ShaderStage::parse(r#"
 #version 330
@@ -20,6 +20,7 @@ uniform sampler2D Sampler;
 uniform vec2 Projection;
 
 void main() {
+    gl_PointSize = 1;
 }
     "#).unwrap();
 
@@ -62,6 +63,8 @@ void main() {
     vert_stage.visit_mut(&mut RewriteFetches {
         buffers: &rewriter.buffers,
     });
+
+    vert_stage.visit_mut(&mut RemovePointSize { is_point_var: false });
 
     vert_stage.visit_mut(&mut out_annotator);
     vert_stage.visit_mut(&mut in_annotator);

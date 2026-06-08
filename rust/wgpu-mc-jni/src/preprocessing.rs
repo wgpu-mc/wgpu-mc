@@ -4,7 +4,7 @@ use std::io::Cursor;
 use std::iter::Flatten;
 use std::str::FromStr;
 use glsl::parser::{Parse, ParseError};
-use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, Declaration, Expr, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SingleDeclaration, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
+use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, CompoundStatement, Declaration, Expr, ExprStatement, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, ShaderStage, SimpleStatement, SingleDeclaration, Statement, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
 use glsl::transpiler::glsl::{show_expr, show_translation_unit};
 use glsl::visitor::{Host, HostMut, Visit, Visitor, VisitorMut};
 use wgpu_mc::wgpu;
@@ -329,6 +329,9 @@ pub struct OrphanDestroyer {
     pub uniform_set: HashMap<String, u32>
 }
 
+pub struct RemovePointSize {
+    pub is_point_var: bool
+}
 
 pub struct SamplerBufferRewriter<'a> {
     pub is_sampler_buffer: bool,
@@ -338,6 +341,33 @@ pub struct SamplerBufferRewriter<'a> {
 
 pub struct RewriteFetches<'a> {
     pub buffers: &'a [String],
+}
+
+impl VisitorMut for RemovePointSize {
+    fn visit_expr(&mut self, e: &mut Expr) -> Visit {
+        if let Expr::Variable(ident) = e && ident.0 == "gl_PointSize" {
+            self.is_point_var = true;
+        }
+
+        Visit::Children
+    }
+
+    fn visit_statement(&mut self, statement: &mut Statement) -> Visit {
+        if let Statement::Simple(simple) = statement {
+            if let SimpleStatement::Expression(expr) = &mut **simple {
+                expr.visit_mut(self);
+
+                if self.is_point_var {
+                    *statement = Statement::parse(";").unwrap();
+                }
+
+                self.is_point_var = false;
+            }
+        }
+
+        Visit::Children
+    }
+
 }
 
 impl<'a> VisitorMut for RewriteFetches<'a> {

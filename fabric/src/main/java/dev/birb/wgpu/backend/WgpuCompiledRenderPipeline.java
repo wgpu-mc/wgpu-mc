@@ -75,6 +75,7 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                     MemorySegment seg = VertexFormatElement.asSlice(vertexFormatElements, i);
                     VertexFormatElement.offset(seg, formatElement.offset());
                     VertexFormatElement.format(seg, GpuFormatHelper.gpuFormatToRustEnum(formatElement.format()));
+                    VertexFormatElement.name(seg, arena.allocateFrom(formatElement.name()));
                 }
 
                 var vertexFormatSeg = VertexFormat.asSlice(vertexFormats, v);
@@ -86,13 +87,6 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                 VertexFormat.elements(vertexFormatSeg, raw_array);
                 VertexFormat.vertex_size(vertexFormatSeg, vertexFormat.getVertexSize());
             }
-
-
-//            var vertexShape = new Object2IntArrayMap<String>();
-//
-//            for(int i=0;i<elements.size();i++) {
-//                vertexShape.put(vertexFormat.getElementName(vertexFormat.getElements().get(i)), i);
-//            }
 
             var fragSource = getOrSourceShader(pipeline.getFragmentShader(), ShaderType.FRAGMENT, pipeline.getShaderDefines(), shaderSource);
             var vertSource = getOrSourceShader(pipeline.getVertexShader(), ShaderType.VERTEX, pipeline.getShaderDefines(), shaderSource);
@@ -148,13 +142,7 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             RawArray_______________FfiStr__________2.contents(defines_raw_array, defines);
             RawArray_______________FfiStr__________2.size(defines_raw_array, pipeline.getShaderDefines().values().size());
 
-            int d = 0;
-            for(var entry : pipeline.getShaderDefines().values().entrySet()) {
-                var slice = defines.asSlice(d * ValueLayout.ADDRESS.byteSize() * 2, ValueLayout.ADDRESS.byteSize() * 2);
-                slice.set(ValueLayout.ADDRESS, 0, arena.allocateFrom(entry.getKey()));
-                slice.set(ValueLayout.ADDRESS, ValueLayout.ADDRESS.byteSize(), arena.allocateFrom(entry.getValue()));
-                d++;
-            }
+            var directives = pipeline.getShaderDefines().asSourceDirectives();
 
             var colorTargetCount = pipeline.getColorTargetStates().length;
 
@@ -182,7 +170,8 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             dev.birb.wm.RenderPipeline.vertex_formats(renderPipelineStruct, vertexFormatsRawArray);
             dev.birb.wm.RenderPipeline.vertex_shader(renderPipelineStruct, arena.allocateFrom(vertSource));
             dev.birb.wm.RenderPipeline.fragment_shader(renderPipelineStruct, arena.allocateFrom(fragSource));
-            dev.birb.wm.RenderPipeline.defines(renderPipelineStruct, defines_raw_array);
+//            dev.birb.wm.RenderPipeline.defines(renderPipelineStruct, defines_raw_array);
+            dev.birb.wm.RenderPipeline.directives(renderPipelineStruct, arena.allocateFrom(directives));
             dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
             dev.birb.wm.RenderPipeline.color_target_states(renderPipelineStruct, rawArrayColorTargetState);
             dev.birb.wm.RenderPipeline.primitive_topology(renderPipelineStruct, switch(pipeline.getPrimitiveTopology()) {
@@ -195,7 +184,6 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                 case QUADS -> 7;
             });
 
-            System.out.println(pipeline.getLocation());
             nativePipeline = WM.compile_render_pipeline(
                     device.getWm(),
                     renderPipelineStruct

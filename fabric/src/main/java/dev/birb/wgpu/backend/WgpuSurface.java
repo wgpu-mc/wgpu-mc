@@ -11,12 +11,15 @@ import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWNativeWin32;
 import org.lwjgl.glfw.GLFWNativeX11;
 
+import java.lang.foreign.MemorySegment;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 public class WgpuSurface implements GpuSurfaceBackend {
 
     private final WgpuDevice wgpuDevice;
+    private MemorySegment nextTexture;
 
     public WgpuSurface(WgpuDevice device, long window) {
         long nativeWindowHandle;
@@ -61,17 +64,25 @@ public class WgpuSurface implements GpuSurfaceBackend {
 
     @Override
     public void acquireNextTexture() throws SurfaceException {
-
+        this.nextTexture = WM.acquire_next_texture(this.wgpuDevice.getWm());
+        if(this.nextTexture == MemorySegment.NULL) {
+            throw new SurfaceException("Failed to acquire surface texture");
+        }
     }
 
     @Override
     public void blitFromTexture(@NonNull CommandEncoderBackend commandEncoder, @NonNull GpuTextureView textureView) {
-
+        WM.blit_from_texture(
+                this.wgpuDevice.getWm(),
+                ((WgpuTextureView) textureView).getNative(),
+                Objects.requireNonNull(this.nextTexture)
+        );
     }
 
     @Override
     public void present() {
-
+        WM.present_surface(this.wgpuDevice.getWm(), Objects.requireNonNull(this.nextTexture));
+        this.nextTexture = null;
     }
 
     @Override
