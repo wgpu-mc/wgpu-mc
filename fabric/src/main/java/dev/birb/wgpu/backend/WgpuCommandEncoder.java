@@ -146,6 +146,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     @Override
     public void copyBufferToTexture(@NonNull GpuBufferSlice source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, @NonNull GpuTexture destination, int destinationX, int destinationY, int copyWidth, int copyHeight, int mipLevel, int arrayLayer) {
         WM.copy_buffer_to_texture(
+                device.getWm(),
                 this.getNativeCommandEncoder(),
                 ((WgpuBuffer) source.buffer()).getNativeBuffer(),
                 source.offset(),

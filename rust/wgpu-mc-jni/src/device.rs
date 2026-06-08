@@ -22,8 +22,9 @@ use std::collections::HashMap;
 use std::ffi::{CStr, c_char};
 use std::hash::{DefaultHasher, Hasher};
 use std::io::pipe;
+use std::iter;
 use std::num::{NonZero, NonZeroIsize};
-use std::ops::Deref;
+use std::ops::{Deref, Rem};
 use std::path::PathBuf;
 use std::sync::Arc;
 use futures::sink::unfold;
@@ -87,7 +88,7 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
 
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
-        required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS,
+        required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::DEPTH_CLIP_CONTROL,
         required_limits: Limits {
             max_bind_groups: adapter.limits().max_bind_groups,
             ..adapter.limits()
@@ -288,6 +289,7 @@ pub extern "C" fn create_buffer(
     wgpu_usage_flags.set(wgpu::BufferUsages::VERTEX, usage & 32 != 0);
     wgpu_usage_flags.set(wgpu::BufferUsages::INDEX, usage & 64 != 0);
     wgpu_usage_flags.set(wgpu::BufferUsages::UNIFORM, usage & 128 != 0);
+    wgpu_usage_flags.set(wgpu::BufferUsages::STORAGE, usage & 256 != 0);
 
     let buffer = wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label.to_str().unwrap()),
@@ -721,6 +723,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
                 strip_index_format: None,
                 front_face: Default::default(),
                 cull_mode: None,
+                //TODO
                 unclipped_depth: false,
                 //TODO
                 polygon_mode: Default::default(),
@@ -730,7 +733,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
                 wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: Some(state.active == 1),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    depth_compare: Some(wgpu::CompareFunction::Always),
                     stencil: Default::default(),
                     bias: Default::default(),
                 }
@@ -743,7 +746,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
                 targets: &render_pipeline_description.color_target_states.iter().map(|state| {
                     Some(wgpu::ColorTargetState {
                         format: state.format.to_wgpu_texture_format(),
-                        blend: Some(BlendState::REPLACE),
+                        blend: Some(BlendState::ALPHA_BLENDING),
                         write_mask: Default::default(),
                     })
                 }).collect::<Vec<_>>(),
@@ -849,10 +852,11 @@ pub extern "C" fn present_surface(wm: &WmRenderer, surface_texture: Box<SurfaceT
 
 #[unsafe(no_mangle)]
 pub extern "C" fn copy_buffer_to_texture(
+    wm: &WmRenderer,
     encoder: &mut wgpu::CommandEncoder,
     buffer: &wgpu::Buffer,
     buffer_start: u64,
-    buffer_end: u64,
+    _buffer_end: u64,
     source_x: u32,
     source_y: u32,
     source_width: u32,
@@ -863,31 +867,83 @@ pub extern "C" fn copy_buffer_to_texture(
     copy_width: u32,
     copy_height: u32,
     mip_level: u32,
-    depth_or_array_layers: u32,
+    _depth_or_array_layers: u32,
 ) {
-    //TODO buffer slice?
-
     if mip_level != 0 {
         return;
     }
 
-    let texel_size = destination.format().block_copy_size(None).unwrap() as u64;
-    let skip = (source_x + source_y * source_width) as u64;
-    let offset = buffer_start + skip * texel_size;
+    let buffer_size = buffer.size();
+
+    let source_width_u64 = source_width as u64;
+    let source_height_u64 = source_height as u64;
+
+    let texel_size = destination
+        .format()
+        .block_copy_size(None)
+        .unwrap() as u64;
+
+    let offset_texels =
+        source_x as u64 + source_y as u64 * source_width_u64;
+
+    let source_offset =
+        buffer_start + offset_texels * texel_size;
+
+    let src_row_bytes = source_width_u64 * texel_size;
+
+    let aligned_row_bytes = src_row_bytes.next_multiple_of(256);
+
+    let scratch = wm.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: aligned_row_bytes * source_height_u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+
+    let mut valid_rows = 0u32;
+
+    for row in 0..source_height_u64 {
+        let src_row_offset =
+            source_offset + row * src_row_bytes;
+
+        let dst_row_offset =
+            row * aligned_row_bytes;
+
+        let src_end = src_row_offset + src_row_bytes;
+        if src_row_offset >= buffer_size || src_end > buffer_size {
+            continue;
+        }
+
+        if src_row_offset % 4 != 0 || src_row_bytes % 4 != 0 {
+            continue;
+        }
+
+        encoder.copy_buffer_to_buffer(
+            buffer,
+            src_row_offset,
+            &scratch,
+            dst_row_offset,
+            src_row_bytes,
+        );
+
+        valid_rows += 1;
+    }
+
+    if valid_rows == 0 {
+        return;
+    }
 
     encoder.copy_buffer_to_texture(
         TexelCopyBufferInfo {
-            buffer,
+            buffer: &scratch,
             layout: TexelCopyBufferLayout {
-                offset: offset as BufferAddress,
-                bytes_per_row: Some(
-                    source_width * texel_size as u32,
-                ),
-                rows_per_image: Some(source_height),
+                offset: 0,
+                bytes_per_row: Some(aligned_row_bytes as u32),
+                rows_per_image: Some(valid_rows),
             },
         },
         TexelCopyTextureInfo {
-            texture: &destination,
+            texture: destination,
             mip_level,
             origin: Origin3d {
                 x: destination_x,
@@ -898,7 +954,7 @@ pub extern "C" fn copy_buffer_to_texture(
         },
         Extent3d {
             width: copy_width,
-            height: copy_height,
+            height: valid_rows.min(copy_height),
             depth_or_array_layers: 1,
         },
     );
@@ -1001,6 +1057,10 @@ pub extern "C" fn create_buffer_init(
     let label = unsafe { CStr::from_ptr(label) };
     let data = unsafe { std::slice::from_raw_parts(data, size as _) };
 
+    let diff = data.len().next_multiple_of(16) - data.len();
+
+    let padded_data: Vec<u8> = data.iter().copied().chain(iter::repeat(0).take(diff)).collect();
+
     let mut wgpu_usage_flags = wgpu::BufferUsages::empty();
     wgpu_usage_flags.set(wgpu::BufferUsages::MAP_READ, usage & 1 != 0);
     wgpu_usage_flags.set(wgpu::BufferUsages::MAP_WRITE, usage & 2 != 0);
@@ -1013,7 +1073,7 @@ pub extern "C" fn create_buffer_init(
     let buffer = wm.gpu.device.create_buffer_init(&BufferInitDescriptor {
         label: Some(label.to_str().unwrap()),
         usage: wgpu_usage_flags,
-        contents: data,
+        contents: &padded_data,
     });
 
     Box::new(buffer)

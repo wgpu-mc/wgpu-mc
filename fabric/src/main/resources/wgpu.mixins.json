@@ -6,7 +6,6 @@
   "client": [
     "core.MixinUseWgpuBackendNotGl",
     "core.RegistryMixin",
-    "patch.NativeImageForceSizeAlign",
     "world.BlockStateMixin"
   ],
   "injectors": {

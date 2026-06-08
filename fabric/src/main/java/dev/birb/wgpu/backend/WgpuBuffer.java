@@ -49,7 +49,7 @@ public class WgpuBuffer extends GpuBuffer {
     }
 
     public WgpuBuffer(WgpuDevice device, String label, int usage, ByteBuffer data) {
-        super(usage, data.capacity());
+        super(usage, Mth.roundToward(data.capacity(), 16));
 
         if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
 
@@ -58,6 +58,7 @@ public class WgpuBuffer extends GpuBuffer {
         try(Arena arena = Arena.ofConfined()) {
             MemorySegment labelSeg = arena.allocateFrom(label);
 
+            //This function will pad out the data to 16 byte alignment
             nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofAddress(MemoryUtil.memAddress0(data)), data.capacity());
         }
     }

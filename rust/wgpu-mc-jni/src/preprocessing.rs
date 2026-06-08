@@ -1,18 +1,58 @@
 use crate::preprocessing;
 use glsl::parser::Parse;
-use glsl::syntax::{
-    ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, CompoundStatement,
-    Declaration, Expr, ExprStatement, ExternalDeclaration, FullySpecifiedType, FunIdentifier,
-    FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier,
-    InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor,
-    PreprocessorVersion, ShaderStage, SimpleStatement, SingleDeclaration, Statement,
-    StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier,
-    TypeSpecifierNonArray,
-};
+use glsl::syntax::{ArraySpecifier, ArraySpecifierDimension, ArrayedIdentifier, Block, CompoundStatement, Declaration, Expr, ExprStatement, ExternalDeclaration, FullySpecifiedType, FunIdentifier, FunctionDefinition, FunctionParameterDeclaration, FunctionParameterDeclarator, FunctionPrototype, Identifier, InitDeclaratorList, Initializer, LayoutQualifier, LayoutQualifierSpec, NonEmpty, Preprocessor, PreprocessorVersion, ShaderStage, SimpleStatement, SingleDeclaration, Statement, StorageQualifier, TranslationUnit, TypeName, TypeQualifier, TypeQualifierSpec, TypeSpecifier, TypeSpecifierNonArray};
 use glsl::transpiler::glsl::{show_expr, show_translation_unit};
 use glsl::visitor::{Host, HostMut, Visit, Visitor, VisitorMut};
 use std::collections::HashMap;
 use std::ffi::{CStr, c_char};
+use once_cell::sync::Lazy;
+
+static OPENGL_TO_WGPU_MATRIX_AST: Lazy<Statement> = Lazy::new(|| {
+    Statement::Simple(Box::new(SimpleStatement::Expression(
+        Some(
+            Expr::parse(r#"gl_Position = mat4(
+    vec4(1.0, 0.0, 0.0, 0.0),
+    vec4(0.0, 1.0, 0.0, 0.0),
+    vec4(0.0, 0.0, 0.5, 0.0),
+    vec4(0.0, 0.0, 0.5, 1.0)
+) * gl_Position;
+"#).unwrap()
+        )
+    )))
+});
+
+static FORCE_WHITE: Lazy<Statement> = Lazy::new(|| {
+    Statement::Simple(Box::new(SimpleStatement::Expression(
+        Some(
+            Expr::parse(r#"fragColor = vec4(1.0, 1.0, 1.0, 1.0);"#).unwrap()
+        )
+    )))
+});
+
+pub struct MatrixPatcher;
+pub struct ForceWhite;
+
+impl VisitorMut for ForceWhite {
+    fn visit_function_definition(&mut self, def: &mut FunctionDefinition) -> Visit {
+        if def.prototype.name.0 == "main" {
+            def.statement.statement_list.insert(def.statement.statement_list.len(), FORCE_WHITE.clone());
+        }
+
+        Visit::Children
+    }
+
+}
+
+impl VisitorMut for MatrixPatcher {
+    fn visit_function_definition(&mut self, def: &mut FunctionDefinition) -> Visit {
+        if def.prototype.name.0 == "main" {
+            def.statement.statement_list.insert(def.statement.statement_list.len(), OPENGL_TO_WGPU_MATRIX_AST.clone());
+        }
+
+        Visit::Children
+    }
+
+}
 
 struct VersionFixer;
 impl VisitorMut for VersionFixer {
@@ -838,6 +878,9 @@ pub fn process_shaders(
 
     let mut vert_stage_ast = ShaderStage::parse(preprocessed_vert).unwrap();
     let mut frag_stage_ast = ShaderStage::parse(preprocessed_frag).unwrap();
+
+    vert_stage_ast.visit_mut(&mut MatrixPatcher);
+    // frag_stage_ast.visit_mut(&mut ForceWhite);
 
     let mut sampler_types = HashMap::new();
 
