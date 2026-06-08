@@ -10,7 +10,6 @@ import lombok.Getter;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
 import java.lang.foreign.MemorySegment;
@@ -57,6 +56,10 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
         throw new IllegalStateException("Submitting an encoder twice");
     }
 
+    private void flush() {
+        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
+    }
+
     @Override
     public @NonNull TransientMemory transientMemory() {
         return transientMemory;
@@ -101,15 +104,15 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 this.device.getWm(),
                 ((WgpuBuffer) destination.buffer()).getNativeBuffer(),
                 destination.offset(),
-                destination.length(),
-                MemorySegment.ofAddress(MemoryUtil.memAddress0(data))
+                data.remaining(),
+                MemorySegment.ofBuffer(data)
         );
-        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
+        this.flush();
     }
 
     @Override
     public void copyToBuffer(@NonNull GpuBufferSlice source, @NonNull GpuBufferSlice target) {
-        assert target.length() >= source.length();
+        assert source.length() + target.offset() < target.buffer().size();
 
         WM.copy_buffer_to_buffer(
                 this.device.getWm(),
@@ -120,6 +123,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 target.offset(),
                 source.length()
         );
+        this.flush();
     }
 
     @Override
@@ -127,8 +131,8 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
         WM.write_to_texture(
                 device.getWm(),
                 ((WgpuTexture) destination).texture,
-                MemorySegment.ofAddress(MemoryUtil.memAddress0(source)),
-                source.limit(),
+                MemorySegment.ofBuffer(source),
+                source.remaining(),
                 mipLevel,
                 depthOrLayer,
                 destX,
@@ -136,7 +140,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 width,
                 height
         );
-        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
+        this.flush();
     }
 
     @Override
@@ -158,7 +162,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 mipLevel,
                 arrayLayer
         );
-        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
+        this.flush();
     }
 
     @Override
@@ -169,13 +173,13 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     @Override
     public void copyTextureToBuffer(@NonNull GpuTexture source, @NonNull GpuBuffer destination, long offset, @NonNull Runnable callback, int mipLevel, int x, int y, int width, int height) {
         WM.copy_texture_to_buffer(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuBuffer) destination).getNativeBuffer(), offset, mipLevel, x, y, width, height);
-        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
+        this.flush();
     }
 
     @Override
     public void copyTextureToTexture(@NonNull GpuTexture source, @NonNull GpuTexture destination, int mipLevel, int destX, int destY, int sourceX, int sourceY, int width, int height) {
         WM.copy_texture_to_texture(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuTexture) destination).texture, mipLevel, destX, destY, sourceX, sourceY, width, height);
-        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
+        this.flush();
     }
 
 

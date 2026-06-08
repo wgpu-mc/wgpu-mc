@@ -21,6 +21,7 @@ public class WgpuBuffer extends GpuBuffer {
     private final WgpuDevice device;
 
     public WgpuBuffer(WgpuDevice device, String label, int usage, long size, boolean mapped) {
+        size = Mth.roundToward(size, 16);
         super(usage, size);
 
         this.device = device;
@@ -57,7 +58,7 @@ public class WgpuBuffer extends GpuBuffer {
         try(Arena arena = Arena.ofConfined()) {
             MemorySegment labelSeg = arena.allocateFrom(label);
 
-            nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofAddress(MemoryUtil.memAddress0(data)), Mth.roundToward(data.capacity(), 16));
+            nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofAddress(MemoryUtil.memAddress0(data)), data.capacity());
         }
     }
 

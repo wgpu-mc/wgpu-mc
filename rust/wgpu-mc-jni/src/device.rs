@@ -213,7 +213,7 @@ pub extern "C" fn create_texture_view(wm: &WmRenderer, texture: &wgpu::Texture, 
         base_array_layer: 0,
         array_layer_count: None,
     });
-    
+
     Box::new(texture_view)
 }
 
@@ -342,9 +342,9 @@ pub unsafe extern "C" fn copy_texture_to_buffer(
     source: &wgpu::Texture,
     dest: &wgpu::Buffer,
     offset: u64,
-    mip: u32, 
-    x: u32, 
-    y: u32, 
+    mip: u32,
+    x: u32,
+    y: u32,
     width: u32,
     height: u32
 ) {
@@ -871,13 +871,17 @@ pub extern "C" fn copy_buffer_to_texture(
         return;
     }
 
+    let texel_size = destination.format().block_copy_size(None).unwrap() as u64;
+    let skip = (source_x + source_y * source_width) as u64;
+    let offset = buffer_start + skip * texel_size;
+
     encoder.copy_buffer_to_texture(
         TexelCopyBufferInfo {
             buffer,
             layout: TexelCopyBufferLayout {
-                offset: (source_width * source_y + source_x) as BufferAddress,
+                offset: offset as BufferAddress,
                 bytes_per_row: Some(
-                    source_width * destination.format().block_copy_size(None).unwrap(),
+                    source_width * texel_size as u32,
                 ),
                 rows_per_image: Some(source_height),
             },
@@ -895,7 +899,7 @@ pub extern "C" fn copy_buffer_to_texture(
         Extent3d {
             width: copy_width,
             height: copy_height,
-            depth_or_array_layers,
+            depth_or_array_layers: 1,
         },
     );
 }
@@ -940,6 +944,7 @@ pub extern "C" fn write_to_texture(
             depth_or_array_layers,
         },
     );
+
 }
 
 #[unsafe(no_mangle)]
@@ -953,6 +958,7 @@ pub extern "C" fn blit_from_texture(
     texture_view: &wgpu::TextureView,
     surface_texture: &SurfaceTexture,
 ) {
+
     let blitter = BLITTER.get().unwrap();
 
     let mut encoder = wm

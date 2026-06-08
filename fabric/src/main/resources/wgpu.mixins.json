@@ -4,9 +4,10 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
+    "core.MixinUseWgpuBackendNotGl",
     "core.RegistryMixin",
-    "world.BlockStateMixin",
-    "core.MixinUseWgpuBackendNotGl"
+    "patch.NativeImageForceSizeAlign",
+    "world.BlockStateMixin"
   ],
   "injectors": {
     "defaultRequire": 1

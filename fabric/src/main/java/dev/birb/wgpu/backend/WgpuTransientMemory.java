@@ -65,7 +65,7 @@ public class WgpuTransientMemory implements TransientMemory, Closeable {
         var totalSize = 0;
 
         for(var buffer : data) {
-            totalSize += Mth.roundToward(buffer.limit(), (int) alignment);
+            totalSize += Mth.roundToward(buffer.remaining(), (int) alignment);
         }
 
         var bigBuffer = arena.allocate(totalSize, alignment);
@@ -73,7 +73,7 @@ public class WgpuTransientMemory implements TransientMemory, Closeable {
         long offset = 0;
         for(var buffer : data) {
             bigBuffer.asSlice(offset).copyFrom(MemorySegment.ofBuffer(buffer));
-            offset += buffer.limit() + Mth.roundToward(buffer.limit(), (int) alignment);
+            offset += buffer.remaining() + Mth.roundToward(buffer.remaining(), (int) alignment);
         }
 
         return new GpuBufferSlice(
