@@ -3,3 +3,4 @@
 /.idea
 ./\.DS_Store
 /wgpu-mc-jni/shader/**
+bindings.h
