@@ -4,30 +4,13 @@
   "package": "dev.birb.wgpu.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
-    "DebugHudMixin",
-    "TitleScreenMixin",
-    "core.MainTestRenderdocMixin",
-    "core.MinecraftClientCoreMixin",
-    "core.OptionsScreenMixin",
+    "core.MixinUseWgpuBackendNotGl",
     "core.RegistryMixin",
-    "entity.EntityRenderDispatcherMixin",
-    "entity.EntityRendererFactoryMixin",
-    "entity.EntityRenderersMixin",
-    "entity.ModelPartDataMixin",
-    "entity.ModelPartMixin",
-    "render.BuiltChunkMixin",
-    "render.GameRendererMixin",
-    "render.InGameHudMixin",
-    "render.ItemRendererMixin",
-    "render.LightmapTextureManagerMixin",
-    "render.RebuildTaskMixin",
-    "render.RenderSystemMixin",
-    "render.SpriteAtlasTextureMixin",
-    "render.WindowMixin",
-    "render.WorldRendererMixin",
     "world.BlockStateMixin"
   ],
   "injectors": {
     "defaultRequire": 1
-  }
+  },
+  "mixins": [
+  ]
 }

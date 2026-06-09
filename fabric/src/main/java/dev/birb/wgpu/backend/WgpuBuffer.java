@@ -1,78 +1,98 @@
 package dev.birb.wgpu.backend;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import dev.birb.wgpu.rust.WgpuNative;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import dev.birb.wm.WM;
 import lombok.Getter;
+import net.minecraft.util.Mth;
+import org.jspecify.annotations.NonNull;
 import org.lwjgl.system.MemoryUtil;
 
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WgpuBuffer extends GpuBuffer {
 
-    private long buffer;
-    private long mapShadow;
     @Getter
-    private ByteBuffer map;
+    private final MemorySegment nativeBuffer;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final WgpuDevice device;
 
-    public AtomicBoolean alive = new AtomicBoolean(true);
-
-    public WgpuBuffer(String label, int usage, int size) {
+    public WgpuBuffer(WgpuDevice device, String label, int usage, long size, boolean mapped) {
+        size = Mth.roundToward(size, 16);
         super(usage, size);
 
-//        if((usage & GpuBuffer.USAGE_MAP_READ) != 0 || (usage & GpuBuffer.USAGE_MAP_WRITE) != 0) {
-//            this.mapShadow = WgpuNative.createBuffer(label, usage, size);
-//        }
+        this.device = device;
 
-        this.map = MemoryUtil.memCalloc(size);
-        this.buffer = WgpuNative.createBuffer(label, usage & ~(GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_MAP_READ), size);
+        if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
+
+        try(Arena arena = Arena.ofConfined()) {
+            MemorySegment labelSeg = arena.allocateFrom(label);
+
+            if(!mapped) {
+                nativeBuffer = WM.create_buffer(
+                        device.getWm(),
+                        labelSeg,
+                        usage,
+                        Mth.roundToward(size, 16)
+                );
+            } else {
+                nativeBuffer = WM.allocate_gpu_buffer_mapped(
+                        device.getWm(),
+                        Mth.roundToward(size, 16),
+                        usage
+                );
+            }
+        }
     }
 
-    public WgpuBuffer(String label, int usage, ByteBuffer data) {
-        super(usage, data.capacity());
+    public WgpuBuffer(WgpuDevice device, String label, int usage, ByteBuffer data) {
+        super(usage, Mth.roundToward(data.capacity(), 16));
 
-        this.map = MemoryUtil.memCalloc(size);
-        MemoryUtil.memCopy(data, this.map);
-        this.buffer = WgpuNative.createBufferInit(label, usage & ~(GpuBuffer.USAGE_MAP_WRITE | GpuBuffer.USAGE_MAP_READ), data);
-    }
+        if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
 
-    public long getWgpuBuffer() {
-        return this.buffer;
+        this.device = device;
+
+        try(Arena arena = Arena.ofConfined()) {
+            MemorySegment labelSeg = arena.allocateFrom(label);
+
+            //This function will pad out the data to 16 byte alignment
+            nativeBuffer = WM.create_buffer_init(device.getWm(), labelSeg, usage, MemorySegment.ofAddress(MemoryUtil.memAddress0(data)), data.capacity());
+        }
     }
 
     @Override
     public boolean isClosed() {
-        return !alive.getAcquire();
+        return closed.get();
     }
 
     @Override
     public void close() {
-        boolean wasAlive = alive.compareAndExchange(true, false);
-        if(wasAlive) {
-            WgpuNative.dropBuffer(this.buffer);
+        if(!closed.compareAndExchange(false, true)) WM.drop_buffer(nativeBuffer);
+    }
+
+    @Override
+    public GpuBufferSlice.@NonNull MappedView map(long offset, long length, boolean read, boolean write) {
+        ByteBuffer data = MemoryUtil.memAlignedAlloc(16, (int) length);
+        if(write) {
+            return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {
+                WM.write_to_buffer(
+                        device.getWm(),
+                        this.getNativeBuffer(),
+                        offset,
+                        length,
+                        MemorySegment.ofAddress(MemoryUtil.memAddress0(data))
+                );
+                MemoryUtil.memAlignedFree(data);
+            });
         } else {
-            throw new IllegalStateException("wgpu buffer was already dropped");
+            return new GpuBufferSlice.MappedView(new GpuBufferSlice(this, offset, length), data, () -> {
+                MemoryUtil.memAlignedFree(data);
+            });
         }
     }
 
-    public static class WgpuMappedView implements MappedView {
-
-        private final ByteBuffer buffer;
-
-        public WgpuMappedView(ByteBuffer buffer) {
-            this.buffer = buffer;
-        }
-
-        @Override
-        public ByteBuffer data() {
-            return this.buffer;
-        }
-
-        @Override
-        public void close() {
-
-        }
-
-    }
 
 }

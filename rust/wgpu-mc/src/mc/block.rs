@@ -1,5 +1,5 @@
 use crate::mc::chunk::RenderLayer;
-use glam::{vec3, Mat3, Vec3};
+use glam::{Mat3, Vec3, vec3};
 use itertools::Itertools;
 use minecraft_assets::api::ModelResolver;
 use minecraft_assets::schemas;
@@ -134,7 +134,7 @@ fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Opt
         .get(&(&face.texture.0).into())
         .copied()
         .map(|tex| {
-            let tw = (tex.1 .0 - tex.0 .0, tex.1 .1 - tex.0 .1);
+            let tw = (tex.1.0 - tex.0.0, tex.1.1 - tex.0.1);
             let uvs = match face.rotation {
                 0 => ((uv[0], uv[1]), (uv[2], uv[3])),
                 90 => ((tw.1 - uv[1], uv[0]), (tw.1 - uv[3], uv[2])),
@@ -143,8 +143,8 @@ fn get_atlas_uv(face: &schemas::models::ElementFace, block_atlas: &Atlas) -> Opt
                 _ => unreachable!(),
             };
             (
-                (tex.0 .0 + uvs.0 .0, tex.0 .1 + uvs.0 .1),
-                (tex.0 .0 + uvs.1 .0, tex.0 .1 + uvs.1 .1),
+                (tex.0.0 + uvs.0.0, tex.0.1 + uvs.0.1),
+                (tex.0.0 + uvs.1.0, tex.0.1 + uvs.1.1),
             )
         })
 }
@@ -457,19 +457,19 @@ impl ModelMesh {
                             vertices: [
                                 BlockMeshVertex {
                                     position: p101,
-                                    tex_coords: [south_face.0 .1 .0, south_face.0 .1 .1],
+                                    tex_coords: [south_face.0.1.0, south_face.0.1.1],
                                 },
                                 BlockMeshVertex {
                                     position: p111,
-                                    tex_coords: [south_face.0 .1 .0, south_face.0 .0 .1],
+                                    tex_coords: [south_face.0.1.0, south_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p011,
-                                    tex_coords: [south_face.0 .0 .0, south_face.0 .0 .1],
+                                    tex_coords: [south_face.0.0.0, south_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p001,
-                                    tex_coords: [south_face.0 .0 .0, south_face.0 .1 .1],
+                                    tex_coords: [south_face.0.0.0, south_face.0.1.1],
                                 },
                             ],
                             normal: vec3(0.0, 0.0, 1.0),
@@ -480,19 +480,19 @@ impl ModelMesh {
                             vertices: [
                                 BlockMeshVertex {
                                     position: p001,
-                                    tex_coords: [west_face.0 .1 .0, west_face.0 .1 .1],
+                                    tex_coords: [west_face.0.1.0, west_face.0.1.1],
                                 },
                                 BlockMeshVertex {
                                     position: p011,
-                                    tex_coords: [west_face.0 .1 .0, west_face.0 .0 .1],
+                                    tex_coords: [west_face.0.1.0, west_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p010,
-                                    tex_coords: [west_face.0 .0 .0, west_face.0 .0 .1],
+                                    tex_coords: [west_face.0.0.0, west_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p000,
-                                    tex_coords: [west_face.0 .0 .0, west_face.0 .1 .1],
+                                    tex_coords: [west_face.0.0.0, west_face.0.1.1],
                                 },
                             ],
                             normal: vec3(-1.0, 0.0, 0.0),
@@ -503,19 +503,19 @@ impl ModelMesh {
                             vertices: [
                                 BlockMeshVertex {
                                     position: p000,
-                                    tex_coords: [north_face.0 .1 .0, north_face.0 .1 .1],
+                                    tex_coords: [north_face.0.1.0, north_face.0.1.1],
                                 },
                                 BlockMeshVertex {
                                     position: p010,
-                                    tex_coords: [north_face.0 .1 .0, north_face.0 .0 .1],
+                                    tex_coords: [north_face.0.1.0, north_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p110,
-                                    tex_coords: [north_face.0 .0 .0, north_face.0 .0 .1],
+                                    tex_coords: [north_face.0.0.0, north_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p100,
-                                    tex_coords: [north_face.0 .0 .0, north_face.0 .1 .1],
+                                    tex_coords: [north_face.0.0.0, north_face.0.1.1],
                                 },
                             ],
                             normal: vec3(0.0, 0.0, -1.0),
@@ -526,19 +526,19 @@ impl ModelMesh {
                             vertices: [
                                 BlockMeshVertex {
                                     position: p100,
-                                    tex_coords: [east_face.0 .1 .0, east_face.0 .1 .1],
+                                    tex_coords: [east_face.0.1.0, east_face.0.1.1],
                                 },
                                 BlockMeshVertex {
                                     position: p110,
-                                    tex_coords: [east_face.0 .1 .0, east_face.0 .0 .1],
+                                    tex_coords: [east_face.0.1.0, east_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p111,
-                                    tex_coords: [east_face.0 .0 .0, east_face.0 .0 .1],
+                                    tex_coords: [east_face.0.0.0, east_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p101,
-                                    tex_coords: [east_face.0 .0 .0, east_face.0 .1 .1],
+                                    tex_coords: [east_face.0.0.0, east_face.0.1.1],
                                 },
                             ],
                             normal: vec3(1.0, 0.0, 0.0),
@@ -549,19 +549,19 @@ impl ModelMesh {
                             vertices: [
                                 BlockMeshVertex {
                                     position: p010,
-                                    tex_coords: [up_face.0 .1 .0, up_face.0 .1 .1],
+                                    tex_coords: [up_face.0.1.0, up_face.0.1.1],
                                 },
                                 BlockMeshVertex {
                                     position: p011,
-                                    tex_coords: [up_face.0 .1 .0, up_face.0 .0 .1],
+                                    tex_coords: [up_face.0.1.0, up_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p111,
-                                    tex_coords: [up_face.0 .0 .0, up_face.0 .0 .1],
+                                    tex_coords: [up_face.0.0.0, up_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p110,
-                                    tex_coords: [up_face.0 .0 .0, up_face.0 .1 .1],
+                                    tex_coords: [up_face.0.0.0, up_face.0.1.1],
                                 },
                             ],
                             normal: vec3(0.0, 1.0, 0.0),
@@ -573,19 +573,19 @@ impl ModelMesh {
                             vertices: [
                                 BlockMeshVertex {
                                     position: p000,
-                                    tex_coords: [down_face.0 .1 .0, down_face.0 .1 .1],
+                                    tex_coords: [down_face.0.1.0, down_face.0.1.1],
                                 },
                                 BlockMeshVertex {
                                     position: p100,
-                                    tex_coords: [down_face.0 .1 .0, down_face.0 .0 .1],
+                                    tex_coords: [down_face.0.1.0, down_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p101,
-                                    tex_coords: [down_face.0 .0 .0, down_face.0 .0 .1],
+                                    tex_coords: [down_face.0.0.0, down_face.0.0.1],
                                 },
                                 BlockMeshVertex {
                                     position: p001,
-                                    tex_coords: [down_face.0 .0 .0, down_face.0 .1 .1],
+                                    tex_coords: [down_face.0.0.0, down_face.0.1.1],
                                 },
                             ],
                             normal: vec3(0.0, -1.0, 0.0),

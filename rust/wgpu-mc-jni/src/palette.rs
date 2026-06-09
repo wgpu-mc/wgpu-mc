@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::slice;
 
+use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JLongArray, JObject, ReleaseMode};
 use jni::sys::{jint, jlong};
-use jni::JNIEnv;
 use jni_fn::jni_fn;
 use mc_varint::VarIntRead;
 use once_cell::sync::Lazy;

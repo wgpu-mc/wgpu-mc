@@ -4,14 +4,14 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use bytemuck::{Pod, Zeroable};
-use glam::{vec3, vec4, Mat4};
+use glam::{Mat4, vec3, vec4};
 use parking_lot::RwLock;
 use wgpu::{BufferDescriptor, BufferUsages};
 
 use crate::render::atlas::Atlas;
 use crate::render::entity::EntityVertex;
 use crate::texture::UV;
-use crate::{Display, WmRenderer};
+use crate::{Gpu, WmRenderer};
 
 pub type Position = (f32, f32, f32);
 pub type EntityType = usize;
@@ -24,7 +24,7 @@ pub struct EntityManager {
 }
 
 impl EntityManager {
-    pub fn new(wgpu_state: &Display) -> Self {
+    pub fn new(wgpu_state: &Gpu) -> Self {
         Self {
             mob_texture_atlas: RwLock::new(Atlas::new(wgpu_state, false)),
             //TODO: support resizing the atlas
@@ -148,37 +148,37 @@ impl Cuboid {
             [
                 EntityVertex {
                     position: h,
-                    tex_coords: [self.textures.south.1 .0, self.textures.south.0 .1],
+                    tex_coords: [self.textures.south.1.0, self.textures.south.0.1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: e,
-                    tex_coords: [self.textures.south.1 .0, self.textures.south.1 .1],
+                    tex_coords: [self.textures.south.1.0, self.textures.south.1.1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: f,
-                    tex_coords: [self.textures.south.0 .0, self.textures.south.1 .1],
+                    tex_coords: [self.textures.south.0.0, self.textures.south.1.1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: g,
-                    tex_coords: [self.textures.south.0 .0, self.textures.south.0 .1],
+                    tex_coords: [self.textures.south.0.0, self.textures.south.0.1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: h,
-                    tex_coords: [self.textures.south.1 .0, self.textures.south.0 .1],
+                    tex_coords: [self.textures.south.1.0, self.textures.south.0.1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: f,
-                    tex_coords: [self.textures.south.0 .0, self.textures.south.1 .1],
+                    tex_coords: [self.textures.south.0.0, self.textures.south.1.1],
                     normal: [0.0, 0.0, 1.0],
                     part_id,
                 },
@@ -186,37 +186,37 @@ impl Cuboid {
             [
                 EntityVertex {
                     position: b,
-                    tex_coords: [self.textures.west.0 .0, self.textures.west.1 .1],
+                    tex_coords: [self.textures.west.0.0, self.textures.west.1.1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: g,
-                    tex_coords: [self.textures.west.1 .0, self.textures.west.0 .1],
+                    tex_coords: [self.textures.west.1.0, self.textures.west.0.1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: f,
-                    tex_coords: [self.textures.west.1 .0, self.textures.west.1 .1],
+                    tex_coords: [self.textures.west.1.0, self.textures.west.1.1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: b,
-                    tex_coords: [self.textures.west.0 .0, self.textures.west.1 .1],
+                    tex_coords: [self.textures.west.0.0, self.textures.west.1.1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: c,
-                    tex_coords: [self.textures.west.0 .0, self.textures.west.0 .1],
+                    tex_coords: [self.textures.west.0.0, self.textures.west.0.1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: g,
-                    tex_coords: [self.textures.west.1 .0, self.textures.west.0 .1],
+                    tex_coords: [self.textures.west.1.0, self.textures.west.0.1],
                     normal: [-1.0, 0.0, 0.0],
                     part_id,
                 },
@@ -224,37 +224,37 @@ impl Cuboid {
             [
                 EntityVertex {
                     position: a,
-                    tex_coords: [self.textures.north.0 .0, self.textures.north.1 .1],
+                    tex_coords: [self.textures.north.0.0, self.textures.north.1.1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: c,
-                    tex_coords: [self.textures.north.1 .0, self.textures.north.0 .1],
+                    tex_coords: [self.textures.north.1.0, self.textures.north.0.1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: b,
-                    tex_coords: [self.textures.north.1 .0, self.textures.north.1 .1],
+                    tex_coords: [self.textures.north.1.0, self.textures.north.1.1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: a,
-                    tex_coords: [self.textures.north.0 .0, self.textures.north.1 .1],
+                    tex_coords: [self.textures.north.0.0, self.textures.north.1.1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: d,
-                    tex_coords: [self.textures.north.0 .0, self.textures.north.0 .1],
+                    tex_coords: [self.textures.north.0.0, self.textures.north.0.1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
                 EntityVertex {
                     position: c,
-                    tex_coords: [self.textures.north.1 .0, self.textures.north.0 .1],
+                    tex_coords: [self.textures.north.1.0, self.textures.north.0.1],
                     normal: [0.0, 0.0, -1.0],
                     part_id,
                 },
@@ -262,37 +262,37 @@ impl Cuboid {
             [
                 EntityVertex {
                     position: a,
-                    tex_coords: [self.textures.east.1 .0, self.textures.east.1 .1],
+                    tex_coords: [self.textures.east.1.0, self.textures.east.1.1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: e,
-                    tex_coords: [self.textures.east.0 .0, self.textures.east.1 .1],
+                    tex_coords: [self.textures.east.0.0, self.textures.east.1.1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: d,
-                    tex_coords: [self.textures.east.1 .0, self.textures.east.0 .1],
+                    tex_coords: [self.textures.east.1.0, self.textures.east.0.1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: h,
-                    tex_coords: [self.textures.east.0 .0, self.textures.east.0 .1],
+                    tex_coords: [self.textures.east.0.0, self.textures.east.0.1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: d,
-                    tex_coords: [self.textures.east.1 .0, self.textures.east.0 .1],
+                    tex_coords: [self.textures.east.1.0, self.textures.east.0.1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: e,
-                    tex_coords: [self.textures.east.0 .0, self.textures.east.1 .1],
+                    tex_coords: [self.textures.east.0.0, self.textures.east.1.1],
                     normal: [1.0, 0.0, 0.0],
                     part_id,
                 },
@@ -300,37 +300,37 @@ impl Cuboid {
             [
                 EntityVertex {
                     position: h,
-                    tex_coords: [self.textures.up.0 .0, self.textures.up.0 .1],
+                    tex_coords: [self.textures.up.0.0, self.textures.up.0.1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: g,
-                    tex_coords: [self.textures.up.1 .0, self.textures.up.0 .1],
+                    tex_coords: [self.textures.up.1.0, self.textures.up.0.1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: d,
-                    tex_coords: [self.textures.up.0 .0, self.textures.up.1 .1],
+                    tex_coords: [self.textures.up.0.0, self.textures.up.1.1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: g,
-                    tex_coords: [self.textures.up.1 .0, self.textures.up.0 .1],
+                    tex_coords: [self.textures.up.1.0, self.textures.up.0.1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: c,
-                    tex_coords: [self.textures.up.1 .0, self.textures.up.1 .1],
+                    tex_coords: [self.textures.up.1.0, self.textures.up.1.1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: d,
-                    tex_coords: [self.textures.up.0 .0, self.textures.up.1 .1],
+                    tex_coords: [self.textures.up.0.0, self.textures.up.1.1],
                     normal: [0.0, 1.0, 0.0],
                     part_id,
                 },
@@ -338,37 +338,37 @@ impl Cuboid {
             [
                 EntityVertex {
                     position: b,
-                    tex_coords: [self.textures.down.0 .0, self.textures.down.0 .1],
+                    tex_coords: [self.textures.down.0.0, self.textures.down.0.1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: f,
-                    tex_coords: [self.textures.down.0 .0, self.textures.down.1 .1],
+                    tex_coords: [self.textures.down.0.0, self.textures.down.1.1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: a,
-                    tex_coords: [self.textures.down.1 .0, self.textures.down.0 .1],
+                    tex_coords: [self.textures.down.1.0, self.textures.down.0.1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: a,
-                    tex_coords: [self.textures.down.1 .0, self.textures.down.0 .1],
+                    tex_coords: [self.textures.down.1.0, self.textures.down.0.1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: f,
-                    tex_coords: [self.textures.down.0 .0, self.textures.down.1 .1],
+                    tex_coords: [self.textures.down.0.0, self.textures.down.1.1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
                 EntityVertex {
                     position: e,
-                    tex_coords: [self.textures.down.1 .0, self.textures.down.1 .1],
+                    tex_coords: [self.textures.down.1.0, self.textures.down.1.1],
                     normal: [0.0, -1.0, 0.0],
                     part_id,
                 },
@@ -426,7 +426,7 @@ fn recurse_get_names(part: &EntityPart, index: &mut usize, names: &mut HashMap<S
 
 impl Entity {
     ///Create an entity from an [EntityPart] and upload it's mesh to the GPU
-    pub fn new(name: String, root: EntityPart, wgpu_state: &Display) -> Self {
+    pub fn new(name: String, root: EntityPart, wgpu_state: &Gpu) -> Self {
         let mut parts = HashMap::new();
 
         recurse_get_names(&root, &mut 0, &mut parts);

@@ -1,4 +1,4 @@
-use glam::{ivec3, IVec3};
+use glam::{IVec3, ivec3};
 
 static VECTOR: [IVec3; 6] = [
     ivec3(-1, 0, 0),

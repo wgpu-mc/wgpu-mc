@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use chunk::SectionStorage;
-use glam::{ivec2, IVec2};
+use glam::{IVec2, ivec2};
 use indexmap::map::IndexMap;
 use minecraft_assets::schemas;
 use minecraft_assets::schemas::blockstates::multipart::StateValue;
@@ -16,7 +16,7 @@ use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::{Atlas, TextureManager};
 use crate::render::pipeline::BLOCK_ATLAS;
 use crate::util::BindableBuffer;
-use crate::{Display, WmRenderer};
+use crate::{Gpu, WmRenderer};
 
 use self::block::ModelMesh;
 use self::resource::ResourcePath;
@@ -112,7 +112,7 @@ impl Block {
                             )
                         })?;
 
-                Some((full.1 .1[0].clone(), full.0 as u16))
+                Some((full.1.1[0].clone(), full.0 as u16))
             }
         }
     }
@@ -128,7 +128,7 @@ impl Multipart {
     pub fn generate_mesh<'a>(
         &self,
         key: impl IntoIterator<Item = (&'a str, &'a schemas::blockstates::multipart::StateValue)>
-            + Clone,
+        + Clone,
         resource_provider: &dyn ResourceProvider,
         block_atlas: &Atlas,
     ) -> Arc<ModelMesh> {
@@ -273,7 +273,7 @@ pub struct MinecraftState {
 
 impl MinecraftState {
     #[must_use]
-    pub fn new(wgpu_state: &Display, resource_provider: Arc<dyn ResourceProvider>) -> Self {
+    pub fn new(wgpu_state: &Gpu, resource_provider: Arc<dyn ResourceProvider>) -> Self {
         MinecraftState {
             entity_models: RwLock::new(HashMap::new()),
 

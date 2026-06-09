@@ -2,13 +2,14 @@
 name = "wgpu-mc-demo"
 version = "0.1.0"
 authors = ["Birb <birb.seeb@gmail.com>"]
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 crate-root = "0.1.3"
 futures = "0.3"
+wgpu-mc-jni = { path = "../wgpu-mc-jni" }
 wgpu-mc = { path = "../wgpu-mc", features = ["tracing"] }
 winit = "0.30"
 glam = "0.29"
@@ -24,7 +25,12 @@ serde_yaml = "0.9.13"
 parking_lot = "0.12.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-#wgpu-mc-jni = { path = "../wgpu-mc-jni", default-features = false}
+glsl = { git = "https://github.com/wgpu-mc/glsl.git" }
+cyntax = { git = "https://github.com/wgpu-mc/cyntax.git", rev="20c1b1f12d7406809c126f3d9ed843b5f08729c3" }
+
+codespan-reporting = "0.12.0"
+string-interner = "0.19.0"
+
 [build-dependencies]
 anyhow = "1.0"
 fs_extra = "1.1"

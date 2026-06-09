@@ -1,0 +1,37 @@
+//plugins {
+//    id("fr.stardustenterprises.rust.wrapper") version("3.2.5")
+//}
+//
+//repositories {
+//    mavenCentral()
+//}
+//
+//rust {
+//    release.set(true)
+//    command.set("cargo")
+//
+//    cargoInstallTargets.set(true)
+//
+//    targets += defaultTarget()
+//}
+//
+//
+tasks.register('copyToResources', Copy) {
+    dependsOn 'copyBindings'
+
+    from ('target/release/' + System.mapLibraryName("wgpu_mc_jni"))
+    into '../fabric/build/resources/main/assets/wgpu_mc/natives/'
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.register('copyBindings', Copy) {
+    dependsOn 'build'
+
+    from 'wgpu-mc-jni/bindings.h' into '../fabric/src/main/'
+    rename 'bindings.h', 'wgpu-mc.h'
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.register("build", Exec) {
+    commandLine "cargo", "build", "--release"
+}

@@ -1,8 +1,8 @@
 use std::slice;
 
+use jni::JNIEnv;
 use jni::objects::{JClass, JLongArray, ReleaseMode};
 use jni::sys::{jint, jlong};
-use jni::JNIEnv;
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;

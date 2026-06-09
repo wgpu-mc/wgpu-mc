@@ -3,159 +3,205 @@ package dev.birb.wgpu.backend;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.GpuFence;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.*;
 import com.mojang.blaze3d.textures.GpuTexture;
-import dev.birb.wgpu.rust.WgpuNative;
+import dev.birb.wm.WM;
 import lombok.Getter;
-import net.minecraft.client.texture.NativeImage;
-import org.jetbrains.annotations.Nullable;
-import org.lwjgl.system.MemoryUtil;
+import org.joml.Vector4fc;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
+import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
-import java.util.*;
-import java.util.function.Supplier;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class WgpuCommandEncoder implements CommandEncoder {
+public class WgpuCommandEncoder implements CommandEncoderBackend {
 
-    private static List<WgpuCommandEncoder> encoders = new ArrayList<>();
-
-    private final List<WgpuRenderPass> renderPasses = new ArrayList<>();
     @Getter
-    private final Set<WgpuBuffer> mappedBuffers = new HashSet<>();
+    private final MemorySegment nativeCommandEncoder;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
-    public WgpuCommandEncoder() {
-        encoders.add(this);
+    private final WgpuTransientMemory transientMemory;
+
+    @Nullable
+    private WgpuRenderPass renderPass;
+
+    private final WgpuDevice device;
+
+    WgpuCommandEncoder(WgpuDevice device) {
+        this.device = device;
+        nativeCommandEncoder = WM.create_command_encoder(device.getWm());
+        this.transientMemory = new WgpuTransientMemory(device, this);
     }
 
     @Override
-    public RenderPass createRenderPass(Supplier<String> supplier, GpuTexture colorAttachment, OptionalInt optionalInt) {
-        WgpuRenderPass pass = new WgpuRenderPass((WgpuTexture) colorAttachment, null);
-        renderPasses.add(pass);
-        return pass;
-    }
+    public void submit() {
+        if(!this.closed.compareAndExchange(false, true)) {
+            WM.submit_command_encoder(
+                    this.device.getWm(),
+                    this.nativeCommandEncoder
+            );
 
-    @Override
-    public RenderPass createRenderPass(Supplier<String> supplier, GpuTexture colorAttachment, OptionalInt optionalInt, @Nullable GpuTexture depthAttachment, OptionalDouble optionalDouble) {
-        WgpuRenderPass pass = new WgpuRenderPass((WgpuTexture) colorAttachment, (WgpuTexture) depthAttachment);
-        renderPasses.add(pass);
-        return pass;
-    }
-
-    @Override
-    public void clearColorTexture(GpuTexture texture, int color) {
-
-    }
-
-    @Override
-    public void clearColorAndDepthTextures(GpuTexture colorAttachment, int color, GpuTexture depthAttachment, double depth) {
-
-    }
-
-    @Override
-    public void clearColorAndDepthTextures(GpuTexture colorAttachment, int color, GpuTexture depthAttachment, double depth, int scissorX, int scissorY, int scissorWidth, int scissorHeight) {
-
-    }
-
-    @Override
-    public void clearDepthTexture(GpuTexture texture, double depth) {
-
-    }
-
-    @Override
-    public void writeToBuffer(GpuBufferSlice slice, ByteBuffer source) {
-
-    }
-
-    @Override
-    public GpuBuffer.MappedView mapBuffer(GpuBuffer buffer, boolean read, boolean write) {
-        if(write) this.mappedBuffers.add((WgpuBuffer) buffer);
-
-        ByteBuffer buf = ((WgpuBuffer) buffer).getMap();
-        return new WgpuBuffer.WgpuMappedView(buf.slice(0, buf.capacity()));
-    }
-
-    @Override
-    public GpuBuffer.MappedView mapBuffer(GpuBufferSlice slice, boolean read, boolean write) {
-        if(write) this.mappedBuffers.add((WgpuBuffer) slice.buffer());
-
-        return new WgpuBuffer.WgpuMappedView(((WgpuBuffer) slice.buffer()).getMap().slice(slice.offset(), slice.length()));
-    }
-
-    @Override
-    public void writeToTexture(GpuTexture target, NativeImage source) {
-
-    }
-
-    @Override
-    public void writeToTexture(GpuTexture target, NativeImage source, int mipLevel, int intoX, int intoY, int width, int height, int x, int y) {
-
-    }
-
-    @Override
-    public void writeToTexture(GpuTexture target, IntBuffer source, NativeImage.Format format, int mipLevel, int intoX, int intoY, int width, int height) {
-
-    }
-
-    @Override
-    public void copyTextureToBuffer(GpuTexture target, GpuBuffer source, int offset, Runnable dataUploadedCallback, int mipLevel) {
-
-    }
-
-    @Override
-    public void copyTextureToBuffer(GpuTexture target, GpuBuffer source, int offset, Runnable dataUploadedCallback, int mipLevel, int intoX, int intoY, int width, int height) {
-
-    }
-
-    @Override
-    public void copyTextureToTexture(GpuTexture target, GpuTexture source, int mipLevel, int intoX, int intoY, int sourceX, int sourceY, int width, int height) {
-
-    }
-
-    @Override
-    public void presentTexture(GpuTexture texture) {
-        submitAllEncoders();
-        WgpuNative.presentTexture(((WgpuTexture) texture).getTexture());
-    }
-
-    private static void submitAllEncoders() {
-        List<WgpuCommandEncoder> oldEncoders = WgpuCommandEncoder.encoders;
-        ByteBuffer toSubmit = MemoryUtil.memCalloc(oldEncoders.size() * 32);
-        WgpuCommandEncoder.encoders = new ArrayList<>();
-
-        for (WgpuCommandEncoder encoder : oldEncoders) {
-            ByteBuffer renderPassQueue = MemoryUtil.memCalloc(32 * encoder.renderPasses.size());
-            ByteBuffer buffersToWrite = MemoryUtil.memCalloc(encoder.getMappedBuffers().size() * 16);
-
-            for(WgpuRenderPass pass : encoder.renderPasses) {
-                renderPassQueue.putLong(pass.getTarget().getTexture());
-                renderPassQueue.putLong(
-                        pass.getDepth() != null ? pass.getDepth().getTexture() : 0L
-                );
-                renderPassQueue.putLong(MemoryUtil.memAddress0(pass.getCommands()));
-                renderPassQueue.putInt(pass.getCommandCount());
-
-                //Padding
-                renderPassQueue.position(renderPassQueue.position() + 4);
+            try {
+                this.transientMemory.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
 
-            for(WgpuBuffer buffer : encoder.getMappedBuffers()) {
-                buffersToWrite.putLong(buffer.getWgpuBuffer());
-                buffersToWrite.putLong(MemoryUtil.memAddress0(buffer.getMap()));
-            }
-
-            toSubmit.putLong(MemoryUtil.memAddress0(renderPassQueue));
-            toSubmit.putLong(encoder.renderPasses.size());
-            toSubmit.putLong(MemoryUtil.memAddress0(buffersToWrite));
-            toSubmit.putLong(encoder.getMappedBuffers().size());
+            return;
         }
 
-        WgpuNative.submitEncoders(MemoryUtil.memAddress0(toSubmit), oldEncoders.size());
+        throw new IllegalStateException("Submitting an encoder twice");
+    }
+
+    private void flush() {
+        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
     }
 
     @Override
-    public GpuFence createFence() {
-        return null;
+    public @NonNull TransientMemory transientMemory() {
+        return transientMemory;
     }
+
+    @Override
+    public @NonNull RenderPassBackend createRenderPass(@NonNull RenderPassDescriptor descriptor) {
+        if(closed.get()) throw new IllegalStateException();
+        this.renderPass = new WgpuRenderPass(this.device, this, descriptor);
+        return this.renderPass;
+    }
+
+    @Override
+    public void submitRenderPass() {
+        WM.drop_render_pass(Objects.requireNonNull(this.renderPass).getNativePass());
+        WM.flush_encoder(device.getWm(), this.nativeCommandEncoder);
+    }
+
+    @Override
+    public void clearColorTexture(@NonNull GpuTexture colorTexture, @NonNull Vector4fc clearColor) {
+
+    }
+
+    @Override
+    public void clearColorAndDepthTextures(@NonNull GpuTexture colorTexture, @NonNull Vector4fc clearColor, @NonNull GpuTexture depthTexture, double clearDepth) {
+
+    }
+
+    @Override
+    public void clearColorAndDepthTextures(@NonNull GpuTexture colorTexture, @NonNull Vector4fc clearColor, @NonNull GpuTexture depthTexture, double clearDepth, int regionX, int regionY, int regionWidth, int regionHeight) {
+
+    }
+
+    @Override
+    public void clearDepthTexture(@NonNull GpuTexture depthTexture, double clearDepth) {
+
+    }
+
+    @Override
+    public void writeToBuffer(@NonNull GpuBufferSlice destination, @NonNull ByteBuffer data) {
+        WM.write_to_buffer(
+                this.device.getWm(),
+                ((WgpuBuffer) destination.buffer()).getNativeBuffer(),
+                destination.offset(),
+                data.remaining(),
+                MemorySegment.ofBuffer(data)
+        );
+        this.flush();
+    }
+
+    @Override
+    public void copyToBuffer(@NonNull GpuBufferSlice source, @NonNull GpuBufferSlice target) {
+        assert source.length() + target.offset() < target.buffer().size();
+
+        WM.copy_buffer_to_buffer(
+                this.device.getWm(),
+                nativeCommandEncoder,
+                ((WgpuBuffer) source.buffer()).getNativeBuffer(),
+                ((WgpuBuffer) target.buffer()).getNativeBuffer(),
+                source.offset(),
+                target.offset(),
+                source.length()
+        );
+        this.flush();
+    }
+
+    @Override
+    public void writeToTexture(@NonNull GpuTexture destination, @NonNull ByteBuffer source, int mipLevel, int depthOrLayer, int destX, int destY, int width, int height) {
+        WM.write_to_texture(
+                device.getWm(),
+                ((WgpuTexture) destination).texture,
+                MemorySegment.ofBuffer(source),
+                source.remaining(),
+                mipLevel,
+                depthOrLayer,
+                destX,
+                destY,
+                width,
+                height
+        );
+        this.flush();
+    }
+
+    @Override
+    public void copyBufferToTexture(@NonNull GpuBufferSlice source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, @NonNull GpuTexture destination, int destinationX, int destinationY, int copyWidth, int copyHeight, int mipLevel, int arrayLayer) {
+        WM.copy_buffer_to_texture(
+                device.getWm(),
+                this.getNativeCommandEncoder(),
+                ((WgpuBuffer) source.buffer()).getNativeBuffer(),
+                source.offset(),
+                source.offset() + source.length(),
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                ((WgpuTexture) destination).texture,
+                destinationX,
+                destinationY,
+                copyWidth,
+                copyHeight,
+                mipLevel,
+                arrayLayer
+        );
+        this.flush();
+    }
+
+    @Override
+    public void copyTextureToBuffer(@NonNull GpuTexture source, @NonNull GpuBuffer destination, long offset, @NonNull Runnable callback, int mipLevel) {
+
+    }
+
+    @Override
+    public void copyTextureToBuffer(@NonNull GpuTexture source, @NonNull GpuBuffer destination, long offset, @NonNull Runnable callback, int mipLevel, int x, int y, int width, int height) {
+        WM.copy_texture_to_buffer(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuBuffer) destination).getNativeBuffer(), offset, mipLevel, x, y, width, height);
+        this.flush();
+    }
+
+    @Override
+    public void copyTextureToTexture(@NonNull GpuTexture source, @NonNull GpuTexture destination, int mipLevel, int destX, int destY, int sourceX, int sourceY, int width, int height) {
+        WM.copy_texture_to_texture(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuTexture) destination).texture, mipLevel, destX, destY, sourceX, sourceY, width, height);
+        this.flush();
+    }
+
+
+    @Override
+    public @NonNull GpuFence createFence() {
+        return new GpuFence() {
+            @Override
+            public void close() {
+
+            }
+
+            @Override
+            public boolean awaitCompletion(long timeoutNS) {
+                return true;
+            }
+        };
+    }
+
+    @Override
+    public void writeTimestamp(@NonNull GpuQueryPool pool, int index) {
+
+    }
+
 }

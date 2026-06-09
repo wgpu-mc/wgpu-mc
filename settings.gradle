@@ -1,0 +1,26 @@
+pluginManagement {
+    repositories {
+        maven {
+            name = 'Fabric'
+            url = 'https://maven.fabricmc.net/'
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = "wgpu-mc"
+
+def subProject(String name) {
+    setupSubproject("wgpu-mc-$name") {
+        projectDir = file(name)
+    }
+}
+
+def setupSubproject(String name, Closure block) {
+    include(name)
+    project(":$name").with(block)
+}
+
+subProject("rust")
+subProject("fabric")

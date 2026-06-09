@@ -40,12 +40,12 @@ See the [render::entity] module for an example of rendering an example entity.
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 use glam::IVec3;
-use mc::chunk::BakedLayer;
 use mc::Scene;
+use mc::chunk::BakedLayer;
 pub use minecraft_assets;
 use parking_lot::{Mutex, RwLock};
 pub use wgpu;
@@ -53,10 +53,10 @@ use wgpu::{BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescripto
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::mc::resource::ResourceProvider;
 use crate::mc::MinecraftState;
+use crate::mc::resource::ResourceProvider;
 use crate::render::atlas::Atlas;
-use crate::render::pipeline::{create_bind_group_layouts, BLOCK_ATLAS, ENTITY_ATLAS};
+use crate::render::pipeline::{BLOCK_ATLAS, ENTITY_ATLAS, create_bind_group_layouts};
 
 pub mod mc;
 pub mod render;
@@ -66,13 +66,12 @@ pub mod util;
 pub use treeculler::Frustum;
 
 /// Provides access to wgpu
-pub struct Display {
+pub struct Gpu {
     pub instance: wgpu::Instance,
     pub adapter: wgpu::Adapter,
-    pub surface: Surface<'static>,
+    pub surface: Mutex<Option<Arc<Surface<'static>>>>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub config: RwLock<wgpu::SurfaceConfiguration>,
 }
 
 /// Tuple of chunk positions and baked layers
@@ -83,7 +82,7 @@ pub type ChunkUpdateData = (IVec3, Vec<BakedLayer>);
 ///
 /// `RenderGraph` is used in tandem with `World` to render scenes.
 pub struct WmRenderer {
-    pub gpu: Display,
+    pub gpu: Arc<Gpu>,
     pub bind_group_layouts: Arc<HashMap<String, BindGroupLayout>>,
     pub mc: MinecraftState,
     pub chunk_update_queue: (Sender<ChunkUpdateData>, Mutex<Receiver<ChunkUpdateData>>),
@@ -100,7 +99,7 @@ pub trait HasWindowSize {
 }
 
 impl WmRenderer {
-    pub fn new(display: Display, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
+    pub fn new(display: Arc<Gpu>, resource_provider: Arc<dyn ResourceProvider>) -> WmRenderer {
         let mc = MinecraftState::new(&display, resource_provider);
         let (sender, receiver) = channel();
         Self {

@@ -1,7 +1,7 @@
 use byteorder::LittleEndian;
 use jni::objects::{AutoElements, JClass, JFloatArray, ReleaseMode};
 use jni::sys::{jfloat, jint, jlong};
-use jni::{objects::JString, JNIEnv};
+use jni::{JNIEnv, objects::JString};
 use jni_fn::jni_fn;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -10,12 +10,12 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::slice;
 use std::{sync::Arc, time::Instant};
-use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex};
 use wgpu_mc::mc::RenderEffectsData;
+use wgpu_mc::mc::entity::{BundledEntityInstances, InstanceVertex};
 use wgpu_mc::texture::BindableTexture;
 
-use crate::application::{load_shaders, SHOULD_STOP};
 use crate::RENDERER;
+use crate::application::{SHOULD_STOP, load_shaders};
 
 pub static MATRICES: Lazy<Mutex<Matrices>> = Lazy::new(|| {
     Mutex::new(Matrices {

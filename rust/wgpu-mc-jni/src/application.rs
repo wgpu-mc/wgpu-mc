@@ -1,20 +1,19 @@
 use std::sync::Arc;
 
 use futures::executor::block_on;
-use jni::{objects::JValue, JavaVM};
+use jni::{JavaVM, objects::JValue};
 use once_cell::sync::OnceCell;
 use parking_lot::lock_api::{Mutex, RwLock};
 use wgpu_mc::{
+    Gpu, WmRenderer,
     render::graph::Geometry,
     wgpu::{
-        self,
+        self, BufferAddress, BufferBindingType, PresentMode,
         util::{BufferInitDescriptor, DeviceExt},
-        BufferAddress, BufferBindingType, PresentMode,
     },
-    Display, WmRenderer,
 };
 
-use crate::{gl::ElectrumVertex, RENDER_GRAPH};
+use crate::{RENDER_GRAPH, gl::ElectrumVertex};
 use std::collections::HashMap;
 use wgpu_mc::render::{
     graph::{RenderGraph, ResourceBacking},

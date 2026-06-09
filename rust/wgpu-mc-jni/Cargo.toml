@@ -2,7 +2,7 @@
 name = "wgpu-mc-jni"
 version = "0.1.0"
 authors = ["Birb <birb.seeb@gmail.com>"]
-edition = "2021"
+edition = "2024"
 
 [features]
 default = ["tracing"]
@@ -15,6 +15,7 @@ jni = "0.21.1"
 jni_fn = "0.1.0"
 raw-window-handle = "0.6"
 wgpu-mc = { path = "../wgpu-mc", features = ["tracing"] }
+#glfw = { git = "https://github.com/birbe/glfw.git", branch = "thin" }
 lazy_static = "1.4.0"
 strum = "0.26"
 strum_macros = "0.26"
@@ -33,15 +34,16 @@ slab = "0.4.7"
 log = "0.4.17"
 env_logger = "0.11"
 serde_yaml = "0.9"
+serde-binary = "0.5.0"
+glsl = { git = "https://github.com/wgpu-mc/glsl.git" }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["libloaderapi", "winuser"] }
+cyntax = { git = "https://github.com/wgpu-mc/cyntax.git", rev="20c1b1f12d7406809c126f3d9ed843b5f08729c3" }
 
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
+[build-dependencies]
+cbindgen = "0.29"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-x11-dl = "2.21.0"
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.9", features = ["windef", "libloaderapi", "winuser"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
