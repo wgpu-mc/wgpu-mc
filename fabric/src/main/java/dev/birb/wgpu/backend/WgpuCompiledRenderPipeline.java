@@ -189,15 +189,30 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
             });
 
             if(pipeline.wantsDepthTexture()) {
-                depthTargetState = BlazeDepthStencilState.allocate(arena);
-                BlazeDepthStencilState.active(depthTargetState, 0);
+                var state = pipeline.getDepthStencilState();
 
-                dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
+                var test = switch(state.depthTest()) {
+                    case ALWAYS_PASS -> 1;
+                    case LESS_THAN -> 2;
+//                    case LESS_THAN_OR_EQUAL -> null;
+//                    case EQUAL -> null;
+//                    case NOT_EQUAL -> null;
+//                    case GREATER_THAN_OR_EQUAL -> null;
+                    case GREATER_THAN -> 3;
+                    case NEVER_PASS -> 4;
+                    default -> 2;
+                };
+
+                depthTargetState = BlazeDepthStencilState.allocate(arena);
+                BlazeDepthStencilState.active(depthTargetState, 1);
+                BlazeDepthStencilState.compare_function(depthTargetState, test);
 
                 pipelineWithoutDepth = WM.compile_render_pipeline(
                         device.getWm(),
                         renderPipelineStruct
                 );
+
+                dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
 
             } else {
                 pipelineWithoutDepth = WM.compile_render_pipeline(
@@ -207,6 +222,7 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
 
                 depthTargetState = BlazeDepthStencilState.allocate(arena);
                 BlazeDepthStencilState.active(depthTargetState, 0);
+                BlazeDepthStencilState.compare_function(depthTargetState, 1);
 
                 dev.birb.wm.RenderPipeline.depth_stencil_state(renderPipelineStruct, depthTargetState);
 

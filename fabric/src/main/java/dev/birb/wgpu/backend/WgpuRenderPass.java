@@ -10,6 +10,7 @@ import com.mojang.blaze3d.systems.RenderPassBackend;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import dev.birb.wgpu.WgpuMcMod;
 import dev.birb.wm.*;
 import lombok.Getter;
 import net.minecraft.util.Mth;
@@ -23,6 +24,7 @@ import java.lang.foreign.*;
 import java.nio.IntBuffer;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 public class WgpuRenderPass implements RenderPassBackend, Closeable {
@@ -171,18 +173,35 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     @Override
     public void multiDrawIndexed(IntBuffer drawParameters, int instanceCount, int firstInstance, int drawCount) {
+        WgpuMcMod.LOGGER.warn("tried to multi raw indexed");
     }
 
     @Override
     public void multiDrawIndexed(PointerBuffer firstIndexOffsets, IntBuffer indexCounts, IntBuffer vertexOffsets, int drawCount) {
+        WgpuMcMod.LOGGER.warn("tried to multi draw indexed");
     }
 
     @Override
     public void drawIndexedIndirect(GpuBufferSlice commands, int drawCount) {
+        WgpuMcMod.LOGGER.warn("tried to draw indexed indiret");
     }
 
     @Override
     public <T> void drawMultipleIndexed(Collection<RenderPass.Draw<T>> draws, @Nullable GpuBuffer defaultIndexBuffer, @Nullable IndexType defaultIndexType, Collection<String> dynamicUniforms, T uniformArgument) {
+        for (RenderPass.Draw<T> draw : draws) {
+            BiConsumer<T, RenderPass.UniformUploader> uniformUploaderConsumer = draw.uniformUploaderConsumer();
+            if (uniformUploaderConsumer != null) {
+                uniformUploaderConsumer.accept(uniformArgument, this::setUniform);
+            }
+
+            assert draw.indexBuffer() != null || defaultIndexBuffer != null;
+
+            assert draw.indexType() != null || defaultIndexType != null;
+
+            this.setIndexBuffer(draw.indexBuffer() == null ? defaultIndexBuffer : draw.indexBuffer(), draw.indexType() == null ? defaultIndexType : draw.indexType());
+            this.setVertexBuffer(draw.slot(), draw.vertexBuffer().slice());
+            this.drawIndexed(draw.indexCount(), 1, draw.firstIndex(), draw.baseVertex(), 0);
+        }
     }
 
     @Override
@@ -193,14 +212,17 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     @Override
     public void multiDraw(IntBuffer drawParameters, int instanceCount, int firstInstance, int drawCount) {
+        WgpuMcMod.LOGGER.warn("tried to multi draw");
     }
 
     @Override
     public void multiDraw(IntBuffer firstVertices, IntBuffer vertexCounts, int drawCount) {
+        WgpuMcMod.LOGGER.warn("tried to multi draw");
     }
 
     @Override
     public void drawIndirect(GpuBufferSlice commands, int drawCount) {
+        WgpuMcMod.LOGGER.warn("tried to draw indirect");
     }
 
     @Override

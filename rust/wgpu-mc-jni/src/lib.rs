@@ -76,7 +76,8 @@ struct MouseState {
 
 // static ENTITIES: OnceCell<HashMap<>> = OnceCell::new();
 static RENDERER: OnceCell<WmRenderer> = OnceCell::new();
-static BLITTER: OnceCell<TextureBlitter> = OnceCell::new();
+static BLITTER: OnceCell<(wgpu::RenderPipeline, wgpu::Sampler)> = OnceCell::new();
+static CLEAR_COLOR_PIPELINE: OnceCell<wgpu::RenderPipeline> = OnceCell::new();
 
 pub static RENDER_GRAPH: OnceCell<Mutex<RenderGraph>> = OnceCell::new();
 pub static CUSTOM_GEOMETRY: OnceCell<Mutex<HashMap<String, Box<dyn Geometry>>>> = OnceCell::new();

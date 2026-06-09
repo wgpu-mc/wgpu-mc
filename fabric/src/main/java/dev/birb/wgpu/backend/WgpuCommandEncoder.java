@@ -7,6 +7,7 @@ import com.mojang.blaze3d.systems.*;
 import com.mojang.blaze3d.textures.GpuTexture;
 import dev.birb.wm.WM;
 import lombok.Getter;
+import net.minecraft.util.ARGB;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -80,22 +81,27 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public void clearColorTexture(@NonNull GpuTexture colorTexture, @NonNull Vector4fc clearColor) {
-
+        var view = device.createTextureView(colorTexture, 0, colorTexture.getMipLevels());
+        WM.clear_color_texture(this.getNativeCommandEncoder(), ((WgpuTextureView) view).getNative(), ARGB.color(
+                (int) (clearColor.x() * 255.0f), (int) (clearColor.y() * 255.0f), (int) (clearColor.z() * 255.0f) ,(int) (clearColor.w() * 255.0f)
+        ));
+        this.flush();
     }
 
     @Override
     public void clearColorAndDepthTextures(@NonNull GpuTexture colorTexture, @NonNull Vector4fc clearColor, @NonNull GpuTexture depthTexture, double clearDepth) {
-
+        this.clearColorTexture(colorTexture, clearColor);
+        this.clearDepthTexture(depthTexture, clearDepth);
     }
 
     @Override
     public void clearColorAndDepthTextures(@NonNull GpuTexture colorTexture, @NonNull Vector4fc clearColor, @NonNull GpuTexture depthTexture, double clearDepth, int regionX, int regionY, int regionWidth, int regionHeight) {
-
+        this.clearColorAndDepthTextures(colorTexture, clearColor, depthTexture, clearDepth);
     }
 
     @Override
     public void clearDepthTexture(@NonNull GpuTexture depthTexture, double clearDepth) {
-
+        WM.clear_depth_texture(nativeCommandEncoder, ((WgpuTexture) depthTexture).texture);
     }
 
     @Override
@@ -107,7 +113,6 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 data.remaining(),
                 MemorySegment.ofBuffer(data)
         );
-        this.flush();
     }
 
     @Override
@@ -140,7 +145,6 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 width,
                 height
         );
-        this.flush();
     }
 
     @Override

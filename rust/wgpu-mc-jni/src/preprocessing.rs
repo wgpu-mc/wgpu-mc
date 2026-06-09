@@ -12,7 +12,7 @@ static OPENGL_TO_WGPU_MATRIX_AST: Lazy<Statement> = Lazy::new(|| {
         Some(
             Expr::parse(r#"gl_Position = mat4(
     vec4(1.0, 0.0, 0.0, 0.0),
-    vec4(0.0, 1.0, 0.0, 0.0),
+    vec4(0.0, -1.0, 0.0, 0.0),
     vec4(0.0, 0.0, 0.5, 0.0),
     vec4(0.0, 0.0, 0.5, 1.0)
 ) * gl_Position;

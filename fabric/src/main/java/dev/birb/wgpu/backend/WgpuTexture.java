@@ -18,7 +18,7 @@ public class WgpuTexture extends GpuTexture {
         super(usage, name, gpuFormat, width, height, depthOrLayers, mips);
         
         try(Arena arena = Arena.ofConfined()) {
-            texture = WM.create_texture(device.getWm(), GpuFormatHelper.gpuFormatToRustEnum(gpuFormat), width, height, depthOrLayers, usage, arena.allocateFrom(name));
+            texture = WM.create_texture(device.getWm(), GpuFormatHelper.gpuFormatToRustEnum(gpuFormat), width, height, depthOrLayers, usage, arena.allocateFrom(name), mips);
         }
     }
 

@@ -1,5 +1,6 @@
 package dev.birb.wgpu.backend;
 
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.birb.wm.WM;
 import lombok.Getter;
@@ -18,7 +19,12 @@ public class WgpuTextureView extends GpuTextureView implements NativeResource {
         super(texture, baseMipLevel, mipLevels);
         this.device = device;
 
-        nativeView = WM.create_texture_view(this.device.getWm(), texture.texture, texture.usage());
+        var isCube = (texture.usage() & GpuTexture.USAGE_CUBEMAP_COMPATIBLE) != 0;
+
+        //0 = None for the wgpu texture view descriptor which just re-interprets it as 1
+        var arraySize = isCube ? 6 : 0;
+
+        nativeView = WM.create_texture_view(this.device.getWm(), texture.texture, texture.usage(), baseMipLevel, mipLevels, arraySize);
     }
 
     @Override

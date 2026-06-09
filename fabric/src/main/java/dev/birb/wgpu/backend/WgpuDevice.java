@@ -50,7 +50,7 @@ public class WgpuDevice implements GpuDeviceBackend {
     public @NonNull GpuSampler createSampler(@NonNull AddressMode addressModeU, @NonNull AddressMode addressModeV,
             @NonNull FilterMode minFilter, @NonNull FilterMode magFilter, int maxAnisotropy,
             @NonNull OptionalDouble maxLod) {
-        return new WgpuSampler(this);
+        return new WgpuSampler(this, addressModeU, addressModeV, minFilter, magFilter, maxAnisotropy, maxLod);
     }
 
     @Override
@@ -169,13 +169,13 @@ public class WgpuDevice implements GpuDeviceBackend {
                 "wgpu",
                 "wgpu",
                 "-",
-                false,
+                true,
                 "wgpu-mc",
                 1.0f,
                 new DeviceLimits(1, 256, 4096, 100000000, 1, 4),
                 new DeviceFeatures(true, false, false, false, false, false, false),
                 Set.of(),
-                new HintsAndWorkarounds(false, true),
+                new HintsAndWorkarounds(false, false),
                 DeviceType.DISCRETE
         );
     }

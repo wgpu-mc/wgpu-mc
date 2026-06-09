@@ -1,6 +1,6 @@
-use crate::blaze::{BindGroups_, BindingBuilder, BlazeBindingResource, BlazeRenderPassDescriptor, FfiStr, GpuFormat, PrimitiveTopology, RenderPipeline, UniformType};
+use crate::blaze::{BindGroups_, BindingBuilder, BlazeBindingResource, BlazeCompareFunction, BlazeRenderPassDescriptor, FfiStr, GpuFormat, PrimitiveTopology, RenderPipeline, UniformType};
 use crate::preprocessing::{RemovePointSize, process_shaders, shim_samplers, ProcessedShaderResult};
-use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing};
+use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing, CLEAR_COLOR_PIPELINE};
 use cyntax::MacroD;
 use futures::executor::block_on;
 use glsl::parser::Parse;
@@ -30,8 +30,10 @@ use std::sync::Arc;
 use futures::sink::unfold;
 use wgpu_mc::util::WmArena;
 use wgpu_mc::wgpu::util::{BufferInitDescriptor, DeviceExt, StagingBelt, TextureBlitterBuilder};
-use wgpu_mc::wgpu::{BlendState, BufferAddress, CurrentSurfaceTexture, Extent3d, IndexFormat, Limits, Origin3d, PresentMode, ShaderSource, SurfaceTexture, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, naga, Color, Operations};
+use wgpu_mc::wgpu::{BlendState, BufferAddress, CurrentSurfaceTexture, Extent3d, IndexFormat, Limits, Origin3d, PresentMode, ShaderSource, SurfaceTexture, TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, naga, Color, Operations, RenderPipelineDescriptor};
 use wgpu_mc::{Gpu, WmRenderer, wgpu};
+use wgpu_mc::render::graph::RenderGraph;
+use wgpu_mc::render::shaderpack::ShaderPackConfig;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn configure_surface(
@@ -88,7 +90,7 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
 
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
-        required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::DEPTH_CLIP_CONTROL,
+        required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::DEPTH_CLIP_CONTROL | wgpu::Features::IMMEDIATES,
         required_limits: Limits {
             max_bind_groups: adapter.limits().max_bind_groups,
             ..adapter.limits()
@@ -113,11 +115,103 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
 
     let wm = WmRenderer::new(Arc::new(gpu), resource_provider);
 
-    let blitter = TextureBlitterBuilder::new(&wm.gpu.device, wgpu::TextureFormat::Bgra8Unorm)
-        .sample_type(wgpu::FilterMode::Nearest)
-        .build();
+    let blit_shader = wm.gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../res/blit.wgsl"))),
+    });
 
-    drop(BLITTER.set(blitter));
+    let blit_layout = wm.gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[
+            Some(wm.bind_group_layouts.get("texture_sampler").unwrap())
+        ],
+        immediate_size: 0,
+    });
+
+    let clear_layout = wm.gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        immediate_size: 4,
+    });
+
+    let blitter = wm.gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&blit_layout),
+        vertex: wgpu::VertexState {
+            module: &blit_shader,
+            entry_point: None,
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: Default::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &blit_shader,
+            entry_point: None,
+            compilation_options: Default::default(),
+            targets: &[
+                Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    blend: None,
+                    write_mask: Default::default(),
+                })
+            ],
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let clear_shader = wm.gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../res/clear.wgsl"))),
+    });
+    
+    let clear_color_pipeline = wm.gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&clear_layout),
+        vertex: wgpu::VertexState {
+            module: &clear_shader,
+            entry_point: None,
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: Default::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &clear_shader,
+            entry_point: None,
+            compilation_options: Default::default(),
+            targets: &[
+                Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: None,
+                    write_mask: Default::default(),
+                })
+            ],
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let sampler = wm.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("wgpu-mc blitter"),
+        address_mode_u: Default::default(),
+        address_mode_v: Default::default(),
+        address_mode_w: Default::default(),
+        mag_filter: wgpu::FilterMode::Nearest,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: Default::default(),
+        lod_min_clamp: 0.0,
+        lod_max_clamp: 0.0,
+        compare: None,
+        anisotropy_clamp: 1,
+        border_color: None,
+    });
+    
+    drop(CLEAR_COLOR_PIPELINE.set(clear_color_pipeline));
+    drop(BLITTER.set((blitter, sampler)));
 
     Box::into_raw(Box::new(wm)) as *mut usize as jlong
 }
@@ -198,21 +292,23 @@ pub extern "C" fn create_command_encoder(wm: &WmRenderer) -> Box<wgpu::CommandEn
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn create_texture_view(wm: &WmRenderer, texture: &wgpu::Texture, usage: u32) -> Box<wgpu::TextureView> {
+pub extern "C" fn create_texture_view(wm: &WmRenderer, texture: &wgpu::Texture, usage: u32, base_mip: u32, mips: u32, array_count: u32) -> Box<wgpu::TextureView> {
+    let is_cube = (usage & 16) != 0;
+
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
         label: None,
         format: Some(texture.format()),
-        dimension: Some(if (usage & 16) != 0 {
+        dimension: Some(if is_cube {
             wgpu::TextureViewDimension::Cube
         } else {
             wgpu::TextureViewDimension::D2
         }),
         usage: None,
         aspect: Default::default(),
-        base_mip_level: 0,
-        mip_level_count: None,
+        base_mip_level: base_mip,
+        mip_level_count: Some(mips),
         base_array_layer: 0,
-        array_layer_count: None,
+        array_layer_count: if array_count == 0 { None } else { Some(array_count) },
     });
 
     Box::new(texture_view)
@@ -240,15 +336,18 @@ pub extern "C" fn create_render_pass(
                     depth_slice: None,
                     resolve_target: None,
                     ops: match attachment.clear_value {
-                        None => Default::default(),
-                        Some(clear_color) => wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                        None => Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        Some(clear_color) => Operations {
+                            load: wgpu::LoadOp::Clear(Color {
                                 r: clear_color[0] as f64,
                                 g: clear_color[1] as f64,
                                 b: clear_color[2] as f64,
                                 a: clear_color[3] as f64,
                             }),
-                            store: Default::default(),
+                            store: wgpu::StoreOp::Store,
                         },
                     },
                 })
@@ -258,8 +357,11 @@ pub extern "C" fn create_render_pass(
             wgpu::RenderPassDepthStencilAttachment {
                 view: &tex.texture_view,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    ..Default::default()
+                    load: match tex.clear_value {
+                        None => wgpu::LoadOp::Load,
+                        Some(clear_val) => wgpu::LoadOp::Clear(*clear_val as f32)
+                    },
+                    store: wgpu::StoreOp::Store
                 }),
                 stencil_ops: None,
             }
@@ -270,6 +372,44 @@ pub extern "C" fn create_render_pass(
     });
 
     Box::new(render_pass.forget_lifetime())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn clear_depth_texture(encoder: &mut wgpu::CommandEncoder, texture: &wgpu::Texture) {
+    encoder.clear_texture(texture, &wgpu::ImageSubresourceRange {
+        aspect: Default::default(),
+        base_mip_level: 0,
+        mip_level_count: None,
+        base_array_layer: 0,
+        array_layer_count: None,
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn clear_color_texture(encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, col: u32) {
+    let mut pass = encoder.begin_render_pass(
+        &wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[
+                Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: Default::default(),
+                })
+            ],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        }
+    );
+
+    let col = col.min(u32::MAX - 1);
+
+    pass.set_pipeline(CLEAR_COLOR_PIPELINE.get().unwrap());
+    pass.set_immediates(0, &col.to_ne_bytes());
+    pass.draw(0..3, 0..1);
 }
 
 #[unsafe(no_mangle)]
@@ -312,6 +452,8 @@ pub unsafe extern "C" fn write_to_buffer(
     wm.gpu
         .queue
         .write_buffer(buffer, start, std::slice::from_raw_parts(data, length as _));
+
+    wm.gpu.queue.submit([]);
 }
 
 #[unsafe(no_mangle)]
@@ -545,6 +687,17 @@ pub unsafe extern "C" fn compile_render_pipeline(
         vertex_stage_input_layout,
     );
 
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("shader");
+
+    let mut frag_path = path.clone();
+    frag_path.push(format!("{}.frag", render_pipeline_description.name).replace("/", "_").replace(":", "_"));
+
+    path.push(format!("{}.vert", render_pipeline_description.name).replace("/", "_").replace(":", "_"));
+    println!("{}", path.to_str().unwrap());
+    std::fs::write(frag_path, &frag_processed).unwrap();
+    std::fs::write(path, &vert_processed).unwrap();
+
     let vert_module = wm
         .gpu
         .device
@@ -708,7 +861,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
         .gpu
         .device
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
+            label: Some(&*render_pipeline_description.name),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &vert_module,
@@ -733,7 +886,12 @@ pub unsafe extern "C" fn compile_render_pipeline(
                 wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: Some(state.active == 1),
-                    depth_compare: Some(wgpu::CompareFunction::Always),
+                    depth_compare: Some(match state.compare_function {
+                        BlazeCompareFunction::Always => wgpu::CompareFunction::Always,
+                        BlazeCompareFunction::Less => wgpu::CompareFunction::Less,
+                        BlazeCompareFunction::Greater => wgpu::CompareFunction::Greater,
+                        BlazeCompareFunction::Never => wgpu::CompareFunction::Never
+                    }),
                     stencil: Default::default(),
                     bias: Default::default(),
                 }
@@ -775,14 +933,14 @@ pub extern "C" fn bind_texture_and_sampler(binding_builder: &mut BindingBuilder,
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn create_sampler(wm: &WmRenderer) -> Box<wgpu::Sampler> {
+pub extern "C" fn create_sampler(wm: &WmRenderer, address_mode_u: u32, address_mode_v: u32, min_filter: u32, mag_filter: u32, _max_anisotropy: f32, _max_lod: f64) -> Box<wgpu::Sampler> {
     Box::new(wm.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
         label: None,
-        address_mode_u: Default::default(),
-        address_mode_v: Default::default(),
-        address_mode_w: Default::default(),
-        mag_filter: Default::default(),
-        min_filter: Default::default(),
+        address_mode_u: if address_mode_u == 0 { wgpu::AddressMode::Repeat } else { wgpu::AddressMode::ClampToEdge },
+        address_mode_v: if address_mode_v == 0 { wgpu::AddressMode::Repeat } else { wgpu::AddressMode::ClampToEdge },
+        address_mode_w: wgpu::AddressMode::Repeat,
+        mag_filter: if mag_filter == 0 { wgpu::FilterMode::Nearest } else { wgpu::FilterMode::Linear },
+        min_filter: if min_filter == 0 { wgpu::FilterMode::Nearest } else { wgpu::FilterMode::Linear },
         mipmap_filter: Default::default(),
         lod_min_clamp: 0.0,
         lod_max_clamp: 0.0,
@@ -867,12 +1025,8 @@ pub extern "C" fn copy_buffer_to_texture(
     copy_width: u32,
     copy_height: u32,
     mip_level: u32,
-    _depth_or_array_layers: u32,
+    layer: u32,
 ) {
-    if mip_level != 0 {
-        return;
-    }
-
     let buffer_size = buffer.size();
 
     let source_width_u64 = source_width as u64;
@@ -929,10 +1083,6 @@ pub extern "C" fn copy_buffer_to_texture(
         valid_rows += 1;
     }
 
-    if valid_rows == 0 {
-        return;
-    }
-
     encoder.copy_buffer_to_texture(
         TexelCopyBufferInfo {
             buffer: &scratch,
@@ -948,7 +1098,7 @@ pub extern "C" fn copy_buffer_to_texture(
             origin: Origin3d {
                 x: destination_x,
                 y: destination_y,
-                z: 0,
+                z: layer,
             },
             aspect: Default::default(),
         },
@@ -973,10 +1123,6 @@ pub extern "C" fn write_to_texture(
     width: u32,
     height: u32,
 ) {
-    if mip_level != 0 {
-        return;
-    }
-
     wm.gpu.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &destination,
@@ -984,7 +1130,7 @@ pub extern "C" fn write_to_texture(
             origin: Origin3d {
                 x: dest_x,
                 y: dest_y,
-                z: 0,
+                z: depth_or_array_layers,
             },
             aspect: Default::default(),
         },
@@ -997,9 +1143,11 @@ pub extern "C" fn write_to_texture(
         Extent3d {
             width,
             height,
-            depth_or_array_layers,
+            depth_or_array_layers: 1,
         },
     );
+
+    wm.gpu.queue.submit([]);
 
 }
 
@@ -1015,14 +1163,14 @@ pub extern "C" fn blit_from_texture(
     surface_texture: &SurfaceTexture,
 ) {
 
-    let blitter = BLITTER.get().unwrap();
+    let (blitter, sampler) = BLITTER.get().unwrap();
 
     let mut encoder = wm
         .gpu
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-    let view = surface_texture
+    let surface_view = surface_texture
         .texture
         .create_view(&wgpu::TextureViewDescriptor {
             label: None,
@@ -1036,12 +1184,45 @@ pub extern "C" fn blit_from_texture(
             array_layer_count: None,
         });
 
-    blitter.copy(
-        &wm.gpu.device,
-        &mut encoder,
-        &texture_view,
-        &view,
-    );
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("wgpu-mc blit pass"),
+        color_attachments: &[
+            Some(wgpu::RenderPassColorAttachment {
+                view: &surface_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })
+        ],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+
+    let bg = wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &wm.bind_group_layouts.get("texture_sampler").unwrap(),
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&texture_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            }
+        ],
+    });
+
+    pass.set_pipeline(blitter);
+    pass.set_bind_group(0, &bg, &[]);
+    pass.draw(0..3, 0..1);
+
+    drop(pass);
 
     wm.gpu.queue.submit([encoder.finish()]);
 }
@@ -1087,7 +1268,8 @@ pub extern "C" fn create_texture(
     height: u32,
     depth_or_layers: u32,
     usage: u32,
-    name: FfiStr
+    name: FfiStr,
+    mips: u32
 ) -> Box<wgpu::Texture> {
     let mut wgpu_usage_flags = wgpu::TextureUsages::empty();
 
@@ -1105,7 +1287,7 @@ pub extern "C" fn create_texture(
             height,
             depth_or_array_layers: depth_or_layers,
         },
-        mip_level_count: 1,
+        mip_level_count: mips,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format,

@@ -179,6 +179,20 @@ pub fn create_bind_group_layouts(device: &wgpu::Device) -> HashMap<String, BindG
             }),
         ),
         (
+            "storage_texture".into(),
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Storage Texture Bind Group Layout Descriptor"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2
+                    },
+                    count: None,
+                }],
+            }),
+        ),
+        (
             "texture_sampler".into(),
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Texture Sampler Bind Group Layout Descriptor"),

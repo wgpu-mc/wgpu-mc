@@ -8,7 +8,7 @@ use std::ops::{Deref, Index, Range};
 use std::vec::IntoIter;
 use glsl::syntax::TypeSpecifierNonArray;
 use wgpu_mc::{wgpu, WmRenderer};
-use wgpu_mc::wgpu::{BufferAddress, BufferSize};
+use wgpu_mc::wgpu::{BlendState, BufferAddress, BufferSize};
 
 #[repr(C)]
 pub struct RawArray<T: Sized> {
@@ -95,7 +95,7 @@ pub struct BlazeRenderPassDescriptor<'a> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn dummy(_: BlazeRenderPassDescriptor) {}
+pub extern "C" fn dummy(_: BlazeRenderPassDescriptor, _: BlazeCompareFunction) {}
 
 #[repr(C)]
 #[derive(Clone, Debug)]
@@ -264,22 +264,36 @@ impl Debug for FfiStr {
 pub struct FragState {}
 
 #[repr(C)]
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BlazeBindGroupLayout {
     pub entries: Box<RawArray<BindGroupEntryDescriptor>>,
+}
+
+pub struct BlazeBlendState {
+
 }
 
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct BlazeColorTargetState {
-    pub format: GpuFormat
+    pub format: GpuFormat,
+    pub write_mask: u64,
+    // pub blend_function: Option<Box<BlazeBlendState>>
+}
+
+#[repr(u64)]
+#[derive(Copy, Clone, Debug)]
+pub enum BlazeCompareFunction {
+    Always = 1,
+    Less = 2,
+    Greater = 3,
+    Never = 4
 }
 
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct BlazeDepthStencilState {
-    compare_function: u64,
+    pub compare_function: BlazeCompareFunction,
     pub active: u64
 }
 
