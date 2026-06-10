@@ -28,12 +28,15 @@ public class WgpuDevice implements GpuDeviceBackend {
     @Getter
     private final MemorySegment wm;
 
+    private final WgpuCommandEncoder globalEncoder;
+
     // private final BiFunction<Identifier, ShaderType, String> shaderSourceGetter;
 
     public WgpuDevice(ShaderSource defaultShaderSource) {
         this.defaultShaderSource = defaultShaderSource;
 
         this.wm = MemorySegment.ofAddress(WgpuNative.create_device());
+        this.globalEncoder = new WgpuCommandEncoder(this);
     }
 
     @Override
@@ -43,7 +46,7 @@ public class WgpuDevice implements GpuDeviceBackend {
 
     @Override
     public @NonNull CommandEncoderBackend createCommandEncoder() {
-        return new WgpuCommandEncoder(this);
+        return this.globalEncoder;
     }
 
     @Override
@@ -173,9 +176,9 @@ public class WgpuDevice implements GpuDeviceBackend {
                 "wgpu-mc",
                 1.0f,
                 new DeviceLimits(1, 256, 4096, 100000000, 1, 4),
-                new DeviceFeatures(true, false, false, false, false, false, false),
+                new DeviceFeatures(true, false, false, false, true, false, false),
                 Set.of(),
-                new HintsAndWorkarounds(false, false),
+                new HintsAndWorkarounds(true, false),
                 DeviceType.DISCRETE
         );
     }

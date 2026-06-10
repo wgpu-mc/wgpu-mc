@@ -162,6 +162,20 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                     break;
                 }
 
+                if(colorTargetState.blendFunction().isPresent()) {
+                    var f = colorTargetState.blendFunction().get();
+                    var blazeBlendFun = BlazeBlendState.allocate(arena);
+                    
+                    BlazeBlendState.src_color_factor(blazeBlendFun, GpuFormatHelper.blendFactorToRustEnum(f.color().sourceFactor()));
+                    BlazeBlendState.dst_color_factor(blazeBlendFun, GpuFormatHelper.blendFactorToRustEnum(f.color().destFactor()));
+                    BlazeBlendState.src_alpha_factor(blazeBlendFun, GpuFormatHelper.blendFactorToRustEnum(f.alpha().sourceFactor()));
+                    BlazeBlendState.dst_alpha_factor(blazeBlendFun, GpuFormatHelper.blendFactorToRustEnum(f.alpha().destFactor()));
+                    BlazeBlendState.color_op(blazeBlendFun, GpuFormatHelper.blendOpToRustEnum(f.color().op()));
+                    BlazeBlendState.alpha_op(blazeBlendFun, GpuFormatHelper.blendOpToRustEnum(f.alpha().op()));
+                    
+                    BlazeColorTargetState.blend_function(colorTargetStates, blazeBlendFun);
+                }
+
                 var slice = BlazeColorTargetState.asSlice(colorTargetStates, i);
                 BlazeColorTargetState.format(slice, GpuFormatHelper.gpuFormatToRustEnum(colorTargetState.format()));
             }
@@ -194,17 +208,16 @@ public class WgpuCompiledRenderPipeline implements CompiledRenderPipeline {
                 var test = switch(state.depthTest()) {
                     case ALWAYS_PASS -> 1;
                     case LESS_THAN -> 2;
-//                    case LESS_THAN_OR_EQUAL -> null;
-//                    case EQUAL -> null;
-//                    case NOT_EQUAL -> null;
-//                    case GREATER_THAN_OR_EQUAL -> null;
-                    case GREATER_THAN -> 3;
-                    case NEVER_PASS -> 4;
-                    default -> 2;
+                    case LESS_THAN_OR_EQUAL -> 3;
+                    case EQUAL -> 4;
+                    case NOT_EQUAL -> 5;
+                    case GREATER_THAN_OR_EQUAL -> 6;
+                    case GREATER_THAN -> 7;
+                    case NEVER_PASS -> 8;
                 };
 
                 depthTargetState = BlazeDepthStencilState.allocate(arena);
-                BlazeDepthStencilState.active(depthTargetState, 1);
+                BlazeDepthStencilState.active(depthTargetState, state.writeDepth() ? 1 : 0);
                 BlazeDepthStencilState.compare_function(depthTargetState, test);
 
                 pipelineWithoutDepth = WM.compile_render_pipeline(

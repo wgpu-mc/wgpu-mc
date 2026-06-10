@@ -269,7 +269,100 @@ pub struct BlazeBindGroupLayout {
     pub entries: Box<RawArray<BindGroupEntryDescriptor>>,
 }
 
+#[repr(C)]
+#[derive(Copy, Debug, Clone)]
+pub enum BlazeBlendOp {
+    Add = 1,
+    Subtract = 2,
+    ReverseSubtract = 3,
+    Min = 4,
+    Max = 5
+}
+
+impl BlazeBlendOp {
+
+    pub fn to_wgpu(&self) -> wgpu::BlendOperation {
+        match self {
+            BlazeBlendOp::Add => wgpu::BlendOperation::Add,
+            BlazeBlendOp::Subtract => wgpu::BlendOperation::Subtract,
+            BlazeBlendOp::ReverseSubtract => wgpu::BlendOperation::ReverseSubtract,
+            BlazeBlendOp::Min => wgpu::BlendOperation::Min,
+            BlazeBlendOp::Max => wgpu::BlendOperation::Max
+        }
+    }
+
+}
+
+#[repr(C)]
+#[derive(Copy, Debug, Clone)]
+pub enum BlazeBlendFactor {
+    ConstantAlpha = 1,
+    ConstantColor = 2,
+    DstAlpha = 3,
+    DstColor = 4,
+    One = 5,
+    OneMinusConstantAlpha = 6,
+    OneMinusConstantColor = 7,
+    OneMinusDstAlpha = 8,
+    OneMinusDstColor = 9,
+    OneMinusSrcAlpha = 10,
+    OneMinusSrcColor = 11,
+    SrcAlpha = 12 ,
+    SrcAlphaSaturate = 13,
+    SrcColor = 14,
+    Zero = 15,
+}
+
+impl BlazeBlendFactor {
+
+    pub fn to_wgpu(&self) -> wgpu::BlendFactor {
+        match self {
+            BlazeBlendFactor::ConstantAlpha | BlazeBlendFactor::ConstantColor => wgpu::BlendFactor::Constant,
+            BlazeBlendFactor::DstAlpha => wgpu::BlendFactor::DstAlpha,
+            BlazeBlendFactor::DstColor => wgpu::BlendFactor::Dst,
+            BlazeBlendFactor::One => wgpu::BlendFactor::One,
+            BlazeBlendFactor::OneMinusConstantAlpha => wgpu::BlendFactor::OneMinusConstant,
+            BlazeBlendFactor::OneMinusConstantColor => wgpu::BlendFactor::OneMinusConstant,
+            BlazeBlendFactor::OneMinusDstAlpha => wgpu::BlendFactor::OneMinusDstAlpha,
+            BlazeBlendFactor::OneMinusDstColor => wgpu::BlendFactor::OneMinusDst,
+            BlazeBlendFactor::OneMinusSrcAlpha => wgpu::BlendFactor::OneMinusSrcAlpha,
+            BlazeBlendFactor::OneMinusSrcColor => wgpu::BlendFactor::OneMinusSrc,
+            BlazeBlendFactor::SrcAlpha => wgpu::BlendFactor::SrcAlpha,
+            BlazeBlendFactor::SrcAlphaSaturate => wgpu::BlendFactor::SrcAlphaSaturated,
+            BlazeBlendFactor::SrcColor => wgpu::BlendFactor::Src,
+            BlazeBlendFactor::Zero => wgpu::BlendFactor::Zero
+        }
+    }
+
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
 pub struct BlazeBlendState {
+    pub src_color_factor: BlazeBlendFactor,
+    pub dst_color_factor: BlazeBlendFactor,
+    pub color_op: BlazeBlendOp,
+    pub src_alpha_factor: BlazeBlendFactor,
+    pub dst_alpha_factor: BlazeBlendFactor,
+    pub alpha_op: BlazeBlendOp
+}
+
+impl BlazeBlendState {
+
+    pub fn to_wgpu(&self) -> wgpu::BlendState {
+        wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: self.src_color_factor.to_wgpu(),
+                dst_factor: self.dst_color_factor.to_wgpu(),
+                operation: self.color_op.to_wgpu(),
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: self.src_alpha_factor.to_wgpu(),
+                dst_factor: self.dst_alpha_factor.to_wgpu(),
+                operation: self.alpha_op.to_wgpu(),
+            },
+        }
+    }
 
 }
 
@@ -278,16 +371,20 @@ pub struct BlazeBlendState {
 pub struct BlazeColorTargetState {
     pub format: GpuFormat,
     pub write_mask: u64,
-    // pub blend_function: Option<Box<BlazeBlendState>>
+    pub blend_function: Option<Box<BlazeBlendState>>
 }
 
 #[repr(u64)]
 #[derive(Copy, Clone, Debug)]
 pub enum BlazeCompareFunction {
-    Always = 1,
-    Less = 2,
-    Greater = 3,
-    Never = 4
+    AlwaysPass = 1,
+    LessThan = 2,
+    LessThanOrEqual = 3,
+    Equal = 4,
+    NotEqual = 5,
+    GreaterThanOrEqual = 6,
+    GreaterThan = 7,
+    NeverPass = 8
 }
 
 #[repr(C)]

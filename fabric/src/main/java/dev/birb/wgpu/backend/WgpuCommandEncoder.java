@@ -12,7 +12,6 @@ import org.joml.Vector4fc;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.io.IOException;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -39,22 +38,22 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
 
     @Override
     public void submit() {
-        if(!this.closed.compareAndExchange(false, true)) {
-            WM.submit_command_encoder(
-                    this.device.getWm(),
-                    this.nativeCommandEncoder
-            );
+        this.flush();
 
-            try {
-                this.transientMemory.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-
-            return;
-        }
-
-        throw new IllegalStateException("Submitting an encoder twice");
+//        if(!this.closed.compareAndExchange(false, true)) {
+//            WM.submit_command_encoder(
+//                    this.device.getWm(),
+//                    this.nativeCommandEncoder
+//            );
+//
+//            try {
+//                this.transientMemory.close();
+//            } catch (IOException e) {
+//                throw new RuntimeException(e);
+//            }
+//
+//            return;
+//        }
     }
 
     private void flush() {
@@ -85,7 +84,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
         WM.clear_color_texture(this.getNativeCommandEncoder(), ((WgpuTextureView) view).getNative(), ARGB.color(
                 (int) (clearColor.x() * 255.0f), (int) (clearColor.y() * 255.0f), (int) (clearColor.z() * 255.0f) ,(int) (clearColor.w() * 255.0f)
         ));
-        this.flush();
+//        this.flush();
     }
 
     @Override
@@ -102,6 +101,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     @Override
     public void clearDepthTexture(@NonNull GpuTexture depthTexture, double clearDepth) {
         WM.clear_depth_texture(nativeCommandEncoder, ((WgpuTexture) depthTexture).texture);
+//        this.flush();
     }
 
     @Override
@@ -128,7 +128,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 target.offset(),
                 source.length()
         );
-        this.flush();
+//        this.flush();
     }
 
     @Override
@@ -167,7 +167,7 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
                 mipLevel,
                 arrayLayer
         );
-        this.flush();
+//        this.flush();
     }
 
     @Override
@@ -178,13 +178,13 @@ public class WgpuCommandEncoder implements CommandEncoderBackend {
     @Override
     public void copyTextureToBuffer(@NonNull GpuTexture source, @NonNull GpuBuffer destination, long offset, @NonNull Runnable callback, int mipLevel, int x, int y, int width, int height) {
         WM.copy_texture_to_buffer(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuBuffer) destination).getNativeBuffer(), offset, mipLevel, x, y, width, height);
-        this.flush();
+//        this.flush();
     }
 
     @Override
     public void copyTextureToTexture(@NonNull GpuTexture source, @NonNull GpuTexture destination, int mipLevel, int destX, int destY, int sourceX, int sourceY, int width, int height) {
         WM.copy_texture_to_texture(nativeCommandEncoder, ((WgpuTexture) source).texture, ((WgpuTexture) destination).texture, mipLevel, destX, destY, sourceX, sourceY, width, height);
-        this.flush();
+//        this.flush();
     }
 
 

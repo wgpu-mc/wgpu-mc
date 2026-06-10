@@ -1,4 +1,4 @@
-use crate::blaze::{BindGroups_, BindingBuilder, BlazeBindingResource, BlazeCompareFunction, BlazeRenderPassDescriptor, FfiStr, GpuFormat, PrimitiveTopology, RenderPipeline, UniformType};
+use crate::blaze::{BindGroups_, BindingBuilder, BlazeBindingResource, BlazeBlendState, BlazeCompareFunction, BlazeRenderPassDescriptor, FfiStr, GpuFormat, PrimitiveTopology, RenderPipeline, UniformType};
 use crate::preprocessing::{RemovePointSize, process_shaders, shim_samplers, ProcessedShaderResult};
 use crate::{BLITTER, MinecraftResourceManagerAdapter, RENDERER, preprocessing, CLEAR_COLOR_PIPELINE};
 use cyntax::MacroD;
@@ -71,7 +71,7 @@ pub unsafe extern "C" fn drop_surface(wm: &WmRenderer) {
 #[jni_fn("dev.birb.wgpu.rust.WgpuNative")]
 pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::DX12,
+        backends: wgpu::Backends::VULKAN,
         flags: wgpu::InstanceFlags::VALIDATION
             | wgpu::InstanceFlags::DEBUG
             | wgpu::InstanceFlags::GPU_BASED_VALIDATION,
@@ -90,7 +90,7 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
 
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
-        required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::DEPTH_CLIP_CONTROL | wgpu::Features::IMMEDIATES,
+        required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::DEPTH_CLIP_CONTROL | wgpu::Features::IMMEDIATES | wgpu::Features::CLEAR_TEXTURE,
         required_limits: Limits {
             max_bind_groups: adapter.limits().max_bind_groups,
             ..adapter.limits()
@@ -315,6 +315,9 @@ pub extern "C" fn create_texture_view(wm: &WmRenderer, texture: &wgpu::Texture, 
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn drop_bind_groups(_: Box<BindGroups_>) { }
+
+#[unsafe(no_mangle)]
 pub extern "C" fn drop_binding_builder(_: Box<BindingBuilder>) { }
 
 #[unsafe(no_mangle)]
@@ -442,6 +445,19 @@ pub extern "C" fn create_buffer(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn create_staging_belt(wm: &WmRenderer) -> Box<StagingBelt> {
+    Box::new(StagingBelt::new(wm.gpu.device.clone(), 1024))
+}
+
+type BeltAllocation = (wgpu::Buffer, u64, u64);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn belt_allocate(belt: &mut StagingBelt, size: u64, alignment: u64) -> Box<BeltAllocation> {
+    let allocation = belt.allocate(NonZero::new(size).unwrap(), NonZero::new(alignment).unwrap());
+    Box::new((allocation.buffer().clone(), allocation.offset(), allocation.size().get()))
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn write_to_buffer(
     wm: &WmRenderer,
     buffer: &wgpu::Buffer,
@@ -452,8 +468,6 @@ pub unsafe extern "C" fn write_to_buffer(
     wm.gpu
         .queue
         .write_buffer(buffer, start, std::slice::from_raw_parts(data, length as _));
-
-    wm.gpu.queue.submit([]);
 }
 
 #[unsafe(no_mangle)]
@@ -578,7 +592,7 @@ pub unsafe extern "C" fn set_vertex_buffer(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn draw(
     pass: &mut wgpu::RenderPass,
-    bind_groups: Box<BindGroups_>,
+    bind_groups: &BindGroups_,
     vertex_count: u32,
     instance_count: u32,
     first_vertex: u32,
@@ -595,9 +609,47 @@ pub unsafe extern "C" fn draw(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn multi_draw_indirect(
+    pass: &mut wgpu::RenderPass,
+    bind_groups: &BindGroups_,
+    index_count: u32,
+    instance_count: u32,
+    first_index: u32,
+    vertex_offset: i32,
+    first_instance: u32,
+) {
+    bind_groups.0.iter().enumerate().for_each(|(index, group)| {
+        pass.set_bind_group(index as u32, group, &[]);
+    });
+
+    pass.draw_indexed(
+        first_index..first_index + index_count,
+        vertex_offset,
+        first_instance..first_instance + instance_count,
+    );
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn draw_indirect(
+    pass: &mut wgpu::RenderPass,
+    bind_groups: &BindGroups_,
+    draws: &wgpu::Buffer,
+    buffer_offset: u64
+) {
+    bind_groups.0.iter().enumerate().for_each(|(index, group)| {
+        pass.set_bind_group(index as u32, group, &[]);
+    });
+
+    pass.draw_indirect(
+        draws,
+        buffer_offset
+    );
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn draw_indexed(
     pass: &mut wgpu::RenderPass,
-    bind_groups: Box<BindGroups_>,
+    bind_groups: &BindGroups_,
     index_count: u32,
     instance_count: u32,
     first_index: u32,
@@ -887,10 +939,14 @@ pub unsafe extern "C" fn compile_render_pipeline(
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: Some(state.active == 1),
                     depth_compare: Some(match state.compare_function {
-                        BlazeCompareFunction::Always => wgpu::CompareFunction::Always,
-                        BlazeCompareFunction::Less => wgpu::CompareFunction::Less,
-                        BlazeCompareFunction::Greater => wgpu::CompareFunction::Greater,
-                        BlazeCompareFunction::Never => wgpu::CompareFunction::Never
+                        BlazeCompareFunction::AlwaysPass => wgpu::CompareFunction::Always,
+                        BlazeCompareFunction::LessThan => wgpu::CompareFunction::Less,
+                        BlazeCompareFunction::LessThanOrEqual => wgpu::CompareFunction::LessEqual,
+                        BlazeCompareFunction::Equal => wgpu::CompareFunction::Equal,
+                        BlazeCompareFunction::NotEqual => wgpu::CompareFunction::NotEqual,
+                        BlazeCompareFunction::GreaterThanOrEqual => wgpu::CompareFunction::GreaterEqual,
+                        BlazeCompareFunction::GreaterThan => wgpu::CompareFunction::Greater,
+                        BlazeCompareFunction::NeverPass => wgpu::CompareFunction::Never
                     }),
                     stencil: Default::default(),
                     bias: Default::default(),
@@ -904,7 +960,7 @@ pub unsafe extern "C" fn compile_render_pipeline(
                 targets: &render_pipeline_description.color_target_states.iter().map(|state| {
                     Some(wgpu::ColorTargetState {
                         format: state.format.to_wgpu_texture_format(),
-                        blend: Some(BlendState::ALPHA_BLENDING),
+                        blend: state.blend_function.as_deref().map(BlazeBlendState::to_wgpu),
                         write_mask: Default::default(),
                     })
                 }).collect::<Vec<_>>(),
@@ -1146,8 +1202,6 @@ pub extern "C" fn write_to_texture(
             depth_or_array_layers: 1,
         },
     );
-
-    wm.gpu.queue.submit([]);
 
 }
 

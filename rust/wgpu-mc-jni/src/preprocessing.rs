@@ -91,10 +91,16 @@ impl VisitorMut for TypeChanger {
 
 impl Visitor for SamplerFinder {
     fn visit_single_declaration(&mut self, decl: &SingleDeclaration) -> Visit {
-        self.names
-            .insert(decl.name.as_ref().unwrap().0.clone(), decl.ty.ty.ty.clone());
+        // dbg!(decl);
+        match decl.name.as_ref() {
+            None => Visit::Parent,
+            Some(name) => {
+                self.names
+                    .insert(name.0.clone(), decl.ty.ty.ty.clone());
 
-        Visit::Children
+                Visit::Children
+            }
+        }
     }
 
     fn visit_type_qualifier_spec(&mut self, t: &TypeQualifierSpec) -> Visit {
@@ -405,6 +411,14 @@ pub struct UniformAnnotator {
     pub active: bool,
 }
 
+pub struct IncrementingUniformAnnotator {
+    pub uniform_found: bool,
+    pub accum: u32,
+    pub uniform_binding: Option<(u32, u32)>,
+    pub uniform_sets: HashMap<String, (u32, u32)>,
+    pub active: bool,
+}
+
 pub struct OrphanDestroyer {
     pub uniform_found: bool,
     pub active: bool,
@@ -482,7 +496,12 @@ impl VisitorMut for SamplerBufferRewriter<'_> {
         if let Declaration::InitDeclaratorList(i) = decl {
             i.visit_mut(self);
 
-            let name = &i.head.name.as_ref().unwrap().0;
+            let name = match &i.head.name {
+                None => {
+                    return Visit::Parent
+                },
+                Some(name) => &name.0,
+            };
 
             if self.is_sampler_buffer {
                 self.buffers.push(name.clone());
@@ -564,6 +583,91 @@ impl VisitorMut for OrphanDestroyer {
         Visit::Children
     }
 }
+
+impl VisitorMut for IncrementingUniformAnnotator {
+    fn visit_block(&mut self, block: &mut Block) -> Visit {
+        self.uniform_found = false;
+
+        self.active = true;
+        block.qualifier.to_owned().visit_mut(self);
+        self.active = false;
+
+        if self.uniform_found {
+            let name = &block.name.0;
+
+            if !self.uniform_sets.contains_key(name) {
+                self.uniform_sets.insert(name.clone(), (0, self.accum));
+                self.accum += 1;
+            }
+
+            self.uniform_binding = Some(
+                self.uniform_sets
+                    .get(&block.name.0)
+                    .copied()
+                    .expect(&block.name.0),
+            );
+        }
+
+        Visit::Children
+    }
+
+    fn visit_single_declaration(
+        &mut self,
+        single_decl: &mut glsl::syntax::SingleDeclaration,
+    ) -> Visit {
+        self.uniform_found = false;
+
+        self.active = true;
+        single_decl.ty.to_owned().visit_mut(self);
+        self.active = false;
+
+        if self.uniform_found {
+            let name = &single_decl.name.as_ref().unwrap().0;
+
+            if !self.uniform_sets.contains_key(name) {
+                self.uniform_sets.insert(name.clone(), (0, self.accum));
+                self.accum += 1;
+            }
+
+            self.uniform_binding = Some(
+                self.uniform_sets
+                    .get(&single_decl.name.as_ref().unwrap().0)
+                    .copied()
+                    .expect(&single_decl.name.as_ref().unwrap().0),
+            );
+        }
+
+        Visit::Children
+    }
+
+    fn visit_type_qualifier(&mut self, qual: &mut TypeQualifier) -> Visit {
+        match self.uniform_binding.take() {
+            Some((set, binding)) => {
+                qual.qualifiers.0.insert(
+                    0,
+                    TypeQualifierSpec::parse(format!("layout(set = {set}, binding = {binding})"))
+                        .unwrap(),
+                );
+
+                return Visit::Parent;
+            }
+            None => {}
+        }
+
+        Visit::Children
+    }
+
+    fn visit_storage_qualifier(&mut self, qual: &mut StorageQualifier) -> Visit {
+        if !self.active {
+            return Visit::Children;
+        }
+
+        self.uniform_found = matches!(qual, StorageQualifier::Uniform);
+
+        Visit::Children
+    }
+}
+
 
 impl VisitorMut for UniformAnnotator {
     fn visit_block(&mut self, block: &mut Block) -> Visit {

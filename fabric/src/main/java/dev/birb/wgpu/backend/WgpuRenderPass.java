@@ -36,6 +36,9 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
             4, ValueLayout.JAVA_FLOAT
     );
 
+    private boolean rebuildBindGroups = true;
+    private MemorySegment bindGroupCache;
+
     @Nullable
     private final MemorySegment bindingBuilder = WM.create_binding_builder();
 
@@ -117,8 +120,22 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     }
 
+    public MemorySegment buildBindGroups(MemorySegment pipeline) {
+        if(this.rebuildBindGroups || this.bindGroupCache == null) {
+            if(this.bindGroupCache != null) {
+                WM.drop_bind_groups(this.bindGroupCache);
+                this.bindGroupCache = null;
+            }
+            this.bindGroupCache = WM.finalize_binding_builder(device.getWm(), bindingBuilder, pipeline);
+            this.rebuildBindGroups = false;
+        }
+
+        return this.bindGroupCache;
+    }
+
     @Override
     public void setPipeline(@NonNull RenderPipeline pipeline) {
+        this.rebuildBindGroups = true;
         WgpuCompiledRenderPipeline wgpuPipeline = WgpuCompiledRenderPipeline.wgpuRenderPipelines.computeIfAbsent(pipeline, p -> new WgpuCompiledRenderPipeline(this.device, p, this.device.getDefaultShaderSource()));
         MemorySegment nativePipeline = this.wantsDepth ? wgpuPipeline.getPipelineWithDepth() : wgpuPipeline.getPipelineWithoutDepth();
         WM.bind_render_pipeline_to_pass(nativePass, nativePipeline);
@@ -128,6 +145,7 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
     @Override
     public void bindTexture(@NonNull String name, @org.jspecify.annotations.Nullable GpuTextureView textureView, @org.jspecify.annotations.Nullable GpuSampler sampler) {
         try(var arena = Arena.ofConfined()) {
+            this.rebuildBindGroups = true;
             WM.bind_texture_and_sampler(this.bindingBuilder, arena.allocateFrom(name), ((WgpuTextureView) textureView).getNative(), ((WgpuSampler) sampler).getNativeSampler());
         }
     }
@@ -140,6 +158,7 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     @Override
     public void setUniform(@NonNull String name, @NonNull GpuBufferSlice slice) {
+        this.rebuildBindGroups = true;
         try(var arena = Arena.ofConfined()) {
             WM.bind_buffer(this.bindingBuilder, arena.allocateFrom(name), ((WgpuBuffer) slice.buffer()).getNativeBuffer(), slice.offset(), Mth.roundToward(slice.length(), 16));
         }
@@ -167,18 +186,18 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     @Override
     public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int vertexOffset, int firstInstance) {
-        MemorySegment bindGroups = WM.finalize_binding_builder(device.getWm(), this.bindingBuilder, this.activePipeline);
+        MemorySegment bindGroups = this.buildBindGroups(this.activePipeline);
         WM.draw_indexed(this.nativePass, bindGroups, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     @Override
     public void multiDrawIndexed(IntBuffer drawParameters, int instanceCount, int firstInstance, int drawCount) {
-        WgpuMcMod.LOGGER.warn("tried to multi raw indexed");
+
     }
 
     @Override
     public void multiDrawIndexed(PointerBuffer firstIndexOffsets, IntBuffer indexCounts, IntBuffer vertexOffsets, int drawCount) {
-        WgpuMcMod.LOGGER.warn("tried to multi draw indexed");
+
     }
 
     @Override
@@ -222,7 +241,8 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     @Override
     public void drawIndirect(GpuBufferSlice commands, int drawCount) {
-        WgpuMcMod.LOGGER.warn("tried to draw indirect");
+        MemorySegment bindGroups = this.buildBindGroups(this.activePipeline);
+        WM.draw_indirect(this.nativePass, bindGroups, ((WgpuBuffer) commands.buffer()).getNativeBuffer(), commands.offset());
     }
 
     @Override

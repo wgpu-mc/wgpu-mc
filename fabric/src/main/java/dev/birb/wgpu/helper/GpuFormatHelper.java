@@ -1,9 +1,41 @@
 package dev.birb.wgpu.helper;
 
 import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.platform.BlendFactor;
+import com.mojang.blaze3d.platform.BlendOp;
 import dev.birb.wm.WM;
 
 public class GpuFormatHelper {
+    
+    public static int blendFactorToRustEnum(BlendFactor factor) {
+        return switch(factor) {
+            case CONSTANT_ALPHA -> 1;
+            case CONSTANT_COLOR -> 2;
+            case DST_ALPHA -> 3;
+            case DST_COLOR -> 4;
+            case ONE -> 5;
+            case ONE_MINUS_CONSTANT_ALPHA -> 6;
+            case ONE_MINUS_CONSTANT_COLOR -> 7;
+            case ONE_MINUS_DST_ALPHA -> 8;
+            case ONE_MINUS_DST_COLOR -> 9;
+            case ONE_MINUS_SRC_ALPHA -> 10;
+            case ONE_MINUS_SRC_COLOR -> 11;
+            case SRC_ALPHA -> 12;
+            case SRC_ALPHA_SATURATE -> 13;
+            case SRC_COLOR -> 14;
+            case ZERO -> 15;
+        };
+    }
+    
+    public static int blendOpToRustEnum(BlendOp op) {
+        return switch(op) {
+            case ADD -> 1;
+            case SUBTRACT -> 2;
+            case REVERSE_SUBTRACT -> 3;
+            case MIN -> 4;
+            case MAX -> 5;
+        };
+    }
     
     public static int gpuFormatToRustEnum(GpuFormat format) {
         return switch(format) {

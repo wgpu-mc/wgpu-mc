@@ -19,9 +19,11 @@ public class WgpuTransientMemory implements TransientMemory, Closeable {
 
     private final WgpuDevice device;
     private final Arena arena = Arena.ofConfined();
+    private final MemorySegment stagingBelt;
 
     public WgpuTransientMemory(WgpuDevice device, WgpuCommandEncoder encoder) {
         this.device = device;
+        this.stagingBelt = WM.create_staging_belt(device.getWm());
     }
 
     @Override
