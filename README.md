@@ -6,13 +6,11 @@
 </p>
 
 > [!NOTE]  
-> As of June 2026 this project is undergoing a large re-write to work with Minecraft's new and improved rendering architecture..<br>
+> As of June 2026 this project is undergoing a large re-write to work with Minecraft's new and improved rendering architecture.<br>
 
 **wgpu-mc** is a standalone [WebGPU](https://www.w3.org/TR/webgpu/) rendering engine written in Rust using the [`wgpu`](https://gpuweb.github.io/gpuweb/) crate. The project was started in late 2021 as a pet project to create a new rendering engine for Minecraft to replace the existing OpenGL renderer.
 
 ## Electrum — Rust-based Rendering Engine Mod for Minecraft
-> [!CAUTION]
-> Electrum is currently wip. [Feel free to contribute!](https://github.com/wgpu-mc/wgpu-mc/labels/electrum).
 
 **Electrum** is a Fabric mod that uses Project Panama bindings to integrate wgpu(-mc) as a Blaze3D backend. Currently due to the rewrite the goal of the project
 is full compatibility with Blaze3D's backend API, which is going quite well. After that, we'll start experimenting again with
