@@ -5,8 +5,8 @@
 <img alt="Static Badge" src="https://img.shields.io/badge/Matrix_-000?style=flat-square&logo=matrix&logoColor=fff&link=%20https%3A%2F%2Fmatrix.to%2F%23%2F%23wgpu-mc%3Amatrix.org">
 </p>
 
-> [!WARNING]  
-> wgpu-mc is in **Beta**. [Contributions appreciated](https://github.com/wgpu-mc/wgpu-mc/labels/engine).<br>
+> [!NOTE]  
+> As of June 2026 this project is undergoing a large re-write to work with Minecraft's new and improved rendering architecture..<br>
 
 **wgpu-mc** is a standalone [WebGPU](https://www.w3.org/TR/webgpu/) rendering engine written in Rust using the [`wgpu`](https://gpuweb.github.io/gpuweb/) crate. The project was started in late 2021 as a pet project to create a new rendering engine for Minecraft to replace the existing OpenGL renderer.
 
@@ -14,13 +14,13 @@
 > [!CAUTION]
 > Electrum is currently wip. [Feel free to contribute!](https://github.com/wgpu-mc/wgpu-mc/labels/electrum).
 
-**Electrum** is a fabric mod that integrates the wgpu-mc rendering engine, replacing the existing Blaze3D rendering engine.
+**Electrum** is a Fabric mod that uses Project Panama bindings to integrate wgpu(-mc) as a Blaze3D backend. Currently due to the rewrite the goal of the project
+is full compatibility with Blaze3D's backend API, which is going quite well. After that, we'll start experimenting again with
+replacing parts of the Java renderer paths with wgpu-mc, such as terrain rendering and chunk meshing.
 
-### Screenshots
+### Screenshots in Minecraft using wgpu-mc as the terrain renderer (old)
 <p>
   <img alt="" src="https://github.com/user-attachments/assets/031437b4-9001-404f-84a1-996660fa49b2" width="280">
   <img alt="" src="https://github.com/user-attachments/assets/16686221-a49a-4761-b4e1-fe81865b0449" width="280">
   <img alt="" src="https://github.com/user-attachments/assets/466264f5-3b05-4a5b-89b3-7cc379aacbae" width="280">
 </p>
-
-## Contribution Guide
