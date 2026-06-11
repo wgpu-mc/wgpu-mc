@@ -5056,6 +5056,7 @@ name = "wgpu-mc-jni"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "arrayvec",
  "bytemuck",
  "byteorder",
  "cbindgen",

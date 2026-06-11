@@ -20,13 +20,26 @@ public class WgpuBuffer extends GpuBuffer {
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final WgpuDevice device;
 
+    private final static int DONT_MAP = ~(USAGE_MAP_WRITE | USAGE_MAP_READ);
+
     public WgpuBuffer(WgpuDevice device, String label, int usage, long size, boolean mapped) {
         size = Mth.roundToward(size, 16);
         super(usage, size);
 
         this.device = device;
 
-        if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
+        if((usage & USAGE_MAP_WRITE) != 0) {
+            usage |= USAGE_COPY_DST;
+        }
+
+        if((usage & USAGE_MAP_READ) != 0) {
+            usage |= USAGE_COPY_SRC;
+        }
+
+        if((usage & DONT_MAP) != 0) {
+            usage &= ~(USAGE_MAP_WRITE | USAGE_MAP_READ);
+        }
+//        if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
 
         try(Arena arena = Arena.ofConfined()) {
             MemorySegment labelSeg = arena.allocateFrom(label);
@@ -51,7 +64,17 @@ public class WgpuBuffer extends GpuBuffer {
     public WgpuBuffer(WgpuDevice device, String label, int usage, ByteBuffer data) {
         super(usage, Mth.roundToward(data.capacity(), 16));
 
-        if((usage & USAGE_MAP_WRITE) != 0) usage |= USAGE_COPY_DST;
+        if((usage & USAGE_MAP_WRITE) != 0) {
+            usage |= USAGE_COPY_DST;
+        }
+
+        if((usage & USAGE_MAP_READ) != 0) {
+            usage |= USAGE_COPY_SRC;
+        }
+
+        if((usage & DONT_MAP) != 0) {
+            usage &= ~(USAGE_MAP_WRITE | USAGE_MAP_READ);
+        }
 
         this.device = device;
 

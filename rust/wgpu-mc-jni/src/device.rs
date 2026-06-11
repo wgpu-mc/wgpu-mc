@@ -72,9 +72,7 @@ pub unsafe extern "C" fn drop_surface(wm: &WmRenderer) {
 pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
-        flags: wgpu::InstanceFlags::VALIDATION
-            | wgpu::InstanceFlags::DEBUG
-            | wgpu::InstanceFlags::GPU_BASED_VALIDATION,
+        flags: wgpu::InstanceFlags::default(),
         memory_budget_thresholds: Default::default(),
         backend_options: Default::default(),
         display: None,
@@ -90,7 +88,7 @@ pub fn create_device(env: JNIEnv, _: JClass) -> jlong {
 
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
-        required_features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::DEPTH_CLIP_CONTROL | wgpu::Features::IMMEDIATES | wgpu::Features::CLEAR_TEXTURE,
+        required_features: wgpu::Features::DEPTH_CLIP_CONTROL | wgpu::Features::IMMEDIATES | wgpu::Features::CLEAR_TEXTURE,
         required_limits: Limits {
             max_bind_groups: adapter.limits().max_bind_groups,
             ..adapter.limits()

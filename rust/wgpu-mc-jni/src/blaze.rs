@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::device::{BlazePipeline};
 use std::ffi::{CStr, c_char, CString};
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, Write};
 use std::iter::{Map, Zip};
 use std::mem;
 use std::ops::{Deref, Index, Range};
@@ -136,7 +136,7 @@ pub extern "C" fn finalize_binding_builder(wm: &WmRenderer, binding_builder: &mu
                         UniformType::TexelBuffer | UniformType::UBO => {
                             *index += 1;
 
-                            let (ssbo_backer, range) = if let Some(BlazeBindingResource::Buffer(buffer, slice)) = bindings.get(&format!("{}", entry.name)) {
+                            let (ssbo_backer, range) = if let Some(BlazeBindingResource::Buffer(buffer, slice)) = bindings.get(&*entry.name) {
                                 (buffer, slice)
                             } else {
                                 panic!("Couldn't find buffer {entry:?} in {bindings:?}");
@@ -156,13 +156,21 @@ pub extern "C" fn finalize_binding_builder(wm: &WmRenderer, binding_builder: &mu
                         UniformType::Sampler => {
                             *index += 2;
 
-                            let view = if let BlazeBindingResource::TextureView (texture) = bindings.get(&format!("{}_wm_texshim", entry.name)).unwrap() {
+                            let mut texshim = String::with_capacity(entry.name.len() + "_wm_texshim".len());
+                            texshim.write_str(&entry.name).unwrap();
+                            texshim.write_str("_wm_texshim").unwrap();
+
+                            let mut sampler = String::with_capacity(entry.name.len() + "_wm_sampler".len());
+                            sampler.write_str(&entry.name).unwrap();
+                            sampler.write_str("_wm_sampler").unwrap();
+
+                            let view = if let BlazeBindingResource::TextureView (texture) = bindings.get(&texshim).unwrap() {
                                 texture
                             } else {
                                 panic!("Type mismatch");
                             };
 
-                            let sampler = if let BlazeBindingResource::Sampler (sampler) = bindings.get(&format!("{}_wm_sampler", entry.name)).unwrap() {
+                            let sampler = if let BlazeBindingResource::Sampler (sampler) = bindings.get(&sampler).unwrap() {
                                 sampler
                             } else {
                                 panic!("Type mismatch");

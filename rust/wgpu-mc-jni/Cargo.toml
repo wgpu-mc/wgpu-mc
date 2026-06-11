@@ -35,6 +35,7 @@ log = "0.4.17"
 env_logger = "0.11"
 serde_yaml = "0.9"
 serde-binary = "0.5.0"
+arrayvec = "0.7.6"
 glsl = { git = "https://github.com/wgpu-mc/glsl.git" }
 
 cyntax = { git = "https://github.com/wgpu-mc/cyntax.git", rev="20c1b1f12d7406809c126f3d9ed843b5f08729c3" }

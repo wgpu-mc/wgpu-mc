@@ -123,8 +123,9 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
     public MemorySegment buildBindGroups(MemorySegment pipeline) {
         if(this.rebuildBindGroups || this.bindGroupCache == null) {
             if(this.bindGroupCache != null) {
-                WM.drop_bind_groups(this.bindGroupCache);
+                var a = this.bindGroupCache;
                 this.bindGroupCache = null;
+                new Thread(() -> WM.drop_bind_groups(a)).start();
             }
             this.bindGroupCache = WM.finalize_binding_builder(device.getWm(), bindingBuilder, pipeline);
             this.rebuildBindGroups = false;
@@ -225,7 +226,7 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
 
     @Override
     public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
-        MemorySegment bindGroups = WM.finalize_binding_builder(device.getWm(), this.bindingBuilder, this.activePipeline);
+        MemorySegment bindGroups = this.buildBindGroups(activePipeline);
         WM.draw(this.nativePass, bindGroups, vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
