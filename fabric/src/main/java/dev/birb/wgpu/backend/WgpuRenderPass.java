@@ -125,7 +125,7 @@ public class WgpuRenderPass implements RenderPassBackend, Closeable {
             if(this.bindGroupCache != null) {
                 var a = this.bindGroupCache;
                 this.bindGroupCache = null;
-                new Thread(() -> WM.drop_bind_groups(a)).start();
+//                new Thread(() -> WM.drop_bind_groups(a)).start();
             }
             this.bindGroupCache = WM.finalize_binding_builder(device.getWm(), bindingBuilder, pipeline);
             this.rebuildBindGroups = false;

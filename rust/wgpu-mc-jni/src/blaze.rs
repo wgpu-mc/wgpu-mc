@@ -1,19 +1,41 @@
+use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use crate::device::{BlazePipeline};
 use std::ffi::{CStr, c_char, CString};
 use std::fmt::{Debug, Display, Formatter, Write};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::iter::{Map, Zip};
 use std::mem;
-use std::ops::{Deref, Index, Range};
+use std::ops::{Deref, DerefMut, Index, Range};
 use std::vec::IntoIter;
 use glsl::syntax::TypeSpecifierNonArray;
+use lazy_static::lazy::Lazy;
+use lazy_static::lazy_static;
+use parking_lot::Mutex;
 use wgpu_mc::{wgpu, WmRenderer};
 use wgpu_mc::wgpu::{BlendState, BufferAddress, BufferSize};
+use wgpu_mc::wgpu::hal::ShouldBeNonZeroExt;
 
 #[repr(C)]
 pub struct RawArray<T: Sized> {
-    contents: *const T,
+    contents: *mut T,
     size: u64,
+}
+
+impl<T> PartialEq for RawArray<T> where T: PartialEq {
+    fn eq(&self, other: &Self) -> bool {
+        let this = &**self;
+        let other = &**other;
+        this == other
+    }
+}
+
+impl<T> Eq for RawArray<T> where T: Eq {}
+
+impl<T> Hash for RawArray<T> where T: Hash {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        T::hash_slice(&**self, state);
+    }
 }
 
 impl<T> Clone for RawArray<T> where T: Clone {
@@ -23,9 +45,23 @@ impl<T> Clone for RawArray<T> where T: Clone {
         assert_eq!(cloned_contents.len() as u64, self.size);
 
         Self {
-            contents: Box::into_raw(cloned_contents.into_boxed_slice()).to_raw_parts().0 as *const _,
+            contents: Box::into_raw(cloned_contents.into_boxed_slice()).to_raw_parts().0 as *mut _,
             size: self.size,
         }
+    }
+}
+
+impl<T> Deref for RawArray<T> where T: Sized {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { std::slice::from_raw_parts(self.contents, self.size as usize) }
+    }
+}
+
+impl<T> DerefMut for RawArray<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { std::slice::from_raw_parts_mut(self.contents, self.size as usize) }
     }
 }
 
@@ -43,10 +79,7 @@ impl<'a, T> IntoIterator for RawArray<T> {
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (0..self.size as usize)
-            .map(|index| unsafe { std::ptr::read(self.contents.offset(index as isize)) })
-            .collect::<Vec<T>>()
-            .into_iter()
+        unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(self.contents, self.size as usize)).into_iter() }
     }
 }
 
@@ -117,45 +150,43 @@ pub struct BindingBuilder {
     pub bindings: HashMap<String, BlazeBindingResource>
 }
 
+lazy_static! {
+    pub static ref CACHE: Mutex<HashMap<u64, Box<BindGroups_>>> = Mutex::new(HashMap::new());
+}
+
+#[derive(Clone)]
 pub struct BindGroups_(pub Vec<wgpu::BindGroup>);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn finalize_binding_builder(wm: &WmRenderer, binding_builder: &mut BindingBuilder, blaze_pipeline: &BlazePipeline) -> Box<BindGroups_> {
     let bindings = &binding_builder.bindings;
 
-    let bind_groups = blaze_pipeline.blaze_descriptor
+    let mut h = DefaultHasher::new();
+    blaze_pipeline.blaze_descriptor.bind_group_layouts.hash(&mut h);
+
+    blaze_pipeline.blaze_descriptor
         .bind_group_layouts
         .iter()
         .zip(&blaze_pipeline.bind_group_layouts)
-        .map(|(blaze_bgl, wgpu_bgl)| {
+        .for_each(|(blaze_bgl, wgpu_bgl)| {
             let entries = blaze_bgl
                 .entries
                 .iter()
-                .scan(0, |index, entry| {
-                    Some(match entry.type_ {
+                .for_each(|entry| {
+                    match entry.type_ {
                         UniformType::TexelBuffer | UniformType::UBO => {
-                            *index += 1;
-
                             let (ssbo_backer, range) = if let Some(BlazeBindingResource::Buffer(buffer, slice)) = bindings.get(&*entry.name) {
                                 (buffer, slice)
                             } else {
                                 panic!("Couldn't find buffer {entry:?} in {bindings:?}");
                             };
 
-                            vec![
-                                wgpu::BindGroupEntry {
-                                    binding: *index - 1,
-                                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                        buffer: ssbo_backer,
-                                        offset: range.start,
-                                        size: Some(BufferSize::new(range.end - range.start).unwrap()),
-                                    })
-                                }
-                            ]
+                            entry.name.hash(&mut h);
+                            ssbo_backer.hash(&mut h);
+                            h.write_u64(range.start.get());
+                            h.write_u64(range.end.get());
                         }
                         UniformType::Sampler => {
-                            *index += 2;
-
                             let mut texshim = String::with_capacity(entry.name.len() + "_wm_texshim".len());
                             texshim.write_str(&entry.name).unwrap();
                             texshim.write_str("_wm_texshim").unwrap();
@@ -176,32 +207,109 @@ pub extern "C" fn finalize_binding_builder(wm: &WmRenderer, binding_builder: &mu
                                 panic!("Type mismatch");
                             };
 
-
-                            vec![
-                                wgpu::BindGroupEntry {
-                                    binding: *index - 2,
-                                    resource: wgpu::BindingResource::TextureView(view)
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: *index - 1,
-                                    resource: wgpu::BindingResource::Sampler(sampler)
-                                },
-                            ]
+                            texshim.hash(&mut h);
+                            sampler.hash(&mut h);
+                            view.hash(&mut h);
+                            sampler.hash(&mut h);
                         }
+                    }
+                });
+        });
+
+    let key = h.finish();
+
+    let mut c = CACHE.lock();
+
+    // if c.len() > 2000 {
+    //     c.clear();
+    // }
+
+    if let Some(g) = c.get(&key) {
+        g.clone()
+    } else {
+        let bind_groups = blaze_pipeline.blaze_descriptor
+            .bind_group_layouts
+            .iter()
+            .zip(&blaze_pipeline.bind_group_layouts)
+            .map(|(blaze_bgl, wgpu_bgl)| {
+                let entries = blaze_bgl
+                    .entries
+                    .iter()
+                    .scan(0, |index, entry| {
+                        Some(match entry.type_ {
+                            UniformType::TexelBuffer | UniformType::UBO => {
+                                *index += 1;
+
+                                let (ssbo_backer, range) = if let Some(BlazeBindingResource::Buffer(buffer, slice)) = bindings.get(&*entry.name) {
+                                    (buffer, slice)
+                                } else {
+                                    panic!("Couldn't find buffer {entry:?} in {bindings:?}");
+                                };
+
+                                vec![
+                                    wgpu::BindGroupEntry {
+                                        binding: *index - 1,
+                                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                            buffer: ssbo_backer,
+                                            offset: range.start,
+                                            size: Some(BufferSize::new(range.end - range.start).unwrap()),
+                                        })
+                                    }
+                                ]
+                            }
+                            UniformType::Sampler => {
+                                *index += 2;
+
+                                let mut texshim = String::with_capacity(entry.name.len() + "_wm_texshim".len());
+                                texshim.write_str(&entry.name).unwrap();
+                                texshim.write_str("_wm_texshim").unwrap();
+
+                                let mut sampler = String::with_capacity(entry.name.len() + "_wm_sampler".len());
+                                sampler.write_str(&entry.name).unwrap();
+                                sampler.write_str("_wm_sampler").unwrap();
+
+                                let view = if let BlazeBindingResource::TextureView(texture) = bindings.get(&texshim).unwrap() {
+                                    texture
+                                } else {
+                                    panic!("Type mismatch");
+                                };
+
+                                let sampler = if let BlazeBindingResource::Sampler(sampler) = bindings.get(&sampler).unwrap() {
+                                    sampler
+                                } else {
+                                    panic!("Type mismatch");
+                                };
+
+
+                                vec![
+                                    wgpu::BindGroupEntry {
+                                        binding: *index - 2,
+                                        resource: wgpu::BindingResource::TextureView(view)
+                                    },
+                                    wgpu::BindGroupEntry {
+                                        binding: *index - 1,
+                                        resource: wgpu::BindingResource::Sampler(sampler)
+                                    },
+                                ]
+                            }
+                        })
                     })
+                    .flatten()
+                    .collect::<Vec<_>>();
+
+                wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: &wgpu_bgl,
+                    entries: &entries,
                 })
-                .flatten()
-                .collect::<Vec<_>>();
-
-            wm.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &wgpu_bgl,
-                entries: &entries,
             })
-        })
-        .collect();
+            .collect();
 
-    Box::new(BindGroups_(bind_groups))
+        let bind_groups = Box::new(BindGroups_(bind_groups));
+        c.insert(key, bind_groups.clone());
+
+        bind_groups
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -219,7 +327,7 @@ pub struct VertexFormat {
 }
 
 #[repr(u64)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Copy, Clone, PartialEq    )]
 pub enum UniformType {
     TexelBuffer = 0,
     UBO = 1,
@@ -227,7 +335,7 @@ pub enum UniformType {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Hash, Clone, Debug)]
 pub struct BindGroupEntryDescriptor {
     pub type_: UniformType,
     pub name: FfiStr,
@@ -237,6 +345,20 @@ pub struct BindGroupEntryDescriptor {
 #[repr(transparent)]
 pub struct FfiStr {
     ptr: *const c_char,
+}
+
+impl Eq for FfiStr {}
+
+impl PartialEq for FfiStr {
+    fn eq(&self, other: &Self) -> bool {
+        &*self == &*other
+    }
+}
+
+impl Hash for FfiStr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(self.as_bytes());
+    }
 }
 
 impl Clone for FfiStr {
@@ -272,7 +394,7 @@ impl Debug for FfiStr {
 pub struct FragState {}
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Hash, Debug, Clone, PartialEq)]
 pub struct BlazeBindGroupLayout {
     pub entries: Box<RawArray<BindGroupEntryDescriptor>>,
 }
@@ -431,7 +553,7 @@ pub struct RenderPipeline {
 
 #[repr(u64)]
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Hash, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum GpuFormat {
     None = 0,
     R8_UNORM = 1,

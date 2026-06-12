@@ -1,6 +1,7 @@
 #![feature(debug_closure_helpers)]
 #![feature(ptr_metadata)]
 pub extern crate wgpu_mc;
+extern crate core;
 
 use arc_swap::access::Access;
 use arc_swap::{ArcSwap, ArcSwapAny};
